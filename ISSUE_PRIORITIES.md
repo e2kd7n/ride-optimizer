@@ -12,6 +12,7 @@ Issues that make the application unusable or cause data loss.
 ## 🔴 P1 - HIGH (Current Sprint)
 Issues that significantly impact core functionality or user experience.
 
+- #51 - Significantly Improve Route Naming Mechanism
 - #44 - Extract HTML Template to External File
 - #45 - Add QR Code Generation for Mobile Transfer
 - #46 - Add PDF Export Option
@@ -19,15 +20,12 @@ Issues that significantly impact core functionality or user experience.
 - #48 - Implement Data Export in JSON, GPX, and CSV Formats
 - #49 - Implement Metric/Imperial Unit Toggle with Complete Consistency
 - #50 - Show Optimal Route Map Preview at Top of Page
-- #51 - Significantly Improve Route Naming Mechanism
 - #52 - Remove Test Routes from Production Code
 - #53 - Code Cleanup and Performance Optimization
 
 ## 🟡 P2 - MEDIUM (Next Sprint)
 Important improvements that enhance functionality but don't block core workflows.
 
-- #19 - Fix map zoom to show start and finish when route is selected
-- #20 - Re-enable geocoding after rate limit expires
 - #21 - Update TECHNICAL_SPEC.md with comprehensive implementation details
 - #24 - Grey out unselected routes on map when route is clicked
 
@@ -35,7 +33,6 @@ Important improvements that enhance functionality but don't block core workflows
 Nice-to-have improvements and minor UX enhancements.
 
 - #22 - Debug and fix Bootstrap tab switching functionality
-- #40 - Complete and review full analysis with Fréchet algorithm
 - #41 - Create unit tests for core modules
 - #42 - Write integration tests for full workflow
 
@@ -154,17 +151,20 @@ New Issue → Triaged (Priority Assigned) → In Progress → Testing → Closed
 
 ## Issue Statistics
 
-**Total Open Issues:** 30 (down from 52 after deduplication)
+**Total Open Issues:** 27 (down from 52 after deduplication)
 - P0 (Critical): 0
 - P1 (High): 10
-- P2 (Medium): 4
-- P3 (Low): 4
+- P2 (Medium): 2
+- P3 (Low): 3
 - P4 (Future): 12
 
-**Recently Closed:** 23 issues
+**Recently Closed:** 26 issues
 - #1-5: Fréchet algorithm validation (completed)
 - #10-18, #26-32: Weather features (consolidated into #54)
+- #19: Map zoom (completed)
+- #20: Geocoding re-enabled (completed)
 - #23: Route naming color coding (duplicate of #51)
+- #40: Fréchet analysis review (completed)
 - #43: Fréchet caching (completed)
 
 **Average Time to Close:** TBD (tracking starts 2026-03-24)
