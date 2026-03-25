@@ -947,6 +947,7 @@ class ReportGenerator:
             console.log('Found route rows:', document.querySelectorAll('.route-row').length);
             
             let selectedRouteId = null;
+            const selectedRoutes = new Set(); // Track multiple selected routes
             const routeRows = document.querySelectorAll('.route-row');
             
             console.log('Setting up', routeRows.length, 'route row listeners');
@@ -1060,22 +1061,35 @@ class ReportGenerator:
                 });
                 
                 // Click to persist highlight
-                row.addEventListener('click', function() {
-                    // Remove previous selection
-                    routeRows.forEach(r => r.classList.remove('selected'));
+                row.addEventListener('click', function(e) {
+                    // Check if Ctrl/Cmd key is pressed for multi-select
+                    const isMultiSelect = e.ctrlKey || e.metaKey;
                     
-                    if (selectedRouteId === routeId) {
-                        // Unselect if clicking the same route
-                        selectedRouteId = null;
+                    if (!isMultiSelect) {
+                        // Single select - clear all others
+                        routeRows.forEach(r => r.classList.remove('selected'));
+                        selectedRoutes.clear();
+                    }
+                    
+                    if (selectedRoutes.has(routeId)) {
+                        // Unselect if clicking selected route
+                        selectedRoutes.delete(routeId);
                         this.classList.remove('selected');
-                        resetRoutes();
                         
-                        // Reset map zoom to show all routes
-                        if (typeof window.resetMapView === 'function') {
-                            window.resetMapView();
+                        if (selectedRoutes.size === 0) {
+                            selectedRouteId = null;
+                            resetRoutes();
+                            if (typeof window.resetMapView === 'function') {
+                                window.resetMapView();
+                            }
+                        } else {
+                            // Highlight remaining selected routes
+                            selectedRouteId = Array.from(selectedRoutes)[0];
+                            highlightRoute(selectedRouteId, true);
                         }
                     } else {
                         // Select new route
+                        selectedRoutes.add(routeId);
                         selectedRouteId = routeId;
                         this.classList.add('selected');
                         highlightRoute(routeId, true);
