@@ -463,7 +463,7 @@ class ReportGenerator:
                     <h6>🌤️ Current Weather Conditions</h6>
                     <div class="row">
                         <div class="col-md-4">
-                            <strong>Wind:</strong> {{ units.wind_speed(wd.wind_speed_kph / 3.6) }} from {{ "%.0f"|format(wd.wind_direction_deg) }}°
+                            <strong>Wind:</strong> {{ units.wind_speed(wd.wind_speed_kph / 3.6) }} from {{ "%.0f"|format(wd.wind_direction_deg) }}° ({{ wd.wind_direction_cardinal }})
                         </div>
                         <div class="col-md-4">
                             <strong>Avg Headwind:</strong>
@@ -872,10 +872,11 @@ class ReportGenerator:
                             path.style.strokeWidth = '8';
                             path.style.strokeOpacity = '1';
                             path.style.zIndex = '1000';
-                        } else if (!persist || routeId !== selectedRouteId) {
-                            // Dim other routes
+                        } else if (classes.includes('route-')) {
+                            // Dim other routes when a route is selected
                             path.style.strokeWidth = '3';
-                            path.style.strokeOpacity = '0.4';
+                            path.style.strokeOpacity = '0.3';
+                            path.style.zIndex = '100';
                         }
                     });
                 } catch (e) {
