@@ -72,14 +72,18 @@ def authenticate(config):
     logger.info(f"Access token expires at: {tokens['expires_at']}")
 
 
-def fetch_activities(config):
+def fetch_activities(config, after_date=None):
     """
     Fetch activities from Strava API.
     
     Args:
         config: Configuration object
+        after_date: Optional datetime to fetch activities after this date
     """
-    logger.info("Fetching activities from Strava...")
+    if after_date:
+        logger.info(f"Fetching activities from Strava (after {after_date.date()})...")
+    else:
+        logger.info("Fetching activities from Strava...")
     
     # Validate credentials before fetching
     client_id = config.get('strava.client_id')
@@ -91,7 +95,7 @@ def fetch_activities(config):
         fetcher = StravaDataFetcher(client, config)
         
         # Fetch activities
-        activities = fetcher.fetch_activities()
+        activities = fetcher.fetch_activities(after=after_date)
         
         # Cache activities
         fetcher.cache_activities(activities)
@@ -495,6 +499,8 @@ Examples:
                        help='Authenticate with Strava (first time only)')
     parser.add_argument('--fetch', action='store_true',
                        help='Fetch new activities from Strava')
+    parser.add_argument('--from-date', type=str,
+                       help='Fetch activities from this date (YYYY-MM-DD), e.g., 2023-01-01')
     parser.add_argument('--analyze', action='store_true',
                        help='Analyze routes and generate report')
     parser.add_argument('--config', type=str, default='config/config.yaml',
@@ -531,7 +537,15 @@ Examples:
             authenticate(config)
         
         if args.fetch:
-            fetch_activities(config)
+            after_date = None
+            if args.from_date:
+                try:
+                    after_date = datetime.strptime(args.from_date, '%Y-%m-%d')
+                    print(f"Fetching activities from {after_date.date()} onwards...")
+                except ValueError:
+                    print(f"Invalid date format: {args.from_date}. Use YYYY-MM-DD")
+                    return
+            fetch_activities(config, after_date)
         
         if args.analyze:
             analyze_routes(config, args.output)
