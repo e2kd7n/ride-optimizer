@@ -173,12 +173,14 @@ class WeatherFetcher:
             
             current = data['current']
             
+            wind_dir = current.get('wind_direction_10m')
             conditions = {
                 'timestamp': current.get('time'),
                 'temp_c': current.get('temperature_2m'),
                 'wind_speed_kph': current.get('wind_speed_10m'),
                 'wind_gust_kph': current.get('wind_gusts_10m'),
-                'wind_direction_deg': current.get('wind_direction_10m'),
+                'wind_direction_deg': wind_dir,
+                'wind_direction_cardinal': WeatherFetcher.degrees_to_cardinal(wind_dir) if wind_dir is not None else 'N/A',
                 'humidity': current.get('relative_humidity_2m'),
                 'precipitation_mm': current.get('precipitation'),
                 'lat': lat,
@@ -339,12 +341,14 @@ class WeatherFetcher:
             return {}
         
         # Average the weather conditions
+        wind_dir_avg = np.mean([w['wind_direction_deg'] for w in weather_samples if w.get('wind_direction_deg') is not None]) if any(w.get('wind_direction_deg') is not None for w in weather_samples) else 0
         avg_conditions = {
             'timestamp': weather_samples[0]['timestamp'],
             'temp_c': np.mean([w['temp_c'] for w in weather_samples if w.get('temp_c') is not None]) if any(w.get('temp_c') is not None for w in weather_samples) else 0,
             'wind_speed_kph': np.mean([w['wind_speed_kph'] for w in weather_samples if w.get('wind_speed_kph') is not None]) if any(w.get('wind_speed_kph') is not None for w in weather_samples) else 0,
             'wind_gust_kph': np.mean([w['wind_gust_kph'] for w in weather_samples if w.get('wind_gust_kph') is not None]) if any(w.get('wind_gust_kph') is not None for w in weather_samples) else 0,
-            'wind_direction_deg': np.mean([w['wind_direction_deg'] for w in weather_samples if w.get('wind_direction_deg') is not None]) if any(w.get('wind_direction_deg') is not None for w in weather_samples) else 0,
+            'wind_direction_deg': wind_dir_avg,
+            'wind_direction_cardinal': WeatherFetcher.degrees_to_cardinal(float(wind_dir_avg)),
             'humidity': np.mean([w['humidity'] for w in weather_samples if w.get('humidity') is not None]) if any(w.get('humidity') is not None for w in weather_samples) else 0,
             'precipitation_mm': np.mean([w['precipitation_mm'] for w in weather_samples if w.get('precipitation_mm') is not None]) if any(w.get('precipitation_mm') is not None for w in weather_samples) else 0,
             'samples': len(weather_samples)
@@ -354,6 +358,22 @@ class WeatherFetcher:
                    f"from {avg_conditions['wind_direction_deg']:.0f}°")
         
         return avg_conditions
+    
+    @staticmethod
+    def degrees_to_cardinal(degrees: float) -> str:
+        """
+        Convert wind direction in degrees to cardinal direction.
+        
+        Args:
+            degrees: Wind direction in degrees (0-360)
+            
+        Returns:
+            Cardinal direction string (N, NNE, NE, etc.)
+        """
+        directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
+                     'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW']
+        index = round(degrees / 22.5) % 16
+        return directions[index]
     
     @staticmethod
     def get_prevailing_wind_direction(lat: float, lon: float,
