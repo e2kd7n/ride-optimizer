@@ -617,7 +617,7 @@ class ReportGenerator:
                         </p>
                     </div>
                     <div class="map-pane">
-                        <div class="map-container">{{ map_html | safe }}</div>
+                        <div id="full-map-container" class="map-container">{{ map_html | safe }}</div>
                     </div>
                 </div>
             </div>
@@ -852,8 +852,8 @@ class ReportGenerator:
             
             // Function to highlight route on map
             function highlightRoute(routeId, persist = false) {
-                // Find all polylines in the map
-                const mapContainer = document.querySelector('.map-container');
+                // Find all polylines in the FULL map only (not preview)
+                const mapContainer = document.querySelector('#full-map-container');
                 if (!mapContainer) return;
                 
                 const iframe = mapContainer.querySelector('iframe');
@@ -886,7 +886,7 @@ class ReportGenerator:
             
             // Function to reset all routes to normal
             function resetRoutes() {
-                const mapContainer = document.querySelector('.map-container');
+                const mapContainer = document.querySelector('#full-map-container');
                 if (!mapContainer) return;
                 
                 const iframe = mapContainer.querySelector('iframe');
@@ -977,7 +977,7 @@ class ReportGenerator:
             
             // Wait for map to load before setting up interactions
             setTimeout(() => {
-                const mapContainer = document.querySelector('.map-container');
+                const mapContainer = document.querySelector('#full-map-container');
                 if (mapContainer) {
                     // Store original styles for routes
                     const iframe = mapContainer.querySelector('iframe');
