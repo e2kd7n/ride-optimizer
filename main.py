@@ -543,10 +543,10 @@ def analyze_routes(config, output_dir, n_workers=2):
         n_workers: Number of parallel workers for route analysis
     """
     print("\n" + "="*70)
-    print("🚴 STRAVA COMMUTE ROUTE ANALYZER")
+    print("🚴  STRAVA COMMUTE ROUTE ANALYZER")
     print("="*70)
     if n_workers > 1:
-        print(f"⚡ Parallel processing: {n_workers} workers")
+        print(f"⚡  Using {n_workers} parallel workers for faster processing")
     print()
     
     # Validate credentials before analysis
@@ -639,11 +639,11 @@ def analyze_routes(config, output_dir, n_workers=2):
         
         # Print completion message
         print("\n" + "="*70)
-        print("✅ ANALYSIS COMPLETE!")
+        print("✅  ANALYSIS COMPLETE!")
         print("="*70)
-        print(f"📄 Report: {report_path}")
-        print(f"🚴 Optimal route: {analysis_results['optimal_route'].id}")
-        print(f"⭐ Score: {analysis_results['optimal_score']:.2f}")
+        print(f"📄  Report saved: {report_path}")
+        print(f"🚴  Optimal route: {analysis_results['optimal_route'].name}")
+        print(f"⭐  Score: {analysis_results['optimal_score']:.2f}/100")
         print("="*70 + "\n")
         
         _open_report_in_browser(report_path)
