@@ -44,6 +44,7 @@ class Route:
     elevation_gain: float  # meters
     timestamp: str  # ISO format
     average_speed: float  # m/s
+    is_plus_route: bool = False  # True if distance is >25% above median
 
 
 @dataclass
@@ -55,6 +56,7 @@ class RouteGroup:
     representative_route: Route
     frequency: int
     name: Optional[str] = None
+    is_plus_route: bool = False  # True if this is a "plus route" group
     
     
 @dataclass
@@ -398,8 +400,69 @@ class RouteAnalyzer:
         print(f"✓ Created {len(groups)} total route groups")
         logger.info(f"Created {len(groups)} route groups from {len(routes)} routes")
         
+        # Mark plus routes (routes >25% longer than median)
+        groups = self._mark_plus_routes(groups)
+        
         # Save similarity cache after grouping
         self._save_similarity_cache()
+        
+        return groups
+    
+    def _mark_plus_routes(self, groups: List[RouteGroup]) -> List[RouteGroup]:
+        """
+        Mark route groups that are significantly longer than typical commutes.
+        
+        A "plus route" is one where the distance is >25% above the median distance
+        for that direction (home_to_work or work_to_home).
+        
+        Args:
+            groups: List of route groups
+            
+        Returns:
+            Updated list of route groups with is_plus_route flag set
+        """
+        if not groups:
+            return groups
+        
+        # Separate by direction
+        htw_groups = [g for g in groups if g.direction == 'home_to_work']
+        wth_groups = [g for g in groups if g.direction == 'work_to_home']
+        
+        # Calculate median distance for each direction
+        for direction_groups in [htw_groups, wth_groups]:
+            if not direction_groups:
+                continue
+            
+            # Get all distances
+            distances = []
+            for group in direction_groups:
+                for route in group.routes:
+                    distances.append(route.distance)
+            
+            if not distances:
+                continue
+            
+            # Calculate median
+            median_distance = np.median(distances)
+            threshold = median_distance * 1.25  # 25% above median
+            
+            direction = direction_groups[0].direction
+            print(f"  {direction}: median={median_distance/1000:.2f}km, "
+                  f"plus route threshold={threshold/1000:.2f}km")
+            
+            # Mark groups where representative route exceeds threshold
+            plus_count = 0
+            for group in direction_groups:
+                if group.representative_route.distance > threshold:
+                    group.is_plus_route = True
+                    # Also mark individual routes
+                    for route in group.routes:
+                        if route.distance > threshold:
+                            route.is_plus_route = True
+                    plus_count += 1
+            
+            if plus_count > 0:
+                print(f"  Marked {plus_count} {direction} groups as plus routes")
         
         return groups
     
