@@ -8,11 +8,18 @@ Licensed under the MIT License - see LICENSE file for details.
 """
 
 import logging
+import base64
+import csv
+import json
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
 from typing import Dict, Any, List
+from xml.etree import ElementTree as ET
 
+import qrcode
 from jinja2 import Template
+from weasyprint import HTML
 
 from .units import UnitConverter
 
@@ -49,6 +56,10 @@ class ReportGenerator:
         # Prepare context
         context = self._prepare_context()
         
+        # Generate QR code for mobile access
+        qr_code_data = self._generate_qr_code(output_path)
+        context['qr_code'] = qr_code_data
+        
         # Render template
         html = self._render_template(context)
         
@@ -60,6 +71,220 @@ class ReportGenerator:
             f.write(html)
         
         logger.info(f"Report saved to {output_path}")
+        
+        # Generate PDF version if requested
+        pdf_path = str(output_file).replace('.html', '.pdf')
+        try:
+            self.generate_pdf(output_path, pdf_path)
+            logger.info(f"PDF report saved to {pdf_path}")
+        except Exception as e:
+            logger.warning(f"Failed to generate PDF: {e}")
+        
+        # Generate data exports
+        base_path = str(output_file).replace('.html', '')
+        try:
+            self.export_data(base_path)
+            logger.info(f"Data exports saved to {base_path}_*.{{json,csv,gpx}}")
+        except Exception as e:
+            logger.warning(f"Failed to generate data exports: {e}")
+    
+    def _generate_qr_code(self, report_path: str) -> str:
+        """
+        Generate QR code for mobile access to the report.
+        
+        Args:
+            report_path: Path to the report file
+            
+        Returns:
+            Base64-encoded PNG image data URL
+        """
+        try:
+            # Convert to absolute path for file:// URL
+            abs_path = Path(report_path).resolve()
+            file_url = f"file://{abs_path}"
+            
+            # Generate QR code
+            qr = qrcode.QRCode(
+                version=1,
+                error_correction=qrcode.constants.ERROR_CORRECT_L,
+                box_size=10,
+                border=4,
+            )
+            qr.add_data(file_url)
+            qr.make(fit=True)
+            
+            # Create image
+            img = qr.make_image(fill_color="black", back_color="white")
+            
+            # Convert to base64
+            buffer = BytesIO()
+            img.save(buffer, format='PNG')
+            img_str = base64.b64encode(buffer.getvalue()).decode()
+            
+            return f"data:image/png;base64,{img_str}"
+        except Exception as e:
+            logger.warning(f"Failed to generate QR code: {e}")
+            return ""
+    
+    def generate_pdf(self, html_path: str, pdf_path: str) -> None:
+        """
+        Generate PDF version of the HTML report.
+        
+        Args:
+            html_path: Path to the HTML report
+            pdf_path: Path to save the PDF
+        """
+        try:
+            # Read HTML content
+            with open(html_path, 'r', encoding='utf-8') as f:
+                html_content = f.read()
+            
+            # Create PDF-optimized version (remove interactive elements)
+            pdf_html = self._prepare_pdf_html(html_content)
+            
+            # Generate PDF
+            HTML(string=pdf_html).write_pdf(pdf_path)
+            
+        except Exception as e:
+            logger.error(f"PDF generation failed: {e}")
+            raise
+    
+    def _prepare_pdf_html(self, html_content: str) -> str:
+        """
+        Prepare HTML content for PDF export by removing interactive elements.
+        
+        Args:
+            html_content: Original HTML content
+            
+        Returns:
+            PDF-optimized HTML content
+        """
+        # Remove interactive JavaScript elements
+        pdf_html = html_content
+        
+        # Remove refresh button
+        pdf_html = pdf_html.replace('onclick="refreshReport()"', '')
+        
+        # Add PDF-specific styles
+        pdf_styles = """
+        <style>
+            @page { size: A4; margin: 1cm; }
+            body { font-size: 10pt; }
+            .no-print { display: none !important; }
+            .map-container { page-break-inside: avoid; }
+            .card { page-break-inside: avoid; }
+        </style>
+        """
+        pdf_html = pdf_html.replace('</head>', f'{pdf_styles}</head>')
+        
+        return pdf_html
+    
+    def export_data(self, base_path: str) -> None:
+        """
+        Export route data in multiple formats.
+        
+        Args:
+            base_path: Base path for export files (without extension)
+        """
+        # Export JSON
+        self._export_json(f"{base_path}_routes.json")
+        
+        # Export CSV
+        self._export_csv(f"{base_path}_routes.csv")
+        
+        # Export GPX
+        self._export_gpx(f"{base_path}_routes.gpx")
+    
+    def _export_json(self, output_path: str) -> None:
+        """Export route data as JSON."""
+        export_data = {
+            'timestamp': datetime.now().isoformat(),
+            'routes': [],
+            'statistics': self.results.get('statistics', {}),
+            'recommendations': self.results.get('recommendations', {})
+        }
+        
+        # Add route data
+        for group, score, breakdown in self.results.get('ranked_routes', []):
+            metrics = self.results.get('optimizer').metrics.get(group.id)
+            route_data = {
+                'id': group.id,
+                'direction': group.direction,
+                'score': score,
+                'frequency': group.frequency,
+                'avg_duration_min': metrics.avg_duration_min if metrics else None,
+                'avg_distance': metrics.avg_distance if metrics else None,
+                'avg_speed': metrics.avg_speed if metrics else None,
+                'coordinates': group.representative_route.coordinates if group.representative_route else None,
+                'breakdown': breakdown
+            }
+            export_data['routes'].append(route_data)
+        
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(export_data, f, indent=2)
+    
+    def _export_csv(self, output_path: str) -> None:
+        """Export route data as CSV."""
+        with open(output_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            
+            # Write header
+            writer.writerow([
+                'Route ID', 'Direction', 'Score', 'Frequency',
+                'Avg Duration (min)', 'Avg Distance', 'Avg Speed',
+                'Weather Score', 'Safety Score', 'Efficiency Score'
+            ])
+            
+            # Write route data
+            for group, score, breakdown in self.results.get('ranked_routes', []):
+                metrics = self.results.get('optimizer').metrics.get(group.id)
+                writer.writerow([
+                    group.id,
+                    group.direction,
+                    f"{score:.1f}",
+                    group.frequency,
+                    f"{metrics.avg_duration_min:.1f}" if metrics else 'N/A',
+                    f"{metrics.avg_distance:.2f}" if metrics else 'N/A',
+                    f"{metrics.avg_speed:.1f}" if metrics else 'N/A',
+                    f"{breakdown.get('weather', 0):.1f}",
+                    f"{breakdown.get('safety', 0):.1f}",
+                    f"{breakdown.get('efficiency', 0):.1f}"
+                ])
+    
+    def _export_gpx(self, output_path: str) -> None:
+        """Export route data as GPX."""
+        # Create GPX root element
+        gpx = ET.Element('gpx', {
+            'version': '1.1',
+            'creator': 'Strava Commute Analyzer',
+            'xmlns': 'http://www.topografix.com/GPX/1/1'
+        })
+        
+        # Add metadata
+        metadata = ET.SubElement(gpx, 'metadata')
+        ET.SubElement(metadata, 'time').text = datetime.now().isoformat()
+        
+        # Add routes
+        for group, score, breakdown in self.results.get('ranked_routes', []):
+            if not group.representative_route or not group.representative_route.coordinates:
+                continue
+            
+            # Create route element
+            rte = ET.SubElement(gpx, 'rte')
+            ET.SubElement(rte, 'name').text = group.id
+            ET.SubElement(rte, 'desc').text = f"Score: {score:.1f}, Direction: {group.direction}"
+            
+            # Add route points
+            for lat, lon in group.representative_route.coordinates:
+                rtept = ET.SubElement(rte, 'rtept', {
+                    'lat': str(lat),
+                    'lon': str(lon)
+                })
+        
+        # Write GPX file
+        tree = ET.ElementTree(gpx)
+        ET.indent(tree, space='  ')
+        tree.write(output_path, encoding='utf-8', xml_declaration=True)
     
     def _prepare_context(self) -> Dict[str, Any]:
         """
@@ -353,15 +578,25 @@ class ReportGenerator:
     
     <div class="container-fluid">
         <div class="header">
-            <h1>🚴 Strava Commute Analysis</h1>
-            <p>Generated on {{ timestamp }}</p>
-            <button onclick="refreshReport()" class="btn btn-light" style="margin-top: 10px;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="vertical-align: text-bottom;">
-                    <path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
-                    <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
-                </svg>
-                Refresh Report
-            </button>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h1>🚴 Strava Commute Analysis</h1>
+                    <p>Generated on {{ timestamp }}</p>
+                    <button onclick="refreshReport()" class="btn btn-light" style="margin-top: 10px;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="vertical-align: text-bottom;">
+                            <path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
+                            <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
+                        </svg>
+                        Refresh Report
+                    </button>
+                </div>
+                {% if qr_code %}
+                <div class="qr-code-container" style="background: rgba(255,255,255,0.1); border: 2px solid rgba(255,255,255,0.3);">
+                    <img src="{{ qr_code }}" alt="QR Code for Mobile Access" style="border-color: rgba(255,255,255,0.5);">
+                    <p style="color: rgba(255,255,255,0.9); margin-bottom: 0;">📱 Scan for Mobile Access</p>
+                </div>
+                {% endif %}
+            </div>
         </div>
 
         <!-- Navigation Tabs -->
@@ -1115,9 +1350,121 @@ class ReportGenerator:
                         } catch (err) {
                             console.error('Error accessing iframe:', err);
                         }
+                        
+                        // Show comparison button if multiple routes selected
+                        updateComparisonButton();
                     }
                 });
             });
+            
+            // Comparison functionality
+            function updateComparisonButton() {
+                let compareBtn = document.getElementById('compare-routes-btn');
+                if (!compareBtn) {
+                    // Create comparison button if it doesn't exist
+                    compareBtn = document.createElement('button');
+                    compareBtn.id = 'compare-routes-btn';
+                    compareBtn.className = 'btn btn-primary';
+                    compareBtn.style.cssText = 'position: fixed; bottom: 20px; right: 20px; z-index: 1000; display: none;';
+                    compareBtn.innerHTML = '🔄 Compare Selected Routes';
+                    compareBtn.onclick = showComparison;
+                    document.body.appendChild(compareBtn);
+                }
+                
+                if (selectedRoutes.size >= 2) {
+                    compareBtn.style.display = 'block';
+                    compareBtn.innerHTML = `🔄 Compare ${selectedRoutes.size} Routes`;
+                } else {
+                    compareBtn.style.display = 'none';
+                }
+            }
+            
+            function showComparison() {
+                if (selectedRoutes.size < 2) return;
+                
+                // Get route data for selected routes
+                const comparisonData = [];
+                selectedRoutes.forEach(routeId => {
+                    const row = document.querySelector(`[data-route-id="${routeId}"]`);
+                    if (row) {
+                        comparisonData.push({
+                            id: routeId,
+                            name: row.querySelector('.route-name-link')?.textContent || routeId,
+                            score: row.cells[1]?.textContent || 'N/A',
+                            duration: row.cells[2]?.textContent || 'N/A',
+                            distance: row.cells[3]?.textContent || 'N/A',
+                            speed: row.cells[4]?.textContent || 'N/A',
+                            frequency: row.cells[5]?.textContent || 'N/A',
+                            weather: row.cells[6]?.textContent || 'N/A'
+                        });
+                    }
+                });
+                
+                // Create comparison modal
+                const modal = document.createElement('div');
+                modal.className = 'modal fade';
+                modal.id = 'comparisonModal';
+                modal.innerHTML = `
+                    <div class="modal-dialog modal-xl">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">Route Comparison</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <table class="table table-bordered">
+                                    <thead>
+                                        <tr>
+                                            <th>Metric</th>
+                                            ${comparisonData.map(r => `<th>${r.name}</th>`).join('')}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td><strong>Score</strong></td>
+                                            ${comparisonData.map(r => `<td>${r.score}</td>`).join('')}
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Duration</strong></td>
+                                            ${comparisonData.map(r => `<td>${r.duration}</td>`).join('')}
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Distance</strong></td>
+                                            ${comparisonData.map(r => `<td>${r.distance}</td>`).join('')}
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Speed</strong></td>
+                                            ${comparisonData.map(r => `<td>${r.speed}</td>`).join('')}
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Frequency</strong></td>
+                                            ${comparisonData.map(r => `<td>${r.frequency}</td>`).join('')}
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Weather Score</strong></td>
+                                            ${comparisonData.map(r => `<td>${r.weather}</td>`).join('')}
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // Remove existing modal if present
+                const existingModal = document.getElementById('comparisonModal');
+                if (existingModal) existingModal.remove();
+                
+                document.body.appendChild(modal);
+                const bsModal = new bootstrap.Modal(modal);
+                bsModal.show();
+                
+                // Clean up modal after it's hidden
+                modal.addEventListener('hidden.bs.modal', () => modal.remove());
+            }
+            
+            // Expose comparison function globally
+            window.showComparison = showComparison;
             
             // Wait for map to load before setting up interactions
             setTimeout(() => {
