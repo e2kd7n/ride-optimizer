@@ -96,10 +96,10 @@ def show_cache_stats():
         cache_timestamp = data.get('timestamp', 'Unknown')
     
     # Summary table
-    print("┌─────────────────────────────────────────────────────────────────┐")
-    print(f"│ Cache Updated: {cache_timestamp[:19]:<44} │")
-    print(f"│ Total Activities: {len(activities):<47} │")
-    print("└─────────────────────────────────────────────────────────────────┘")
+    print("+---------------------------------------------------------------+")
+    print(f"| Cache Updated: {cache_timestamp[:19]:<42} |")
+    print(f"| Total Activities: {len(activities):<45} |")
+    print("+---------------------------------------------------------------+")
     print()
     
     if not activities:
@@ -162,71 +162,72 @@ def show_cache_stats():
     if earliest_date and latest_date:
         days_span = (latest_date - earliest_date).days
         print("📅 DATE RANGE")
-        print("┌──────────────┬────────────────────────────────────────────────┐")
-        print(f"│ Earliest     │ {str(earliest_date.date()):<46} │")
-        print(f"│ Latest       │ {str(latest_date.date()):<46} │")
-        print(f"│ Span         │ {days_span} days ({days_span/365.25:.1f} years){'':<30} │")
-        print("└──────────────┴────────────────────────────────────────────────┘")
+        print("+-------------+------------------------------------------------+")
+        print(f"| Earliest    | {str(earliest_date.date()):<46} |")
+        print(f"| Latest      | {str(latest_date.date()):<46} |")
+        span_text = f"{days_span} days ({days_span/365.25:.1f} years)"
+        print(f"| Span        | {span_text:<46} |")
+        print("+-------------+------------------------------------------------+")
         print()
     
     # Activity Types table
     print("🚴 ACTIVITY TYPES")
-    print("┌─────────────────────────────┬───────────┬────────────┐")
-    print("│ Type                        │ Count     │ Percentage │")
-    print("├─────────────────────────────┼───────────┼────────────┤")
+    print("+-----------------------------+-----------+------------+")
+    print("| Type                        | Count     | Percentage |")
+    print("+-----------------------------+-----------+------------+")
     for activity_type, count in activity_types.most_common():
         percentage = (count / len(activities)) * 100
-        print(f"│ {activity_type:<27} │ {count:>9} │ {percentage:>9.1f}% │")
-    print("└─────────────────────────────┴───────────┴────────────┘")
+        print(f"| {activity_type:<27} | {count:>9} | {percentage:>9.1f}% |")
+    print("+-----------------------------+-----------+------------+")
     print()
     
     # Activities by Year table
     if years:
         print("📆 ACTIVITIES BY YEAR")
-        print("┌──────────┬───────────┐")
-        print("│ Year     │ Count     │")
-        print("├──────────┼───────────┤")
+        print("+----------+-----------+")
+        print("| Year     | Count     |")
+        print("+----------+-----------+")
         for year in sorted(years.keys()):
-            print(f"│ {year}   │ {years[year]:>9} │")
-        print("└──────────┴───────────┘")
+            print(f"| {year}   | {years[year]:>9} |")
+        print("+----------+-----------+")
         print()
     
     # Commute Activities table
     commute_percentage = (commute_count / len(activities)) * 100 if activities else 0
     print("🏢 COMMUTE ACTIVITIES")
-    print("┌──────────────────┬───────────┬────────────┐")
-    print("│ Category         │ Count     │ Percentage │")
-    print("├──────────────────┼───────────┼────────────┤")
-    print(f"│ Total Commutes   │ {commute_count:>9} │ {commute_percentage:>9.1f}% │")
-    print(f"│ To Work          │ {to_work_count:>9} │ {(to_work_count/len(activities)*100):>9.1f}% │")
-    print(f"│ From Work        │ {from_work_count:>9} │ {(from_work_count/len(activities)*100):>9.1f}% │")
-    print("└──────────────────┴───────────┴────────────┘")
+    print("+------------------+-----------+------------+")
+    print("| Category         | Count     | Percentage |")
+    print("+------------------+-----------+------------+")
+    print(f"| Total Commutes   | {commute_count:>9} | {commute_percentage:>9.1f}% |")
+    print(f"| To Work          | {to_work_count:>9} | {(to_work_count/len(activities)*100):>9.1f}% |")
+    print(f"| From Work        | {from_work_count:>9} | {(from_work_count/len(activities)*100):>9.1f}% |")
+    print("+------------------+-----------+------------+")
     print()
     
     # Distance Statistics table
     if distances:
         print("📏 DISTANCE STATISTICS")
-        print("┌──────────────┬──────────────┐")
-        print("│ Metric       │ Value        │")
-        print("├──────────────┼──────────────┤")
-        print(f"│ Total        │ {sum(distances):>10.1f} km │")
-        print(f"│ Average      │ {sum(distances)/len(distances):>10.2f} km │")
-        print(f"│ Minimum      │ {min(distances):>10.2f} km │")
-        print(f"│ Maximum      │ {max(distances):>10.2f} km │")
-        print("└──────────────┴──────────────┘")
+        print("+--------------+--------------+")
+        print("| Metric       | Value        |")
+        print("+--------------+--------------+")
+        print(f"| Total        | {sum(distances):>10.1f} km |")
+        print(f"| Average      | {sum(distances)/len(distances):>10.2f} km |")
+        print(f"| Min          | {min(distances):>10.2f} km |")
+        print(f"| Max          | {max(distances):>10.2f} km |")
+        print("+--------------+--------------+")
         print()
     
     # Duration Statistics table
     if durations:
         print("⏱️  DURATION STATISTICS")
-        print("┌──────────────┬──────────────────┐")
-        print("│ Metric       │ Value            │")
-        print("├──────────────┼──────────────────┤")
-        print(f"│ Total        │ {sum(durations)/60:>12.1f} hrs │")
-        print(f"│ Average      │ {sum(durations)/len(durations):>12.1f} min │")
-        print(f"│ Minimum      │ {min(durations):>12.1f} min │")
-        print(f"│ Maximum      │ {max(durations):>12.1f} min │")
-        print("└──────────────┴──────────────────┘")
+        print("+--------------+------------------+")
+        print("| Metric       | Value            |")
+        print("+--------------+------------------+")
+        print(f"| Total        | {sum(durations)/60:>12.1f} hours |")
+        print(f"| Average      | {sum(durations)/len(durations):>12.1f} min   |")
+        print(f"| Min          | {min(durations):>12.1f} min   |")
+        print(f"| Max          | {max(durations):>12.1f} min   |")
+        print("+--------------+------------------+")
         print()
     
     print("="*70 + "\n")
