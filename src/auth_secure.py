@@ -50,6 +50,8 @@ def setup_security_logging():
         )
         security_logger.addHandler(security_handler)
         security_logger.setLevel(logging.INFO)
+        # Prevent security logs from propagating to console
+        security_logger.propagate = False
 
 def log_security_event(event_type: str, details: dict):
     """Log security-relevant events."""

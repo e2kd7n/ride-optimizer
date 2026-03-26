@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-03-24
+**Last Updated:** 2026-03-26 22:23 UTC
 
 This file reflects the current state of GitHub issues by priority. Issues are managed via GitHub labels (P0-critical, P1-high, P2-medium, P3-low, P4-future).
 
@@ -12,61 +12,52 @@ Issues that make the application unusable or cause data loss.
 ## 🔴 P1 - HIGH (Current Sprint)
 Issues that significantly impact core functionality or user experience.
 
-**No P1 issues currently open** ✅
+- #58 - Show time-aware next commute recommendations (to work & to home)
+- #56 - Implement percentile-based route similarity to reduce over-clustering
+- #55 - Complete and review full analysis with Fréchet algorithm
 
-**Recently Completed:**
-- ✅ #44 - Extract HTML Template to External File (2026-03-25)
-- ✅ #45 - Add QR Code Generation for Mobile Transfer (2026-03-25)
-- ✅ #46 - Add PDF Export Option (2026-03-25)
-- ✅ #47 - Add Side-by-Side Route Comparison Feature (2026-03-25)
-- ✅ #48 - Implement Data Export in JSON, GPX, and CSV Formats (2026-03-25)
-- ✅ #49 - Implement Metric/Imperial Unit Toggle with Complete Consistency (2026-03-25)
-- ✅ #50 - Show Optimal Route Map Preview at Top of Page (2026-03-25)
-- ✅ #51 - Significantly Improve Route Naming Mechanism (2026-03-24)
-- ✅ #52 - Remove Test Routes from Production Code (2026-03-24)
-- ✅ #53 - Code Cleanup and Performance Optimization (2026-03-24)
 
 ## 🟡 P2 - MEDIUM (Next Sprint)
 Important improvements that enhance functionality but don't block core workflows.
 
 - #21 - Update TECHNICAL_SPEC.md with comprehensive implementation details
-- #24 - Grey out unselected routes on map when route is clicked
+- #24 - [LOW PRIORITY] Grey out unselected routes on map when route is clicked
 
 ## 🟢 P3 - LOW (Backlog)
 Nice-to-have improvements and minor UX enhancements.
 
-- #22 - Debug and fix Bootstrap tab switching functionality
+- #22 - [LOW PRIORITY] Debug and fix Bootstrap tab switching functionality
 - #41 - Create unit tests for core modules
 - #42 - Write integration tests for full workflow
 
 ## 📋 P4 - FUTURE ENHANCEMENTS
 Feature requests and enhancements for future releases.
 
-### Long Rides Features
-- #6 - Add top 10 longest rides table with Strava links
-- #7 - Add monthly ride statistics breakdown
-- #8 - Add average speed and elevation gain metrics
-- #9 - Add interactive map showing all long ride routes
-
-### Weather Integration
+- #57 - 🎯 EPIC: Long Rides Analysis & Recommendations (consolidates #6, #7, #8, #9)
 - #54 - Weather Dashboard Implementation (Epic)
-
-### Infrastructure & Integrations
-- #25 - Implement automatic token refresh for expired Strava tokens
-- #33 - Add traffic pattern analysis
-- #34 - Add carbon footprint calculations
-- #35 - Add integration with other fitness platforms
-- #39 - Evaluate Photon API as Nominatim alternative
-
-### Advanced Features
-- #36 - Create mobile app version
-- #37 - Add real-time route suggestions
-- #38 - Add social features (compare with other commuters)
+- #6 - Add top 10 longest rides table with Strava links (part of #57 epic)
+- #7 - Add monthly ride statistics breakdown (part of #57 epic)
+- #8 - Add average speed and elevation gain metrics (part of #57 epic)
+- #9 - Add interactive map showing all long ride routes (part of #57 epic)
 
 ## ⚠️ Unprioritized Issues
 Issues without priority labels that need to be triaged.
 
-**No unprioritized issues currently open** ✅
+- #49 - Implement Metric/Imperial Unit Toggle with Complete Consistency
+- #48 - Implement Data Export in JSON, GPX, and CSV Formats
+- #47 - Add Side-by-Side Route Comparison Feature
+- #46 - Add PDF Export Option
+- #45 - Add QR Code Generation for Mobile Transfer
+- #44 - Extract HTML template to external file
+- #39 - Evaluate Photon API as Nominatim alternative
+- #38 - Add social features (compare with other commuters)
+- #37 - Add real-time route suggestions
+- #36 - Create mobile app version
+- #35 - Add integration with other fitness platforms
+- #34 - Add carbon footprint calculations
+- #33 - Add traffic pattern analysis
+- #25 - Implement automatic token refresh for expired Strava tokens
+
 
 ## Priority Guidelines
 
@@ -74,126 +65,53 @@ Issues without priority labels that need to be triaged.
 - Application is down or unusable
 - Data loss or corruption
 - Security vulnerabilities
-- Strava API authentication failures
 - **Action:** Drop everything and fix immediately
 
 ### P1 - HIGH
 - Core features broken or severely degraded
 - Significant user pain points
 - Blocks important workflows
-- Route matching failures
-- Weather data integration issues
 - **Action:** Fix in current sprint (1-2 weeks)
 
 ### P2 - MEDIUM
 - Feature improvements
 - Moderate user pain points
 - Quality of life enhancements
-- Report visualization improvements
 - **Action:** Plan for next sprint (2-4 weeks)
 
 ### P3 - LOW
 - Minor UX improvements
 - Edge cases
 - Nice-to-have features
-- Documentation updates
 - **Action:** Backlog, address when time permits
 
 ### P4 - FUTURE
 - New features
 - Major enhancements
 - Long-term improvements
-- Mobile app development
-- Real-time tracking integration
 - **Action:** Plan for future releases
 
 ## How to Update Priorities
 
 1. Use GitHub labels to set priority (P0-critical, P1-high, P2-medium, P3-low, P4-future)
-2. Manually update this file to reflect current state
+2. Update this file manually or via script
 3. Commit changes with descriptive message
 4. Communicate priority changes to team
 
-## Issue Lifecycle
+## Summary Statistics
 
-```
-New Issue → Triaged (Priority Assigned) → In Progress → Testing → Closed
-```
+- **Total Open Issues:** 29
+- **P0 (Critical):** 0
+- **P1 (High):** 3
+- **P2 (Medium):** 2
+- **P3 (Low):** 3
+- **P4 (Future):** 6
+- **Unprioritized:** 15
 
-### Status Labels
-- `needs-triage` - New issue, priority not yet assigned
-- `in-progress` - Actively being worked on
-- `blocked` - Waiting on external dependency
-- `needs-testing` - Implementation complete, needs verification
-- `ready-for-review` - Code complete, awaiting review
+## Recommended Next Actions
 
-## Sprint Planning
-
-### Current Sprint Focus (Week of 2026-03-24)
-**Theme:** Report Enhancement & Code Quality
-
-**Goals:**
-1. Extract HTML template for maintainability (#44)
-2. Add mobile transfer capability (#45)
-3. Improve route naming (#51)
-4. Clean up test code (#52)
-
-**Stretch Goals:**
-- PDF export (#46)
-- Unit system consistency (#49)
-
-### Next Sprint (Week of 2026-03-31)
-**Theme:** Data Export & Visualization
-
-**Planned:**
-- Side-by-side route comparison (#47)
-- Multiple export formats (#48)
-- Optimal route preview map (#50)
-- Map zoom fixes (#19)
-- Re-enable geocoding (#20)
-
-## Issue Statistics
-
-**Total Open Issues:** 17 (down from 52 after deduplication)
-- P0 (Critical): 0
-- P1 (High): 0
-- P2 (Medium): 2
-- P3 (Low): 3
-- P4 (Future): 12
-
-**Recently Closed:** 36 issues
-- #1-5: Fréchet algorithm validation (completed)
-- #10-18, #26-32: Weather features (consolidated into #54)
-- #19: Map zoom (completed)
-- #20: Geocoding re-enabled (completed)
-- #23: Route naming color coding (duplicate of #51)
-- #40: Fréchet analysis review (completed)
-- #43: Fréchet caching (completed)
-- #44-50: All P1 features (completed 2026-03-25)
-- #51: Route naming improvements (completed 2026-03-24)
-- #52: Test routes removed (completed 2026-03-24)
-- #53: Code cleanup (completed 2026-03-24)
-
-**Average Time to Close:** TBD (tracking starts 2026-03-24)
-
-## Deduplication Summary
-
-**Date:** 2026-03-24
-
-### Actions Taken:
-1. ✅ Closed #1-5 (Fréchet validation - completed)
-2. ✅ Closed #10-18, #26-32 (Weather - consolidated into #54)
-3. ✅ Closed #23 (Duplicate of #51)
-4. ✅ Created #54 (Weather Dashboard Epic)
-5. ✅ Reprioritized remaining 30 issues
-
-### Result:
-- **Before:** 52 open issues (many duplicates/obsolete)
-- **After:** 30 open issues (clean, prioritized)
-- **Improvement:** 42% reduction in issue count
-
-## Related Documentation
-
-- [WORKFLOW_GUIDE.md](./WORKFLOW_GUIDE.md) - Development workflow and processes
-- [GITHUB_ISSUES.md](./GITHUB_ISSUES.md) - Detailed issue descriptions
-- [WEEKLY_MAINTENANCE.md](./WEEKLY_MAINTENANCE.md) - Maintenance procedures
+1. **Implement #58** - Time-aware next commute recommendations (highest user value)
+2. **Implement #56** - Fix route similarity algorithm (highest impact on core functionality)
+3. **Complete #55** - Validate Fréchet algorithm improvements
+4. **Triage unprioritized issues** - Assign priority labels to remaining 15 issues
+5. **Update #21** - Document recent changes for maintainability

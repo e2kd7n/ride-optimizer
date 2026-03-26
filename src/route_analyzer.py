@@ -12,13 +12,13 @@ import json
 import hashlib
 from pathlib import Path
 from typing import List, Tuple, Dict, Any, Optional
-from dataclasses import dataclass
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from dataclasses import dataclass, asdict
 
 import numpy as np
 from scipy.spatial.distance import directed_hausdorff
 from geopy.distance import geodesic
 import polyline
+from tqdm import tqdm
 
 from .data_fetcher import Activity
 from .location_finder import Location
@@ -76,7 +76,7 @@ class RouteAnalyzer:
     """Analyzes and groups routes between home and work."""
     
     def __init__(self, activities: List[Activity], home: Location,
-                 work: Location, config, n_workers=2):
+                 work: Location, config, n_workers=2, force_reanalysis=False):
         """
         Initialize route analyzer.
         
@@ -86,6 +86,7 @@ class RouteAnalyzer:
             work: Work location
             config: Configuration object
             n_workers: Number of parallel workers for route grouping (1-8)
+            force_reanalysis: If True, clear cache and reprocess all routes
         """
         self.activities = activities
         self.home = home
@@ -94,12 +95,24 @@ class RouteAnalyzer:
         self.n_workers = max(1, min(8, n_workers))  # Clamp between 1 and 8
         self.similarity_threshold = config.get('route_analysis.similarity_threshold', 0.85)
         self.route_namer = RouteNamer(config)
+        self.force_reanalysis = force_reanalysis
         
-        # Initialize similarity cache
+        # Initialize caches
         self.cache_dir = Path('cache')
         self.cache_dir.mkdir(exist_ok=True)
         self.cache_file = self.cache_dir / 'route_similarity_cache.json'
         self.similarity_cache = self._load_similarity_cache()
+        
+        # Route grouping cache
+        self.groups_cache_file = self.cache_dir / 'route_groups_cache.json'
+        
+        # Clear cache if force reanalysis
+        if force_reanalysis and self.groups_cache_file.exists():
+            tqdm.write("   🗑️  Clearing route groups cache (force reanalysis)")
+            self.groups_cache_file.unlink()
+            self.groups_cache = {}
+        else:
+            self.groups_cache = self._load_groups_cache()
         
     def _load_similarity_cache(self) -> Dict[str, float]:
         """Load similarity cache from disk."""
@@ -122,6 +135,155 @@ class RouteAnalyzer:
             logger.info(f"Saved {len(self.similarity_cache)} similarity calculations to cache")
         except Exception as e:
             logger.warning(f"Failed to save similarity cache: {e}")
+    
+    def _load_groups_cache(self) -> Dict[str, Any]:
+        """Load route groups cache from disk."""
+        if self.groups_cache_file.exists():
+            try:
+                with open(self.groups_cache_file, 'r') as f:
+                    cache = json.load(f)
+                logger.info(f"Loaded route groups cache (key: {cache.get('cache_key', 'unknown')[:8]}...)")
+                return cache
+            except Exception as e:
+                logger.warning(f"Failed to load groups cache: {e}")
+                return {}
+        return {}
+    
+    def _save_groups_cache(self, cache_key: str, groups: List[RouteGroup]):
+        """Save route groups cache to disk (legacy method)."""
+        # Extract activity IDs from groups
+        activity_ids = []
+        for group in groups:
+            for route in group.routes:
+                if route.activity_id not in activity_ids:
+                    activity_ids.append(route.activity_id)
+        self._save_groups_cache_with_ids(activity_ids, groups)
+    
+    def _save_groups_cache_with_ids(self, activity_ids: List[int], groups: List[RouteGroup]):
+        """Save route groups cache to disk with activity ID tracking."""
+        try:
+            # Serialize groups to JSON-compatible format
+            serialized_groups = []
+            for group in groups:
+                serialized_group = {
+                    'id': group.id,
+                    'direction': group.direction,
+                    'frequency': group.frequency,
+                    'name': group.name,
+                    'is_plus_route': group.is_plus_route,
+                    'representative_route': {
+                        'activity_id': group.representative_route.activity_id,
+                        'direction': group.representative_route.direction,
+                        'coordinates': group.representative_route.coordinates,
+                        'distance': group.representative_route.distance,
+                        'duration': group.representative_route.duration,
+                        'elevation_gain': group.representative_route.elevation_gain,
+                        'timestamp': group.representative_route.timestamp,
+                        'average_speed': group.representative_route.average_speed,
+                        'is_plus_route': group.representative_route.is_plus_route
+                    },
+                    'routes': [
+                        {
+                            'activity_id': r.activity_id,
+                            'direction': r.direction,
+                            'coordinates': r.coordinates,
+                            'distance': r.distance,
+                            'duration': r.duration,
+                            'elevation_gain': r.elevation_gain,
+                            'timestamp': r.timestamp,
+                            'average_speed': r.average_speed,
+                            'is_plus_route': r.is_plus_route
+                        }
+                        for r in group.routes
+                    ]
+                }
+                serialized_groups.append(serialized_group)
+            
+            cache_data = {
+                'activity_ids': activity_ids,
+                'groups': serialized_groups,
+                'similarity_threshold': self.similarity_threshold,
+                'algorithm': 'frechet' if FRECHET_AVAILABLE else 'hausdorff',
+                'timestamp': str(np.datetime64('now'))
+            }
+            
+            with open(self.groups_cache_file, 'w') as f:
+                json.dump(cache_data, f)
+            logger.info(f"Saved {len(groups)} route groups to cache ({len(activity_ids)} activities)")
+        except Exception as e:
+            logger.warning(f"Failed to save groups cache: {e}")
+    
+    def _deserialize_groups(self, serialized_groups: List[Dict]) -> List[RouteGroup]:
+        """Deserialize route groups from JSON format."""
+        groups = []
+        for sg in serialized_groups:
+            # Deserialize representative route
+            rep_data = sg['representative_route']
+            representative = Route(
+                activity_id=rep_data['activity_id'],
+                direction=rep_data['direction'],
+                coordinates=[(lat, lon) for lat, lon in rep_data['coordinates']],
+                distance=rep_data['distance'],
+                duration=rep_data['duration'],
+                elevation_gain=rep_data['elevation_gain'],
+                timestamp=rep_data['timestamp'],
+                average_speed=rep_data['average_speed'],
+                is_plus_route=rep_data['is_plus_route']
+            )
+            
+            # Deserialize routes
+            routes = []
+            for r_data in sg['routes']:
+                route = Route(
+                    activity_id=r_data['activity_id'],
+                    direction=r_data['direction'],
+                    coordinates=[(lat, lon) for lat, lon in r_data['coordinates']],
+                    distance=r_data['distance'],
+                    duration=r_data['duration'],
+                    elevation_gain=r_data['elevation_gain'],
+                    timestamp=r_data['timestamp'],
+                    average_speed=r_data['average_speed'],
+                    is_plus_route=r_data['is_plus_route']
+                )
+                routes.append(route)
+            
+            # Create route group
+            group = RouteGroup(
+                id=sg['id'],
+                direction=sg['direction'],
+                routes=routes,
+                representative_route=representative,
+                frequency=sg['frequency'],
+                name=sg['name'],
+                is_plus_route=sg['is_plus_route']
+            )
+            groups.append(group)
+        
+        return groups
+    
+    def _generate_cache_key(self, routes: List[Route]) -> str:
+        """
+        Generate cache key based on route activity IDs and config.
+        
+        Args:
+            routes: List of routes
+            
+        Returns:
+            Cache key string
+        """
+        # Sort activity IDs for consistent key
+        activity_ids = sorted([r.activity_id for r in routes])
+        
+        # Include similarity threshold and algorithm version in key
+        key_data = {
+            'activity_ids': activity_ids,
+            'similarity_threshold': self.similarity_threshold,
+            'algorithm': 'frechet' if FRECHET_AVAILABLE else 'hausdorff',
+            'version': '2.0'  # Increment when algorithm changes
+        }
+        
+        key_str = json.dumps(key_data, sort_keys=True)
+        return hashlib.md5(key_str.encode()).hexdigest()
     
     def _get_route_hash(self, route: Route) -> str:
         """
@@ -366,7 +528,10 @@ class RouteAnalyzer:
     
     def group_similar_routes(self, routes: List[Route] = None) -> List[RouteGroup]:
         """
-        Group similar routes together using parallel processing.
+        Group similar routes with intelligent caching and incremental analysis.
+        
+        Uses cached groups when possible, only processes new routes incrementally,
+        and only uses parallelism when beneficial (>100 new routes).
         
         Args:
             routes: List of routes to group (if None, extracts all routes)
@@ -381,66 +546,187 @@ class RouteAnalyzer:
             logger.warning("No routes to group")
             return []
         
+        # Check for cached groups
+        if not self.force_reanalysis and self.groups_cache:
+            cached_activity_ids = set(self.groups_cache.get('activity_ids', []))
+            current_activity_ids = set(r.activity_id for r in routes)
+            
+            # Check if we can use incremental analysis
+            new_activity_ids = current_activity_ids - cached_activity_ids
+            removed_activity_ids = cached_activity_ids - current_activity_ids
+            
+            if not new_activity_ids and not removed_activity_ids:
+                # Perfect cache hit - no changes
+                tqdm.write("   💾 Using cached route groups (instant!)")
+                cached_groups = self._deserialize_groups(self.groups_cache['groups'])
+                logger.info(f"Loaded {len(cached_groups)} route groups from cache")
+                return cached_groups
+            
+            elif new_activity_ids and not removed_activity_ids:
+                # Incremental analysis - only new routes
+                tqdm.write(f"   ⚡ Incremental analysis: {len(new_activity_ids)} new routes")
+                new_routes = [r for r in routes if r.activity_id in new_activity_ids]
+                cached_groups = self._deserialize_groups(self.groups_cache['groups'])
+                
+                # Merge new routes into existing groups
+                updated_groups = self._merge_new_routes(cached_groups, new_routes)
+                
+                # Save updated cache
+                all_activity_ids = list(current_activity_ids)
+                self._save_groups_cache_with_ids(all_activity_ids, updated_groups)
+                self._save_similarity_cache()
+                
+                return updated_groups
+            
+            else:
+                # Routes removed or config changed - full reanalysis needed
+                if removed_activity_ids:
+                    tqdm.write(f"   🔄 Full reanalysis: {len(removed_activity_ids)} routes removed")
+                else:
+                    tqdm.write("   🔄 Full reanalysis: configuration changed")
+        
+        # Full analysis (no cache or force reanalysis)
+        tqdm.write(f"   🔄 Full analysis: {len(routes)} routes")
+        
         # Separate by direction
         home_to_work = [r for r in routes if r.direction == 'home_to_work']
         work_to_home = [r for r in routes if r.direction == 'work_to_home']
         
-        # Group each direction separately (potentially in parallel)
+        # Sequential processing (parallel removed - adds overhead without benefit)
         groups = []
         
-        if self.n_workers > 1 and home_to_work and work_to_home:
-            # Parallel processing for both directions
-            print(f"   Parallel ({self.n_workers} workers)")
-            with ProcessPoolExecutor(max_workers=self.n_workers) as executor:
-                futures = {}
-                
-                if home_to_work:
-                    print(f"   → {len(home_to_work)} home→work")
-                    future_htw = executor.submit(
-                        self._group_routes_by_similarity_static,
-                        home_to_work, 'home_to_work', self.similarity_threshold,
-                        self.similarity_cache
-                    )
-                    futures[future_htw] = 'home_to_work'
-                
-                if work_to_home:
-                    print(f"   → {len(work_to_home)} work→home")
-                    future_wth = executor.submit(
-                        self._group_routes_by_similarity_static,
-                        work_to_home, 'work_to_home', self.similarity_threshold,
-                        self.similarity_cache
-                    )
-                    futures[future_wth] = 'work_to_home'
-                
-                # Collect results as they complete
-                for future in as_completed(futures):
-                    direction = futures[future]
-                    result_groups = future.result()
-                    groups.extend(result_groups)
-                    dir_label = direction.replace('_', '→')
-                    print(f"   ✓ {len(result_groups)} {dir_label} groups")
-        else:
-            # Sequential processing
-            if home_to_work:
-                print(f"   → {len(home_to_work)} home→work")
-                htw_groups = self._group_routes_by_similarity(home_to_work, 'home_to_work')
-                groups.extend(htw_groups)
-                print(f"   ✓ {len(htw_groups)} groups")
-            
-            if work_to_home:
-                print(f"   → {len(work_to_home)} work→home")
-                wth_groups = self._group_routes_by_similarity(work_to_home, 'work_to_home')
-                groups.extend(wth_groups)
-                print(f"   ✓ {len(wth_groups)} groups")
+        if home_to_work:
+            tqdm.write(f"   → Processing {len(home_to_work)} home→work routes")
+            htw_groups = self._group_routes_by_similarity(home_to_work, 'home_to_work')
+            groups.extend(htw_groups)
+            tqdm.write(f"   ✓ {len(htw_groups)} groups")
         
-        print(f"   Total: {len(groups)} groups")
+        if work_to_home:
+            tqdm.write(f"   → Processing {len(work_to_home)} work→home routes")
+            wth_groups = self._group_routes_by_similarity(work_to_home, 'work_to_home')
+            groups.extend(wth_groups)
+            tqdm.write(f"   ✓ {len(wth_groups)} groups")
+        
+        tqdm.write(f"   Total: {len(groups)} groups")
         logger.info(f"Created {len(groups)} route groups from {len(routes)} routes")
         
         # Mark plus routes (routes >15% longer than median)
         groups = self._mark_plus_routes(groups)
         
+        # Save to cache
+        activity_ids = [r.activity_id for r in routes]
+        self._save_groups_cache_with_ids(activity_ids, groups)
+        
         # Save similarity cache after grouping
         self._save_similarity_cache()
+        
+        return groups
+    
+    def _merge_new_routes(self, existing_groups: List[RouteGroup],
+                         new_routes: List[Route]) -> List[RouteGroup]:
+        """
+        Merge new routes into existing groups incrementally.
+        
+        Args:
+            existing_groups: Existing route groups from cache
+            new_routes: New routes to merge
+            
+        Returns:
+            Updated list of route groups
+        """
+        if not new_routes:
+            return existing_groups
+        
+        tqdm.write(f"   → Merging {len(new_routes)} new routes into {len(existing_groups)} groups")
+        
+        # Separate new routes by direction
+        new_htw = [r for r in new_routes if r.direction == 'home_to_work']
+        new_wth = [r for r in new_routes if r.direction == 'work_to_home']
+        
+        # Separate existing groups by direction
+        htw_groups = [g for g in existing_groups if g.direction == 'home_to_work']
+        wth_groups = [g for g in existing_groups if g.direction == 'work_to_home']
+        
+        # Merge each direction
+        updated_groups = []
+        
+        if new_htw:
+            updated_htw = self._merge_routes_into_groups(htw_groups, new_htw, 'home_to_work')
+            updated_groups.extend(updated_htw)
+            tqdm.write(f"   ✓ Merged into {len(updated_htw)} home→work groups")
+        else:
+            updated_groups.extend(htw_groups)
+        
+        if new_wth:
+            updated_wth = self._merge_routes_into_groups(wth_groups, new_wth, 'work_to_home')
+            updated_groups.extend(updated_wth)
+            tqdm.write(f"   ✓ Merged into {len(updated_wth)} work→home groups")
+        else:
+            updated_groups.extend(wth_groups)
+        
+        # Re-mark plus routes after merge
+        updated_groups = self._mark_plus_routes(updated_groups)
+        
+        return updated_groups
+    
+    def _merge_routes_into_groups(self, groups: List[RouteGroup],
+                                  new_routes: List[Route],
+                                  direction: str) -> List[RouteGroup]:
+        """
+        Merge new routes into existing groups for a specific direction.
+        
+        Args:
+            groups: Existing route groups
+            new_routes: New routes to merge
+            direction: Route direction
+            
+        Returns:
+            Updated list of route groups
+        """
+        if not new_routes:
+            return groups
+        
+        # Try to match each new route to existing groups
+        unmatched_routes = []
+        
+        for route in new_routes:
+            matched = False
+            best_similarity = 0
+            best_group_idx = -1
+            
+            # Find best matching group
+            for idx, group in enumerate(groups):
+                similarity = self.calculate_route_similarity(
+                    route, group.representative_route
+                )
+                if similarity >= self.similarity_threshold and similarity > best_similarity:
+                    best_similarity = similarity
+                    best_group_idx = idx
+                    matched = True
+            
+            if matched:
+                # Add to existing group
+                groups[best_group_idx].routes.append(route)
+                groups[best_group_idx].frequency += 1
+                # Update representative if needed (keep median)
+                groups[best_group_idx].representative_route = self._select_representative_route(
+                    groups[best_group_idx].routes
+                )
+            else:
+                unmatched_routes.append(route)
+        
+        # Create new groups for unmatched routes
+        if unmatched_routes:
+            new_groups = self._group_routes_by_similarity(unmatched_routes, direction)
+            # Renumber new group IDs to avoid conflicts
+            next_id = len(groups)
+            for group in new_groups:
+                group.id = f"{direction}_{next_id}"
+                next_id += 1
+            groups.extend(new_groups)
+        
+        # Re-sort by frequency
+        groups.sort(key=lambda g: g.frequency, reverse=True)
         
         return groups
     
@@ -497,8 +783,8 @@ class RouteAnalyzer:
                     plus_count += 1
             
             if plus_count > 0:
-                print(f"   ⭐ {plus_count} {direction_label} PLUS routes")
-                print(f"      (>{median_distance/1000:.1f}km + 15%)")
+                tqdm.write(f"   ⭐ {plus_count} {direction_label} PLUS routes")
+                tqdm.write(f"      (>{median_distance/1000:.1f}km + 15%)")
         
         return groups
     

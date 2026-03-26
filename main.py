@@ -17,9 +17,19 @@ import logging
 import sys
 import webbrowser
 import json
+import os
+import platform
 from pathlib import Path
 from datetime import datetime
 from collections import Counter
+
+# Fix WeasyPrint library path on macOS
+if platform.system() == 'Darwin':  # macOS
+    homebrew_lib = '/opt/homebrew/lib'
+    if os.path.exists(homebrew_lib):
+        dyld_path = os.environ.get('DYLD_LIBRARY_PATH', '')
+        if homebrew_lib not in dyld_path:
+            os.environ['DYLD_LIBRARY_PATH'] = f"{homebrew_lib}:{dyld_path}"
 
 from tqdm import tqdm
 
@@ -479,13 +489,14 @@ def _generate_visualization(route_groups, home, work, config, long_rides,
     return map_html, preview_map_html, visualizer
 
 
-def _save_report(analysis_results, output_dir):
+def _save_report(analysis_results, output_dir, generate_pdf=False):
     """
     Generate and save HTML report with timestamp.
     
     Args:
         analysis_results: Dictionary of analysis results
         output_dir: Output directory path
+        generate_pdf: Whether to generate PDF report (default: False)
         
     Returns:
         Path: Path to the saved report file
@@ -499,10 +510,13 @@ def _save_report(analysis_results, output_dir):
     report_path = output_path / f'commute_analysis_{timestamp}.html'
     
     generator = ReportGenerator(analysis_results)
-    generator.generate_report(str(report_path))
+    generator.generate_report(str(report_path), generate_pdf=generate_pdf)
     
     logger.info(f"✅ Analysis complete!")
     logger.info(f"📄 Report saved to: {report_path}")
+    if generate_pdf:
+        pdf_path = str(report_path).replace('.html', '.pdf')
+        logger.info(f"📄 PDF saved to: {pdf_path}")
     logger.info(f"🚴 Optimal route: {analysis_results['optimal_route'].id} (score: {analysis_results['optimal_score']:.2f})")
     
     return report_path
@@ -533,7 +547,35 @@ def _open_report_in_browser(report_path):
         logger.info(f"Please open manually: {report_path}")
 
 
-def analyze_routes(config, output_dir, n_workers=2):
+def _log_runtime(runtime_seconds: float, num_activities: int, num_route_groups: int):
+    """
+    Log analysis runtime to file for performance tracking.
+    
+    Args:
+        runtime_seconds: Total runtime in seconds
+        num_activities: Number of activities analyzed
+        num_route_groups: Number of route groups created
+    """
+    log_dir = Path('logs')
+    log_dir.mkdir(exist_ok=True)
+    log_file = log_dir / 'performance.log'
+    
+    timestamp = datetime.now().isoformat()
+    log_entry = {
+        'timestamp': timestamp,
+        'runtime_seconds': round(runtime_seconds, 2),
+        'runtime_minutes': round(runtime_seconds / 60, 2),
+        'num_activities': num_activities,
+        'num_route_groups': num_route_groups,
+        'activities_per_second': round(num_activities / runtime_seconds, 2) if runtime_seconds > 0 else 0
+    }
+    
+    # Append to log file
+    with open(log_file, 'a') as f:
+        f.write(json.dumps(log_entry) + '\n')
+
+
+def analyze_routes(config, output_dir, n_workers=2, generate_pdf=False, force_reanalysis=False):
     """
     Analyze routes and generate report.
     
@@ -541,13 +583,21 @@ def analyze_routes(config, output_dir, n_workers=2):
         config: Configuration object
         output_dir: Output directory for reports
         n_workers: Number of parallel workers for route analysis
+        generate_pdf: Whether to generate PDF report (default: False)
+        force_reanalysis: Whether to clear cache and reprocess all routes (default: False)
     """
-    print("\n" + "="*60)
-    print("🚴  STRAVA COMMUTE ROUTE ANALYZER")
-    print("="*60)
+    import time
+    from tqdm import tqdm as tqdm_module
+    
+    # Start timing
+    start_time = time.time()
+    
+    tqdm_module.write("\n" + "="*60)
+    tqdm_module.write("🚴  STRAVA COMMUTE ROUTE ANALYZER")
+    tqdm_module.write("="*60)
     if n_workers > 1:
-        print(f"⚡  Parallel: {n_workers} workers")
-    print()
+        tqdm_module.write(f"⚡  Parallel: {n_workers} workers")
+    tqdm_module.write("")
     
     # Validate credentials before analysis
     client_id = config.get('strava.client_id')
@@ -583,7 +633,8 @@ def analyze_routes(config, output_dir, n_workers=2):
             
             # Step 4: Analyze commute routes
             pbar.set_description("🗺️  Analyzing commute routes")
-            analyzer = RouteAnalyzer(commute_activities, home, work, config, n_workers=n_workers)
+            analyzer = RouteAnalyzer(commute_activities, home, work, config,
+                                    n_workers=n_workers, force_reanalysis=force_reanalysis)
             route_groups = analyzer.group_similar_routes()
             
             if not route_groups:
@@ -635,17 +686,28 @@ def analyze_routes(config, output_dir, n_workers=2):
             }
             
             # Save and open report
-            report_path = _save_report(analysis_results, output_dir)
+            report_path = _save_report(analysis_results, output_dir, generate_pdf)
             pbar.update(1)
         
+        # Calculate runtime
+        end_time = time.time()
+        runtime_seconds = end_time - start_time
+        minutes = int(runtime_seconds // 60)
+        seconds = runtime_seconds % 60
+        runtime_display = f"{minutes}m{seconds:.1f}s"
+        
         # Print completion message
-        print("\n" + "="*60)
-        print("✅  ANALYSIS COMPLETE!")
-        print("="*60)
-        print(f"📄  Report: {report_path.name}")
-        print(f"🚴  Route: {analysis_results['optimal_route'].name}")
-        print(f"⭐  Score: {analysis_results['optimal_score']:.1f}/100")
-        print("="*60 + "\n")
+        tqdm_module.write("\n" + "="*60)
+        tqdm_module.write("✅  ANALYSIS COMPLETE!")
+        tqdm_module.write("="*60)
+        tqdm_module.write(f"📄  Report: {report_path.name}")
+        tqdm_module.write(f"🚴  Route: {analysis_results['optimal_route'].name}")
+        tqdm_module.write(f"⭐  Score: {analysis_results['optimal_score']:.1f}/100")
+        tqdm_module.write(f"⏱️   Runtime: {runtime_display}")
+        tqdm_module.write("="*60 + "\n")
+        
+        # Log runtime to file for performance tracking
+        _log_runtime(runtime_seconds, len(commute_activities), len(route_groups))
         
         _open_report_in_browser(report_path)
         
@@ -715,6 +777,10 @@ Examples:
                        help='Enable verbose logging')
     parser.add_argument('--parallel', type=int, default=2, choices=range(1, 9),
                        help='Number of parallel workers for route analysis (1-8, default: 2)')
+    parser.add_argument('--pdf', action='store_true',
+                       help='Generate PDF report (slower, adds ~30s)')
+    parser.add_argument('--force-reanalysis', action='store_true',
+                       help='Clear route grouping cache and reprocess all routes')
     
     args = parser.parse_args()
     
@@ -783,7 +849,8 @@ Examples:
             fetch_activities(config, after_date, before_date, limit, args.replace_cache)
         
         if args.analyze:
-            analyze_routes(config, args.output, n_workers=args.parallel)
+            analyze_routes(config, args.output, n_workers=args.parallel,
+                          generate_pdf=args.pdf, force_reanalysis=args.force_reanalysis)
         
     except FileNotFoundError as e:
         logger.error(f"File not found: {e}")
