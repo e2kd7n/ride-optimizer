@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-03-26 22:23 UTC
+**Last Updated:** 2026-03-26 22:31 UTC
 
 This file reflects the current state of GitHub issues by priority. Issues are managed via GitHub labels (P0-critical, P1-high, P2-medium, P3-low, P4-future).
 
@@ -12,6 +12,7 @@ Issues that make the application unusable or cause data loss.
 ## 🔴 P1 - HIGH (Current Sprint)
 Issues that significantly impact core functionality or user experience.
 
+- #60 - Security: Upgrade vulnerable dependencies (requests, tornado, pygments)
 - #58 - Show time-aware next commute recommendations (to work & to home)
 - #56 - Implement percentile-based route similarity to reduce over-clustering
 - #55 - Complete and review full analysis with Fréchet algorithm
@@ -20,12 +21,14 @@ Issues that significantly impact core functionality or user experience.
 ## 🟡 P2 - MEDIUM (Next Sprint)
 Important improvements that enhance functionality but don't block core workflows.
 
+- #59 - Security: Replace MD5 hash with SHA256 for cache keys
 - #21 - Update TECHNICAL_SPEC.md with comprehensive implementation details
 - #24 - [LOW PRIORITY] Grey out unselected routes on map when route is clicked
 
 ## 🟢 P3 - LOW (Backlog)
 Nice-to-have improvements and minor UX enhancements.
 
+- #61 - Code Quality: Improve exception handling (remove bare except)
 - #22 - [LOW PRIORITY] Debug and fix Bootstrap tab switching functionality
 - #41 - Create unit tests for core modules
 - #42 - Write integration tests for full workflow
@@ -100,18 +103,19 @@ Issues without priority labels that need to be triaged.
 
 ## Summary Statistics
 
-- **Total Open Issues:** 29
+- **Total Open Issues:** 32
 - **P0 (Critical):** 0
-- **P1 (High):** 3
-- **P2 (Medium):** 2
-- **P3 (Low):** 3
+- **P1 (High):** 4
+- **P2 (Medium):** 3
+- **P3 (Low):** 4
 - **P4 (Future):** 6
 - **Unprioritized:** 15
 
 ## Recommended Next Actions
 
-1. **Implement #58** - Time-aware next commute recommendations (highest user value)
-2. **Implement #56** - Fix route similarity algorithm (highest impact on core functionality)
-3. **Complete #55** - Validate Fréchet algorithm improvements
-4. **Triage unprioritized issues** - Assign priority labels to remaining 15 issues
-5. **Update #21** - Document recent changes for maintainability
+1. **🔒 Security #60** - Upgrade vulnerable dependencies (IMMEDIATE)
+2. **Implement #58** - Time-aware next commute recommendations (highest user value)
+3. **Implement #56** - Fix route similarity algorithm (highest impact on core functionality)
+4. **🔒 Security #59** - Replace MD5 with SHA256 in cache keys
+5. **Complete #55** - Validate Fréchet algorithm improvements
+6. **Triage unprioritized issues** - Assign priority labels to remaining 15 issues
