@@ -1,0 +1,21 @@
+# Cline ignore patterns - exclude from AI context
+# Keep only the most recent report accessible
+
+# Exclude all output files except the latest report
+output/reports/*
+!output/reports/commute_analysis_20260326_171515.html
+!output/reports/commute_analysis_20260326_171515_routes.json
+!output/reports/commute_analysis_20260326_171515_routes.gpx
+
+# Exclude ALL cache files (too large for context)
+/data/cache/
+/cache/
+
+# Exclude logs
+/logs/
+*.log
+
+# Exclude archived analysis (already completed)
+/archive/completed_analysis/
+/archive/debug_scripts/
+/archive/security_scans/

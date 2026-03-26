@@ -974,64 +974,6 @@ parser.add_argument('--export-csv', type=str,
 
 ---
 
-## Issue #6: ✅ RESOLVED - Fix Logger Reference Before Definition
-
-**Labels:** `bug`, `priority: critical`, `resolved`
-
-**Title:** Logger referenced before definition in route_analyzer.py
-
-**Description:**
-
-VSCode identified a critical bug where the `logger` variable was being referenced in an exception handler before it was defined, which would cause a `NameError` at runtime if the `similaritymeasures` package was not installed.
-
-### Problem:
-
-In `src/route_analyzer.py`, the code attempted to use `logger.warning()` in the `except ImportError` block (line 24) before `logger` was initialized (line 30):
-
-```python
-try:
-    import similaritymeasures
-    FRECHET_AVAILABLE = True
-except ImportError:
-    FRECHET_AVAILABLE = False
-    logger.warning("...")  # ❌ NameError: logger not defined yet
-    
-logger = logging.getLogger(__name__)  # Defined here
-```
-
-### Solution:
-
-Moved the logger initialization before the try-except block to ensure it's available when needed:
-
-```python
-logger = logging.getLogger(__name__)  # ✅ Define first
-
-try:
-    import similaritymeasures
-    FRECHET_AVAILABLE = True
-except ImportError:
-    FRECHET_AVAILABLE = False
-    logger.warning("...")  # ✅ Now works correctly
-```
-
-### Resolution:
-
-- **Fixed in commit:** `7423f0d`
-- **Files changed:** `src/route_analyzer.py`
-- **Documentation:** `VSCODE_PROBLEMS_RESOLUTION.md`
-- **Status:** ✅ RESOLVED
-
-### Validation:
-
-- ✅ All Python files pass syntax validation
-- ✅ AST parsing successful for all modules
-- ✅ No runtime errors when similaritymeasures is missing
-- ✅ Logger properly initialized before use
-
-**Closed:** 2026-03-13
-
----
-
 ## Issue #1: Test Interactive Route Highlighting Features
 
 **Labels:** `testing`, `enhancement`, `priority: high`
@@ -1659,9 +1601,6 @@ def get_user_directory(user_id: int) -> Path:
 **Low Priority:**
 - Issue #4: Add Charts/Graphs
 
-**Resolved:**
-- Issue #6: ✅ Fix Logger Reference Before Definition (Commit: 7423f0d)
-
 ---
 
 ## How to Create These Issues on GitHub
@@ -1676,4 +1615,6 @@ def get_user_directory(user_id: int) -> Path:
 
 ---
 
-*Last Updated: 2026-03-24*
+*Last Updated: 2026-03-26*
+
+**Note:** Completed issues are tracked in [RELEASE_NOTES.md](RELEASE_NOTES.md)

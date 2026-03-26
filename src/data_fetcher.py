@@ -200,7 +200,8 @@ class StravaDataFetcher:
                                 earliest_date = act_date
                             if latest_date is None or act_date > latest_date:
                                 latest_date = act_date
-                        except:
+                        except (ValueError, AttributeError) as e:
+                            logger.debug(f"Failed to parse activity date: {e}")
                             pass
                             
                 except Exception as e:
