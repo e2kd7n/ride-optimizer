@@ -14,6 +14,8 @@ from geopy.distance import geodesic
 import calendar
 import json
 from pathlib import Path
+import hashlib
+from functools import lru_cache
 
 logger = logging.getLogger(__name__)
 
@@ -470,19 +472,25 @@ class WindImpactCalculator:
             travel_direction: Travel direction in degrees
             
         Returns:
-            Dictionary with headwind (positive = against, negative = with) 
+            Dictionary with headwind (positive = against, negative = with)
             and crosswind components
         """
         # Calculate relative wind angle
-        # Wind direction is where wind comes FROM, so we need to reverse it
-        wind_from = wind_direction
-        relative_angle = (wind_from - travel_direction + 180) % 360
+        # Wind direction is where wind comes FROM
+        # If wind is from North (0°) and you're traveling North (0°), that's a headwind
+        # The angle between wind direction and travel direction tells us the component
+        relative_angle = (wind_direction - travel_direction) % 360
+        
+        # Normalize to -180 to 180 for easier interpretation
+        if relative_angle > 180:
+            relative_angle -= 360
         
         # Convert to radians
         angle_rad = np.radians(relative_angle)
         
         # Calculate components
-        headwind = wind_speed * np.cos(angle_rad)  # Positive = headwind
+        # cos(0°) = 1 (direct headwind), cos(180°) = -1 (direct tailwind)
+        headwind = wind_speed * np.cos(angle_rad)  # Positive = headwind, negative = tailwind
         crosswind = abs(wind_speed * np.sin(angle_rad))
         
         return {
@@ -496,6 +504,8 @@ class WindImpactCalculator:
         """
         Analyze wind impact along entire route.
         
+        Uses caching to avoid recalculating for the same route/wind combination.
+        
         Args:
             coordinates: List of (lat, lon) tuples
             wind_speed: Wind speed in km/h
@@ -506,6 +516,19 @@ class WindImpactCalculator:
         """
         if len(coordinates) < 2:
             return {}
+        
+        # Create cache key from coordinates and wind conditions
+        coords_str = str(coordinates)
+        cache_key = hashlib.md5(
+            f"{coords_str}_{wind_speed}_{wind_direction}".encode()
+        ).hexdigest()
+        
+        # Check if we have cached result
+        if hasattr(self, '_wind_analysis_cache'):
+            if cache_key in self._wind_analysis_cache:
+                return self._wind_analysis_cache[cache_key]
+        else:
+            self._wind_analysis_cache = {}
         
         headwinds = []
         crosswinds = []
@@ -558,7 +581,7 @@ class WindImpactCalculator:
         else:
             favorability = 'neutral'
         
-        return {
+        result = {
             'avg_headwind_kph': avg_headwind,
             'avg_crosswind_kph': avg_crosswind,
             'max_headwind_kph': max(headwinds) if headwinds else 0,
@@ -567,6 +590,11 @@ class WindImpactCalculator:
             'wind_favorability': favorability,
             'estimated_time_impact_min': 0  # Will be calculated based on route duration
         }
+        
+        # Cache the result
+        self._wind_analysis_cache[cache_key] = result
+        
+        return result
 
 
 # Made with Bob

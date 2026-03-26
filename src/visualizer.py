@@ -150,6 +150,12 @@ class RouteVisualizer:
         # Determine direction class for filtering
         direction_class = f"direction-{route_group.direction}"
         
+        # Determine plus route class for filtering
+        plus_class = "plus-route" if route_group.is_plus_route else ""
+        
+        # Build className with all applicable classes
+        class_names = f"route-line route-{route_group.id} {direction_class} {plus_class}".strip()
+        
         # Add polyline with custom class and data attributes for JavaScript interaction
         folium.PolyLine(
             coords,
@@ -158,7 +164,7 @@ class RouteVisualizer:
             opacity=opacity,
             popup=folium.Popup(popup_html, max_width=300),
             tooltip=f"{route_name} ({route_group.frequency} uses)",
-            className=f"route-line route-{route_group.id} {direction_class}",
+            className=class_names,
             # Store bounds as data attribute for JavaScript access
             name=f"route-{route_group.id}"
         ).add_to(self.map)
@@ -451,9 +457,14 @@ class RouteVisualizer:
                 distance_m = ride.distance_km * 1000
                 distance_value = self.units.distance_value(distance_m)
                 
+                # Clean activity name - remove newlines and other problematic characters
+                clean_name = ride.name.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
+                # Remove multiple spaces
+                clean_name = ' '.join(clean_name.split())
+                
                 long_rides_data.append({
                     'id': ride.activity_id,
-                    'name': ride.name,
+                    'name': clean_name,
                     'distance': round(distance_value, 1),  # In target unit
                     'duration_hours': round(ride.duration_hours, 2),
                     'is_loop': ride.is_loop,
@@ -462,7 +473,8 @@ class RouteVisualizer:
                     'strava_url': f'https://www.strava.com/activities/{ride.activity_id}'
                 })
         
-        long_rides_json = json.dumps(long_rides_data)
+        # Convert to JSON for JavaScript embedding
+        long_rides_json = json.dumps(long_rides_data, ensure_ascii=False)
         num_long_rides = len(long_rides_data)
         
         # Get unit labels for JavaScript
@@ -678,6 +690,7 @@ class RouteVisualizer:
         var routeData = {route_data_json};
         var selectedRoutes = new Set();  // Track multiple selected routes
         var currentFilter = 'all';
+        var showPlusRoutes = true;  // Track plus routes filter state
         
         // Wait for map to be ready
         document.addEventListener('DOMContentLoaded', function() {{
@@ -774,7 +787,7 @@ class RouteVisualizer:
                             // Update all route visibility
                             var allRouteLines = document.querySelectorAll('path.route-line');
                             if (selectedRoutes.size === 0) {{
-                                // No routes selected - show all
+                                // No routes selected - show all (respecting filters)
                                 resetRouteStyles();
                             }} else {{
                                 // Some routes selected - hide unselected, show selected
@@ -785,7 +798,16 @@ class RouteVisualizer:
                                     
                                     var lineRouteId = 'route-' + lineRouteMatch[1];
                                     
-                                    if (selectedRoutes.has(lineRouteId)) {{
+                                    // Check if route should be visible based on current filters
+                                    var matchesDirection = (currentFilter === 'all') || (lineClasses.indexOf('direction-' + currentFilter) !== -1);
+                                    var isPlus = lineClasses.indexOf('plus-route') !== -1;
+                                    var matchesPlusFilter = showPlusRoutes || !isPlus;
+                                    var shouldBeVisible = matchesDirection && matchesPlusFilter;
+                                    
+                                    if (!shouldBeVisible) {{
+                                        // Route is filtered out - keep it hidden
+                                        line.style.display = 'none';
+                                    }} else if (selectedRoutes.has(lineRouteId)) {{
                                         // Selected route - show with original color and thicker line
                                         line.style.display = '';
                                         line.style.opacity = '1.0';
@@ -848,10 +870,15 @@ class RouteVisualizer:
         }});
         
         // Expose filterRoutes globally so report buttons can call it
-        window.filterRoutes = function(filter) {{
-            console.log('filterRoutes called with:', filter);
+        window.filterRoutes = function(filter, showPlusRoutes) {{
+            console.log('filterRoutes called with:', filter, 'showPlusRoutes:', showPlusRoutes);
             currentFilter = filter;
-            selectedRoute = null;
+            selectedRoutes.clear();  // Clear selections when filtering
+            
+            // Default showPlusRoutes to true if not provided
+            if (typeof showPlusRoutes === 'undefined') {{
+                showPlusRoutes = true;
+            }}
             
             // Filter routes - need to find SVG path elements
             var routeLines = document.querySelectorAll('path.route-line');
@@ -862,28 +889,28 @@ class RouteVisualizer:
                 // For SVG elements, use getAttribute to get class
                 var classes = line.getAttribute('class') || '';
                 
-                if (filter === 'all') {{
+                // Check direction filter
+                var matchesDirection = (filter === 'all') || (classes.indexOf('direction-' + filter) !== -1);
+                
+                // Check plus route filter
+                var isPlus = classes.indexOf('plus-route') !== -1;
+                var matchesPlusFilter = showPlusRoutes || !isPlus;
+                
+                // Show only if BOTH conditions are met
+                if (matchesDirection && matchesPlusFilter) {{
                     line.style.display = '';
                     line.style.opacity = '';
                     line.style.strokeWidth = '';
                     visibleCount++;
                 }} else {{
-                    var directionClass = 'direction-' + filter;
-                    if (classes.indexOf(directionClass) !== -1) {{
-                        line.style.display = '';
-                        line.style.opacity = '';
-                        line.style.strokeWidth = '';
-                        visibleCount++;
-                    }} else {{
-                        line.style.display = 'none';
-                    }}
+                    line.style.display = 'none';
                 }}
             }});
             
             console.log('Visible routes after filter:', visibleCount);
             
             // Auto-zoom to fit visible routes
-            if (filter !== 'all') {{
+            if (filter !== 'all' || !showPlusRoutes) {{
                 zoomToFilteredRoutes(filter);
             }} else {{
                 resetMapView();
@@ -1066,11 +1093,24 @@ class RouteVisualizer:
         function resetRouteStyles() {{
             var routeLines = document.querySelectorAll('path.route-line');
             routeLines.forEach(function(line) {{
-                // Reset all styles to show routes normally
-                line.style.display = '';
-                line.style.opacity = '';
-                line.style.strokeWidth = '';
-                line.style.stroke = '';  // Clear stroke color override
+                var classes = line.getAttribute('class') || '';
+                
+                // Check if route should be visible based on current filters
+                var matchesDirection = (currentFilter === 'all') || (classes.indexOf('direction-' + currentFilter) !== -1);
+                var isPlus = classes.indexOf('plus-route') !== -1;
+                var matchesPlusFilter = showPlusRoutes || !isPlus;
+                var shouldBeVisible = matchesDirection && matchesPlusFilter;
+                
+                if (!shouldBeVisible) {{
+                    // Route is filtered out - keep it hidden
+                    line.style.display = 'none';
+                }} else {{
+                    // Reset styles to show route normally
+                    line.style.display = '';
+                    line.style.opacity = '';
+                    line.style.strokeWidth = '';
+                    line.style.stroke = '';  // Clear stroke color override
+                }}
             }});
         }}
         
