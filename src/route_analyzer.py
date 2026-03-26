@@ -283,7 +283,7 @@ class RouteAnalyzer:
         }
         
         key_str = json.dumps(key_data, sort_keys=True)
-        return hashlib.md5(key_str.encode()).hexdigest()
+        return hashlib.sha256(key_str.encode()).hexdigest()
     
     def _get_route_hash(self, route: Route) -> str:
         """
@@ -464,7 +464,12 @@ class RouteAnalyzer:
     
     def _calculate_hausdorff_similarity(self, coords1: np.ndarray, coords2: np.ndarray) -> float:
         """
-        Calculate similarity using Hausdorff distance.
+        Calculate similarity using percentile-based Hausdorff distance.
+        
+        Instead of using the maximum deviation (which is sensitive to outliers),
+        uses the Nth percentile of deviations. This allows X% of points to be
+        outliers (GPS glitches, brief detours) while still detecting substantive
+        route differences.
         
         Args:
             coords1: First route coordinates
@@ -473,20 +478,31 @@ class RouteAnalyzer:
         Returns:
             Similarity score (0-1)
         """
-        # Calculate Hausdorff distance in both directions
-        dist_forward = directed_hausdorff(coords1, coords2)[0]
-        dist_backward = directed_hausdorff(coords2, coords1)[0]
+        from scipy.spatial.distance import cdist
         
-        # Use maximum distance (this is the maximum deviation at any point)
-        max_dist = max(dist_forward, dist_backward)
+        # Get percentile from config (default 95.0 = ignore worst 5% of deviations)
+        percentile = self.config.get('route_analysis.outlier_tolerance_percentile', 95.0)
+        
+        # Distance from each point in coords1 to nearest point in coords2
+        distances_1_to_2 = cdist(coords1, coords2).min(axis=1)
+        
+        # Distance from each point in coords2 to nearest point in coords1
+        distances_2_to_1 = cdist(coords2, coords1).min(axis=1)
+        
+        # Use percentile instead of max to tolerate outliers
+        percentile_dist_1 = np.percentile(distances_1_to_2, percentile)
+        percentile_dist_2 = np.percentile(distances_2_to_1, percentile)
+        
+        # Take the larger of the two percentile distances
+        percentile_dist = max(percentile_dist_1, percentile_dist_2)
         
         # Convert degrees to meters (approximate)
         # At Chicago's latitude (~42°), 1 degree ≈ 111km latitude, ~82km longitude
         # Using 111km as conservative estimate
-        normalized_dist = max_dist * 111000
+        normalized_dist = percentile_dist * 111000
         
         # Convert to similarity score (0-1)
-        # Routes are considered similar if max deviation is within 200m
+        # Routes are considered similar if percentile deviation is within 200m
         distance_threshold = 200  # meters
         similarity = 1 / (1 + normalized_dist / distance_threshold)
         
@@ -890,7 +906,8 @@ class RouteAnalyzer:
                     distance_threshold = 200
                     similarity = 1 / (1 + normalized_dist / distance_threshold)
                     return similarity
-                except:
+                except (ValueError, IndexError, TypeError) as e:
+                    logger.debug(f"Fréchet distance calculation failed, falling back to Hausdorff: {e}")
                     pass
             
             # Fallback to Hausdorff

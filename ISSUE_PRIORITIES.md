@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-03-26 22:31 UTC
+**Last Updated:** 2026-03-26 23:18 UTC
 
 This file reflects the current state of GitHub issues by priority. Issues are managed via GitHub labels (P0-critical, P1-high, P2-medium, P3-low, P4-future).
 
@@ -12,32 +12,49 @@ Issues that make the application unusable or cause data loss.
 ## 🔴 P1 - HIGH (Current Sprint)
 Issues that significantly impact core functionality or user experience.
 
-- #60 - Security: Upgrade vulnerable dependencies (requests, tornado, pygments)
+- #61 - Code Quality: Improve exception handling (remove bare except)
+- #59 - Security: Replace MD5 hash with SHA256 for cache keys
+- #41 - Create unit tests for core modules
+- #42 - Write integration tests for full workflow
+- **EPIC: Segment-Based Route Naming** - Show connection streets + main route (see ROUTE_NAMING_EPIC.md)
+  - Sub-issue 1: Increase route sampling density
+  - Sub-issue 2: Implement route segment identification
+  - Sub-issue 3: Implement segment-based name generation
+  - Sub-issue 4: Update route analysis integration
+  - Sub-issue 5: Add configuration options
+  - Sub-issue 6: Clear cache and validate with real data
 - #58 - Show time-aware next commute recommendations (to work & to home)
-- #56 - Implement percentile-based route similarity to reduce over-clustering
-- #55 - Complete and review full analysis with Fréchet algorithm
-
+- #21 - Update TECHNICAL_SPEC.md with comprehensive implementation details
+- #24 - [LOW PRIORITY] Grey out unselected routes on map when route is clicked
+- #54 - Weather Dashboard Implementation (Epic)
+- #33 - Add traffic pattern analysis
+- **EPIC: Mobile-First UI/UX Improvements** - Comprehensive mobile responsiveness and UX enhancements (see UIUX_IMPROVEMENTS_EPIC.md)
+  - Sub-issue 1: Implement mobile-first responsive layout (P1-high)
+  - Sub-issue 2: Add progressive disclosure for metrics (P2-medium)
+  - Sub-issue 3: Implement touch-optimized interactions (P1-high)
+  - Sub-issue 4: Add feature discovery & onboarding (P2-medium)
+  - Sub-issue 5: Implement mobile navigation patterns (P2-medium)
+  - Sub-issue 6: Improve visual hierarchy & polish (P3-low)
 
 ## 🟡 P2 - MEDIUM (Next Sprint)
 Important improvements that enhance functionality but don't block core workflows.
 
-- #59 - Security: Replace MD5 hash with SHA256 for cache keys
-- #21 - Update TECHNICAL_SPEC.md with comprehensive implementation details
-- #24 - [LOW PRIORITY] Grey out unselected routes on map when route is clicked
+
+
+
+
+
 
 ## 🟢 P3 - LOW (Backlog)
 Nice-to-have improvements and minor UX enhancements.
 
-- #61 - Code Quality: Improve exception handling (remove bare except)
+
 - #22 - [LOW PRIORITY] Debug and fix Bootstrap tab switching functionality
-- #41 - Create unit tests for core modules
-- #42 - Write integration tests for full workflow
 
 ## 📋 P4 - FUTURE ENHANCEMENTS
 Feature requests and enhancements for future releases.
 
 - #57 - 🎯 EPIC: Long Rides Analysis & Recommendations (consolidates #6, #7, #8, #9)
-- #54 - Weather Dashboard Implementation (Epic)
 - #6 - Add top 10 longest rides table with Strava links (part of #57 epic)
 - #7 - Add monthly ride statistics breakdown (part of #57 epic)
 - #8 - Add average speed and elevation gain metrics (part of #57 epic)
@@ -58,7 +75,6 @@ Issues without priority labels that need to be triaged.
 - #36 - Create mobile app version
 - #35 - Add integration with other fitness platforms
 - #34 - Add carbon footprint calculations
-- #33 - Add traffic pattern analysis
 - #25 - Implement automatic token refresh for expired Strava tokens
 
 
@@ -103,19 +119,27 @@ Issues without priority labels that need to be triaged.
 
 ## Summary Statistics
 
-- **Total Open Issues:** 32
+- **Total Open Issues:** 31
 - **P0 (Critical):** 0
-- **P1 (High):** 4
-- **P2 (Medium):** 3
+- **P1 (High):** 2
+- **P2 (Medium):** 5 (includes 2 epics with 12 sub-issues)
 - **P3 (Low):** 4
 - **P4 (Future):** 6
 - **Unprioritized:** 15
 
+## Completed P1 Issues (2026-03-26)
+
+1. **✅ #60** - Security: Upgraded vulnerable dependencies (requests 2.33.0, tornado 6.5.5)
+2. **✅ #56** - Implemented percentile-based route similarity to reduce over-clustering
+3. **✅ #55** - Closed as superseded by #56 (Fréchet algorithm already working)
+
 ## Recommended Next Actions
 
-1. **🔒 Security #60** - Upgrade vulnerable dependencies (IMMEDIATE)
-2. **Implement #58** - Time-aware next commute recommendations (highest user value)
-3. **Implement #56** - Fix route similarity algorithm (highest impact on core functionality)
-4. **🔒 Security #59** - Replace MD5 with SHA256 in cache keys
-5. **Complete #55** - Validate Fréchet algorithm improvements
+1. **🔴 P1 Issues** - Complete remaining high-priority issues:
+   - #61 - Improve exception handling (remove bare except)
+   - #59 - Replace MD5 with SHA256 in cache keys
+2. **Run full analysis** - Test new percentile-based similarity algorithm with real data
+3. **🎨 UI/UX Epic** - Start mobile-first responsive layout (Sub-issue 1 & 3 are P1-high)
+4. **Implement #58** - Time-aware next commute recommendations (P2-medium)
+5. **Update #21** - Update TECHNICAL_SPEC.md with comprehensive implementation details
 6. **Triage unprioritized issues** - Assign priority labels to remaining 15 issues

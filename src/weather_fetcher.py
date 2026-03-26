@@ -519,7 +519,7 @@ class WindImpactCalculator:
         
         # Create cache key from coordinates and wind conditions
         coords_str = str(coordinates)
-        cache_key = hashlib.md5(
+        cache_key = hashlib.sha256(
             f"{coords_str}_{wind_speed}_{wind_direction}".encode()
         ).hexdigest()
         

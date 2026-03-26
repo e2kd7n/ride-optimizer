@@ -29,8 +29,10 @@ route_analysis:
   similarity_threshold: 0.70  # Fréchet distance threshold for route grouping (0.70 = routes follow similar paths)
   min_route_frequency: 2
   enable_geocoding: true  # ENABLED - IP is not blocked, rate limiting set to 1 req/sec
+  outlier_tolerance_percentile: 95.0  # Ignore worst 5% of point deviations in Hausdorff calculation
   # Similarity algorithm: Uses Fréchet distance (primary) with Hausdorff validation (secondary)
   # Fréchet is superior for route comparison as it considers path order and is more robust to GPS sampling
+  # Percentile-based Hausdorff tolerates GPS glitches and brief detours while catching real route differences
 
 optimization:
   weights:

@@ -253,7 +253,8 @@ class LongRideAnalyzer:
                 try:
                     coords = polyline.decode(rep.polyline)
                     group_representatives[name] = np.array(coords)
-                except:
+                except (ValueError, AttributeError) as e:
+                    logger.debug(f"Failed to decode polyline for group '{name}': {e}")
                     continue
         
         # Try to match each unnamed ride
@@ -287,7 +288,8 @@ class LongRideAnalyzer:
                         if combined_distance < best_distance:
                             best_distance = combined_distance
                             best_match = group_name
-                    except:
+                    except (ValueError, IndexError, TypeError) as e:
+                        logger.debug(f"Failed to calculate similarity for group '{group_name}': {e}")
                         continue
                 
                 # If we found a good match, add to that group
