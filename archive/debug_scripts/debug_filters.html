@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Filter Debug Script</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #f5f5f5; }
+        .section { background: white; padding: 15px; margin: 10px 0; border-radius: 5px; }
+        .error { color: red; font-weight: bold; }
+        .success { color: green; font-weight: bold; }
+        .warning { color: orange; font-weight: bold; }
+        pre { background: #f0f0f0; padding: 10px; overflow-x: auto; }
+        h2 { color: #667eea; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Filter System Diagnostic Tool</h1>
+    <p>Copy and paste this script into your browser console when viewing the report:</p>
+    
+    <div class="section">
+        <h2>Step 1: Check DOM Elements</h2>
+        <pre>
+// Check if route rows exist
+const allRows = document.querySelectorAll('.route-row');
+console.log('=== DOM ELEMENTS CHECK ===');
+console.log('Total route rows found:', allRows.length);
+
+if (allRows.length === 0) {
+    console.error('❌ NO ROUTE ROWS FOUND! Check if table is rendered.');
+} else {
+    console.log('✅ Route rows exist');
+    
+    // Check first 3 rows
+    console.log('\n=== FIRST 3 ROWS DATA ===');
+    allRows.forEach((row, i) => {
+        if (i < 3) {
+            console.log(`Row ${i}:`, {
+                direction: row.getAttribute('data-direction'),
+                isPlus: row.getAttribute('data-is-plus'),
+                classes: row.className,
+                visible: !row.classList.contains('direction-hidden') && 
+                        !row.classList.contains('plus-hidden') && 
+                        !row.classList.contains('page-hidden')
+            });
+        }
+    });
+}
+        </pre>
+    </div>
+    
+    <div class="section">
+        <h2>Step 2: Check Filter System</h2>
+        <pre>
+console.log('\n=== FILTER SYSTEM CHECK ===');
+
+// Check if filter system is loaded
+if (typeof window.routeFilters === 'undefined') {
+    console.error('❌ window.routeFilters NOT FOUND!');
+} else {
+    console.log('✅ Filter system loaded');
+    console.log('Current direction:', window.routeFilters.getCurrentDirection());
+    console.log('Show plus routes:', window.routeFilters.isShowingPlus());
+}
+
+// Check filter buttons
+const directionButtons = document.querySelectorAll('.direction-filter .btn-group button[data-direction]');
+console.log('Direction filter buttons found:', directionButtons.length);
+directionButtons.forEach(btn => {
+    console.log('  -', btn.getAttribute('data-direction'), 'active:', btn.classList.contains('active'));
+});
+
+const showPlusBtn = document.getElementById('show-plus-routes');
+const hidePlusBtn = document.getElementById('hide-plus-routes');
+console.log('Show Plus button:', showPlusBtn ? '✅ Found' : '❌ Not found');
+console.log('Hide Plus button:', hidePlusBtn ? '✅ Found' : '❌ Not found');
+if (showPlusBtn) console.log('  Show Plus active:', showPlusBtn.classList.contains('active'));
+if (hidePlusBtn) console.log('  Hide Plus active:', hidePlusBtn.classList.contains('active'));
+        </pre>
+    </div>
+    
+    <div class="section">
+        <h2>Step 3: Check Pagination System</h2>
+        <pre>
+console.log('\n=== PAGINATION SYSTEM CHECK ===');
+
+if (typeof window.paginationController === 'undefined') {
+    console.error('❌ window.paginationController NOT FOUND!');
+} else {
+    console.log('✅ Pagination system loaded');
+}
+
+// Check pagination buttons
+const prevBtn = document.getElementById('prevPage');
+const nextBtn = document.getElementById('nextPage');
+const pageInfo = document.getElementById('pageInfo');
+console.log('Prev button:', prevBtn ? '✅ Found' : '❌ Not found');
+console.log('Next button:', nextBtn ? '✅ Found' : '❌ Not found');
+console.log('Page info:', pageInfo ? pageInfo.textContent : '❌ Not found');
+        </pre>
+    </div>
+    
+    <div class="section">
+        <h2>Step 4: Analyze Current State</h2>
+        <pre>
+console.log('\n=== CURRENT STATE ANALYSIS ===');
+
+const rows = document.querySelectorAll('.route-row');
+let stats = {
+    total: rows.length,
+    directionHidden: 0,
+    plusHidden: 0,
+    pageHidden: 0,
+    fullyVisible: 0,
+    homeToWork: 0,
+    workToHome: 0,
+    plusRoutes: 0,
+    nonPlusRoutes: 0
+};
+
+rows.forEach(row => {
+    const direction = row.getAttribute('data-direction');
+    const isPlus = row.getAttribute('data-is-plus') === 'true';
+    
+    if (row.classList.contains('direction-hidden')) stats.directionHidden++;
+    if (row.classList.contains('plus-hidden')) stats.plusHidden++;
+    if (row.classList.contains('page-hidden')) stats.pageHidden++;
+    
+    if (!row.classList.contains('direction-hidden') && 
+        !row.classList.contains('plus-hidden') && 
+        !row.classList.contains('page-hidden')) {
+        stats.fullyVisible++;
+    }
+    
+    if (direction === 'home_to_work') stats.homeToWork++;
+    if (direction === 'work_to_home') stats.workToHome++;
+    if (isPlus) stats.plusRoutes++;
+    else stats.nonPlusRoutes++;
+});
+
+console.table(stats);
+        </pre>
+    </div>
+    
+    <div class="section">
+        <h2>Step 5: Test Manual Filter</h2>
+        <pre>
+console.log('\n=== MANUAL FILTER TEST ===');
+
+// Test applying filters manually
+if (window.routeFilters) {
+    console.log('Testing manual filter application...');
+    window.routeFilters.applyFilters();
+    
+    // Wait a moment then check results
+    setTimeout(() => {
+        const visible = document.querySelectorAll('.route-row:not(.direction-hidden):not(.plus-hidden):not(.page-hidden)');
+        console.log('Visible rows after manual filter:', visible.length);
+    }, 100);
+} else {
+    console.error('Cannot test - filter system not loaded');
+}
+        </pre>
+    </div>
+    
+    <div class="section">
+        <h2>Step 6: Test Filter Button Clicks</h2>
+        <pre>
+console.log('\n=== FILTER BUTTON CLICK TEST ===');
+
+// Test clicking "To Work" button
+const toWorkBtn = document.querySelector('button[data-direction="home_to_work"]');
+if (toWorkBtn) {
+    console.log('Simulating click on "To Work" button...');
+    toWorkBtn.click();
+    
+    setTimeout(() => {
+        const visible = document.querySelectorAll('.route-row:not(.direction-hidden):not(.plus-hidden):not(.page-hidden)');
+        console.log('Visible rows after "To Work" click:', visible.length);
+        console.log('Expected: Only home_to_work routes should be visible');
+        
+        // Verify
+        let correct = true;
+        visible.forEach(row => {
+            const dir = row.getAttribute('data-direction');
+            if (dir !== 'home_to_work') {
+                console.error('❌ Wrong direction visible:', dir);
+                correct = false;
+            }
+        });
+        if (correct) console.log('✅ Filter working correctly!');
+    }, 100);
+} else {
+    console.error('❌ "To Work" button not found');
+}
+        </pre>
+    </div>
+    
+    <div class="section">
+        <h2>Step 7: Complete Diagnostic</h2>
+        <pre>
+// Run all checks at once
+(function runCompleteDiagnostic() {
+    console.log('\n\n');
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('         COMPLETE FILTER DIAGNOSTIC REPORT');
+    console.log('═══════════════════════════════════════════════════════');
+    
+    const issues = [];
+    const warnings = [];
+    
+    // Check 1: Route rows
+    const rows = document.querySelectorAll('.route-row');
+    if (rows.length === 0) {
+        issues.push('No route rows found in DOM');
+    } else {
+        console.log('✅ Found', rows.length, 'route rows');
+    }
+    
+    // Check 2: Data attributes
+    let missingDirection = 0;
+    let missingIsPlus = 0;
+    rows.forEach(row => {
+        if (!row.getAttribute('data-direction')) missingDirection++;
+        if (!row.getAttribute('data-is-plus')) missingIsPlus++;
+    });
+    if (missingDirection > 0) issues.push(`${missingDirection} rows missing data-direction`);
+    if (missingIsPlus > 0) issues.push(`${missingIsPlus} rows missing data-is-plus`);
+    
+    // Check 3: Filter system
+    if (typeof window.routeFilters === 'undefined') {
+        issues.push('Filter system (window.routeFilters) not loaded');
+    } else {
+        console.log('✅ Filter system loaded');
+    }
+    
+    // Check 4: Pagination system
+    if (typeof window.paginationController === 'undefined') {
+        issues.push('Pagination system (window.paginationController) not loaded');
+    } else {
+        console.log('✅ Pagination system loaded');
+    }
+    
+    // Check 5: Filter buttons
+    const dirBtns = document.querySelectorAll('.direction-filter .btn-group button[data-direction]');
+    if (dirBtns.length === 0) {
+        issues.push('No direction filter buttons found');
+    } else {
+        console.log('✅ Found', dirBtns.length, 'direction filter buttons');
+    }
+    
+    // Check 6: Plus route buttons
+    if (!document.getElementById('show-plus-routes')) {
+        warnings.push('Show Plus Routes button not found');
+    }
+    if (!document.getElementById('hide-plus-routes')) {
+        warnings.push('Hide Plus Routes button not found');
+    }
+    
+    // Summary
+    console.log('\n═══════════════════════════════════════════════════════');
+    if (issues.length === 0 && warnings.length === 0) {
+        console.log('✅ ALL CHECKS PASSED - Filter system should be working!');
+        console.log('\nIf filters still don\'t work, the issue is likely:');
+        console.log('1. Browser cache - try hard refresh (Cmd+Shift+R)');
+        console.log('2. JavaScript errors - check console for errors');
+        console.log('3. Event listeners not firing - check browser DevTools');
+    } else {
+        if (issues.length > 0) {
+            console.log('❌ CRITICAL ISSUES FOUND:');
+            issues.forEach(issue => console.log('  -', issue));
+        }
+        if (warnings.length > 0) {
+            console.log('⚠️  WARNINGS:');
+            warnings.forEach(warning => console.log('  -', warning));
+        }
+    }
+    console.log('═══════════════════════════════════════════════════════\n\n');
+})();
+        </pre>
+    </div>
+    
+    <div class="section">
+        <h2>🎯 Quick Fix Test</h2>
+        <p>If the diagnostic shows everything is loaded but filters don't work, try this:</p>
+        <pre>
+// Force re-initialization
+console.log('🔄 Forcing filter re-initialization...');
+
+if (window.paginationController && window.routeFilters) {
+    // Reset to initial state
+    window.paginationController.showPage(1);
+    window.routeFilters.applyFilters();
+    console.log('✅ Re-initialization complete');
+    
+    // Check results
+    setTimeout(() => {
+        const visible = document.querySelectorAll('.route-row:not(.direction-hidden):not(.plus-hidden):not(.page-hidden)');
+        console.log('Visible rows:', visible.length);
+    }, 100);
+} else {
+    console.error('❌ Cannot re-initialize - systems not loaded');
+}
+        </pre>
+    </div>
+</body>
+</html>
