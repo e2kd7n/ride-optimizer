@@ -12,6 +12,4 @@ __pycache__/
 project_comms/
 .mailmap
 rewrite_git_history.sh
-# Archive directory
-archive/
 
