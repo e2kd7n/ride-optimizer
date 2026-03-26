@@ -149,12 +149,16 @@
                         Refresh Report
                     </button>
                 </div>
+                <!-- QR Code temporarily disabled - needs debugging and fixing before re-enabling
+                     Issue: QR code doesn't work when scanned with phone
+                     TODO: Debug QR code generation and scanning functionality
                 {% if qr_code %}
                 <div class="qr-code-container" style="background: rgba(255,255,255,0.1); border: 2px solid rgba(255,255,255,0.3);">
                     <img src="{{ qr_code }}" alt="QR Code for Mobile Access" style="border-color: rgba(255,255,255,0.5);">
                     <p style="color: rgba(255,255,255,0.9); margin-bottom: 0;">📱 Scan for Mobile Access</p>
                 </div>
                 {% endif %}
+                -->
             </div>
         </div>
 
@@ -253,40 +257,28 @@
                         </div>
                     </div>
                 </div>
-                {% if optimal.breakdown.get('weather_details') %}
-                {% set wd = optimal.breakdown.weather_details %}
+                {% if current_weather %}
                 <div class="alert alert-info mt-3">
                     <h6>🌤️ Current Weather Conditions</h6>
                     <div class="row">
-                        <div class="col-md-4">
-                            <strong>Wind:</strong> {{ units.wind_speed(wd.wind_speed_kph / 3.6) }} from {{ "%.0f"|format(wd.wind_direction_deg) }}° ({{ wd.wind_direction_cardinal }})
+                        <div class="col-md-3">
+                            <strong>Wind:</strong> {{ units.wind_speed(current_weather.wind_speed_kph / 3.6) }} from {{ "%.0f"|format(current_weather.wind_direction_deg) }}° ({{ current_weather.wind_direction_cardinal }})
                         </div>
-                        <div class="col-md-4">
-                            <strong>Avg Headwind:</strong>
-                            {% if wd.avg_headwind_kph < 0 %}
-                                <span class="text-success">{{ units.wind_speed((wd.avg_headwind_kph|abs) / 3.6) }} tailwind</span>
-                            {% else %}
-                                <span class="text-danger">{{ units.wind_speed(wd.avg_headwind_kph / 3.6) }} headwind</span>
-                            {% endif %}
+                        <div class="col-md-3">
+                            <strong>Temperature:</strong> {{ units.temperature(current_weather.temp_c) }}
                         </div>
-                        <div class="col-md-4">
-                            <strong>Avg Crosswind:</strong> {{ units.wind_speed(wd.avg_crosswind_kph / 3.6) }}
+                        <div class="col-md-3">
+                            <strong>Humidity:</strong> {{ "%.0f"|format(current_weather.humidity) }}%
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Precipitation:</strong> {{ "%.1f"|format(current_weather.precipitation_mm) }} mm
                         </div>
                     </div>
                     <div class="row mt-2">
-                        <div class="col-md-4">
-                            <strong>Temperature:</strong> {{ units.temperature(wd.temp_c) }}
-                        </div>
-                        <div class="col-md-4">
-                            <strong>Time Impact:</strong>
-                            {% if wd.time_penalty_pct < 0 %}
-                                <span class="text-success">{{ "%.1f"|format(wd.time_penalty_pct|abs) }}% faster</span>
-                            {% else %}
-                                <span class="text-warning">{{ "%.1f"|format(wd.time_penalty_pct) }}% slower</span>
-                            {% endif %}
-                        </div>
-                        <div class="col-md-4">
-                            <strong>Humidity:</strong> {{ "%.0f"|format(wd.humidity) }}%
+                        <div class="col-12">
+                            <small class="text-muted">
+                                <em>Current conditions at home location. Route-specific wind impacts shown in table below.</em>
+                            </small>
                         </div>
                     </div>
                 </div>
@@ -330,7 +322,7 @@
                             </div>
                             <div class="page-info">
                                 <span id="pageInfo">Page 1 of <span id="totalPages">1</span></span>
-                                <span class="ms-3">Showing <span id="showingCount">0</span> of {{ ranked_routes|length }} routes</span>
+                                <span class="ms-3">Showing <span id="showingCount">0</span> of <span id="totalCount">{{ ranked_routes|length }}</span> routes</span>
                             </div>
                         </div>
                         <table class="table table-hover" id="routesTable">
@@ -377,40 +369,30 @@
                                             {% set wd = route.breakdown.weather_details %}
                                             {% if wd.wind_favorability == 'favorable' %}
                                                 <div style="background-color: #d4edda; padding: 6px 8px; border-radius: 4px; border-left: 3px solid #28a745;"
-                                                     title="Favorable: Headwind {{ units.wind_speed(wd.avg_headwind_kph / 3.6) }}, Crosswind {{ units.wind_speed(wd.avg_crosswind_kph / 3.6) }}">
+                                                     title="Favorable wind conditions. Crosswind: {{ units.wind_speed(wd.avg_crosswind_kph / 3.6) }}">
                                                     <span style="font-size: 16px;">🌬️</span>
-                                                    <span style="color: #155724; font-weight: 600;">{{ "%.0f"|format(route.breakdown.weather) }}</span>
+                                                    <span style="color: #155724; font-weight: 600;">{{ units.wind_speed((wd.avg_headwind_kph|abs) / 3.6) }}</span>
                                                     <span style="color: #155724; font-size: 11px;">✓ Tailwind</span>
                                                 </div>
                                             {% elif wd.wind_favorability == 'unfavorable' %}
                                                 <div style="background-color: #f8d7da; padding: 6px 8px; border-radius: 4px; border-left: 3px solid #dc3545;"
-                                                     title="Unfavorable: Headwind {{ units.wind_speed(wd.avg_headwind_kph / 3.6) }}, Crosswind {{ units.wind_speed(wd.avg_crosswind_kph / 3.6) }}">
+                                                     title="Unfavorable wind conditions. Crosswind: {{ units.wind_speed(wd.avg_crosswind_kph / 3.6) }}">
                                                     <span style="font-size: 16px;">💨</span>
-                                                    <span style="color: #721c24; font-weight: 600;">{{ "%.0f"|format(route.breakdown.weather) }}</span>
+                                                    <span style="color: #721c24; font-weight: 600;">{{ units.wind_speed(wd.avg_headwind_kph / 3.6) }}</span>
                                                     <span style="color: #721c24; font-size: 11px;">⚠ Headwind</span>
                                                 </div>
                                             {% else %}
                                                 <div style="background-color: #e2e3e5; padding: 6px 8px; border-radius: 4px; border-left: 3px solid #6c757d;"
-                                                     title="Neutral: Headwind {{ units.wind_speed(wd.avg_headwind_kph / 3.6) }}, Crosswind {{ units.wind_speed(wd.avg_crosswind_kph / 3.6) }}">
+                                                     title="Neutral wind conditions. Headwind: {{ units.wind_speed(wd.avg_headwind_kph / 3.6) }}, Crosswind: {{ units.wind_speed(wd.avg_crosswind_kph / 3.6) }}">
                                                     <span style="font-size: 16px;">🌫️</span>
-                                                    <span style="color: #383d41; font-weight: 600;">{{ "%.0f"|format(route.breakdown.weather) }}</span>
+                                                    <span style="color: #383d41; font-weight: 600;">{{ units.wind_speed((wd.avg_headwind_kph|abs) / 3.6) }}</span>
                                                     <span style="color: #383d41; font-size: 11px;">~ Neutral</span>
                                                 </div>
-                                            {% endif %}
-                                            {% if route.prevailing_wind %}
-                                                <small class="text-muted" style="font-size: 10px; display: block; margin-top: 4px;" title="{{ route.prevailing_wind.description }}">
-                                                    📅 {{ route.prevailing_wind.month }}: {{ route.prevailing_wind.direction_name }}
-                                                </small>
                                             {% endif %}
                                         {% else %}
                                             <div style="background-color: #f8f9fa; padding: 6px 8px; border-radius: 4px; text-align: center;" title="No weather data available">
                                                 <span class="text-muted">-</span>
                                             </div>
-                                            {% if route.prevailing_wind %}
-                                                <small class="text-muted" style="font-size: 10px; display: block; margin-top: 4px;" title="{{ route.prevailing_wind.description }}">
-                                                    📅 {{ route.prevailing_wind.month }}: {{ route.prevailing_wind.direction_name }}
-                                                </small>
-                                            {% endif %}
                                         {% endif %}
                                     </td>
                                     <td>
@@ -487,55 +469,100 @@
     <script>
         // Unified filter system with boolean AND logic
         (function() {
+            console.log('🔧 FILTER SYSTEM: Initializing...');
+            
             // Filter state
             let currentDirection = 'all';
             let showPlusRoutes = true;
             
             const allRouteRows = document.querySelectorAll('.route-row');
-            const directionButtons = document.querySelectorAll('.direction-filter button');
+            console.log('🔍 FILTER SYSTEM: Found', allRouteRows.length, 'route rows');
+            
+            // Select ONLY direction filter buttons, not plus routes buttons
+            const directionButtons = document.querySelectorAll('.direction-filter .btn-group button[data-direction]');
+            console.log('🔍 FILTER SYSTEM: Found', directionButtons.length, 'direction filter buttons');
+            
             const showPlusBtn = document.getElementById('show-plus-routes');
             const hidePlusBtn = document.getElementById('hide-plus-routes');
+            console.log('🔍 FILTER SYSTEM: Show Plus button:', !!showPlusBtn, '| Hide Plus button:', !!hidePlusBtn);
+            
+            // Log first row sample for debugging
+            if (allRouteRows.length > 0) {
+                const firstRow = allRouteRows[0];
+                console.log('📋 FIRST ROW SAMPLE:', {
+                    direction: firstRow.getAttribute('data-direction'),
+                    isPlus: firstRow.getAttribute('data-is-plus'),
+                    classes: firstRow.className
+                });
+            }
             
             // Unified filter function - applies both filters with AND logic
             function applyFilters() {
-                allRouteRows.forEach(row => {
+                console.log('=== APPLY FILTERS START ===');
+                console.log('Current direction:', currentDirection);
+                console.log('Show plus routes:', showPlusRoutes);
+                
+                let visibleCount = 0;
+                let plusRouteCount = 0;
+                let nonPlusRouteCount = 0;
+                let directionMatchCount = 0;
+                
+                allRouteRows.forEach((row, index) => {
                     const rowDirection = row.getAttribute('data-direction');
                     const isPlus = row.getAttribute('data-is-plus') === 'true';
+                    
+                    if (isPlus) plusRouteCount++;
+                    else nonPlusRouteCount++;
                     
                     // Boolean AND: show only if BOTH conditions are met
                     const matchesDirection = (currentDirection === 'all' || rowDirection === currentDirection);
                     const matchesPlusFilter = (showPlusRoutes || !isPlus);
                     
-                    if (matchesDirection && matchesPlusFilter) {
-                        row.classList.remove('direction-hidden', 'plus-hidden');
+                    if (matchesDirection) directionMatchCount++;
+                    
+                    // Log first few rows for debugging
+                    if (index < 3) {
+                        console.log(`Row ${index}: direction=${rowDirection}, isPlus=${isPlus}, matchesDir=${matchesDirection}, matchesPlus=${matchesPlusFilter}`);
+                    }
+                    
+                    // Always update both classes independently
+                    if (matchesDirection) {
+                        row.classList.remove('direction-hidden');
                     } else {
-                        // Add appropriate hidden class
-                        if (!matchesDirection) {
-                            row.classList.add('direction-hidden');
-                        } else {
-                            row.classList.remove('direction-hidden');
-                        }
-                        
-                        if (!matchesPlusFilter) {
-                            row.classList.add('plus-hidden');
-                        } else {
-                            row.classList.remove('plus-hidden');
-                        }
+                        row.classList.add('direction-hidden');
+                    }
+                    
+                    if (matchesPlusFilter) {
+                        row.classList.remove('plus-hidden');
+                    } else {
+                        row.classList.add('plus-hidden');
+                    }
+                    
+                    // Count visible rows (neither hidden class)
+                    if (matchesDirection && matchesPlusFilter) {
+                        visibleCount++;
                     }
                 });
+                
+                console.log('Total routes:', allRouteRows.length);
+                console.log('Plus routes:', plusRouteCount, 'Non-plus:', nonPlusRouteCount);
+                console.log('Direction matches:', directionMatchCount);
+                console.log('Final visible count:', visibleCount);
+                console.log('=== APPLY FILTERS END ===');
                 
                 // Update pagination counts
                 if (window.paginationController) {
                     window.paginationController.updateCounts();
                 }
                 
-                // Update map if available
+                // Update map if available - pass BOTH direction AND plus routes filter
                 try {
                     const fullMapContainer = document.querySelector('#full-map-container');
                     if (fullMapContainer) {
                         const mapIframe = fullMapContainer.querySelector('iframe');
                         if (mapIframe && mapIframe.contentWindow && typeof mapIframe.contentWindow.filterRoutes === 'function') {
-                            mapIframe.contentWindow.filterRoutes(currentDirection);
+                            // Pass both filter parameters to the map
+                            mapIframe.contentWindow.filterRoutes(currentDirection, showPlusRoutes);
                         }
                     }
                 } catch (err) {
@@ -544,40 +571,54 @@
             }
             
             // Direction filter setup
-            directionButtons.forEach(button => {
+            console.log('🔧 FILTER SYSTEM: Setting up direction button listeners...');
+            directionButtons.forEach((button, index) => {
+                console.log(`   Button ${index}:`, button.getAttribute('data-direction'));
                 button.addEventListener('click', function(e) {
+                    console.log('🖱️  DIRECTION BUTTON CLICKED!', e.currentTarget.getAttribute('data-direction'));
                     e.preventDefault();
                     e.stopPropagation();
                     
+                    // Use e.currentTarget to always get the button, not child elements
+                    const clickedButton = e.currentTarget;
+                    
                     // Update active button
                     directionButtons.forEach(btn => btn.classList.remove('active'));
-                    this.classList.add('active');
+                    clickedButton.classList.add('active');
                     
                     // Update direction
-                    currentDirection = this.getAttribute('data-direction');
+                    currentDirection = clickedButton.getAttribute('data-direction');
+                    console.log('   New direction filter:', currentDirection);
                     
                     // Apply unified filters
                     applyFilters();
                     
                     // Reset pagination
                     if (window.paginationController) {
+                        console.log('   Resetting pagination to page 1');
                         window.paginationController.resetToFirstPage();
+                    } else {
+                        console.error('   ❌ Pagination controller not available!');
                     }
                     
                     return false;
                 });
             });
+            console.log('✅ FILTER SYSTEM: Direction button listeners attached');
             
             // Plus route filter setup
+            console.log('🔧 FILTER SYSTEM: Setting up Plus Routes button listeners...');
             if (showPlusBtn && hidePlusBtn) {
                 // Set initial button state
                 showPlusBtn.classList.add('active');
                 
                 showPlusBtn.addEventListener('click', function(e) {
+                    console.log('🖱️  SHOW PLUS ROUTES CLICKED!');
                     e.preventDefault();
                     e.stopPropagation();
                     
                     showPlusRoutes = true;
+                    console.log('   Show plus routes:', showPlusRoutes);
                     showPlusBtn.classList.add('active');
                     hidePlusBtn.classList.remove('active');
                     
@@ -586,17 +627,22 @@
                     
                     // Reset pagination
                     if (window.paginationController) {
+                        console.log('   Resetting pagination to page 1');
                         window.paginationController.resetToFirstPage();
+                    } else {
+                        console.error('   ❌ Pagination controller not available!');
                     }
                     
                     return false;
                 });
                 
                 hidePlusBtn.addEventListener('click', function(e) {
+                    console.log('🖱️  HIDE PLUS ROUTES CLICKED!');
                     e.preventDefault();
                     e.stopPropagation();
                     
                     showPlusRoutes = false;
+                    console.log('   Show plus routes:', showPlusRoutes);
                     hidePlusBtn.classList.add('active');
                     showPlusBtn.classList.remove('active');
                     
@@ -605,11 +651,17 @@
                     
                     // Reset pagination
                     if (window.paginationController) {
+                        console.log('   Resetting pagination to page 1');
                         window.paginationController.resetToFirstPage();
+                    } else {
+                        console.error('   ❌ Pagination controller not available!');
                     }
                     
                     return false;
                 });
+                console.log('✅ FILTER SYSTEM: Plus Routes button listeners attached');
+            } else {
+                console.warn('⚠️  FILTER SYSTEM: Plus Routes buttons not found!');
             }
             
             // Expose filter state globally
@@ -619,8 +671,7 @@
                 applyFilters: applyFilters
             };
             
-            // Initialize filters on page load
-            applyFilters();
+            // Don't initialize here - wait for unified initialization
         })();
         
         // Pagination functionality
@@ -634,6 +685,7 @@
             const pageInfo = document.getElementById('pageInfo');
             const totalPagesSpan = document.getElementById('totalPages');
             const showingCount = document.getElementById('showingCount');
+            const totalCount = document.getElementById('totalCount');
             
             function getVisibleRoutes() {
                 return Array.from(allRouteRows).filter(row =>
@@ -643,9 +695,11 @@
             }
             
             function showPage(page, shouldScroll = false) {
+                console.log('📄 PAGINATION: showPage called with page:', page);
                 const visibleRoutes = getVisibleRoutes();
                 const totalRoutes = visibleRoutes.length;
                 const totalPages = Math.ceil(totalRoutes / ROUTES_PER_PAGE);
+                console.log('📄 PAGINATION: Visible routes:', totalRoutes, 'Total pages:', totalPages);
                 
                 currentPage = Math.min(page, Math.max(1, totalPages));
                 
@@ -657,6 +711,7 @@
                 // Show rows for current page (only visible ones)
                 const startIndex = (currentPage - 1) * ROUTES_PER_PAGE;
                 const endIndex = Math.min(startIndex + ROUTES_PER_PAGE, totalRoutes);
+                console.log('📄 PAGINATION: Showing rows', startIndex + 1, 'to', endIndex);
                 
                 for (let i = startIndex; i < endIndex; i++) {
                     visibleRoutes[i].classList.remove('page-hidden');
@@ -668,6 +723,8 @@
                 pageInfo.textContent = `Page ${currentPage} of `;
                 totalPagesSpan.textContent = totalPages || 1;
                 showingCount.textContent = totalRoutes > 0 ? `${startIndex + 1}-${endIndex}` : '0';
+                totalCount.textContent = totalRoutes;
+                console.log('📄 PAGINATION: Updated counts - showing:', showingCount.textContent, 'total:', totalRoutes);
                 
                 // Only scroll if explicitly requested (e.g., pagination button clicks)
                 if (shouldScroll) {
@@ -705,8 +762,44 @@
                 resetToFirstPage: resetToFirstPage
             };
             
-            // Initialize first page
-            showPage(1);
+            // Don't initialize here - wait for unified initialization
+        })();
+        
+        // ============================================================================
+        // UNIFIED INITIALIZATION - Ensures correct order of operations
+        // ============================================================================
+        // This function initializes both the pagination and filter systems in the
+        // correct order to prevent race conditions. It must run AFTER both systems
+        // have registered their global APIs (window.paginationController and
+        // window.routeFilters).
+        //
+        // Thanks to Senior Developer Agents 1 & 2 for identifying the initialization
+        // race condition during the group code review!
+        // ============================================================================
+        (function initializeApp() {
+            console.log('🚀 Initializing Strava Commute Analyzer...');
+            
+            // Verify both systems are loaded
+            if (!window.routeFilters) {
+                console.error('❌ Filter system not loaded!');
+                return;
+            }
+            if (!window.paginationController) {
+                console.error('❌ Pagination system not loaded!');
+                return;
+            }
+            
+            console.log('✅ All systems loaded successfully');
+            
+            // Initialize in correct order: pagination first, then filters
+            console.log('📄 Initializing pagination system...');
+            window.paginationController.showPage(1);
+            
+            console.log('🔍 Applying initial filters...');
+            window.routeFilters.applyFilters();
+            
+            console.log('✅ Application ready! Filters and pagination are now active.');
+            console.log('💡 Tip: Open browser DevTools to see filter activity when you click buttons.');
         })();
         
         // Route name click to open Strava
@@ -762,8 +855,14 @@
                     paths.forEach(path => {
                         const classes = path.getAttribute('class') || '';
                         
-                        // Check if this path belongs to the route
-                        if (classes.includes('route-' + routeId)) {
+                        // Extract route ID from classes using regex for exact matching
+                        const routeMatch = classes.match(/route-((?:home_to_work|work_to_home)_\d+)/);
+                        const thisRouteId = routeMatch ? routeMatch[1] : null;
+                        
+                        if (!thisRouteId) return; // Skip if no route ID found
+                        
+                        // Check if this path belongs to the currently highlighted route
+                        if (thisRouteId === routeId) {
                             // Highlight this route - brightest
                             path.style.strokeWidth = '8';
                             path.style.strokeOpacity = '1';
@@ -772,31 +871,25 @@
                             if (path.dataset.originalStroke) {
                                 path.style.stroke = path.dataset.originalStroke;
                             }
-                        } else if (classes.includes('route-')) {
-                            // Check if this route is in selected set
-                            const routeMatch = classes.match(/route-((?:home_to_work|work_to_home)_\d+)/);
-                            const thisRouteId = routeMatch ? routeMatch[1] : null;
-                            
-                            if (thisRouteId && selectedRoutes.has(thisRouteId)) {
-                                // Keep selected routes visible but slightly dimmed
-                                path.style.strokeWidth = '5';
-                                path.style.strokeOpacity = '0.7';
-                                path.style.zIndex = '500';
-                                // Restore original color
-                                if (path.dataset.originalStroke) {
-                                    path.style.stroke = path.dataset.originalStroke;
-                                }
-                            } else {
-                                // Grey out unselected routes
-                                path.style.strokeWidth = '3';
-                                path.style.strokeOpacity = '0.3';
-                                path.style.zIndex = '100';
-                                // Store original color and change to grey
-                                if (!path.dataset.originalStroke) {
-                                    path.dataset.originalStroke = path.style.stroke || path.getAttribute('stroke');
-                                }
-                                path.style.stroke = '#808080';  // Grey
+                        } else if (selectedRoutes.has(thisRouteId)) {
+                            // Keep selected routes visible but slightly dimmed
+                            path.style.strokeWidth = '5';
+                            path.style.strokeOpacity = '0.7';
+                            path.style.zIndex = '500';
+                            // Restore original color
+                            if (path.dataset.originalStroke) {
+                                path.style.stroke = path.dataset.originalStroke;
                             }
+                        } else {
+                            // Grey out unselected routes
+                            path.style.strokeWidth = '3';
+                            path.style.strokeOpacity = '0.3';
+                            path.style.zIndex = '100';
+                            // Store original color and change to grey
+                            if (!path.dataset.originalStroke) {
+                                path.dataset.originalStroke = path.style.stroke || path.getAttribute('stroke');
+                            }
+                            path.style.stroke = '#808080';  // Grey
                         }
                     });
                 } catch (e) {
@@ -859,14 +952,24 @@
                     // Check if Ctrl/Cmd key is pressed for multi-select
                     const isMultiSelect = e.ctrlKey || e.metaKey;
                     
+                    // Check if this route is already selected BEFORE clearing
+                    const wasSelected = selectedRoutes.has(routeId);
+                    
                     if (!isMultiSelect) {
-                        // Single select - clear all others
+                        // Single select - clear all others (but remember if THIS one was selected)
                         routeRows.forEach(r => r.classList.remove('selected'));
                         selectedRoutes.clear();
                     }
                     
-                    if (selectedRoutes.has(routeId)) {
-                        // Unselect if clicking selected route
+                    if (wasSelected && !isMultiSelect) {
+                        // Clicking already-selected route in single-select mode - deselect it
+                        selectedRouteId = null;
+                        resetRoutes();
+                        if (typeof window.resetMapView === 'function') {
+                            window.resetMapView();
+                        }
+                    } else if (wasSelected && isMultiSelect) {
+                        // Multi-select mode: toggle off this route
                         selectedRoutes.delete(routeId);
                         this.classList.remove('selected');
                         
@@ -877,16 +980,18 @@
                                 window.resetMapView();
                             }
                         } else {
-                            // Highlight remaining selected routes
+                            // Update to show remaining selected routes
                             selectedRouteId = Array.from(selectedRoutes)[0];
-                            highlightRoute(selectedRouteId, true);
+                            highlightAllSelectedRoutes();
                         }
                     } else {
-                        // Select new route
+                        // Select new route (or re-select in single mode after clearing)
                         selectedRoutes.add(routeId);
                         selectedRouteId = routeId;
                         this.classList.add('selected');
-                        highlightRoute(routeId, true);
+                        
+                        // Highlight all selected routes (not just the new one)
+                        highlightAllSelectedRoutes();
                         
                         // Zoom map to selected route - need to access iframe's contentWindow
                         console.log('Table row clicked, routeId:', routeId);
@@ -915,6 +1020,49 @@
                     }
                 });
             });
+            
+            // Function to highlight all selected routes
+            function highlightAllSelectedRoutes() {
+                const mapContainer = document.querySelector('#full-map-container');
+                if (!mapContainer) return;
+                
+                const iframe = mapContainer.querySelector('iframe');
+                let mapDoc = iframe ? iframe.contentDocument : mapContainer;
+                
+                try {
+                    const paths = mapDoc.querySelectorAll('path.leaflet-interactive');
+                    paths.forEach(path => {
+                        const classes = path.getAttribute('class') || '';
+                        const routeMatch = classes.match(/route-((?:home_to_work|work_to_home)_\d+)/);
+                        const thisRouteId = routeMatch ? routeMatch[1] : null;
+                        
+                        if (!thisRouteId) return;
+                        
+                        if (selectedRoutes.has(thisRouteId)) {
+                            // Highlight all selected routes with full opacity and color
+                            path.style.strokeWidth = '6';
+                            path.style.strokeOpacity = '1';
+                            path.style.zIndex = '900';
+                            // Restore original color
+                            if (path.dataset.originalStroke) {
+                                path.style.stroke = path.dataset.originalStroke;
+                            }
+                        } else {
+                            // Grey out unselected routes
+                            path.style.strokeWidth = '3';
+                            path.style.strokeOpacity = '0.3';
+                            path.style.zIndex = '100';
+                            // Store and change to grey
+                            if (!path.dataset.originalStroke) {
+                                path.dataset.originalStroke = path.style.stroke || path.getAttribute('stroke');
+                            }
+                            path.style.stroke = '#808080';
+                        }
+                    });
+                } catch (e) {
+                    console.log('Could not access map elements:', e);
+                }
+            }
             
             // Comparison functionality
             function updateComparisonButton() {
@@ -1402,7 +1550,7 @@
             {% for ride in long_rides %}
             {
                 activity_id: {{ ride.activity_id }},
-                name: "{{ ride.name|replace('"', '\\"') }}",
+                name: {{ ride.name|tojson }},
                 distance: {{ ride.distance }},
                 elevation_gain: {{ ride.elevation_gain }},
                 coordinates: {{ ride.coordinates|tojson }}

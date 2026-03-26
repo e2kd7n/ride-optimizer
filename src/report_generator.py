@@ -17,9 +17,25 @@ from pathlib import Path
 from typing import Dict, Any, List
 from xml.etree import ElementTree as ET
 
-import qrcode
+# QR code temporarily disabled - needs debugging before re-enabling
+# TODO: Debug QR code generation and scanning functionality
+try:
+    import qrcode
+    QRCODE_AVAILABLE = True
+except ImportError:
+    QRCODE_AVAILABLE = False
+    qrcode = None
+
 from jinja2 import Template
-from weasyprint import HTML
+
+try:
+    from weasyprint import HTML
+    WEASYPRINT_AVAILABLE = True
+except (ImportError, OSError) as e:
+    WEASYPRINT_AVAILABLE = False
+    logger = logging.getLogger(__name__)
+    logger.warning(f"WeasyPrint not available: {e}. PDF export will be disabled.")
+    HTML = None
 
 from .units import UnitConverter
 
@@ -44,21 +60,26 @@ class ReportGenerator:
         unit_system = config.get('units.system', 'metric') if config else 'metric'
         self.units = UnitConverter(unit_system)
         
-    def generate_report(self, output_path: str) -> None:
+    def generate_report(self, output_path: str, generate_pdf: bool = False) -> None:
         """
         Generate complete HTML report.
         
         Args:
             output_path: Path to save the report
+            generate_pdf: Whether to generate PDF report (default: False)
         """
         logger.info("Generating HTML report...")
         
         # Prepare context
         context = self._prepare_context()
         
-        # Generate QR code for mobile access
-        qr_code_data = self._generate_qr_code(output_path)
-        context['qr_code'] = qr_code_data
+        # QR code temporarily disabled - needs debugging
+        # Generate QR code for mobile access only if available
+        if QRCODE_AVAILABLE:
+            qr_code_data = self._generate_qr_code(output_path)
+            context['qr_code'] = qr_code_data
+        else:
+            context['qr_code'] = None
         
         # Render template
         html = self._render_template(context)
@@ -73,12 +94,14 @@ class ReportGenerator:
         logger.info(f"Report saved to {output_path}")
         
         # Generate PDF version if requested
-        pdf_path = str(output_file).replace('.html', '.pdf')
-        try:
-            self.generate_pdf(output_path, pdf_path)
-            logger.info(f"PDF report saved to {pdf_path}")
-        except Exception as e:
-            logger.warning(f"Failed to generate PDF: {e}")
+        if generate_pdf:
+            pdf_path = str(output_file).replace('.html', '.pdf')
+            try:
+                self.generate_pdf(output_path, pdf_path)
+                logger.info(f"PDF report saved to {pdf_path}")
+            except Exception as e:
+                print(f"\n\033[93m⚠️  WARNING\033[0m - Failed to generate PDF: {e}\n")
+                logger.warning(f"Failed to generate PDF: {e}")
         
         # Generate data exports
         base_path = str(output_file).replace('.html', '')
@@ -86,18 +109,25 @@ class ReportGenerator:
             self.export_data(base_path)
             logger.info(f"Data exports saved to {base_path}_*.{{json,csv,gpx}}")
         except Exception as e:
+            print(f"\n\033[93m⚠️  WARNING\033[0m - Failed to generate data exports: {e}\n")
             logger.warning(f"Failed to generate data exports: {e}")
     
-    def _generate_qr_code(self, report_path: str) -> str:
+    def _generate_qr_code(self, report_path: str) -> str | None:
         """
         Generate QR code for mobile access to the report.
+        
+        NOTE: QR code functionality is currently disabled and needs debugging.
         
         Args:
             report_path: Path to the report file
             
         Returns:
-            Base64-encoded PNG image data URL
+            Base64-encoded PNG image data URL or None if qrcode not available
         """
+        if not QRCODE_AVAILABLE:
+            logger.warning("QR code generation skipped - qrcode module not available")
+            return None
+            
         try:
             # Convert to absolute path for file:// URL
             abs_path = Path(report_path).resolve()
@@ -134,6 +164,10 @@ class ReportGenerator:
             html_path: Path to the HTML report
             pdf_path: Path to save the PDF
         """
+        if not WEASYPRINT_AVAILABLE:
+            logger.warning("PDF generation skipped: WeasyPrint not available. Install system dependencies: brew install pango")
+            return
+            
         try:
             # Read HTML content
             with open(html_path, 'r', encoding='utf-8') as f:
@@ -144,6 +178,7 @@ class ReportGenerator:
             
             # Generate PDF
             HTML(string=pdf_html).write_pdf(pdf_path)
+            logger.info(f"PDF generated successfully: {pdf_path}")
             
         except Exception as e:
             logger.error(f"PDF generation failed: {e}")
@@ -212,7 +247,7 @@ class ReportGenerator:
                 'direction': group.direction,
                 'score': score,
                 'frequency': group.frequency,
-                'avg_duration_min': metrics.avg_duration_min if metrics else None,
+                'avg_duration_min': (metrics.avg_duration / 60) if metrics else None,
                 'avg_distance': metrics.avg_distance if metrics else None,
                 'avg_speed': metrics.avg_speed if metrics else None,
                 'coordinates': group.representative_route.coordinates if group.representative_route else None,
@@ -243,7 +278,7 @@ class ReportGenerator:
                     group.direction,
                     f"{score:.1f}",
                     group.frequency,
-                    f"{metrics.avg_duration_min:.1f}" if metrics else 'N/A',
+                    f"{(metrics.avg_duration / 60):.1f}" if metrics else 'N/A',
                     f"{metrics.avg_distance:.2f}" if metrics else 'N/A',
                     f"{metrics.avg_speed:.1f}" if metrics else 'N/A',
                     f"{breakdown.get('weather', 0):.1f}",
@@ -302,7 +337,15 @@ class ReportGenerator:
         route_names = visualizer.get_route_names() if visualizer else {}
         route_colors = visualizer.get_route_colors() if visualizer else {}
         
-        # Prepare ranked routes with metrics, names, Strava links, and prevailing wind
+        # Get current weather for general location (use home location)
+        current_weather = None
+        home = self.results.get('home')
+        if home:
+            from .weather_fetcher import WeatherFetcher
+            weather_fetcher = WeatherFetcher()
+            current_weather = weather_fetcher.get_current_conditions(home.lat, home.lon)
+        
+        # Prepare ranked routes with metrics, names, Strava links, and current weather
         ranked_routes = []
         for group, score, breakdown in self.results.get('ranked_routes', []):
             metrics = self.results.get('optimizer').metrics.get(group.id)
@@ -315,15 +358,8 @@ class ReportGenerator:
                 sorted_routes = sorted(group.routes, key=lambda r: r.timestamp, reverse=True)
                 most_recent_activity_id = sorted_routes[0].activity_id
             
-            # Get prevailing wind direction for this route
-            from .weather_fetcher import WeatherFetcher
-            if group.representative_route and group.representative_route.coordinates:
-                # Use midpoint of route for location
-                mid_idx = len(group.representative_route.coordinates) // 2
-                mid_lat, mid_lon = group.representative_route.coordinates[mid_idx]
-                prevailing_wind = WeatherFetcher.get_prevailing_wind_direction(mid_lat, mid_lon)
-            else:
-                prevailing_wind = None
+            # Get current weather details from breakdown if available
+            current_route_weather = breakdown.get('weather_details')
             
             ranked_routes.append({
                 'group': group,
@@ -333,7 +369,7 @@ class ReportGenerator:
                 'name': route_name,
                 'color': route_colors.get(group.id, '#808080'),  # Default to gray if not found
                 'strava_url': f"https://www.strava.com/activities/{most_recent_activity_id}" if most_recent_activity_id else None,
-                'prevailing_wind': prevailing_wind,
+                'current_weather': current_route_weather,
                 'is_plus_route': group.is_plus_route  # Flag for extended/recreational routes
             })
         
@@ -407,6 +443,7 @@ class ReportGenerator:
             'home': self.results.get('home'),
             'work': self.results.get('work'),
             'route_names': route_names,
+            'current_weather': current_weather,  # Add current weather for general location
             'statistics': {
                 'total_activities': total_activities,
                 'commute_activities': commute_activities,
