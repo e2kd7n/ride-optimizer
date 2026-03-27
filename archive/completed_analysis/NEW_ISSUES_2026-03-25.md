@@ -187,11 +187,11 @@ Based on investigation results:
 
 ---
 
-## Issue #58: Fix Analyzer Output Word Wrapping for Terminal
+## ~~Issue #58: Fix Analyzer Output Word Wrapping for Terminal~~ [DRAFT - NOT CREATED]
 
-**Labels:** `bug`, `cli`, `priority: P2`
+**NOTE:** This was a draft issue that was never created in GitHub. The actual Issue #58 is "Show time-aware next commute recommendations (to work & to home)" with labels `enhancement`, `P1-high`.
 
-**Title:** Ensure analyzer output displays cleanly in terminal regardless of window size
+**Original Draft Title:** Ensure analyzer output displays cleanly in terminal regardless of window size
 
 **Description:**
 
