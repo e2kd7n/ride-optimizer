@@ -7,17 +7,19 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
-        /* Base Styles */
+        /* Base Styles - Using Design System Spacing Scale */
+        /* Spacing scale: xs(4px) sm(8px) md(16px) lg(24px) xl(32px) */
         body { font-family: Arial, sans-serif; background-color: #f8f9fa; }
-        .container-fluid { padding: 30px; }
-        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px; border-radius: 10px; margin-bottom: 30px; }
-        .card { border: none; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        .card-header { background-color: #667eea; color: white; font-weight: bold; }
-        .metric { text-align: center; padding: 20px; }
+        .container-fluid { padding: 16px; }  /* md - reduced from 30px */
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 24px; border-radius: 10px; margin-bottom: 16px; }  /* lg padding, md margin - reduced from 40px/30px */
+        .card { border: none; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 12px; }  /* reduced from 20px */
+        .card-header { background-color: #667eea; color: white; font-weight: bold; padding: 12px 16px; }  /* optimized padding */
+        .card-body { padding: 16px; }  /* md - explicit card body padding */
+        .metric { text-align: center; padding: 12px; }  /* reduced from 20px */
         .metric-value { font-size: 2em; font-weight: bold; color: #667eea; }
         .metric-label { color: #6c757d; font-size: 0.9em; }
-        .map-container { height: 800px; border-radius: 10px; overflow: hidden; position: sticky; top: 20px; }
-        .map-container iframe { height: 800px !important; width: 100% !important; }
+        .map-container { height: 600px; border-radius: 10px; overflow: hidden; position: sticky; top: 20px; }  /* reduced from 800px */
+        .map-container iframe { height: 600px !important; width: 100% !important; }  /* reduced from 800px */
         .route-row { cursor: pointer; transition: all 0.2s ease; }
         .route-row:hover { background-color: #f0f0f0; }
         .route-row.selected { background-color: #d4edda; font-weight: bold; }
@@ -28,10 +30,11 @@
         .comparison-section { display: flex; gap: 20px; }
         .comparison-table { flex: 1; }
         .map-pane { flex: 1; min-width: 500px; }
-        .pagination-controls { margin: 15px 0; display: flex; justify-content: space-between; align-items: center; }
+        .pagination-controls { margin: 8px 0; display: flex; justify-content: space-between; align-items: center; }  /* sm - reduced from 15px */
         .pagination-controls button { margin: 0 5px; }
         .page-info { color: #6c757d; }
-        .direction-filter { margin-bottom: 15px; }
+        .direction-filter { margin-bottom: 12px; }  /* reduced from 15px */
+        .table td, .table th { padding: 8px 12px; }  /* sm vertical, optimized horizontal */
         .direction-filter .btn-group { box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .direction-filter .btn { border-radius: 0; }
         .direction-filter .btn:first-child { border-radius: 5px 0 0 5px; }
@@ -49,8 +52,8 @@
         /* Mobile: < 768px */
         @media (max-width: 767px) {
             /* Reduce padding on mobile */
-            .container-fluid { padding: 15px; }
-            .header { padding: 20px; border-radius: 8px; }
+            .container-fluid { padding: 12px; }  /* slightly reduced for mobile */
+            .header { padding: 20px; border-radius: 8px; }  /* keep mobile header padding */
             
             /* Stack comparison section vertically */
             .comparison-section {
@@ -117,7 +120,7 @@
             
             /* Adjust metrics for mobile */
             .metric {
-                padding: 12px;
+                padding: 8px;  /* sm - more compact on mobile */
             }
             
             .metric-value {
@@ -177,7 +180,7 @@
         
         /* Tablet: 768px - 1023px */
         @media (min-width: 768px) and (max-width: 1023px) {
-            .container-fluid { padding: 20px; }
+            .container-fluid { padding: 16px; }  /* md - consistent with desktop */
             
             /* Stack comparison section on tablet */
             .comparison-section {
@@ -189,11 +192,11 @@
             }
             
             .map-container {
-                height: 600px;
+                height: 500px;  /* slightly reduced for tablet */
             }
-            
+
             .map-container iframe {
-                height: 600px !important;
+                height: 500px !important;
             }
             
             /* Slightly larger touch targets for tablet */
@@ -374,10 +377,134 @@
         </ul>
 
         <!-- Tab Content -->
-        <div class="tab-content" id="reportTabContent" style="margin-top: 20px;">
+        <div class="tab-content" id="reportTabContent" style="margin-top: 12px;">
             <!-- Commute Routes Tab -->
             <div class="tab-pane fade show active" id="commute" role="tabpanel" aria-labelledby="commute-tab">
 
+        <!-- Time-Aware Next Commute Recommendations -->
+        {% if next_commutes %}
+        <div class="card">
+            <div class="card-header"><h3>🕐 Next Commute Recommendations</h3></div>
+            <div class="card-body">
+                <div class="row">
+                    <!-- To Work Recommendation -->
+                    {% if next_commutes.get('to_work') %}
+                    {% set rec = next_commutes['to_work'] %}
+                    {% set group = rec.route_group %}
+                    {% set metrics = optimizer.metrics.get(group.id) %}
+                    <div class="col-md-6">
+                        <div class="card" style="border: 2px solid #28a745;">
+                            <div class="card-header bg-success text-white">
+                                <h5 class="mb-0">🌅 Next Commute to Work</h5>
+                                <small>{{ rec.time_window }}</small>
+                            </div>
+                            <div class="card-body">
+                                <h5>{{ route_names.get(group.id, group.id) }}</h5>
+                                <p class="text-muted mb-3">Score: {{ "%.1f"|format(rec.score) }}/100</p>
+                                
+                                <div class="row">
+                                    <div class="col-6">
+                                        <div class="metric">
+                                            <div class="metric-value" style="font-size: 1.5em;">{{ "%.1f"|format(metrics.avg_duration / 60) }}</div>
+                                            <div class="metric-label">Minutes</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <div class="metric">
+                                            <div class="metric-value" style="font-size: 1.5em;">{{ "%.2f"|format(units.distance_value(metrics.avg_distance)) }}</div>
+                                            <div class="metric-label">{{ units.distance_unit() }}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                {% if rec.forecast_weather %}
+                                <div class="alert alert-info mt-3 mb-0">
+                                    <h6 class="mb-2">🌤️ Forecast Weather</h6>
+                                    <div class="row small">
+                                        <div class="col-6">
+                                            <strong>Temp:</strong> {{ units.temperature(rec.forecast_weather.temp_c) }}
+                                        </div>
+                                        <div class="col-6">
+                                            <strong>Wind:</strong> {{ units.wind_speed(rec.forecast_weather.wind_speed_kph / 3.6) }}
+                                        </div>
+                                        <div class="col-6">
+                                            <strong>Precip:</strong> {{ "%.0f"|format(rec.forecast_weather.precipitation_prob) }}%
+                                        </div>
+                                        <div class="col-6">
+                                            {% if rec.breakdown.get('weather_details') %}
+                                            {% set wd = rec.breakdown['weather_details'] %}
+                                            <strong>Wind:</strong> {{ wd.wind_favorability|title }}
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- To Home Recommendation -->
+                    {% if next_commutes.get('to_home') %}
+                    {% set rec = next_commutes['to_home'] %}
+                    {% set group = rec.route_group %}
+                    {% set metrics = optimizer.metrics.get(group.id) %}
+                    <div class="col-md-6">
+                        <div class="card" style="border: 2px solid #007bff;">
+                            <div class="card-header bg-primary text-white">
+                                <h5 class="mb-0">🌆 Next Commute Home</h5>
+                                <small>{{ rec.time_window }}</small>
+                            </div>
+                            <div class="card-body">
+                                <h5>{{ route_names.get(group.id, group.id) }}</h5>
+                                <p class="text-muted mb-3">Score: {{ "%.1f"|format(rec.score) }}/100</p>
+                                
+                                <div class="row">
+                                    <div class="col-6">
+                                        <div class="metric">
+                                            <div class="metric-value" style="font-size: 1.5em;">{{ "%.1f"|format(metrics.avg_duration / 60) }}</div>
+                                            <div class="metric-label">Minutes</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <div class="metric">
+                                            <div class="metric-value" style="font-size: 1.5em;">{{ "%.2f"|format(units.distance_value(metrics.avg_distance)) }}</div>
+                                            <div class="metric-label">{{ units.distance_unit() }}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                {% if rec.forecast_weather %}
+                                <div class="alert alert-info mt-3 mb-0">
+                                    <h6 class="mb-2">🌤️ Forecast Weather</h6>
+                                    <div class="row small">
+                                        <div class="col-6">
+                                            <strong>Temp:</strong> {{ units.temperature(rec.forecast_weather.temp_c) }}
+                                        </div>
+                                        <div class="col-6">
+                                            <strong>Wind:</strong> {{ units.wind_speed(rec.forecast_weather.wind_speed_kph / 3.6) }}
+                                        </div>
+                                        <div class="col-6">
+                                            <strong>Precip:</strong> {{ "%.0f"|format(rec.forecast_weather.precipitation_prob) }}%
+                                        </div>
+                                        <div class="col-6">
+                                            {% if rec.breakdown.get('weather_details') %}
+                                            {% set wd = rec.breakdown['weather_details'] %}
+                                            <strong>Wind:</strong> {{ wd.wind_favorability|title }}
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <!-- Fallback to original optimal route if next_commutes not available -->
         <div class="card">
             <div class="card-header"><h3>🏆 Recommended Optimal Route</h3></div>
             <div class="card-body">
@@ -398,80 +525,9 @@
                     </div>
                     {% endif %}
                 </div>
-                <div class="row">
-                    <div class="col-md-2">
-                        <div class="metric">
-                            <div class="metric-value">{{ "%.1f"|format(optimal['avg_duration_min']) }}</div>
-                            <div class="metric-label">Minutes</div>
-                        </div>
-                    </div>
-                    <div class="col-md-2">
-                        <div class="metric">
-                            <div class="metric-value">{{ "%.2f"|format(optimal['avg_distance']) }}</div>
-                            <div class="metric-label">{{ optimal['avg_distance_unit'] }}</div>
-                        </div>
-                    </div>
-                    <div class="col-md-2">
-                        <div class="metric">
-                            <div class="metric-value">{{ "%.1f"|format(optimal['avg_speed']) }}</div>
-                            <div class="metric-label">{{ optimal['avg_speed_unit'] }}</div>
-                        </div>
-                    </div>
-                    <div class="col-md-2">
-                        <div class="metric">
-                            <div class="metric-value">{{ optimal['frequency'] }}</div>
-                            <div class="metric-label">Times Used</div>
-                        </div>
-                    </div>
-                    <div class="col-md-2">
-                        <div class="metric">
-                            <div class="metric-value">{{ "%.0f"|format(optimal['breakdown'].get('weather', 50)) }}</div>
-                            <div class="metric-label">Weather Score</div>
-                        </div>
-                    </div>
-                    <div class="col-md-2">
-                        <div class="metric">
-                            {% if optimal['breakdown'].get('weather_details') %}
-                                {% set wd = optimal['breakdown']['weather_details'] %}
-                                <div class="metric-value" style="font-size: 1.5em;">
-                                    {% if wd.wind_favorability == 'favorable' %}🌬️✅{% elif wd.wind_favorability == 'unfavorable' %}🌬️⚠️{% else %}🌬️{% endif %}
-                                </div>
-                                <div class="metric-label">{{ wd.wind_favorability|title }} Wind</div>
-                            {% else %}
-                                <div class="metric-value" style="font-size: 1.5em;">🌤️</div>
-                                <div class="metric-label">No Weather Data</div>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-                {% if current_weather %}
-                <div class="alert alert-info mt-3">
-                    <h6>🌤️ Current Weather Conditions</h6>
-                    <div class="row">
-                        <div class="col-md-3">
-                            <strong>Wind:</strong> {{ units.wind_speed(current_weather.wind_speed_kph / 3.6) }} from {{ "%.0f"|format(current_weather.wind_direction_deg) }}° ({{ current_weather.wind_direction_cardinal }})
-                        </div>
-                        <div class="col-md-3">
-                            <strong>Temperature:</strong> {{ units.temperature(current_weather.temp_c) }}
-                        </div>
-                        <div class="col-md-3">
-                            <strong>Humidity:</strong> {{ "%.0f"|format(current_weather.humidity) }}%
-                        </div>
-                        <div class="col-md-3">
-                            <strong>Precipitation:</strong> {{ "%.1f"|format(current_weather.precipitation_mm) }} mm
-                        </div>
-                    </div>
-                    <div class="row mt-2">
-                        <div class="col-12">
-                            <small class="text-muted">
-                                <em>Current conditions at home location. Route-specific wind impacts shown in table below.</em>
-                            </small>
-                        </div>
-                    </div>
-                </div>
-                {% endif %}
             </div>
         </div>
+        {% endif %}
 
         <div class="card" id="full-map-section">
             <div class="card-header"><h3>📊 Route Comparison & Full Interactive Map</h3></div>
