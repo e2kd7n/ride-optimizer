@@ -564,8 +564,8 @@
                                 <button class="btn btn-sm btn-outline-primary" id="nextPage">Next →</button>
                             </div>
                             <div class="page-info">
-                                <span id="pageInfo">Page 1 of <span id="totalPages">1</span></span>
-                                <span class="ms-3">Showing <span id="showingCount">0</span> of <span id="totalCount">{{ ranked_routes|length }}</span> routes</span>
+                                <span id="pageInfo">Page <span id="currentPage">1</span> of <span id="totalPages">1</span></span>
+                                <span class="ms-3"><span id="totalCount">{{ ranked_routes|length }}</span> <span id="routeLabel">route{{ 's' if ranked_routes|length != 1 else '' }}</span></span>
                             </div>
                         </div>
                         <table class="table table-hover" id="routesTable">
@@ -963,11 +963,18 @@
                 // Update pagination controls
                 prevButton.disabled = (currentPage === 1);
                 nextButton.disabled = (currentPage === totalPages || totalPages === 0);
-                pageInfo.textContent = `Page ${currentPage} of `;
+                
+                // Update page numbers (don't overwrite pageInfo.textContent as it contains child spans)
+                const currentPageSpan = document.getElementById('currentPage');
+                currentPageSpan.textContent = currentPage;
                 totalPagesSpan.textContent = totalPages || 1;
-                showingCount.textContent = totalRoutes > 0 ? `${startIndex + 1}-${endIndex}` : '0';
+                
+                // Update route count with singular/plural
                 totalCount.textContent = totalRoutes;
-                console.log('📄 PAGINATION: Updated counts - showing:', showingCount.textContent, 'total:', totalRoutes);
+                const routeLabel = document.getElementById('routeLabel');
+                routeLabel.textContent = totalRoutes === 1 ? 'route' : 'routes';
+                
+                console.log('📄 PAGINATION: Updated counts - page:', currentPage, 'of', totalPages, 'total routes:', totalRoutes);
                 
                 // Only scroll if explicitly requested (e.g., pagination button clicks)
                 if (shouldScroll) {
