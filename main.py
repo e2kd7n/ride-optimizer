@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+c#!/usr/bin/env python3
 """
 Strava Commute Route Analyzer - Main Entry Point
 
@@ -484,10 +484,16 @@ def _generate_visualization(route_groups, home, work, config, long_rides,
         str: HTML content for the map
     """
     logger.info("Generating interactive map...")
+    
+    # Create weather fetcher for current conditions display
+    from src.weather_fetcher import WeatherFetcher
+    weather_fetcher = WeatherFetcher()
+    
     visualizer = RouteVisualizer(
         route_groups, home, work, config,
         long_rides=long_rides,
-        long_ride_analyzer=long_ride_analyzer
+        long_ride_analyzer=long_ride_analyzer,
+        weather_fetcher=weather_fetcher
     )
     map_html = visualizer.generate_map(
         optimal_route=optimal_route,
@@ -536,7 +542,7 @@ def _save_report(analysis_results, output_dir, generate_pdf=False):
 
 def _open_report_in_browser(report_path):
     """
-    Open report in browser without blocking (non-blocking subprocess).
+    Open report in Chrome browser without blocking (non-blocking subprocess).
     
     This significantly improves performance by not waiting for the browser to launch.
     
@@ -547,16 +553,50 @@ def _open_report_in_browser(report_path):
         # Convert to absolute path
         abs_path = report_path.resolve()
         
-        # Use platform-specific non-blocking commands
+        # Use platform-specific commands to open in Chrome
         if sys.platform == 'darwin':  # macOS
-            subprocess.Popen(['open', str(abs_path)])
-            logger.info("🌐 Opening report in default browser...")
+            # Open specifically in Chrome on macOS
+            subprocess.run(
+                ['open', '-a', 'Google Chrome', str(abs_path)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False
+            )
+            logger.info("🌐 Opening report in Chrome...")
         elif sys.platform == 'win32':  # Windows
-            subprocess.Popen(['start', str(abs_path)], shell=True)
-            logger.info("🌐 Opening report in default browser...")
+            # Try to find Chrome on Windows
+            chrome_paths = [
+                r'C:\Program Files\Google\Chrome\Application\chrome.exe',
+                r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe',
+                os.path.expanduser(r'~\AppData\Local\Google\Chrome\Application\chrome.exe')
+            ]
+            chrome_path = None
+            for path in chrome_paths:
+                if os.path.exists(path):
+                    chrome_path = path
+                    break
+            
+            if chrome_path:
+                subprocess.run(
+                    [chrome_path, str(abs_path)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False
+                )
+                logger.info("🌐 Opening report in Chrome...")
+            else:
+                # Fallback to default browser
+                os.startfile(str(abs_path))
+                logger.info("🌐 Chrome not found, opening in default browser...")
         else:  # Linux
-            subprocess.Popen(['xdg-open', str(abs_path)])
-            logger.info("🌐 Opening report in default browser...")
+            # Try to open in Chrome on Linux
+            subprocess.run(
+                ['google-chrome', str(abs_path)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False
+            )
+            logger.info("🌐 Opening report in Chrome...")
         
         # Return immediately without waiting for browser to launch
     except Exception as e:
@@ -639,7 +679,7 @@ def analyze_routes(config, output_dir, n_workers=2, generate_pdf=False, force_re
         total_steps = 8
         
         with tqdm(total=total_steps, desc="Progress", unit="step", ncols=80,
-                 bar_format='{desc}: {percentage:3.0f}%|{bar}|', leave=True) as pbar:
+                 bar_format='{desc}: {n}/{total} |{bar}| {percentage:3.0f}%', leave=True) as pbar:
             # Step 1: Get authenticated client
             step_start = time.time()
             pbar.set_description("🔐 Authenticating")

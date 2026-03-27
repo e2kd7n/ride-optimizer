@@ -26,7 +26,8 @@ class RouteVisualizer:
     """Creates interactive map visualizations of routes."""
     
     def __init__(self, route_groups: List[RouteGroup], home: Location,
-                 work: Location, config, long_rides=None, long_ride_analyzer=None):
+                 work: Location, config, long_rides=None, long_ride_analyzer=None,
+                 weather_fetcher=None):
         """
         Initialize route visualizer.
         
@@ -37,6 +38,7 @@ class RouteVisualizer:
             config: Configuration object
             long_rides: Optional list of LongRide objects
             long_ride_analyzer: Optional LongRideAnalyzer instance
+            weather_fetcher: Optional WeatherFetcher instance for current conditions
         """
         self.route_groups = route_groups
         self.home = home
@@ -48,6 +50,7 @@ class RouteVisualizer:
         self.route_colors = {}  # Map route_id to color
         self.long_rides = long_rides or []
         self.long_ride_analyzer = long_ride_analyzer
+        self.weather_fetcher = weather_fetcher
         
         # Initialize unit converter
         unit_system = config.get('units.system', 'metric')
@@ -194,6 +197,98 @@ class RouteVisualizer:
         
         logger.info("Added location markers")
     
+    def add_weather_display(self) -> None:
+        """Add current weather conditions display to the map."""
+        if self.map is None:
+            raise ValueError("Map not initialized. Call create_base_map() first.")
+        
+        if self.weather_fetcher is None:
+            logger.debug("No weather fetcher provided, skipping weather display")
+            return
+        
+        try:
+            # Get weather for the center point between home and work
+            center_lat = (self.home.lat + self.work.lat) / 2
+            center_lon = (self.home.lon + self.work.lon) / 2
+            
+            conditions = self.weather_fetcher.get_current_conditions(center_lat, center_lon)
+            
+            if not conditions:
+                logger.warning("Could not fetch current weather conditions")
+                return
+            
+            # Convert temperature based on unit system
+            temp_c = conditions.get('temp_c', 0)
+            if self.units.system == 'imperial':
+                temp = temp_c * 9/5 + 32
+                temp_unit = '°F'
+            else:
+                temp = temp_c
+                temp_unit = '°C'
+            
+            # Convert wind speed based on unit system
+            wind_kph = conditions.get('wind_speed_kph', 0)
+            if self.units.system == 'imperial':
+                wind_speed = wind_kph * 0.621371  # Convert to mph
+                wind_unit = 'mph'
+            else:
+                wind_speed = wind_kph
+                wind_unit = 'km/h'
+            
+            # Get wind direction
+            wind_dir = conditions.get('wind_direction_cardinal', 'N/A')
+            wind_deg = conditions.get('wind_direction_deg', 0)
+            
+            # Get precipitation
+            precip_mm = conditions.get('precipitation_mm', 0)
+            if self.units.system == 'imperial':
+                precip = precip_mm * 0.0393701  # Convert to inches
+                precip_unit = 'in'
+            else:
+                precip = precip_mm
+                precip_unit = 'mm'
+            
+            # Create weather info HTML
+            weather_html = f"""
+            <div style="position: fixed;
+                        top: 10px;
+                        right: 60px;
+                        width: 200px;
+                        background-color: white;
+                        border: 2px solid #ccc;
+                        border-radius: 5px;
+                        padding: 10px;
+                        font-family: Arial, sans-serif;
+                        font-size: 12px;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                        z-index: 1000;">
+                <h4 style="margin: 0 0 8px 0; font-size: 14px; color: #333;">
+                    🌤️ Current Conditions
+                </h4>
+                <div style="line-height: 1.6;">
+                    <div><b>🌡️ Temp:</b> {temp:.1f}{temp_unit}</div>
+                    <div><b>💨 Wind:</b> {wind_speed:.1f} {wind_unit} {wind_dir}</div>
+                    <div style="font-size: 10px; color: #666; margin-left: 20px;">
+                        ({wind_deg}°)
+                    </div>
+                    <div><b>💧 Precip:</b> {precip:.1f} {precip_unit}</div>
+                </div>
+                <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee;
+                            font-size: 10px; color: #666;">
+                    Updated: {conditions.get('timestamp', 'N/A')}
+                </div>
+            </div>
+            """
+            
+            # Add weather display to map
+            self.map.get_root().html.add_child(folium.Element(weather_html))
+            
+            logger.info(f"Added weather display: {temp:.1f}{temp_unit}, "
+                       f"Wind {wind_speed:.1f} {wind_unit} from {wind_dir}")
+            
+        except Exception as e:
+            logger.error(f"Failed to add weather display: {e}")
+    
     def add_heatmap_layer(self) -> None:
         """Add heatmap overlay showing most frequently used paths."""
         if self.map is None:
@@ -328,6 +423,9 @@ class RouteVisualizer:
         
         # Add location markers
         self.add_location_markers()
+        
+        # Add current weather display
+        self.add_weather_display()
         
         # Add layer control
         folium.LayerControl().add_to(self.map)
