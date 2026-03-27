@@ -1,9 +1,9 @@
 # UI/UX P1 Improvements
 
-**Priority:** P1  
-**Epic:** UI/UX Enhancements  
-**Created:** 2026-03-27  
-**Status:** Ready for Implementation
+**Priority:** P1
+**Epic:** UI/UX Enhancements
+**Created:** 2026-03-27
+**Status:** Partially Complete (Issue #69 Done)
 
 ---
 
@@ -396,4 +396,37 @@ Reference: `plans/v2.1.0/DESIGN_PRINCIPLES.md`
 
 ---
 
-*Last Updated: 2026-03-27*
+## Completed Issues
+
+### Issue #69 - Map Direction Indicators (COMPLETED 2026-03-27)
+
+**Implementation Summary:**
+- ✅ Stacked card layout for "To Work" and "To Home" recommendations
+- ✅ Dense information display with 6 compact metrics per card (duration, distance, temperature, wind speed, precipitation, wind favorability)
+- ✅ Interactive Leaflet map with color-coded routes
+  - Green (#28a745) for "to work" route
+  - Blue (#007bff) for "to home" route
+- ✅ Direction arrows using screen-space bearing calculation
+  - 5 arrows per route for clear direction indication
+  - Arrows rotate based on visual direction on map (not geographic bearing)
+  - Uses `latLngToContainerPoint()` for accurate screen-space angles
+- ✅ Click handlers on cards to highlight and zoom to specific routes
+- ✅ Responsive design with mobile breakpoints (<768px)
+- ✅ Start/end markers with labels ("Start", "End")
+
+**Technical Details:**
+- Two-column flex layout: cards (400px fixed) + map (flex: 1)
+- Fixed CSS height issue using flex context (`align-items: stretch`, `flex: 1`)
+- Leaflet.js for interactive map with CartoDB light basemap
+- Touch-optimized interactions (44x44px minimum targets)
+
+**Files Modified:**
+- `templates/report_template.html` - Complete Next Commute section redesign
+
+**Time Investment:** 1 hour
+**Estimated Without AI:** 6-8 hours
+**Productivity Multiplier:** 6-8x
+
+---
+
+*Last Updated: 2026-03-27 at 16:15 UTC*
