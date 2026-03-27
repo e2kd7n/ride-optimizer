@@ -5605,5 +5605,12 @@
     "neighborhood": "Mid-North District",
     "landmark": null,
     "feature": null
+  },
+  "details_41.8845,-87.6370": {
+    "street": "West Randolph Street",
+    "is_major": false,
+    "neighborhood": "Loop",
+    "landmark": null,
+    "feature": null
   }
 }
