@@ -118,17 +118,25 @@ class Activity:
 class StravaDataFetcher:
     """Fetches and caches activity data from Strava API."""
     
-    def __init__(self, client: Client, config):
+    def __init__(self, client: Client, config, use_test_cache: bool = False):
         """
         Initialize data fetcher.
         
         Args:
             client: Authenticated Strava client
             config: Configuration object
+            use_test_cache: If True, use test cache instead of production cache
         """
         self.client = client
         self.config = config
-        self.cache_path = Path("data/cache/activities.json")
+        self.use_test_cache = use_test_cache
+        
+        # Use separate cache paths for test and production data
+        if use_test_cache:
+            self.cache_path = Path("data/cache/activities_test.json")
+            logger.info("Using TEST cache: data/cache/activities_test.json")
+        else:
+            self.cache_path = Path("data/cache/activities.json")
         
     def fetch_activities(self, limit: Optional[int] = None,
                         after: Optional[datetime] = None,
