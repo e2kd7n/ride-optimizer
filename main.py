@@ -740,7 +740,7 @@ Examples:
   # Show cached activity statistics
   python main.py --stats
   
-  # Fetch most recent 100 activities
+  # Fetch most recent 100 activities and analyze
   python main.py --fetch --limit 100 --analyze
   
   # Fetch activities from a specific date onwards
@@ -749,23 +749,23 @@ Examples:
   # Fetch activities within a date range
   python main.py --fetch --from-date 2023-01-01 --to-date 2023-12-31 --analyze
   
-  # Fetch specific number of activities from a date
-  python main.py --fetch --from-date 2023-01-01 --limit 200 --analyze
-  
   # Replace cache completely (WARNING: loses existing data)
   python main.py --fetch --replace-cache --analyze
   
   # Re-analyze with cached data
   python main.py --analyze
   
-  # Force full reanalysis (clears route grouping cache)
-  python main.py --analyze --force-reanalysis
+  # Force full reanalysis (auto-enables --analyze)
+  python main.py --force-reanalysis
   
-  # Use parallel processing (2-8 workers)
-  python main.py --analyze --parallel 4
+  # Use parallel processing (auto-enables --analyze)
+  python main.py --parallel 4
   
-  # Generate PDF report (slower, adds ~30s)
-  python main.py --analyze --pdf
+  # Generate PDF report (auto-enables --analyze)
+  python main.py --pdf
+  
+  # Combine options
+  python main.py --force-reanalysis --parallel 4 --pdf
         """
     )
     
@@ -803,6 +803,12 @@ Examples:
     # Set logging level
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
+    
+    # Auto-enable --analyze if analysis-specific flags are used
+    if args.force_reanalysis or args.pdf or (args.parallel != 2):
+        if not args.analyze:
+            args.analyze = True
+            logger.info("Auto-enabling --analyze due to analysis-specific flags")
     
     # Show help if no arguments
     if not (args.auth or args.fetch or args.stats or args.analyze):
