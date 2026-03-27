@@ -37,6 +37,7 @@ except (ImportError, OSError) as e:
     logger.warning(f"WeasyPrint not available: {e}. PDF export will be disabled.")
     HTML = None
 
+from .route_analyzer import Route
 from .units import UnitConverter
 
 logger = logging.getLogger(__name__)
@@ -155,6 +156,25 @@ class ReportGenerator:
         except Exception as e:
             logger.warning(f"Failed to generate QR code: {e}")
             return ""
+    def _route_to_dict(self, route: Route) -> dict:
+        """
+        Convert Route dataclass to JSON-serializable dictionary.
+        
+        Only includes fields needed by JavaScript showMatchedRoutes() function.
+        
+        Args:
+            route: Route dataclass instance
+            
+        Returns:
+            Dictionary with serializable route data
+        """
+        return {
+            'id': route.activity_id,
+            'start_date': route.timestamp,
+            'distance': route.distance,
+            'moving_time': route.duration
+        }
+    
     
     def generate_pdf(self, html_path: str, pdf_path: str) -> None:
         """
@@ -332,6 +352,9 @@ class ReportGenerator:
         optimal = recommendations.get('optimal', {})
         alternative = recommendations.get('alternative')
         
+        # Get next commute recommendations (time-aware)
+        next_commutes = self.results.get('next_commutes', {})
+        
         # Get route names and colors from visualizer
         visualizer = self.results.get('visualizer')
         route_names = visualizer.get_route_names() if visualizer else {}
@@ -370,7 +393,8 @@ class ReportGenerator:
                 'color': route_colors.get(group.id, '#808080'),  # Default to gray if not found
                 'strava_url': f"https://www.strava.com/activities/{most_recent_activity_id}" if most_recent_activity_id else None,
                 'current_weather': current_route_weather,
-                'is_plus_route': group.is_plus_route  # Flag for extended/recreational routes
+                'is_plus_route': group.is_plus_route,  # Flag for extended/recreational routes
+                'routes_data': [self._route_to_dict(r) for r in group.routes]  # JSON-serializable route data
             })
         
         # Calculate statistics
@@ -453,7 +477,9 @@ class ReportGenerator:
             'long_rides': long_rides,
             'long_rides_stats': long_rides_stats,
             'distance_bins': distance_bins,
-            'units': self.units  # Pass unit converter to template
+            'units': self.units,  # Pass unit converter to template
+            'next_commutes': next_commutes,  # Add time-aware next commute recommendations
+            'optimizer': self.results.get('optimizer')  # Add optimizer for template access
         }
         
         return context
