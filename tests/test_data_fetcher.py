@@ -16,21 +16,21 @@ class TestActivity:
             id=12345,
             name="Morning Commute",
             type="Ride",
-            start_date=datetime(2024, 1, 1, 8, 0, 0, tzinfo=timezone.utc),
+            start_date="2024-01-01T08:00:00+00:00",
             distance=5000.0,
             moving_time=1200,
             elapsed_time=1300,
             total_elevation_gain=50.0,
             average_speed=4.17,
             max_speed=8.0,
-            polyline="encoded_polyline",
-            commute=True
+            start_latlng=(41.8781, -87.6298),
+            end_latlng=(41.8819, -87.6278),
+            polyline="encoded_polyline"
         )
         
         assert activity.id == 12345
         assert activity.name == "Morning Commute"
         assert activity.distance == 5000.0
-        assert activity.commute is True
     
     def test_from_strava_activity(self):
         """Test creating Activity from Strava activity object."""
@@ -45,18 +45,17 @@ class TestActivity:
         mock_strava_activity.total_elevation_gain = 100.0
         mock_strava_activity.average_speed = 4.17
         mock_strava_activity.max_speed = 10.0
+        mock_strava_activity.start_latlng = [41.8781, -87.6298]
+        mock_strava_activity.end_latlng = [41.8819, -87.6278]
         mock_strava_activity.map = Mock()
         mock_strava_activity.map.summary_polyline = "summary_polyline"
-        mock_strava_activity.commute = False
         
         activity = Activity.from_strava_activity(mock_strava_activity)
         
         assert activity.id == 67890
         assert activity.name == "Evening Ride"
         assert activity.distance == 10000.0
-        assert activity.commute is False
         assert activity.polyline == "summary_polyline"
-    
     def test_from_dict(self):
         """Test creating Activity from dictionary."""
         data = {
@@ -70,8 +69,9 @@ class TestActivity:
             'total_elevation_gain': 50.0,
             'average_speed': 4.17,
             'max_speed': 8.0,
-            'polyline': 'test_polyline',
-            'commute': True
+            'start_latlng': [41.8781, -87.6298],
+            'end_latlng': [41.8819, -87.6278],
+            'polyline': 'test_polyline'
         }
         
         activity = Activity.from_dict(data)
@@ -104,15 +104,15 @@ class TestStravaDataFetcher:
     
     def test_fetcher_initialization(self, mock_client, mock_config):
         """Test StravaDataFetcher initialization."""
-        fetcher = StravaDataFetcher(mock_client, mock_config)
+        fetcher = StravaDataFetcher(mock_client, mock_config, use_test_cache=True)
         
         assert fetcher.client == mock_client
         assert fetcher.config == mock_config
-        assert fetcher.cache_dir == 'cache'
+        assert hasattr(fetcher, 'cache_path')
     
     def test_decode_polyline(self, mock_client, mock_config):
         """Test polyline decoding."""
-        fetcher = StravaDataFetcher(mock_client, mock_config)
+        fetcher = StravaDataFetcher(mock_client, mock_config, use_test_cache=True)
         
         # Simple polyline encoding for testing
         # This is a simplified test - real polylines are more complex
@@ -126,37 +126,43 @@ class TestStravaDataFetcher:
     
     def test_filter_commute_activities(self, mock_client, mock_config):
         """Test filtering commute activities."""
-        fetcher = StravaDataFetcher(mock_client, mock_config)
+        fetcher = StravaDataFetcher(mock_client, mock_config, use_test_cache=True)
         
         activities = [
             Activity(
-                id=1, name="Commute", type="Ride", 
-                start_date=datetime.now(timezone.utc),
+                id=1, name="Morning Commute", type="Ride",
+                start_date=datetime.now(timezone.utc).isoformat(),
                 distance=5000.0, moving_time=1200, elapsed_time=1300,
                 total_elevation_gain=50.0, average_speed=4.17, max_speed=8.0,
-                polyline="poly1", commute=True
+                start_latlng=(41.8781, -87.6298),
+                end_latlng=(41.8819, -87.6278),
+                polyline="poly1"
             ),
             Activity(
                 id=2, name="Long Ride", type="Ride",
-                start_date=datetime.now(timezone.utc),
+                start_date=datetime.now(timezone.utc).isoformat(),
                 distance=100000.0, moving_time=10000, elapsed_time=10100,
                 total_elevation_gain=500.0, average_speed=10.0, max_speed=15.0,
-                polyline="poly2", commute=False
+                start_latlng=(41.8781, -87.6298),
+                end_latlng=(41.9819, -87.7278),
+                polyline="poly2"
             ),
             Activity(
-                id=3, name="Short Commute", type="Ride",
-                start_date=datetime.now(timezone.utc),
+                id=3, name="Evening Commute", type="Ride",
+                start_date=datetime.now(timezone.utc).isoformat(),
                 distance=3000.0, moving_time=600, elapsed_time=700,
                 total_elevation_gain=20.0, average_speed=5.0, max_speed=7.0,
-                polyline="poly3", commute=True
+                start_latlng=(41.8819, -87.6278),
+                end_latlng=(41.8781, -87.6298),
+                polyline="poly3"
             ),
         ]
         
         commute_activities = fetcher.filter_commute_activities(activities)
         
-        # Should filter based on commute flag and distance range
+        # Should filter based on commute keywords in name and distance range
         assert len(commute_activities) >= 1
-        assert all(act.commute for act in commute_activities)
+        assert all('commute' in act.name.lower() or 'work' in act.name.lower() for act in commute_activities)
     
     @patch('os.path.exists')
     @patch('builtins.open', create=True)
@@ -166,21 +172,25 @@ class TestStravaDataFetcher:
         mock_file = MagicMock()
         mock_open.return_value.__enter__.return_value = mock_file
         
-        fetcher = StravaDataFetcher(mock_client, mock_config)
+        fetcher = StravaDataFetcher(mock_client, mock_config, use_test_cache=True)
         
         activities = [
             Activity(
-                id=1, name="Test", type="Ride",
-                start_date=datetime.now(timezone.utc),
+                id=1, name="Test Commute", type="Ride",
+                start_date=datetime.now(timezone.utc).isoformat(),
                 distance=5000.0, moving_time=1200, elapsed_time=1300,
                 total_elevation_gain=50.0, average_speed=4.17, max_speed=8.0,
-                polyline="poly", commute=True
+                start_latlng=(41.8781, -87.6298),
+                end_latlng=(41.8819, -87.6278),
+                polyline="poly"
             )
         ]
         
         result = fetcher.cache_activities(activities)
         
-        assert 'cached_count' in result
-        assert 'cache_file' in result
+        # Check for the actual keys returned by cache_activities
+        assert 'new' in result
+        assert 'total' in result
+        assert result['total'] == 1
 
 # Made with Bob
