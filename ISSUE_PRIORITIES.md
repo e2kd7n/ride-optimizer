@@ -29,15 +29,11 @@ Issues that significantly impact core functionality or user experience.
   - Sub-issue 5: Add configuration options
   - Sub-issue 6: Clear cache and validate with real data
 - #58 - Show time-aware next commute recommendations (to work & to home)
-- #60 - Security: Upgrade vulnerable dependencies (requests, tornado, pygments)
-- #56 - Implement percentile-based route similarity to reduce over-clustering
 
 ## 🟡 P2 - MEDIUM (Next Sprint)
 Important improvements that enhance functionality but don't block core workflows.
 
 - #21 - Update TECHNICAL_SPEC.md with comprehensive implementation details
-- #24 - Grey out unselected routes on map when route is clicked
-- #59 - Security: Replace MD5 hash with SHA256 for cache keys
 
 
 
@@ -169,11 +165,10 @@ Issues without priority labels that need to be triaged.
 
 ## Recommended Next Actions
 
-1. **🏷️ Route Naming Epic** - Implement segment-based route naming with connection streets
+1. **🏷️ Route Naming Epic** - Implement segment-based route naming with connection streets (P1-high)
 2. **#58** - Time-aware next commute recommendations (P1-high)
-3. **#60** - Security: Upgrade vulnerable dependencies (P1-high)
-4. **#56** - Implement percentile-based route similarity (P1-high)
-5. **#21** - Update TECHNICAL_SPEC.md with comprehensive implementation details (P2-medium)
-6. **CI/CD Integration** - Set up GitHub Actions with the now-working test suite
-7. **Increase test coverage** - Expand #41 and #42 to cover more modules
-8. **Triage unprioritized issues** - Assign priority labels to remaining 15 issues
+3. **#21** - Update TECHNICAL_SPEC.md with comprehensive implementation details (P2-medium)
+4. **CI/CD Integration** - Set up GitHub Actions with the now-working test suite
+5. **Increase test coverage** - Expand #41 and #42 to cover more modules
+6. **Triage unprioritized issues** - Assign priority labels to remaining 15 issues
+7. **Prepare v2.2.0 release** - All P1/P2 issues resolved, ready for release
