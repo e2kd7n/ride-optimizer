@@ -5556,5 +5556,33 @@
     "neighborhood": "Margate Park",
     "landmark": null,
     "feature": null
+  },
+  "details_41.9561,-87.6415": {
+    "street": "North Recreation Drive",
+    "is_major": false,
+    "neighborhood": "Northalsted",
+    "landmark": null,
+    "feature": "Sydney R. Marovitz Golf Course"
+  },
+  "details_41.9346,-87.6364": {
+    "street": "Lincoln Park Fitness Course",
+    "is_major": false,
+    "neighborhood": "Lakeview East",
+    "landmark": null,
+    "feature": null
+  },
+  "details_41.9124,-87.6295": {
+    "street": "West LaSalle Drive",
+    "is_major": false,
+    "neighborhood": "Lincoln Park",
+    "landmark": null,
+    "feature": null
+  },
+  "details_41.8849,-87.6369": {
+    "street": "North Lower Wacker Drive",
+    "is_major": false,
+    "neighborhood": "Loop",
+    "landmark": null,
+    "feature": null
   }
 }
