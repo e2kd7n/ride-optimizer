@@ -656,6 +656,15 @@ def analyze_routes(config, output_dir, n_workers=2, generate_pdf=False, force_re
             optimization_results = _optimize_and_rank_routes(route_groups, config)
             pbar.update(1)
             
+            # Step 6.5: Generate next commute recommendations
+            pbar.set_description("🕐 Next commute recommendations")
+            from src.next_commute_recommender import NextCommuteRecommender
+            next_commute_recommender = NextCommuteRecommender(
+                route_groups, config, (home.lat, home.lon), (work.lat, work.lon)
+            )
+            next_commutes = next_commute_recommender.get_next_commute_recommendations()
+            logger.info(f"Generated recommendations for {len(next_commutes)} next commutes")
+            
             # Step 7: Generate visualization
             pbar.set_description("🗺️  Generating map")
             map_html, preview_map_html, visualizer = _generate_visualization(
@@ -682,7 +691,8 @@ def analyze_routes(config, output_dir, n_workers=2, generate_pdf=False, force_re
                 'visualizer': visualizer,
                 'long_rides': long_rides,
                 'long_ride_analyzer': long_ride_analyzer,
-                'config': config
+                'config': config,
+                'next_commutes': next_commutes
             }
             
             # Save and open report
@@ -748,8 +758,14 @@ Examples:
   # Re-analyze with cached data
   python main.py --analyze
   
+  # Force full reanalysis (clears route grouping cache)
+  python main.py --analyze --force-reanalysis
+  
   # Use parallel processing (2-8 workers)
   python main.py --analyze --parallel 4
+  
+  # Generate PDF report (slower, adds ~30s)
+  python main.py --analyze --pdf
         """
     )
     
