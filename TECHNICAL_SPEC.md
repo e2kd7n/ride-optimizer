@@ -470,7 +470,7 @@ strava:
 
 data_fetching:
   cache_enabled: true
-  cache_duration_days: 7
+  cache_duration_days: 365  # Extended to 1 year - historical data doesn't change
   max_activities: 500
 
 location_detection:
@@ -492,19 +492,30 @@ route_filtering:
   exclude_virtual: true
 
 route_analysis:
-  similarity_threshold: 0.85
+  similarity_threshold: 0.70  # Fréchet distance threshold (0.70 = routes follow similar paths)
   min_route_frequency: 2
+  enable_geocoding: true  # Enable reverse geocoding for route naming
+  outlier_tolerance_percentile: 95.0  # Ignore worst 5% of point deviations
+
+route_naming:
+  sampling_density: 10              # Number of points to sample along route
+  min_segment_length_pct: 10        # Minimum % to be considered significant segment
+  show_full_path: true              # Show start → middle → end format
+  max_segments_in_name: 3           # Maximum segments to include in name
+  enable_segment_naming: true       # Feature flag to enable/disable segment-based naming
 
 optimization:
   weights:
-    time: 0.4
-    distance: 0.3
-    safety: 0.3
+    time: 0.35      # Speed and duration
+    distance: 0.25  # Route length
+    safety: 0.25    # Familiarity and road conditions
+    weather: 0.15   # Wind impact on cycling efficiency
+  weather_enabled: true  # Enable real-time weather analysis
 
 visualization:
   map:
     zoom_level: 13
-    tile_layer: "OpenStreetMap"
+    tile_layer: "CartoDB Positron"
   colors:
     optimal: "#FF0000"
     alternative: ["#00FF00", "#0000FF", "#FFA500", "#800080"]
@@ -512,10 +523,22 @@ visualization:
     optimal: 5
     alternative: 3
 
+long_rides:
+  enabled: true
+  min_distance_km: 15  # Minimum distance to be considered a long ride
+  search_radius_km: 5  # Radius to search for rides near clicked location
+  default_target_duration_hours: 2.0
+  default_target_distance_km: 40
+
 output:
   report_directory: "output/reports"
   map_filename: "route_map.html"
   report_filename: "commute_analysis.html"
+
+units:
+  system: "imperial"  # Options: "metric" or "imperial"
+  # metric: km, km/h, m/s (wind), °C
+  # imperial: mi, mph, mph (wind), °F
 ```
 
 ---
@@ -819,34 +842,52 @@ score = base_score + tailwind_bonus - headwind_penalty - crosswind_penalty
 ## 9. Route Namer Module (`route_namer.py`)
 
 ### Purpose
-Generate human-readable route names based on streets, neighborhoods, and landmarks.
+Generate human-readable route names based on route segments, showing connection streets and main routes to provide complete journey context.
 
 ### Key Functions
 
 ```python
 class RouteNamer:
     def __init__(self, config=None)
-    def generate_route_name(self, coordinates: List[Tuple[float, float]]) -> str
+    def name_route(self, coordinates: List[Tuple[float, float]], route_id: str, direction: str) -> str
+    def _analyze_route_geography(self, coordinates: List[Tuple[float, float]]) -> Dict
     def _get_strategic_sample_points(self, coordinates: List[Tuple[float, float]]) -> List
-    def _reverse_geocode_batch(self, points: List[Tuple[float, float]]) -> List[Dict]
-    def _extract_street_names(self, geocode_results: List[Dict]) -> List[str]
-    def _select_representative_name(self, street_names: List[str]) -> str
+    def _identify_route_segments(self, coordinates: List[Tuple[float, float]]) -> List[Dict]
+    def _get_location_details(self, point: Tuple[float, float]) -> Optional[Dict]
+    def _generate_descriptive_name(self, route_info: Dict, route_id: str, direction: str) -> str
+    def _generate_descriptive_name_legacy(self, route_info: Dict, route_id: str, direction: str) -> str
 ```
 
 ### Naming Algorithm
 
-**Current Implementation (v2.1.0):**
+**Current Implementation (v2.3.0 - Segment-Based Naming):**
+
+1. **Sample Strategic Points** (10 points)
+   - First 3 points: Capture start street
+   - Middle 4 points: At 20%, 40%, 60%, 80% to capture transitions
+   - Last 3 points: Capture end street
+
+2. **Identify Route Segments**
+   - Detect street changes along the route
+   - Calculate segment length percentages
+   - Classify segments by position (start/middle/end)
+
+3. **Generate Segment-Based Names**
+   - **3+ segments**: "Start St → Main St → End St"
+   - **2 segments**: "Main St via Connection St" (if main > 60%) or "Start St → End St"
+   - **1 segment**: "Via Main St"
+   - **Fallback**: Legacy naming strategies
+
+4. **Filter Significant Segments**
+   - Only include segments ≥ 10% of route length (configurable)
+   - Ignore segments without street names
+
+**Legacy Implementation (v2.1.0 - Still available as fallback):**
 1. Sample 5 strategic points along route (start, 25%, 50%, 75%, end)
 2. Reverse geocode each point to get street/path names
 3. Count frequency of each street name
 4. Select most common street as route name
 5. Format as "Via [Street Name]"
-
-**Planned Enhancement (Route Naming Epic):**
-1. Sample 10-12 points to capture transitions
-2. Identify route segments (start → middle → end)
-3. Detect connection streets vs main route
-4. Format as "[Start St] → [Main Route] → [End St]"
 
 ### Geocoding
 
@@ -860,29 +901,116 @@ class RouteNamer:
 - Key: Rounded coordinates (4 decimal places ≈ 11m precision)
 - Never expires (street names rarely change)
 
-### Name Selection Logic
+### Configuration Options (v2.3.0)
+
+```yaml
+route_naming:
+  sampling_density: 10              # Number of points to sample along route
+  min_segment_length_pct: 10        # Minimum % to be considered significant segment
+  show_full_path: true              # Show start → middle → end format
+  max_segments_in_name: 3           # Maximum segments to include in name
+  enable_segment_naming: true       # Feature flag to enable/disable
+```
+
+### Segment Identification Algorithm
 
 ```python
-def _select_representative_name(self, street_names):
-    # Filter out generic names
-    filtered = [n for n in street_names if n not in 
-                ['Road', 'Path', 'Trail', 'Street']]
+def _identify_route_segments(self, coordinates):
+    """
+    Identify distinct route segments based on street changes.
     
-    # Count frequency
-    counter = Counter(filtered)
+    Returns:
+        List of segments with:
+        - street: Street name
+        - length_pct: Percentage of route on this street
+        - position: 'start', 'middle', or 'end'
+        - sample_points: Number of sample points on this street
+    """
+    sample_points = self._get_strategic_sample_points(coordinates)
+    segments = []
+    current_street = None
     
-    # Return most common, or 'Unknown Route' if none
-    if counter:
-        return counter.most_common(1)[0][0]
-    return 'Unknown Route'
+    for point in sample_points:
+        location_info = self._get_location_details(point)
+        street = location_info.get('street') if location_info else None
+        
+        if street != current_street:
+            # Street changed - start new segment
+            segments.append({
+                'street': street,
+                'sample_points': 1
+            })
+            current_street = street
+        else:
+            # Same street - extend current segment
+            segments[-1]['sample_points'] += 1
+    
+    # Calculate percentages and positions
+    total_points = len(sample_points)
+    for i, segment in enumerate(segments):
+        segment['length_pct'] = (segment['sample_points'] / total_points) * 100
+        segment['position'] = 'start' if i == 0 else 'end' if i == len(segments)-1 else 'middle'
+    
+    return segments
+```
+
+### Name Selection Logic
+
+**Segment-Based Selection (Primary):**
+```python
+def _generate_descriptive_name(self, route_info, route_id, direction):
+    segments = route_info.get('segments', [])
+    
+    # Filter significant segments (≥ min_segment_length_pct)
+    significant = [s for s in segments
+                   if s.get('street') and s.get('length_pct', 0) >= self.min_segment_length_pct]
+    
+    if len(significant) >= 3:
+        # Full path: "Start St → Main St → End St"
+        start = significant[0]['street']
+        main = max(significant[1:-1], key=lambda s: s['length_pct'])['street']
+        end = significant[-1]['street']
+        return f"{start} → {main} → {end}"
+    
+    elif len(significant) == 2:
+        # Two segments
+        main = max(significant, key=lambda s: s['length_pct'])
+        if main['length_pct'] > 60:
+            connection = min(significant, key=lambda s: s['length_pct'])
+            return f"{main['street']} via {connection['street']}"
+        else:
+            return f"{significant[0]['street']} → {significant[1]['street']}"
+    
+    elif len(significant) == 1:
+        # Single route
+        return f"Via {significant[0]['street']}"
+    
+    # Fallback to legacy naming
+    return self._generate_descriptive_name_legacy(route_info, route_id, direction)
+```
+
+**Legacy Selection (Fallback):**
+```python
+def _generate_descriptive_name_legacy(self, route_info, route_id, direction):
+    major_streets = route_info.get('major_streets', [])
+    neighborhoods = route_info.get('neighborhoods', [])
+    
+    # Priority order:
+    # 1. Multiple major streets: "Street A → Street B"
+    # 2. Single street + neighborhood: "Through [Neighborhood] via [Street]"
+    # 3. Just major street: "Via [Street]"
+    # 4. Just neighborhood: "Through [Neighborhood]"
+    # 5. Generic fallback: "Route X to Work/Home"
 ```
 
 ### Error Handling
 
-- **Geocoding Timeout**: Use cached data or skip point
+- **Geocoding Timeout**: Use cached data or skip point (with debug logging)
 - **Rate Limit**: Automatic 1-second delay between requests
-- **No Results**: Mark as "Unknown Street"
+- **No Results**: Mark as "Unknown Street" and continue
 - **Network Error**: Graceful degradation with generic names
+- **Segment Naming Disabled**: Falls back to legacy naming automatically
+- **All Exceptions**: Specific exception types (ValueError, AttributeError, TypeError) with debug logging
 
 ---
 
@@ -1129,22 +1257,35 @@ pytest -v tests/test_units.py::TestUnitConverter::test_metric_distance
 
 ## 14. Security & Code Quality
 
-### Security Enhancements (v2.1.0)
+### Security Enhancements (v2.3.0)
 
-**Hash Algorithm:**
-- Replaced MD5 with SHA256 for all cache keys
-- Prevents collision attacks
-- Better integrity verification
+**Hash Algorithm (v2.1.0 → v2.3.0):**
+- ✅ Replaced MD5 with SHA256 for all cache keys
+- Used in `route_analyzer.py` for route similarity cache
+- Used in `weather_fetcher.py` for wind analysis cache
+- Prevents collision attacks and provides better integrity verification
+- Cache files regenerated with new algorithm
 
 **Dependency Management:**
 - Regular security audits with `pip-audit`
 - Automated vulnerability scanning
 - Minimum version requirements in `requirements.txt`
 
-**Exception Handling:**
-- No bare `except:` statements
-- Specific exception types for all handlers
-- Proper logging of all errors
+**Exception Handling (v2.3.0):**
+- ✅ No bare `except:` statements (all replaced with specific types)
+- Specific exception types for all handlers:
+  - `ValueError`: Invalid data formats
+  - `AttributeError`: Missing object attributes
+  - `TypeError`: Incorrect data types
+  - `IndexError`: Array access errors
+- Debug logging added for all caught exceptions
+- Improved troubleshooting capabilities
+
+**Affected Files:**
+- `src/data_fetcher.py`: Date parsing exceptions
+- `src/route_analyzer.py`: Fréchet distance calculation, cache key generation
+- `src/long_ride_analyzer.py`: Polyline decoding, route similarity
+- `src/weather_fetcher.py`: Wind analysis cache keys
 
 ### Code Quality Standards
 
