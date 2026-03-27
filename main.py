@@ -14,11 +14,13 @@ Unauthorized use, reproduction, or distribution is prohibited.
 
 import argparse
 import logging
+import subprocess
 import sys
 import webbrowser
 import json
 import os
 import platform
+import warnings
 from pathlib import Path
 from datetime import datetime
 from collections import Counter
@@ -44,6 +46,9 @@ from src.visualizer import RouteVisualizer
 from src.report_generator import ReportGenerator
 from src.long_ride_analyzer import LongRideAnalyzer
 
+# Suppress stravalib refresh_token warning
+warnings.filterwarnings('ignore', message='.*refresh_token.*auto.*', category=Warning)
+
 # Configure logging - suppress timestamps for cleaner output during analysis
 logging.basicConfig(
     level=logging.WARNING,  # Only show warnings and errors by default
@@ -58,6 +63,16 @@ progress_handler = logging.StreamHandler()
 progress_handler.setFormatter(logging.Formatter('%(message)s'))
 progress_logger.addHandler(progress_handler)
 progress_logger.propagate = False
+
+# Create a file logger for debugging
+debug_logger = logging.getLogger('debug')
+debug_logger.setLevel(logging.DEBUG)
+log_dir = Path('logs')
+log_dir.mkdir(exist_ok=True)
+debug_handler = logging.FileHandler(log_dir / 'debug.log')
+debug_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+debug_logger.addHandler(debug_handler)
+debug_logger.propagate = False
 
 
 def authenticate(config):
@@ -524,24 +539,29 @@ def _save_report(analysis_results, output_dir, generate_pdf=False):
 
 def _open_report_in_browser(report_path):
     """
-    Open report in browser with Chrome preference.
+    Open report in browser without blocking (non-blocking subprocess).
+    
+    This significantly improves performance by not waiting for the browser to launch.
     
     Args:
         report_path: Path to the report file
     """
     try:
-        # Convert to absolute path and file:// URL
+        # Convert to absolute path
         abs_path = report_path.resolve()
-        file_url = f"file://{abs_path}"
         
-        # Try Chrome first, fallback to default browser
-        try:
-            chrome = webbrowser.get('chrome')
-            chrome.open_new_tab(file_url)
-            logger.info("🌐 Opening report in Chrome...")
-        except webbrowser.Error:
-            webbrowser.open_new_tab(file_url)
+        # Use platform-specific non-blocking commands
+        if sys.platform == 'darwin':  # macOS
+            subprocess.Popen(['open', str(abs_path)])
             logger.info("🌐 Opening report in default browser...")
+        elif sys.platform == 'win32':  # Windows
+            subprocess.Popen(['start', str(abs_path)], shell=True)
+            logger.info("🌐 Opening report in default browser...")
+        else:  # Linux
+            subprocess.Popen(['xdg-open', str(abs_path)])
+            logger.info("🌐 Opening report in default browser...")
+        
+        # Return immediately without waiting for browser to launch
     except Exception as e:
         logger.warning(f"Could not automatically open report: {e}")
         logger.info(f"Please open manually: {report_path}")
@@ -599,105 +619,218 @@ def analyze_routes(config, output_dir, n_workers=2, generate_pdf=False, force_re
         tqdm_module.write(f"⚡  Parallel: {n_workers} workers")
     tqdm_module.write("")
     
+    # Log start of analysis
+    debug_logger.info("="*60)
+    debug_logger.info("Starting route analysis")
+    debug_logger.info(f"Workers: {n_workers}, PDF: {generate_pdf}, Force reanalysis: {force_reanalysis}")
+    debug_logger.info("="*60)
+    
     # Validate credentials before analysis
-    client_id = config.get('strava.client_id')
-    client_secret = config.get('strava.client_secret')
-    validate_strava_credentials(client_id, client_secret)
+    try:
+        debug_logger.info("Validating Strava credentials...")
+        client_id = config.get('strava.client_id')
+        client_secret = config.get('strava.client_secret')
+        validate_strava_credentials(client_id, client_secret)
+        debug_logger.info("Credentials validated successfully")
+    except Exception as e:
+        debug_logger.error(f"Credential validation failed: {e}", exc_info=True)
+        tqdm_module.write(f"\n❌ ERROR: Credential validation failed: {e}")
+        raise
     
     try:
         # Progress tracking
         total_steps = 8
         
         with tqdm(total=total_steps, desc="Progress", unit="step", ncols=80,
-                 bar_format='{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt}') as pbar:
+                 bar_format='{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt}', leave=True) as pbar:
             # Step 1: Get authenticated client
+            step_start = time.time()
             pbar.set_description("🔐 Authenticating")
-            client = get_authenticated_client(config)
-            fetcher = StravaDataFetcher(client, config)
-            pbar.update(1)
+            debug_logger.info("Step 1: Getting authenticated client...")
+            try:
+                client = get_authenticated_client(config)
+                fetcher = StravaDataFetcher(client, config)
+                debug_logger.info(f"Step 1 completed in {time.time() - step_start:.2f}s")
+                pbar.update(1)
+                pbar.refresh()
+                print()  # New line after this phase
+            except Exception as e:
+                debug_logger.error(f"Step 1 failed: {e}", exc_info=True)
+                tqdm_module.write(f"\n❌ ERROR at Step 1 (Authentication): {e}")
+                raise
             
             # Step 2: Load and filter activities
+            step_start = time.time()
             pbar.set_description("📥 Loading activities")
-            all_activities, commute_activities = _load_and_filter_activities(fetcher, config)
-            if not all_activities or not commute_activities:
-                return
-            pbar.update(1)
+            debug_logger.info("Step 2: Loading and filtering activities...")
+            try:
+                all_activities, commute_activities = _load_and_filter_activities(fetcher, config)
+                if not all_activities or not commute_activities:
+                    debug_logger.error("No activities found or insufficient commute activities")
+                    tqdm_module.write("\n❌ ERROR: No activities found or insufficient commute activities")
+                    return
+                debug_logger.info(f"Step 2 completed in {time.time() - step_start:.2f}s")
+                debug_logger.info(f"Loaded {len(all_activities)} total, {len(commute_activities)} commute activities")
+                pbar.update(1)
+                pbar.refresh()
+                print()  # New line after this phase
+            except Exception as e:
+                debug_logger.error(f"Step 2 failed: {e}", exc_info=True)
+                tqdm_module.write(f"\n❌ ERROR at Step 2 (Loading activities): {e}")
+                raise
             
             # Step 3: Identify locations
+            step_start = time.time()
             pbar.set_description("📍 Identifying locations")
+            debug_logger.info("Step 3: Identifying home and work locations...")
             try:
                 home, work = _identify_locations(commute_activities, config)
-            except ValueError:
+                debug_logger.info(f"Step 3 completed in {time.time() - step_start:.2f}s")
+                debug_logger.info(f"Home: ({home.lat:.4f}, {home.lon:.4f}), Work: ({work.lat:.4f}, {work.lon:.4f})")
+                pbar.update(1)
+                pbar.refresh()
+                print()  # New line after this phase
+            except ValueError as e:
+                debug_logger.error(f"Step 3 failed: {e}", exc_info=True)
+                tqdm_module.write(f"\n❌ ERROR at Step 3 (Identifying locations): {e}")
                 return
-            pbar.update(1)
+            except Exception as e:
+                debug_logger.error(f"Step 3 failed with unexpected error: {e}", exc_info=True)
+                tqdm_module.write(f"\n❌ ERROR at Step 3 (Identifying locations): {e}")
+                raise
             
             # Step 4: Analyze commute routes
+            step_start = time.time()
             pbar.set_description("🗺️  Analyzing commute routes")
-            analyzer = RouteAnalyzer(commute_activities, home, work, config,
-                                    n_workers=n_workers, force_reanalysis=force_reanalysis)
-            route_groups = analyzer.group_similar_routes()
-            
-            if not route_groups:
-                logger.error("No route groups found")
-                return
-            
-            _log_route_summary(route_groups)
-            pbar.update(1)
+            debug_logger.info("Step 4: Analyzing commute routes...")
+            debug_logger.info(f"Creating RouteAnalyzer with {n_workers} workers, force_reanalysis={force_reanalysis}")
+            try:
+                analyzer = RouteAnalyzer(commute_activities, home, work, config,
+                                        n_workers=n_workers, force_reanalysis=force_reanalysis)
+                debug_logger.info("RouteAnalyzer created, starting route grouping...")
+                route_groups = analyzer.group_similar_routes()
+                
+                if not route_groups:
+                    debug_logger.error("No route groups found")
+                    tqdm_module.write("\n❌ ERROR: No route groups found")
+                    return
+                
+                debug_logger.info(f"Step 4 completed in {time.time() - step_start:.2f}s")
+                debug_logger.info(f"Found {len(route_groups)} route groups")
+                _log_route_summary(route_groups)
+                pbar.update(1)
+                pbar.refresh()
+                print()  # New line after this phase
+            except Exception as e:
+                debug_logger.error(f"Step 4 failed: {e}", exc_info=True)
+                tqdm_module.write(f"\n❌ ERROR at Step 4 (Analyzing routes): {e}")
+                tqdm_module.write(f"   This step took {time.time() - step_start:.1f}s before failing")
+                raise
             
             # Step 5: Analyze long rides (optional)
+            step_start = time.time()
             pbar.set_description("🚵 Analyzing long rides")
-            long_rides, long_ride_analyzer = _analyze_long_rides(
-                all_activities, commute_activities, config
-            )
-            pbar.update(1)
+            debug_logger.info("Step 5: Analyzing long rides...")
+            try:
+                long_rides, long_ride_analyzer = _analyze_long_rides(
+                    all_activities, commute_activities, config
+                )
+                debug_logger.info(f"Step 5 completed in {time.time() - step_start:.2f}s")
+                debug_logger.info(f"Found {len(long_rides)} long rides")
+                pbar.update(1)
+                pbar.refresh()
+                print()  # New line after this phase
+            except Exception as e:
+                debug_logger.error(f"Step 5 failed: {e}", exc_info=True)
+                tqdm_module.write(f"\n❌ ERROR at Step 5 (Analyzing long rides): {e}")
+                raise
             
             # Step 6: Optimize routes
+            step_start = time.time()
             pbar.set_description("⚡ Optimizing routes")
-            optimization_results = _optimize_and_rank_routes(route_groups, config)
-            pbar.update(1)
+            debug_logger.info("Step 6: Optimizing routes...")
+            try:
+                optimization_results = _optimize_and_rank_routes(route_groups, config)
+                debug_logger.info(f"Step 6 completed in {time.time() - step_start:.2f}s")
+                pbar.update(1)
+                pbar.refresh()
+                print()  # New line after this phase
+            except Exception as e:
+                debug_logger.error(f"Step 6 failed: {e}", exc_info=True)
+                tqdm_module.write(f"\n❌ ERROR at Step 6 (Optimizing routes): {e}")
+                raise
             
             # Step 6.5: Generate next commute recommendations
+            step_start = time.time()
             pbar.set_description("🕐 Next commute recommendations")
-            from src.next_commute_recommender import NextCommuteRecommender
-            next_commute_recommender = NextCommuteRecommender(
-                route_groups, config, (home.lat, home.lon), (work.lat, work.lon)
-            )
-            next_commutes = next_commute_recommender.get_next_commute_recommendations()
-            logger.info(f"Generated recommendations for {len(next_commutes)} next commutes")
+            debug_logger.info("Step 6.5: Generating next commute recommendations...")
+            try:
+                from src.next_commute_recommender import NextCommuteRecommender
+                next_commute_recommender = NextCommuteRecommender(
+                    route_groups, config, (home.lat, home.lon), (work.lat, work.lon)
+                )
+                next_commutes = next_commute_recommender.get_next_commute_recommendations()
+                debug_logger.info(f"Step 6.5 completed in {time.time() - step_start:.2f}s")
+                debug_logger.info(f"Generated recommendations for {len(next_commutes)} next commutes")
+                logger.info(f"Generated recommendations for {len(next_commutes)} next commutes")
+                pbar.refresh()
+                print()  # New line after this phase
+            except Exception as e:
+                debug_logger.error(f"Step 6.5 failed: {e}", exc_info=True)
+                tqdm_module.write(f"\n❌ ERROR at Step 6.5 (Next commute recommendations): {e}")
+                raise
             
             # Step 7: Generate visualization
+            step_start = time.time()
             pbar.set_description("🗺️  Generating map")
-            map_html, preview_map_html, visualizer = _generate_visualization(
-                route_groups, home, work, config,
-                long_rides, long_ride_analyzer,
-                optimization_results['optimal_route'],
-                optimization_results['ranked_routes']
-            )
-            pbar.update(1)
+            debug_logger.info("Step 7: Generating visualization...")
+            try:
+                map_html, preview_map_html, visualizer = _generate_visualization(
+                    route_groups, home, work, config,
+                    long_rides, long_ride_analyzer,
+                    optimization_results['optimal_route'],
+                    optimization_results['ranked_routes']
+                )
+                debug_logger.info(f"Step 7 completed in {time.time() - step_start:.2f}s")
+                pbar.update(1)
+                pbar.refresh()
+                print()  # New line after this phase
+            except Exception as e:
+                debug_logger.error(f"Step 7 failed: {e}", exc_info=True)
+                tqdm_module.write(f"\n❌ ERROR at Step 7 (Generating map): {e}")
+                raise
             
             # Step 8: Save report
+            step_start = time.time()
             pbar.set_description("💾 Saving report")
-            
-            # Build complete analysis results
-            analysis_results = {
-                **optimization_results,
-                'route_groups': route_groups,
-                'home': home,
-                'work': work,
-                'map_html': map_html,
-                'preview_map_html': preview_map_html,
-                'all_activities': all_activities,
-                'commute_activities': commute_activities,
-                'visualizer': visualizer,
-                'long_rides': long_rides,
-                'long_ride_analyzer': long_ride_analyzer,
-                'config': config,
-                'next_commutes': next_commutes
-            }
-            
-            # Save and open report
-            report_path = _save_report(analysis_results, output_dir, generate_pdf)
-            pbar.update(1)
+            debug_logger.info("Step 8: Saving report...")
+            try:
+                # Build complete analysis results
+                analysis_results = {
+                    **optimization_results,
+                    'route_groups': route_groups,
+                    'home': home,
+                    'work': work,
+                    'map_html': map_html,
+                    'preview_map_html': preview_map_html,
+                    'all_activities': all_activities,
+                    'commute_activities': commute_activities,
+                    'visualizer': visualizer,
+                    'long_rides': long_rides,
+                    'long_ride_analyzer': long_ride_analyzer,
+                    'config': config,
+                    'next_commutes': next_commutes
+                }
+                
+                # Save and open report
+                report_path = _save_report(analysis_results, output_dir, generate_pdf)
+                debug_logger.info(f"Step 8 completed in {time.time() - step_start:.2f}s")
+                pbar.update(1)
+                pbar.refresh()
+            except Exception as e:
+                debug_logger.error(f"Step 8 failed: {e}", exc_info=True)
+                tqdm_module.write(f"\n❌ ERROR at Step 8 (Saving report): {e}")
+                raise
         
         # Calculate runtime
         end_time = time.time()
@@ -721,8 +854,21 @@ def analyze_routes(config, output_dir, n_workers=2, generate_pdf=False, force_re
         
         _open_report_in_browser(report_path)
         
+        debug_logger.info("="*60)
+        debug_logger.info("Analysis completed successfully")
+        debug_logger.info("="*60)
+        
+    except KeyboardInterrupt:
+        debug_logger.warning("Analysis interrupted by user (Ctrl+C)")
+        tqdm_module.write("\n\n⚠️  Analysis interrupted by user")
+        tqdm_module.write("Check logs/debug.log for details on where the script stopped")
+        raise
     except Exception as e:
-        logger.error(f"Analysis failed: {e}", exc_info=True)
+        debug_logger.error(f"Analysis failed: {e}", exc_info=True)
+        tqdm_module.write(f"\n\n❌ ANALYSIS FAILED")
+        tqdm_module.write(f"Error: {e}")
+        tqdm_module.write(f"\n📋 Check logs/debug.log for detailed error information")
+        tqdm_module.write(f"   Last successful step information is logged there")
         raise
 
 
