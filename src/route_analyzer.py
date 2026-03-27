@@ -1161,17 +1161,23 @@ tell application "Terminal"
 end tell
 '''
             # Start subprocess in a new session to properly detach it
-            # Suppress ResourceWarning since this process is intentionally detached
-            import warnings
-            with warnings.catch_warnings():
-                warnings.filterwarnings('ignore', category=ResourceWarning)
-                self._terminal_process = subprocess.Popen(
-                    ['osascript', '-e', script],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    start_new_session=True  # Detach from parent process
-                )
-            # Don't wait for the process - let it run independently
+            # Use subprocess.run in background to avoid ResourceWarning
+            import threading
+            def start_terminal():
+                try:
+                    subprocess.run(
+                        ['osascript', '-e', script],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        check=False
+                    )
+                except Exception:
+                    pass  # Ignore errors in background thread
+            
+            # Start in a daemon thread so it doesn't block exit
+            terminal_thread = threading.Thread(target=start_terminal, daemon=True)
+            terminal_thread.start()
+            # Don't wait for the thread - let it run independently
             # The terminal window will remain open for the user to monitor
             
         except Exception as e:
@@ -1191,8 +1197,7 @@ end tell
                 logger.warning("Background geocoding still running after timeout")
         
         # Terminal process is detached and managed by the OS
-        # No need to explicitly terminate it as user will close it manually
-        self._terminal_process = None
+        # No subprocess reference stored, so nothing to clean up
     
     def _geocode_routes_background(self, groups: List[RouteGroup]) -> None:
         """
