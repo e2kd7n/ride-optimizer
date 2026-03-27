@@ -13,6 +13,7 @@ If you encounter this project hosted elsewhere without proper attribution or wit
 - 🔍 **Automatic Location Detection**: Identifies your home and work locations from activity patterns
 - 📊 **Multi-Criteria Analysis**: Evaluates routes based on time, distance, safety, and weather
 - 🧮 **Advanced Route Matching**: Uses Fréchet distance algorithm for accurate path similarity detection
+- 🏷️ **Intelligent Route Naming**: Segment-based naming shows complete journey (e.g., "Wells St → Lakefront Trail → North Ave")
 - 🌤️ **Real-Time Weather Analysis**: Considers wind speed and direction for optimal route selection
 - 🗺️ **Interactive Maps**: Generates beautiful HTML reports with interactive route visualizations
 - 📈 **Detailed Statistics**: Provides comprehensive metrics for each route variant
@@ -468,6 +469,36 @@ A: Run monthly or after accumulating 10+ new commute activities.
 
 **Q: Can I compare different time periods?**
 A: Yes, use the `--start` and `--end` flags to analyze specific date ranges.
+
+## Version History
+
+### v2.3.0 (2026-03-27)
+**Segment-Based Route Naming & Security Enhancements**
+
+- ✨ **NEW: Intelligent Route Naming** - Routes now show complete journey context
+  - Segment-based naming: "Start St → Main St → End St"
+  - Increased sampling density from 5 to 10 points
+  - Automatic segment identification and classification
+  - Configurable via `route_naming` section in config.yaml
+- 🔒 **Security: SHA256 Migration** - Replaced MD5 with SHA256 for all cache keys
+- 🛡️ **Code Quality: Exception Handling** - All bare `except:` statements replaced with specific exception types
+- 📚 **Documentation: Technical Spec Updates** - Comprehensive updates to reflect new implementations
+- ✅ **Testing: 100% Pass Rate** - All 43 tests passing
+
+### v2.2.0 (2026-03-27)
+**Test Infrastructure & Cache Separation**
+
+- ✅ Test suite remediation (43/43 tests passing)
+- 🔧 Separated test and production cache files
+- 📝 Comprehensive test documentation
+
+### v2.1.0 (2026-03-26)
+**Performance & Route Naming Improvements**
+
+- ⚡ Code cleanup and performance optimization
+- 🏷️ Improved route naming mechanism
+- 🗺️ Optimal route map preview at top of page
+- 💾 Fréchet distance caching
 
 ## License
 
