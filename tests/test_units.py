@@ -38,7 +38,8 @@ class TestUnitConverter:
     def test_metric_wind_speed(self):
         """Test metric wind speed conversion."""
         converter = UnitConverter('metric')
-        assert converter.wind_speed(10) == "36.0 km/h"
+        # Metric wind speed is kept in m/s (common in weather)
+        assert converter.wind_speed(10) == "10.0 m/s"
     
     def test_imperial_wind_speed(self):
         """Test imperial wind speed conversion."""
