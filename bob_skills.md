@@ -4,6 +4,18 @@
 **Last Updated:** 2026-03-25  
 **Purpose:** Consolidated development guidelines, coding standards, and workflow procedures for AI-assisted development
 
+## Browser Preferences
+
+**Default Browser:** Chrome  
+**Authentication Browser:** Firefox
+
+### Rules
+- **All web links**: Open in Chrome (default browser)
+- **Bob authentication requests**: Open in Firefox
+  - This includes OAuth flows, login pages, and credential verification
+  - Ensures separation between development browsing and authentication sessions
+
+---
 ---
 
 ## Table of Contents
