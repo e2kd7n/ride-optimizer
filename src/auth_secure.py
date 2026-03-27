@@ -21,7 +21,7 @@ import os
 import secrets
 import hashlib
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 from datetime import datetime, timezone
@@ -155,7 +155,7 @@ class SecureTokenStorage:
         
         self.cipher = Fernet(key if isinstance(key, bytes) else key.encode())
     
-    def save_tokens(self, tokens: Dict[str, any]) -> None:
+    def save_tokens(self, tokens: Dict[str, Any]) -> None:
         """
         Save tokens with encryption and secure permissions.
         
@@ -182,7 +182,7 @@ class SecureTokenStorage:
             'timestamp': datetime.now(timezone.utc).isoformat()
         })
     
-    def load_tokens(self) -> Optional[Dict[str, any]]:
+    def load_tokens(self) -> Optional[Dict[str, Any]]:
         """
         Load and decrypt tokens.
         
@@ -224,8 +224,8 @@ class RateLimitedCallbackHandler(BaseHTTPRequestHandler):
     TIME_WINDOW = 60  # seconds
     
     # Will be set by server
-    expected_state = None
-    code_container = None
+    expected_state: Optional[str] = None
+    code_container: Optional[Dict[str, Optional[str]]] = None
     
     def do_GET(self):
         """Handle GET request with rate limiting and validation."""
@@ -283,8 +283,9 @@ class RateLimitedCallbackHandler(BaseHTTPRequestHandler):
         
         # State validated, check for authorization code
         if 'code' in params:
-            self.code_container['code'] = params['code'][0]
-            self.code_container['state'] = received_state
+            if self.code_container is not None:
+                self.code_container['code'] = params['code'][0]
+                self.code_container['state'] = received_state
             
             # Send success response with security headers
             self.send_response(200)
@@ -337,7 +338,7 @@ class RateLimitedCallbackHandler(BaseHTTPRequestHandler):
 class SecureStravaAuthenticator:
     """Handles Strava OAuth authentication with enhanced security."""
     
-    def __init__(self, client_id: str, client_secret: str, 
+    def __init__(self, client_id: str, client_secret: str,
                  credentials_path: str = "config/credentials.json"):
         """
         Initialize secure authenticator.
@@ -347,7 +348,7 @@ class SecureStravaAuthenticator:
             client_secret: Strava API client secret
             credentials_path: Path to store encrypted credentials
         """
-        self.client_id = client_id
+        self.client_id = int(client_id)  # Convert to int for stravalib API
         self.client_secret = client_secret
         self.token_storage = SecureTokenStorage(credentials_path)
         self.redirect_uri = "http://localhost:8000/authorized"
@@ -380,7 +381,7 @@ class SecureStravaAuthenticator:
         })
         return url
     
-    def exchange_code_for_token(self, code: str) -> Dict[str, any]:
+    def exchange_code_for_token(self, code: str) -> Dict[str, Any]:
         """
         Exchange authorization code for access token.
         
@@ -397,10 +398,17 @@ class SecureStravaAuthenticator:
             code=code
         )
         
+        # Handle return type: AccessInfo TypedDict or tuple
+        # When return_athlete=False (default), returns AccessInfo dict
+        if isinstance(token_response, tuple):
+            access_info = token_response[0]
+        else:
+            access_info = token_response
+        
         tokens = {
-            'access_token': token_response['access_token'],
-            'refresh_token': token_response['refresh_token'],
-            'expires_at': token_response['expires_at']
+            'access_token': access_info['access_token'],  # type: ignore[index]
+            'refresh_token': access_info['refresh_token'],  # type: ignore[index]
+            'expires_at': access_info['expires_at']  # type: ignore[index]
         }
         
         log_security_event('TOKEN_EXCHANGED', {
@@ -408,7 +416,7 @@ class SecureStravaAuthenticator:
         })
         return tokens
     
-    def refresh_access_token(self, refresh_token: str) -> Dict[str, any]:
+    def refresh_access_token(self, refresh_token: str) -> Dict[str, Any]:
         """
         Refresh expired access token.
         
@@ -426,9 +434,9 @@ class SecureStravaAuthenticator:
         )
         
         tokens = {
-            'access_token': token_response['access_token'],
-            'refresh_token': token_response['refresh_token'],
-            'expires_at': token_response['expires_at']
+            'access_token': token_response['access_token'],  # type: ignore[index]
+            'refresh_token': token_response['refresh_token'],  # type: ignore[index]
+            'expires_at': token_response['expires_at']  # type: ignore[index]
         }
         
         log_security_event('TOKEN_REFRESHED', {
@@ -436,15 +444,15 @@ class SecureStravaAuthenticator:
         })
         return tokens
     
-    def save_tokens(self, tokens: Dict[str, any]) -> None:
+    def save_tokens(self, tokens: Dict[str, Any]) -> None:
         """Save tokens using secure storage."""
         self.token_storage.save_tokens(tokens)
     
-    def load_tokens(self) -> Optional[Dict[str, any]]:
+    def load_tokens(self) -> Optional[Dict[str, Any]]:
         """Load tokens from secure storage."""
         return self.token_storage.load_tokens()
     
-    def authenticate(self) -> Dict[str, any]:
+    def authenticate(self) -> Dict[str, Any]:
         """
         Perform OAuth authentication flow with security enhancements.
         
@@ -501,7 +509,7 @@ class SecureStravaAuthenticator:
         Returns:
             Authorization code from callback
         """
-        code_container = {'code': None, 'state': None}
+        code_container: Dict[str, Optional[str]] = {'code': None, 'state': None}
         
         # Configure handler with state and code container
         RateLimitedCallbackHandler.expected_state = self.state
@@ -554,7 +562,7 @@ class SecureStravaAuthenticator:
             refresh_token=tokens['refresh_token']
         )
         # Set token expiration time as an attribute (not a constructor parameter)
-        client.token_expires_at = tokens['expires_at']
+        client.token_expires_at = tokens['expires_at']  # type: ignore[attr-defined]
         return client
 
 

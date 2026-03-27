@@ -27,7 +27,7 @@ class Activity:
     id: int
     name: str
     type: str
-    start_date: str  # ISO format
+    start_date: Optional[str]  # ISO format
     distance: float  # meters
     moving_time: int  # seconds
     elapsed_time: int  # seconds
@@ -354,7 +354,7 @@ class StravaDataFetcher:
                 
                 # Convert back to list and sort by date (newest first)
                 merged_activities = list(existing_by_id.values())
-                merged_activities.sort(key=lambda x: x.start_date, reverse=True)
+                merged_activities.sort(key=lambda x: x.start_date or "", reverse=True)
                 
                 stats['total'] = len(merged_activities)
                 
