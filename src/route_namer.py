@@ -28,6 +28,12 @@ class RouteNamer:
             config: Configuration object
         """
         self.config = config
+        
+        # Load route naming configuration
+        self.sampling_density = self.config.get('route_naming.sampling_density', 10) if config else 10
+        self.min_segment_length_pct = self.config.get('route_naming.min_segment_length_pct', 10) if config else 10
+        self.enable_segment_naming = self.config.get('route_naming.enable_segment_naming', True) if config else True
+        
         # Initialize with 10-second timeout to handle slow Nominatim responses
         self.geolocator = Nominatim(user_agent="strava_commute_analyzer", timeout=10)
         
@@ -39,6 +45,9 @@ class RouteNamer:
         # Load cache from disk
         self.cache = self._load_cache()
         logger.info(f"Loaded {len(self.cache)} geocoding entries from cache")
+        logger.info(f"Route naming config: sampling_density={self.sampling_density}, "
+                   f"min_segment_length_pct={self.min_segment_length_pct}, "
+                   f"enable_segment_naming={self.enable_segment_naming}")
     
     def _load_cache(self) -> Dict:
         """Load geocoding cache from disk."""
@@ -99,9 +108,10 @@ class RouteNamer:
     
     def _analyze_route_geography(self, coordinates: List[Tuple[float, float]]) -> Dict:
         """
-        Analyze route geography to extract naming information.
+        Analyze route geography including segment identification.
         
         Returns dict with:
+        - segments: List of route segments with street names and positions
         - major_streets: List of significant streets (not every small street)
         - neighborhoods: List of neighborhoods/districts traversed
         - landmarks: List of notable landmarks
@@ -109,6 +119,9 @@ class RouteNamer:
         """
         if not coordinates:
             return {}
+        
+        # Identify route segments (NEW)
+        segments = self._identify_route_segments(coordinates)
         
         # Sample strategic points along route
         sample_points = self._get_strategic_sample_points(coordinates)
@@ -140,6 +153,7 @@ class RouteNamer:
                     features.append(location_info['feature'])
         
         return {
+            'segments': segments,  # NEW
             'major_streets': self._filter_significant_streets(streets),
             'neighborhoods': list(neighborhoods),
             'landmarks': landmarks[:2],  # Limit to 2 most prominent
@@ -148,21 +162,82 @@ class RouteNamer:
     
     def _get_strategic_sample_points(self, coordinates: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
         """
-        Get strategic sample points along route for naming.
-        Focuses on start, key waypoints, and end.
+        Sample points to capture route structure.
+        Returns points based on sampling_density config (default ~10 points).
         """
-        if len(coordinates) < 3:
+        target_points = self.sampling_density
+        
+        if len(coordinates) < target_points:
             return coordinates
         
-        # Always include start and end
-        points = [coordinates[0], coordinates[-1]]
+        points = []
         
-        # Add points at 25%, 50%, 75% of route
-        for pct in [0.25, 0.5, 0.75]:
+        # First 3 points (start street)
+        points.extend(coordinates[:3])
+        
+        # Middle points at key percentages
+        for pct in [0.2, 0.4, 0.6, 0.8]:
             idx = int(len(coordinates) * pct)
             points.append(coordinates[idx])
         
+        # Last 3 points (end street)
+        points.extend(coordinates[-3:])
+        
         return points
+    
+    def _identify_route_segments(self, coordinates: List[Tuple[float, float]]) -> List[Dict]:
+        """
+        Identify distinct route segments based on street changes.
+        
+        Returns list of segments with:
+        - street: Street name
+        - length_pct: Percentage of route on this street
+        - position: 'start', 'middle', or 'end'
+        - sample_points: Number of sample points on this street
+        """
+        sample_points = self._get_strategic_sample_points(coordinates)
+        
+        segments = []
+        current_street = None
+        current_segment = None
+        
+        for i, point in enumerate(sample_points):
+            location_info = self._get_location_details(point)
+            street = location_info.get('street') if location_info else None
+            
+            if street != current_street:
+                # Street changed - start new segment
+                if current_segment:
+                    segments.append(current_segment)
+                
+                current_street = street
+                current_segment = {
+                    'street': street,
+                    'start_idx': i,
+                    'sample_points': 1
+                }
+            else:
+                # Same street - extend current segment
+                if current_segment:
+                    current_segment['sample_points'] += 1
+        
+        # Add final segment
+        if current_segment:
+            segments.append(current_segment)
+        
+        # Calculate percentages and positions
+        total_points = len(sample_points)
+        for i, segment in enumerate(segments):
+            segment['length_pct'] = (segment['sample_points'] / total_points) * 100
+            
+            if i == 0:
+                segment['position'] = 'start'
+            elif i == len(segments) - 1:
+                segment['position'] = 'end'
+            else:
+                segment['position'] = 'middle'
+        
+        return segments
     
     def _get_location_details(self, point: Tuple[float, float]) -> Optional[Dict]:
         """
@@ -269,7 +344,49 @@ class RouteNamer:
     
     def _generate_descriptive_name(self, route_info: Dict, route_id: str, direction: str) -> str:
         """
-        Generate descriptive name from route information.
+        Generate descriptive name from route segments.
+        
+        Priority:
+        1. Full path (3+ segments): "Start → Main → End"
+        2. Main + connection (2 segments): "Main via Connection"
+        3. Single route: "Via Main"
+        4. Fallback to legacy naming strategies
+        """
+        segments = route_info.get('segments', [])
+        
+        # Try segment-based naming first (if enabled)
+        if self.enable_segment_naming and segments:
+            # Filter out segments that are too short or have no street name
+            significant_segments = [s for s in segments
+                                   if s.get('street') and s.get('length_pct', 0) >= self.min_segment_length_pct]
+            
+            if len(significant_segments) >= 3:
+                # Strategy 1: Full path
+                start = significant_segments[0]['street']
+                main = max(significant_segments[1:-1], key=lambda s: s['length_pct'])['street']
+                end = significant_segments[-1]['street']
+                return f"{start} → {main} → {end}"
+            
+            elif len(significant_segments) == 2:
+                # Strategy 2: Main + connection
+                main = max(significant_segments, key=lambda s: s['length_pct'])
+                connection = min(significant_segments, key=lambda s: s['length_pct'])
+                
+                if main['length_pct'] > 60:
+                    return f"{main['street']} via {connection['street']}"
+                else:
+                    return f"{significant_segments[0]['street']} → {significant_segments[1]['street']}"
+            
+            elif len(significant_segments) == 1:
+                # Strategy 3: Single route
+                return f"Via {significant_segments[0]['street']}"
+        
+        # Fallback to legacy naming strategies
+        return self._generate_descriptive_name_legacy(route_info, route_id, direction)
+    
+    def _generate_descriptive_name_legacy(self, route_info: Dict, route_id: str, direction: str) -> str:
+        """
+        Legacy naming strategy (pre-segment implementation).
         
         Priority:
         1. Major streets (if 2-3 available): "Street A → Street B"
