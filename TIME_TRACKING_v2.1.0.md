@@ -54,7 +54,7 @@
 **Time:** 6:36 PM - 7:06 PM (~30 minutes)
 
 **Work Completed:**
-- Updated repository name references (strava-route-optimizer-weather → commute-optimizer)
+- Updated repository name references (strava-route-optimizer-weather → ride-optimizer)
 - Updated `ISSUES_TRACKING.md` with new repository URL
 - Created comprehensive release notes
 - Pushed all changes to GitHub
@@ -220,7 +220,7 @@
 ### Release
 - **Tag:** v2.1.0
 - **Commit:** 34033a4
-- **URL:** https://github.com/e2kd7n/commute-optimizer/releases/tag/v2.1.0
+- **URL:** https://github.com/e2kd7n/ride-optimizer/releases/tag/v2.1.0
 
 ---
 

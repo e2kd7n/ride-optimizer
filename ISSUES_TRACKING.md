@@ -3,8 +3,8 @@
 All project issues are now tracked on GitHub Issues.
 
 ## Where to Find Issues
+🔗 **GitHub Issues:** https://github.com/e2kd7n/ride-optimizer/issues
 
-🔗 **GitHub Issues:** https://github.com/e2kd7n/commute-optimizer/issues
 
 ## Archived Documentation
 

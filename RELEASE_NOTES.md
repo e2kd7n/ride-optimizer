@@ -116,8 +116,8 @@ Created 7 sub-issues (#63-#69):
 
 ### 🔗 Links
 
-- **Release:** https://github.com/e2kd7n/commute-optimizer/releases/tag/v2.1.0
-- **Epic #62:** https://github.com/e2kd7n/commute-optimizer/issues/62
+- **Release:** https://github.com/e2kd7n/ride-optimizer/releases/tag/v2.1.0
+- **Epic #62:** https://github.com/e2kd7n/ride-optimizer/issues/62
 - **Commit:** 34033a4
 
 ---

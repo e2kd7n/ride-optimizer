@@ -1,21 +1,29 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-03-26 23:18 UTC
+**Last Updated:** 2026-03-27 00:00 UTC
 
 This file reflects the current state of GitHub issues by priority. Issues are managed via GitHub labels (P0-critical, P1-high, P2-medium, P3-low, P4-future).
 
 ## 🔴 P0 - CRITICAL (Drop Everything)
 Issues that make the application unusable or cause data loss.
 
-**No P0 issues currently open** ✅
+### Active P0 Issues
+
+- **P0-CRITICAL: Fix Test Suite Failures (16/43 tests failing)**
+  - **Impact:** 37.2% test failure rate blocks CI/CD and release confidence
+  - **Root Cause:** Type mismatches in test code (not implementation bugs)
+  - **Estimated Fix Time:** 70 minutes
+  - **Details:** See TEST_REMEDIATION_PLAN.md
+  - **Categories:**
+    - 6 failures: Activity dataclass 'commute' parameter
+    - 3 failures: datetime vs string type mismatch
+    - 5 failures: tuple vs Location object mismatch
+    - 2 failures: Mock configuration issues
+  - **Action Required:** Implement fixes from TEST_REMEDIATION_PLAN.md phases 1-3
 
 ## 🔴 P1 - HIGH (Current Sprint)
 Issues that significantly impact core functionality or user experience.
 
-- #61 - Code Quality: Improve exception handling (remove bare except)
-- #59 - Security: Replace MD5 hash with SHA256 for cache keys
-- #41 - Create unit tests for core modules
-- #42 - Write integration tests for full workflow
 - **EPIC: Segment-Based Route Naming** - Show connection streets + main route (see ROUTE_NAMING_EPIC.md)
   - Sub-issue 1: Increase route sampling density
   - Sub-issue 2: Implement route segment identification
@@ -28,13 +36,6 @@ Issues that significantly impact core functionality or user experience.
 - #24 - [LOW PRIORITY] Grey out unselected routes on map when route is clicked
 - #54 - Weather Dashboard Implementation (Epic)
 - #33 - Add traffic pattern analysis
-- **EPIC: Mobile-First UI/UX Improvements** - Comprehensive mobile responsiveness and UX enhancements (see UIUX_IMPROVEMENTS_EPIC.md)
-  - Sub-issue 1: Implement mobile-first responsive layout (P1-high)
-  - Sub-issue 2: Add progressive disclosure for metrics (P2-medium)
-  - Sub-issue 3: Implement touch-optimized interactions (P1-high)
-  - Sub-issue 4: Add feature discovery & onboarding (P2-medium)
-  - Sub-issue 5: Implement mobile navigation patterns (P2-medium)
-  - Sub-issue 6: Improve visual hierarchy & polish (P3-low)
 
 ## 🟡 P2 - MEDIUM (Next Sprint)
 Important improvements that enhance functionality but don't block core workflows.
@@ -119,27 +120,46 @@ Issues without priority labels that need to be triaged.
 
 ## Summary Statistics
 
-- **Total Open Issues:** 31
-- **P0 (Critical):** 0
-- **P1 (High):** 2
+- **Total Open Issues:** 29
+- **P0 (Critical):** 1 ⚠️ (Test suite failures)
+- **P1 (High):** 6 (includes 1 epic with 6 sub-issues)
 - **P2 (Medium):** 5 (includes 2 epics with 12 sub-issues)
 - **P3 (Low):** 4
 - **P4 (Future):** 6
 - **Unprioritized:** 15
 
-## Completed P1 Issues (2026-03-26)
+## Completed Issues (v2.2.0 - 2026-03-27)
 
-1. **✅ #60** - Security: Upgraded vulnerable dependencies (requests 2.33.0, tornado 6.5.5)
-2. **✅ #56** - Implemented percentile-based route similarity to reduce over-clustering
-3. **✅ #55** - Closed as superseded by #56 (Fréchet algorithm already working)
+### v2.1.0 Completed (2026-03-26)
+1. **✅ #61** - Code Quality: Improved exception handling (replaced 4 bare except statements with specific exception types)
+2. **✅ #59** - Security: Replaced MD5 with SHA256 for cache key generation
+3. **✅ #60** - Security: Upgraded vulnerable dependencies (requests 2.33.0, tornado 6.5.5)
+4. **✅ #56** - Implemented percentile-based route similarity to reduce over-clustering
+5. **✅ #55** - Closed as superseded by #56 (Fréchet algorithm already working)
+
+### v2.2.0 Completed (2026-03-27)
+1. **✅ #41** - Created comprehensive unit tests for core modules (626 lines, 4 test files)
+2. **✅ #42** - Created integration tests for full workflow (371 lines, end-to-end testing)
+3. **✅ #63** - Implemented mobile-first responsive layout (P1-high sub-issue)
+   - Responsive breakpoints for mobile/tablet/desktop
+   - Touch-optimized controls (44px minimum)
+   - Horizontal scrollable tables with sticky columns
+4. **✅ #65** - Implemented touch-optimized interactions (P1-high sub-issue)
+   - Touch-friendly tooltips (tap-to-show)
+   - Tap feedback animations
+   - Loading indicators for async actions
+5. **✅ Test Infrastructure** - Created pytest configuration, test runner, and documentation
 
 ## Recommended Next Actions
 
-1. **🔴 P1 Issues** - Complete remaining high-priority issues:
-   - #61 - Improve exception handling (remove bare except)
-   - #59 - Replace MD5 with SHA256 in cache keys
-2. **Run full analysis** - Test new percentile-based similarity algorithm with real data
-3. **🎨 UI/UX Epic** - Start mobile-first responsive layout (Sub-issue 1 & 3 are P1-high)
-4. **Implement #58** - Time-aware next commute recommendations (P2-medium)
-5. **Update #21** - Update TECHNICAL_SPEC.md with comprehensive implementation details
-6. **Triage unprioritized issues** - Assign priority labels to remaining 15 issues
+1. **🔴 P0-CRITICAL: Fix Test Suite Failures** - 16/43 tests failing (70 min fix time)
+   - See TEST_REMEDIATION_PLAN.md for detailed fix instructions
+   - Phase 1: Fix type issues (45 min)
+   - Phase 2: Fix mock configurations (15 min)
+   - Phase 3: Fix edge cases (10 min)
+2. **🏷️ Route Naming Epic** - Implement segment-based route naming with connection streets
+3. **Implement #58** - Time-aware next commute recommendations
+4. **Update #21** - Update TECHNICAL_SPEC.md with comprehensive implementation details
+5. **Implement #33** - Add traffic pattern analysis
+6. **Implement #54** - Weather Dashboard Implementation (Epic)
+7. **Triage unprioritized issues** - Assign priority labels to remaining 15 issues
