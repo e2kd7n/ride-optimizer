@@ -1,6 +1,6 @@
 # Bob Skills - Development Guidelines & Best Practices
 
-**Project:** Strava Commute Route Analyzer  
+**Project:** Ride Optimizer
 **Last Updated:** 2026-03-25  
 **Purpose:** Consolidated development guidelines, coding standards, and workflow procedures for AI-assisted development
 
@@ -848,6 +848,247 @@ gh label edit "label-name" \
 
 # Delete label
 gh label delete "label-name"
+
+---
+
+## Git Workflow
+
+### Core Principles
+
+**IMPORTANT:** Git operations (commits and pushes) should ONLY be performed at user direction. Never commit or push automatically without explicit user approval.
+
+### Standard Workflow
+
+1. **Make Changes**
+   - Edit files using appropriate tools (apply_diff, write_to_file, etc.)
+   - Test changes to ensure they work
+   - Wait for user confirmation after each significant change
+
+2. **Stage Changes (Only When User Approves)**
+   ```bash
+   # Stage specific files
+   git add path/to/file1.py path/to/file2.md
+   
+   # Stage all changes (use cautiously)
+   git add -A
+   ```
+
+3. **Commit Changes (Only When User Approves)**
+   ```bash
+   # Commit with descriptive message
+   git commit -m "type: brief description
+   
+   - Detailed change 1
+   - Detailed change 2
+   - Detailed change 3"
+   ```
+
+4. **Push Changes (Only When User Approves)**
+   ```bash
+   # Push to remote repository
+   git push origin main
+   ```
+
+### Commit Message Format
+
+Follow conventional commits format:
+
+```
+type: brief description (50 chars or less)
+
+- Detailed bullet point 1
+- Detailed bullet point 2
+- Detailed bullet point 3
+- Related issue references (#123)
+```
+
+**Commit Types:**
+- `feat`: New feature
+- `fix`: Bug fix
+- `docs`: Documentation changes
+- `style`: Code style changes (formatting, no logic change)
+- `refactor`: Code refactoring (no feature change)
+- `perf`: Performance improvements
+- `test`: Adding or updating tests
+- `chore`: Maintenance tasks (dependencies, configs)
+- `ci`: CI/CD changes
+- `build`: Build system changes
+
+**Examples:**
+```bash
+# Feature commit
+git commit -m "feat: Add segment-based route naming
+
+- Implemented route segment identification algorithm
+- Added configuration options to config.yaml
+- Updated route analyzer to use new naming system
+- Resolves #60"
+
+# Documentation commit
+git commit -m "docs: Update TECHNICAL_SPEC.md with v2.3.0 features
+
+- Added Route Namer section with algorithm details
+- Updated Configuration section with new parameters
+- Added Security section documenting SHA256 migration"
+
+# Bug fix commit
+git commit -m "fix: Correct issue #58 numbering discrepancy
+
+- Clarified terminal wrapping entry was never created
+- Documented actual issue #58 definition
+- Prevents future confusion in archived docs"
+
+# Chore commit
+git commit -m "chore: Organize scripts into /scripts folder
+
+- Created /scripts directory for utility scripts
+- Moved 14 scripts from root to /scripts
+- Added scripts/README.md with documentation
+- Root directory now clean (only main.py remains)"
+```
+
+### Logical Commit Grouping
+
+**Group related changes into single commits:**
+
+✅ **Good - Logical grouping:**
+```bash
+# All route naming changes together
+git add src/route_namer.py config/config.yaml cache/geocoding_cache.json
+git commit -m "feat: Implement segment-based route naming"
+
+# All documentation updates together
+git add README.md TECHNICAL_SPEC.md TIME_TRACKING.md
+git commit -m "docs: Update documentation for v2.3.0 release"
+```
+
+❌ **Bad - Fragmented commits:**
+```bash
+# Don't split related changes
+git add src/route_namer.py
+git commit -m "Update route namer"
+git add config/config.yaml
+git commit -m "Update config"
+git add cache/geocoding_cache.json
+git commit -m "Clear cache"
+```
+
+### Multi-Step Workflow Example
+
+**Scenario: Implementing a new feature**
+
+1. **User requests feature implementation**
+   - User: "Implement segment-based route naming"
+
+2. **Make changes and wait for confirmation**
+   - Edit src/route_namer.py
+   - Wait for user: "Looks good, continue"
+
+3. **Make related changes**
+   - Update config/config.yaml
+   - Clear cache files
+   - Wait for user: "Perfect, commit these changes"
+
+4. **Stage and commit (only after user approval)**
+   ```bash
+   git add src/route_namer.py config/config.yaml cache/geocoding_cache.json
+   git commit -m "feat: Implement segment-based route naming
+   
+   - Added route segment identification algorithm
+   - Updated configuration with new parameters
+   - Cleared geocoding cache for fresh analysis"
+   ```
+
+5. **Update documentation**
+   - Edit README.md, TECHNICAL_SPEC.md
+   - Wait for user: "Documentation looks good, commit it"
+
+6. **Commit documentation separately**
+   ```bash
+   git add README.md TECHNICAL_SPEC.md
+   git commit -m "docs: Document segment-based route naming feature"
+   ```
+
+7. **Push only when user approves**
+   - User: "Push these changes"
+   ```bash
+   git push origin main
+   ```
+
+### When to Commit
+
+**Commit after:**
+- Completing a logical unit of work
+- All related files are updated
+- Changes have been tested
+- User has approved the changes
+
+**Don't commit:**
+- Partial implementations
+- Broken code
+- Without user approval
+- Before testing changes
+
+### When to Push
+
+**Push after:**
+- One or more commits are ready
+- User explicitly approves
+- All tests pass
+- Documentation is updated
+
+**Don't push:**
+- Automatically after every commit
+- Without user approval
+- Broken or untested code
+- Incomplete features
+
+### Checking Status
+
+```bash
+# Check what's changed
+git status
+
+# See detailed changes
+git diff
+
+# See staged changes
+git diff --cached
+
+# View commit history
+git log --oneline -10
+
+# View recent commits with details
+git log --since="1 day ago" --oneline --no-merges
+```
+
+### Undoing Changes (If Needed)
+
+```bash
+# Unstage files (keep changes)
+git reset HEAD path/to/file
+
+# Discard uncommitted changes
+git checkout -- path/to/file
+
+# Amend last commit (before push)
+git commit --amend -m "New message"
+
+# Undo last commit (keep changes)
+git reset --soft HEAD~1
+```
+
+### Best Practices
+
+1. **Always wait for user approval before git operations**
+2. **Group related changes into logical commits**
+3. **Write clear, descriptive commit messages**
+4. **Test changes before committing**
+5. **Update documentation in same commit or immediately after**
+6. **Push only when user explicitly requests it**
+7. **Use conventional commit format for consistency**
+8. **Reference issue numbers in commit messages**
+
 ```
 
 ### TODO Comments in Code
