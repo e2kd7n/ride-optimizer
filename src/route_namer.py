@@ -13,6 +13,7 @@ from geopy.exc import GeocoderTimedOut, GeocoderServiceError
 import time
 import json
 import os
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,7 @@ class RouteNamer:
         # Set up persistent cache
         self.cache_dir = "cache"
         self.cache_file = os.path.join(self.cache_dir, "geocoding_cache.json")
+        self.rate_limit_file = os.path.join(self.cache_dir, "geocoding_rate_limit.json")
         os.makedirs(self.cache_dir, exist_ok=True)
         
         # Load cache from disk
@@ -48,6 +50,9 @@ class RouteNamer:
         logger.info(f"Route naming config: sampling_density={self.sampling_density}, "
                    f"min_segment_length_pct={self.min_segment_length_pct}, "
                    f"enable_segment_naming={self.enable_segment_naming}")
+        
+        # Check for rate limiting
+        self._check_rate_limit_status()
     
     def _load_cache(self) -> Dict:
         """Load geocoding cache from disk."""
@@ -66,6 +71,71 @@ class RouteNamer:
                 json.dump(self.cache, f, indent=2)
         except Exception as e:
             logger.warning(f"Failed to save geocoding cache: {e}")
+    
+    def _check_rate_limit_status(self):
+        """Check if we're currently rate limited and wait if necessary."""
+        if not os.path.exists(self.rate_limit_file):
+            return
+        
+        try:
+            with open(self.rate_limit_file, 'r') as f:
+                rate_limit_data = json.load(f)
+            
+            blocked_until_str = rate_limit_data.get('blocked_until')
+            if not blocked_until_str:
+                return
+            
+            blocked_until = datetime.fromisoformat(blocked_until_str)
+            now = datetime.now()
+            
+            if now < blocked_until:
+                wait_seconds = (blocked_until - now).total_seconds()
+                wait_hours = wait_seconds / 3600
+                
+                # Format with timezone info
+                blocked_until_formatted = blocked_until.strftime('%Y-%m-%d %H:%M:%S %Z').strip()
+                if not blocked_until_formatted.endswith('Z') and not any(tz in blocked_until_formatted for tz in ['EST', 'EDT', 'CST', 'CDT', 'MST', 'MDT', 'PST', 'PDT']):
+                    # Add local timezone indicator if not present
+                    import time as time_module
+                    tz_name = time_module.tzname[time_module.daylight]
+                    blocked_until_formatted = f"{blocked_until.strftime('%Y-%m-%d %H:%M:%S')} {tz_name}"
+                
+                logger.warning(f"Geocoding rate limit detected. Self-imposed 4-hour block until {blocked_until_formatted}")
+                logger.warning(f"Waiting {wait_hours:.1f} hours before attempting geocoding...")
+                print(f"\n⚠️  RATE LIMIT PROTECTION ACTIVE")
+                print(f"This system detected Nominatim rate limiting and imposed a 4-hour pause.")
+                print(f"Self-imposed block until: {blocked_until_formatted}")
+                print(f"Waiting {wait_hours:.1f} hours before continuing...")
+                print(f"(This prevents further rate limiting and potential IP blocks)\n")
+                time.sleep(wait_seconds)
+                # Clear the rate limit file after waiting
+                os.remove(self.rate_limit_file)
+                logger.info("Rate limit wait period completed, resuming geocoding")
+        except Exception as e:
+            logger.warning(f"Failed to check rate limit status: {e}")
+    
+    def _record_rate_limit(self):
+        """Record that we've been rate limited and set a 4-hour self-imposed block."""
+        try:
+            now = datetime.now()
+            blocked_until = now + timedelta(hours=4)
+            
+            # Format with timezone
+            import time as time_module
+            tz_name = time_module.tzname[time_module.daylight]
+            blocked_until_formatted = f"{blocked_until.strftime('%Y-%m-%d %H:%M:%S')} {tz_name}"
+            
+            rate_limit_data = {
+                'blocked_until': blocked_until.isoformat(),
+                'blocked_at': now.isoformat(),
+                'reason': 'Nominatim rate limit detected - self-imposed 4-hour pause to prevent IP block',
+                'note': 'This is a protective measure, not a Nominatim-imposed block'
+            }
+            with open(self.rate_limit_file, 'w') as f:
+                json.dump(rate_limit_data, f, indent=2)
+            logger.error(f"Rate limit detected. Self-imposing 4-hour block until {blocked_until_formatted}")
+        except Exception as e:
+            logger.error(f"Failed to record rate limit: {e}")
     
     def name_route(self, coordinates: List[Tuple[float, float]],
                    route_id: str, direction: str) -> str:
@@ -239,9 +309,13 @@ class RouteNamer:
         
         return segments
     
-    def _get_location_details(self, point: Tuple[float, float]) -> Optional[Dict]:
+    def _get_location_details(self, point: Tuple[float, float], retry_count: int = 0) -> Optional[Dict]:
         """
-        Get detailed location information for a point.
+        Get detailed location information for a point with retry logic.
+        
+        Args:
+            point: (lat, lon) tuple
+            retry_count: Current retry attempt (for exponential backoff)
         
         Returns dict with street, neighborhood, landmark, feature, and is_major flag.
         """
@@ -251,12 +325,12 @@ class RouteNamer:
             logger.debug(f"Cache hit for {cache_key}")
             return self.cache[cache_key]
         
-        # Rate limiting for API requests
+        # Rate limiting for API requests - enforce 1 req/sec minimum
         logger.debug(f"Cache miss for {cache_key}, making API request")
         time.sleep(1.0)
         
         try:
-            location = self.geolocator.reverse(point, exactly_one=True, language='en', timeout=5)
+            location = self.geolocator.reverse(point, exactly_one=True, language='en', timeout=10)
             
             if not location or not location.raw.get('address'):
                 return None
@@ -305,10 +379,38 @@ class RouteNamer:
             
             return result
             
-        except (GeocoderTimedOut, GeocoderServiceError) as e:
-            logger.debug(f"Geocoding failed for {point}: {e}")
+        except GeocoderTimedOut as e:
+            # Timeout - retry with exponential backoff
+            if retry_count < 3:
+                wait_time = 2 ** retry_count  # 1s, 2s, 4s
+                logger.warning(f"Geocoding timeout for {point}, retrying in {wait_time}s (attempt {retry_count + 1}/3)")
+                time.sleep(wait_time)
+                return self._get_location_details(point, retry_count + 1)
+            else:
+                logger.error(f"Geocoding failed after 3 retries for {point}: {e}")
+                return None
+                
+        except GeocoderServiceError as e:
+            # Service error (rate limit, blocked IP, etc.) - longer backoff
+            error_msg = str(e).lower()
+            if 'rate' in error_msg or 'limit' in error_msg or 'blocked' in error_msg:
+                if retry_count < 2:
+                    wait_time = 5 * (retry_count + 1)  # 5s, 10s
+                    logger.warning(f"Rate limit/block detected for {point}, waiting {wait_time}s (attempt {retry_count + 1}/2)")
+                    time.sleep(wait_time)
+                    return self._get_location_details(point, retry_count + 1)
+                else:
+                    logger.error(f"Geocoding blocked/rate limited after retries for {point}: {e}")
+                    # Record rate limit for 4-hour block
+                    self._record_rate_limit()
+                    return None
+            else:
+                logger.warning(f"Geocoding service error for {point}: {e}")
+                return None
+                
         except Exception as e:
             logger.warning(f"Unexpected error geocoding {point}: {e}")
+            return None
         
         return None
     
@@ -479,10 +581,38 @@ class RouteNamer:
                 logger.info(f"Geocoded {cache_key} -> {street}")
                 return street
             
-        except (GeocoderTimedOut, GeocoderServiceError) as e:
-            logger.debug(f"Geocoding failed for {point}: {e}")
+        except GeocoderTimedOut as e:
+            # Timeout - retry with exponential backoff
+            if retry_count < 3:
+                wait_time = 2 ** retry_count  # 1s, 2s, 4s
+                logger.warning(f"Geocoding timeout for {point}, retrying in {wait_time}s (attempt {retry_count + 1}/3)")
+                time.sleep(wait_time)
+                return self._get_street_name(point, retry_count + 1)
+            else:
+                logger.error(f"Geocoding failed after 3 retries for {point}: {e}")
+                return None
+                
+        except GeocoderServiceError as e:
+            # Service error (rate limit, blocked IP, etc.) - longer backoff
+            error_msg = str(e).lower()
+            if 'rate' in error_msg or 'limit' in error_msg or 'blocked' in error_msg:
+                if retry_count < 2:
+                    wait_time = 5 * (retry_count + 1)  # 5s, 10s
+                    logger.warning(f"Rate limit/block detected for {point}, waiting {wait_time}s (attempt {retry_count + 1}/2)")
+                    time.sleep(wait_time)
+                    return self._get_street_name(point, retry_count + 1)
+                else:
+                    logger.error(f"Geocoding blocked/rate limited after retries for {point}: {e}")
+                    # Record rate limit for 4-hour block
+                    self._record_rate_limit()
+                    return None
+            else:
+                logger.warning(f"Geocoding service error for {point}: {e}")
+                return None
+                
         except Exception as e:
             logger.warning(f"Unexpected error geocoding {point}: {e}")
+            return None
         
         return None
     

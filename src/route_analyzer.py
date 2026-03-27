@@ -649,6 +649,9 @@ class RouteAnalyzer:
         # Start background geocoding for route names
         self._start_background_geocoding(groups)
         
+        # Check geocoding status and notify user
+        self._check_geocoding_status(groups)
+        
         return groups
     
     def _merge_new_routes(self, existing_groups: List[RouteGroup],
@@ -1099,6 +1102,36 @@ class RouteAnalyzer:
             logger.info("Geocoding disabled in config, skipping background geocoding")
             return
         
+        # Check if we're currently rate limited
+        import os
+        rate_limit_file = os.path.join(self.cache_dir, "geocoding_rate_limit.json")
+        if os.path.exists(rate_limit_file):
+            try:
+                import json
+                from datetime import datetime
+                with open(rate_limit_file, 'r') as f:
+                    rate_limit_data = json.load(f)
+                blocked_until_str = rate_limit_data.get('blocked_until')
+                if blocked_until_str:
+                    blocked_until = datetime.fromisoformat(blocked_until_str)
+                    if datetime.now() < blocked_until:
+                        import time as time_module
+                        tz_name = time_module.tzname[time_module.daylight]
+                        blocked_until_formatted = f"{blocked_until.strftime('%Y-%m-%d %H:%M:%S')} {tz_name}"
+                        
+                        logger.info(f"Geocoding is rate limited until {blocked_until_formatted}, skipping")
+                        tqdm.write("\n" + "="*60)
+                        tqdm.write("⚠️  GEOCODING RATE LIMITED")
+                        tqdm.write("="*60)
+                        tqdm.write("Background geocoding is currently paused due to rate limiting.")
+                        tqdm.write(f"Self-imposed block until: {blocked_until_formatted}")
+                        tqdm.write("\n💡 Geocoding will automatically resume after the block expires.")
+                        tqdm.write("   Re-run analysis after that time to geocode route names.")
+                        tqdm.write("="*60 + "\n")
+                        return
+            except Exception as e:
+                logger.warning(f"Failed to check rate limit file: {e}")
+        
         # Don't start multiple threads
         if self._geocoding_thread and self._geocoding_thread.is_alive():
             logger.info("Background geocoding already in progress, skipping new geocoding request")
@@ -1139,12 +1172,17 @@ class RouteAnalyzer:
         # Prompt user for approval unless auto-approved
         if not auto_approve:
             tqdm.write("")
-            response = input("Start background geocoding? [Y/n]: ").strip().lower()
-            if response and response not in ['y', 'yes']:
-                tqdm.write("\n⏭️  Skipping background geocoding. Routes will use temporary names.")
-                tqdm.write("   You can re-run analysis later to geocode route names.\n")
-                logger.info("User declined background geocoding")
-                return
+            try:
+                response = input("Start background geocoding? [Y/n]: ").strip().lower()
+                if response and response not in ['y', 'yes']:
+                    tqdm.write("\n⏭️  Skipping background geocoding. Routes will use temporary names.")
+                    tqdm.write("   You can re-run analysis later to geocode route names.\n")
+                    logger.info("User declined background geocoding")
+                    return
+            except (EOFError, OSError):
+                # Handle non-interactive environments (tests, CI/CD, etc.)
+                logger.info("Non-interactive environment detected, auto-approving geocoding")
+                tqdm.write("\n✓ Non-interactive mode: auto-approving background geocoding\n")
         
         tqdm.write("\n✓ Starting background geocoding...")
         tqdm.write("  A new terminal window will open to show progress.\n")
@@ -1252,15 +1290,25 @@ end tell
             # Filter groups that need geocoding (have temporary names)
             groups_to_geocode = [g for g in groups if g.name and ("Route" in g.name and ("to Work" in g.name or "to Home" in g.name))]
             
-            # Write header to progress file
+            # Write header to progress file with timezone
             try:
+                import time as time_module
+                tz_name = time_module.tzname[time_module.daylight]
+                start_time_formatted = f"{start_time.strftime('%Y-%m-%d %H:%M:%S')} {tz_name}"
+                
                 with open(progress_file, 'w') as f:
                     f.write(f"{'='*70}\n")
                     f.write(f"🌐 ROUTE GEOCODING IN PROGRESS\n")
                     f.write(f"{'='*70}\n")
-                    f.write(f"Started: {start_time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                    f.write(f"Started: {start_time_formatted}\n")
                     f.write(f"Total routes to geocode: {len(groups_to_geocode)}\n")
+                    f.write(f"\n⚠️  RATE LIMITING INFO:\n")
+                    f.write(f"• Nominatim enforces 1 request/second maximum\n")
+                    f.write(f"• Retries with exponential backoff on timeouts\n")
+                    f.write(f"• If rate limited, system will self-impose 4-hour pause\n")
+                    f.write(f"• This prevents IP blocks and allows Nominatim to reset\n")
                     f.write(f"{'='*70}\n\n")
+                    f.flush()
             except:
                 pass
             
@@ -1301,26 +1349,59 @@ end tell
                             f.write(f"[{timestamp()}] [{bar}] {progress_pct:5.1f}% ({i}/{len(groups_to_geocode)})\n")
                             # Line 2: Route name
                             f.write(f"  ✓ {route_name}\n")
-                    except:
-                        pass
+                            f.flush()  # Ensure immediate write to disk for visibility
+                    except Exception as e:
+                        logger.debug(f"Failed to write progress: {e}")
                     
                     if geocoded_count % 10 == 0:
                         logger.info(f"Background geocoding progress: {geocoded_count}/{len(groups_to_geocode)} routes named")
                 
                 except Exception as e:
                     failed_count += 1
-                    logger.warning(f"Failed to geocode route {group.id} in background: {e}")
+                    error_msg = str(e)
+                    error_lower = error_msg.lower()
+                    
+                    # Check if this is a rate limit error
+                    is_rate_limit = 'rate' in error_lower or 'limit' in error_lower or 'blocked' in error_lower
+                    
+                    logger.warning(f"Failed to geocode route {group.id}: {error_msg}")
                     try:
+                        import time as time_module
+                        tz_name = time_module.tzname[time_module.daylight]
+                        
                         with open(progress_file, 'a') as f:
-                            f.write(f"[{timestamp()}] ✗ Failed: {group.id[:30]} - {str(e)[:40]}\n")
-                    except:
-                        pass
+                            if is_rate_limit:
+                                resume_time = datetime.now() + datetime.timedelta(hours=4)
+                                resume_time_formatted = f"{resume_time.strftime('%Y-%m-%d %H:%M:%S')} {tz_name}"
+                                
+                                f.write(f"\n{'='*70}\n")
+                                f.write(f"⚠️  RATE LIMIT DETECTED\n")
+                                f.write(f"{'='*70}\n")
+                                f.write(f"[{timestamp()}] Nominatim API rate limit hit\n")
+                                f.write(f"Route: {group.id[:30]}\n")
+                                f.write(f"Error: {error_msg[:60]}\n")
+                                f.write(f"\n🛑 SELF-IMPOSING 4-HOUR PAUSE\n")
+                                f.write(f"This is a protective measure to prevent IP blocking.\n")
+                                f.write(f"Next geocoding attempt after: {resume_time_formatted}\n")
+                                f.write(f"\n💡 The next analysis run will automatically wait if needed.\n")
+                                f.write(f"{'='*70}\n\n")
+                            else:
+                                f.write(f"[{timestamp()}] ✗ Failed: {group.id[:30]}\n")
+                                f.write(f"     Error: {error_msg[:60]}\n")
+                            f.flush()  # Ensure immediate write to disk
+                    except Exception as write_error:
+                        logger.debug(f"Failed to write error to progress file: {write_error}")
+                    
+                    # If rate limited, stop geocoding immediately
+                    if is_rate_limit:
+                        logger.error("Rate limit detected, stopping geocoding")
+                        break
             
-            # Phase 2: Saving cache
+            # Phase 2: Saving caches
             try:
                 with open(progress_file, 'a') as f:
                     f.write(f"\n{'-'*70}\n")
-                    f.write(f"[{timestamp()}] Phase 2/2: Saving geocoding cache\n")
+                    f.write(f"[{timestamp()}] Phase 2/3: Saving geocoding cache\n")
                     f.write(f"{'-'*70}\n")
             except:
                 pass
@@ -1330,7 +1411,33 @@ end tell
             
             try:
                 with open(progress_file, 'a') as f:
-                    f.write(f"[{timestamp()}] ✓ Cache saved successfully\n")
+                    f.write(f"[{timestamp()}] ✓ Geocoding cache saved\n")
+            except:
+                pass
+            
+            # Phase 3: Save route groups cache with updated names
+            try:
+                with open(progress_file, 'a') as f:
+                    f.write(f"\n{'-'*70}\n")
+                    f.write(f"[{timestamp()}] Phase 3/3: Saving route groups cache with updated names\n")
+                    f.write(f"{'-'*70}\n")
+            except:
+                pass
+            
+            # Extract activity IDs from groups
+            activity_ids = []
+            for group in groups:
+                for route in group.routes:
+                    if route.activity_id not in activity_ids:
+                        activity_ids.append(route.activity_id)
+            
+            # Save route groups cache with updated names
+            self._save_groups_cache_with_ids(activity_ids, groups)
+            logger.info("Route groups cache saved with updated names")
+            
+            try:
+                with open(progress_file, 'a') as f:
+                    f.write(f"[{timestamp()}] ✓ Route groups cache saved with {geocoded_count} updated names\n")
             except:
                 pass
             
@@ -1338,29 +1445,93 @@ end tell
             duration = (end_time - start_time).total_seconds()
             logger.info(f"Background geocoding completed: {geocoded_count}/{len(groups_to_geocode)} routes successfully named")
             
-            # Write completion summary
+            # Write completion summary with timezone
             try:
+                import time as time_module
+                tz_name = time_module.tzname[time_module.daylight]
+                end_time_formatted = f"{end_time.strftime('%Y-%m-%d %H:%M:%S')} {tz_name}"
+                
                 with open(progress_file, 'a') as f:
                     f.write(f"\n{'='*70}\n")
                     f.write(f"✅ GEOCODING COMPLETE!\n")
                     f.write(f"{'='*70}\n")
-                    f.write(f"Completed: {end_time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                    f.write(f"Completed: {end_time_formatted}\n")
                     f.write(f"Duration: {duration:.1f} seconds\n")
                     f.write(f"Successfully named: {geocoded_count}/{len(groups_to_geocode)} routes\n")
                     if failed_count > 0:
                         f.write(f"Failed: {failed_count} routes\n")
-                    f.write(f"\n💡 Re-run the analysis to see updated route names in the report.\n")
+                    f.write(f"\n✅ Route names have been saved to cache.\n")
+                    f.write(f"💡 The next analysis will use these updated route names.\n")
                     f.write(f"{'='*70}\n")
             except:
                 pass
             
         except Exception as e:
             logger.error(f"Background geocoding thread failed: {e}", exc_info=True)
+            error_msg = str(e)
+            error_type = type(e).__name__
             try:
                 with open(progress_file, 'a') as f:
-                    f.write(f"\n[{timestamp()}] ❌ ERROR: {str(e)}\n")
-            except:
-                pass
+                    f.write(f"\n{'='*70}\n")
+                    f.write(f"❌ GEOCODING FAILED\n")
+                    f.write(f"{'='*70}\n")
+                    f.write(f"Error Type: {error_type}\n")
+                    f.write(f"Error Message: {error_msg}\n")
+                    f.write(f"\n💡 Check logs/debug.log for full stack trace.\n")
+                    f.write(f"{'='*70}\n")
+                    f.flush()
+            except Exception as write_error:
+                logger.error(f"Failed to write error to progress file: {write_error}")
+    def _check_geocoding_status(self, groups: List[RouteGroup]) -> None:
+        """
+        Check geocoding status and notify user if incomplete.
+        
+        Args:
+            groups: List of route groups to check
+        """
+        from tqdm import tqdm
+        
+        # Count routes with generic names
+        generic_names = sum(1 for g in groups if g.name and ("Route" in g.name and ("to Work" in g.name or "to Home" in g.name)))
+        total_routes = len(groups)
+        geocoded_routes = total_routes - generic_names
+        
+        # Only show status if there are routes with generic names
+        if generic_names > 0:
+            # Check if geocoding is actually running
+            geocoding_running = self._geocoding_thread and self._geocoding_thread.is_alive()
+            
+            tqdm.write("\n" + "="*60)
+            tqdm.write("📍 ROUTE NAMING STATUS")
+            tqdm.write("="*60)
+            tqdm.write(f"Routes with descriptive names: {geocoded_routes}/{total_routes}")
+            tqdm.write(f"Routes with generic names: {generic_names}/{total_routes}")
+            
+            if geocoding_running:
+                # Geocoding is actively running
+                if generic_names == total_routes:
+                    tqdm.write("\n⚠️  No routes have been geocoded yet.")
+                    tqdm.write("   Background geocoding is running in a separate terminal.")
+                else:
+                    tqdm.write(f"\n⚠️  Geocoding is incomplete ({geocoded_routes}/{total_routes} routes named).")
+                    tqdm.write("   Background geocoding is continuing in a separate terminal.")
+                
+                tqdm.write("\n💡 To see updated route names:")
+                tqdm.write("   1. Wait for geocoding to complete (check the geocoding terminal)")
+                tqdm.write("   2. Re-run the analysis")
+                tqdm.write("   3. The report will then show descriptive route names")
+            else:
+                # Geocoding is not running (blocked, disabled, or user declined)
+                tqdm.write(f"\n⚠️  {generic_names} routes still have generic names.")
+                tqdm.write("   Background geocoding was not started (rate limited, disabled, or declined).")
+                
+                tqdm.write("\n💡 To geocode route names:")
+                tqdm.write("   • If rate limited: wait for the block to expire, then re-run analysis")
+                tqdm.write("   • If disabled: enable geocoding in config and re-run analysis")
+                tqdm.write("   • If declined: re-run analysis and accept the geocoding prompt")
+            
+            tqdm.write("="*60 + "\n")
+    
     
     def wait_for_geocoding(self, timeout: float = None) -> bool:
         """
