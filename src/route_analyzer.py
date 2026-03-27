@@ -639,18 +639,18 @@ class RouteAnalyzer:
         # Mark plus routes (routes >15% longer than median)
         groups = self._mark_plus_routes(groups)
         
-        # Save to cache
+        # Geocode route names BEFORE saving cache (synchronous)
+        if self.config and self.config.get('route_analysis.enable_geocoding', True):
+            tqdm.write("\n🌐 Geocoding route names...")
+            self._geocode_routes_synchronous(groups)
+            tqdm.write("✓ Geocoding complete\n")
+        
+        # Save to cache (with geocoded names)
         activity_ids = [r.activity_id for r in routes]
         self._save_groups_cache_with_ids(activity_ids, groups)
         
         # Save similarity cache after grouping
         self._save_similarity_cache()
-        
-        # Start background geocoding for route names
-        self._start_background_geocoding(groups)
-        
-        # Check geocoding status and notify user
-        self._check_geocoding_status(groups)
         
         return groups
     
@@ -1266,6 +1266,44 @@ end tell
         
         # Terminal process is detached and managed by the OS
         # No subprocess reference stored, so nothing to clean up
+    
+    def _geocode_routes_synchronous(self, groups: List[RouteGroup]) -> None:
+        """
+        Geocode route names synchronously (blocking).
+        This ensures names are available before saving cache.
+        
+        Args:
+            groups: List of RouteGroup objects to geocode
+        """
+        from tqdm import tqdm
+        
+        # Filter groups that need geocoding (have temporary names)
+        groups_to_geocode = [g for g in groups if g.name and ("Route" in g.name and ("to Work" in g.name or "to Home" in g.name))]
+        
+        if not groups_to_geocode:
+            logger.info("All routes already have geocoded names")
+            return
+        
+        logger.info(f"Geocoding {len(groups_to_geocode)} route groups synchronously")
+        
+        # Geocode with progress bar
+        for group in tqdm(groups_to_geocode, desc="Geocoding routes", unit="route"):
+            try:
+                # Generate descriptive route name using RouteNamer
+                route_name = self.route_namer.name_route(
+                    group.representative_route.coordinates,
+                    group.id,
+                    group.direction
+                )
+                
+                # Update the group name
+                group.name = route_name
+                
+            except Exception as e:
+                logger.warning(f"Failed to geocode route {group.id}: {e}")
+                # Keep the temporary name on failure
+        
+        logger.info(f"Geocoding complete: {len(groups_to_geocode)} routes named")
     
     def _geocode_routes_background(self, groups: List[RouteGroup]) -> None:
         """
