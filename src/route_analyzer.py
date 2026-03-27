@@ -1161,13 +1161,16 @@ tell application "Terminal"
 end tell
 '''
             # Start subprocess in a new session to properly detach it
-            # This prevents ResourceWarning about subprocess still running
-            self._terminal_process = subprocess.Popen(
-                ['osascript', '-e', script],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True  # Detach from parent process
-            )
+            # Suppress ResourceWarning since this process is intentionally detached
+            import warnings
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=ResourceWarning)
+                self._terminal_process = subprocess.Popen(
+                    ['osascript', '-e', script],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True  # Detach from parent process
+                )
             # Don't wait for the process - let it run independently
             # The terminal window will remain open for the user to monitor
             
