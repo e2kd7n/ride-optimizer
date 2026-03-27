@@ -813,6 +813,10 @@ class RouteVisualizer:
                                         line.style.opacity = '1.0';
                                         line.style.strokeWidth = '6';
                                         line.style.stroke = '';  // Keep original color
+                                        // Bring to front by moving to end of parent (SVG rendering order)
+                                        if (line.parentNode) {{
+                                            line.parentNode.appendChild(line);
+                                        }}
                                     }} else {{
                                         // Unselected route - subdue with low opacity and gray color
                                         line.style.display = '';
@@ -971,6 +975,10 @@ class RouteVisualizer:
                         line.style.opacity = '1.0';
                         line.style.strokeWidth = '6';
                         line.style.stroke = '';  // Keep original color
+                        // Bring to front by moving to end of parent (SVG rendering order)
+                        if (line.parentNode) {{
+                            line.parentNode.appendChild(line);
+                        }}
                     }} else {{
                         // Unselected route - subdue with low opacity and gray color
                         line.style.display = '';

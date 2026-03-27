@@ -10,6 +10,9 @@ Licensed under the MIT License - see LICENSE file for details.
 import logging
 import json
 import hashlib
+import threading
+import subprocess
+import sys
 from pathlib import Path
 from typing import List, Tuple, Dict, Any, Optional
 from dataclasses import dataclass, asdict
@@ -113,6 +116,11 @@ class RouteAnalyzer:
             self.groups_cache = {}
         else:
             self.groups_cache = self._load_groups_cache()
+        
+        # Background geocoding thread and subprocess
+        self._geocoding_thread = None
+        self._geocoding_lock = threading.Lock()
+        self._terminal_process = None
         
     def _load_similarity_cache(self) -> Dict[str, float]:
         """Load similarity cache from disk."""
@@ -636,6 +644,9 @@ class RouteAnalyzer:
         # Save similarity cache after grouping
         self._save_similarity_cache()
         
+        # Start background geocoding for route names
+        self._start_background_geocoding(groups)
+        
         return groups
     
     def _merge_new_routes(self, existing_groups: List[RouteGroup],
@@ -807,33 +818,54 @@ class RouteAnalyzer:
     def _group_routes_by_similarity(self, routes: List[Route], direction: str) -> List[RouteGroup]:
         """
         Group routes by similarity using threshold-based clustering.
+        Route naming is deferred to background thread for performance.
         
         Args:
             routes: List of routes
             direction: Route direction
             
         Returns:
-            List of RouteGroup objects
+            List of RouteGroup objects (with temporary names)
         """
+        # Get debug logger
+        debug_logger = logging.getLogger('debug')
+        
         if not routes:
             return []
+        
+        debug_logger.info(f"Starting similarity grouping for {len(routes)} {direction} routes")
+        debug_logger.info(f"Similarity threshold: {self.similarity_threshold}")
         
         groups = []
         ungrouped = routes.copy()
         group_id = 0
+        total_comparisons = 0
         
         while ungrouped:
             # Start new group with first ungrouped route
             current = ungrouped.pop(0)
             group = [current]
             
+            debug_logger.debug(f"Group {group_id}: Starting with route {current.activity_id}, {len(ungrouped)} routes remaining")
+            
             # Find similar routes
             to_remove = []
+            comparisons_this_group = 0
             for i, route in enumerate(ungrouped):
                 similarity = self.calculate_route_similarity(current, route)
+                comparisons_this_group += 1
+                total_comparisons += 1
+                
                 if similarity >= self.similarity_threshold:
                     group.append(route)
                     to_remove.append(i)
+                    debug_logger.debug(f"  Route {route.activity_id} matched (similarity: {similarity:.3f})")
+                
+                # Log progress every 50 comparisons
+                if comparisons_this_group % 50 == 0:
+                    debug_logger.info(f"  Group {group_id}: {comparisons_this_group} comparisons, {len(group)} routes matched so far")
+            
+            debug_logger.info(f"Group {group_id}: Matched {len(group)} routes after {comparisons_this_group} comparisons")
             
             # Remove grouped routes
             for i in reversed(to_remove):
@@ -845,16 +877,11 @@ class RouteAnalyzer:
             # Generate route ID
             route_id = f"{direction}_{group_id}"
             
-            # Generate descriptive route name using RouteNamer
-            try:
-                route_name = self.route_namer.name_route(
-                    representative.coordinates,
-                    route_id,
-                    direction
-                )
-            except Exception as e:
-                logger.warning(f"Failed to generate name for {route_id}, using fallback: {e}")
-                route_name = f"Route {group_id}"
+            debug_logger.info(f"Created group {route_id} with {len(group)} routes")
+            
+            # Use simple temporary name (geocoding deferred to background)
+            direction_label = "to Work" if direction == "home_to_work" else "to Home"
+            route_name = f"Route {group_id} {direction_label}"
             
             route_group = RouteGroup(
                 id=route_id,
@@ -1054,5 +1081,216 @@ class RouteAnalyzer:
             'avg_elevation_m': metrics.avg_elevation,
             'consistency_score': metrics.consistency_score
         }
+    
+    def _start_background_geocoding(self, groups: List[RouteGroup]) -> None:
+        """
+        Start background thread to geocode route names.
+        This allows route grouping to complete quickly while geocoding happens in parallel.
+        Opens a new terminal window to show geocoding progress.
+        
+        Args:
+            groups: List of RouteGroup objects to geocode
+        """
+        # Don't start if geocoding is disabled
+        if self.config and not self.config.get('route_analysis.enable_geocoding', True):
+            logger.info("Geocoding disabled in config, skipping background geocoding")
+            return
+        
+        # Don't start multiple threads
+        if self._geocoding_thread and self._geocoding_thread.is_alive():
+            logger.info("Background geocoding already in progress")
+            return
+        
+        # Count routes that need geocoding (those with temporary names)
+        routes_needing_geocoding = sum(1 for g in groups if "Route" in g.name and ("to Work" in g.name or "to Home" in g.name))
+        routes_already_named = len(groups) - routes_needing_geocoding
+        
+        logger.info(f"Starting background geocoding for {len(groups)} route groups")
+        
+        # Display user-friendly message
+        tqdm.write("\n" + "="*60)
+        tqdm.write("🌐 ROUTE NAMING STATUS")
+        tqdm.write("="*60)
+        tqdm.write(f"✓ {routes_already_named} routes already have geocoded names")
+        tqdm.write(f"⏳ {routes_needing_geocoding} routes will be geocoded in background")
+        tqdm.write("")
+        tqdm.write("📍 Background geocoding is now running in a separate terminal.")
+        tqdm.write("   You can continue using the report with temporary names.")
+        tqdm.write("   Re-run the analysis later to see updated route names.")
+        tqdm.write("="*60 + "\n")
+        
+        self._geocoding_thread = threading.Thread(
+            target=self._geocode_routes_background,
+            args=(groups,),
+            daemon=True,
+            name="RouteGeocoding"
+        )
+        self._geocoding_thread.start()
+        
+        # Open a new terminal window to show progress
+        self._open_geocoding_terminal(len(groups))
+    
+    def _open_geocoding_terminal(self, total_routes: int) -> None:
+        """
+        Open a new terminal window to show geocoding progress.
+        Creates a progress file that the terminal monitors.
+        
+        Args:
+            total_routes: Total number of routes being geocoded
+        """
+        try:
+            # Create progress file with absolute path
+            progress_file = self.cache_dir / 'geocoding_progress.txt'
+            progress_file_abs = progress_file.resolve()  # Get absolute path
+            
+            with open(progress_file, 'w') as f:
+                f.write(f"🌐 Route Geocoding Progress\n")
+                f.write(f"{'='*60}\n")
+                f.write(f"Total routes: {total_routes}\n")
+                f.write(f"Progress: 0/{total_routes}\n")
+                f.write(f"{'='*60}\n\n")
+                f.write("Starting geocoding...\n")
+            
+            # Open new terminal window with tail command to monitor progress
+            # Use osascript on macOS to open Terminal.app
+            # Use absolute path to ensure terminal can find the file
+            script = f'''
+tell application "Terminal"
+    do script "echo '🌐 Route Geocoding Monitor'; echo ''; tail -f {progress_file_abs}; echo ''; echo 'Press Ctrl+C to close this window'"
+    activate
+end tell
+'''
+            # Start subprocess in a new session to properly detach it
+            # This prevents ResourceWarning about subprocess still running
+            self._terminal_process = subprocess.Popen(
+                ['osascript', '-e', script],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True  # Detach from parent process
+            )
+            # Don't wait for the process - let it run independently
+            # The terminal window will remain open for the user to monitor
+            
+        except Exception as e:
+            logger.warning(f"Could not open geocoding terminal: {e}")
+            # Not critical, continue anyway
+    
+    def cleanup(self) -> None:
+        """
+        Clean up resources including background threads and subprocesses.
+        Should be called when the analyzer is no longer needed.
+        """
+        # Wait for geocoding thread to complete (with timeout)
+        if self._geocoding_thread and self._geocoding_thread.is_alive():
+            logger.info("Waiting for background geocoding to complete...")
+            self._geocoding_thread.join(timeout=5.0)
+            if self._geocoding_thread.is_alive():
+                logger.warning("Background geocoding still running after timeout")
+        
+        # Terminal process is detached and managed by the OS
+        # No need to explicitly terminate it as user will close it manually
+        self._terminal_process = None
+    
+    def _geocode_routes_background(self, groups: List[RouteGroup]) -> None:
+        """
+        Background worker that geocodes route names and updates the cache.
+        Runs in a separate thread to not block the main analysis.
+        Writes progress to a file that can be monitored in a terminal.
+        
+        Args:
+            groups: List of RouteGroup objects to geocode
+        """
+        progress_file = self.cache_dir / 'geocoding_progress.txt'
+        
+        try:
+            logger.info(f"Background geocoding started for {len(groups)} groups")
+            geocoded_count = 0
+            
+            # Filter groups that need geocoding (have temporary names)
+            groups_to_geocode = [g for g in groups if g.name and ("Route" in g.name and ("to Work" in g.name or "to Home" in g.name))]
+            
+            for i, group in enumerate(groups_to_geocode, 1):
+                try:
+                    # Generate descriptive route name using RouteNamer
+                    route_name = self.route_namer.name_route(
+                        group.representative_route.coordinates,
+                        group.id,
+                        group.direction
+                    )
+                    
+                    # Update the group name with thread safety
+                    with self._geocoding_lock:
+                        group.name = route_name
+                    
+                    geocoded_count += 1
+                    
+                    # Update progress file
+                    try:
+                        with open(progress_file, 'a') as f:
+                            f.write(f"[{i}/{len(groups_to_geocode)}] ✓ {group.id}: {route_name}\n")
+                    except:
+                        pass
+                    
+                    if geocoded_count % 5 == 0:
+                        logger.info(f"Background geocoding progress: {geocoded_count}/{len(groups_to_geocode)} routes named")
+                
+                except Exception as e:
+                    logger.warning(f"Failed to geocode route {group.id} in background: {e}")
+                    try:
+                        with open(progress_file, 'a') as f:
+                            f.write(f"[{i}/{len(groups_to_geocode)}] ✗ {group.id}: Failed - {str(e)[:50]}\n")
+                    except:
+                        pass
+            
+            logger.info(f"Background geocoding completed: {geocoded_count}/{len(groups_to_geocode)} routes successfully named")
+            
+            # Write completion message to progress file
+            try:
+                with open(progress_file, 'a') as f:
+                    f.write(f"\n{'='*60}\n")
+                    f.write(f"✅ GEOCODING COMPLETE!\n")
+                    f.write(f"{'='*60}\n")
+                    f.write(f"Successfully named: {geocoded_count}/{len(groups_to_geocode)} routes\n")
+                    f.write(f"\n💡 Re-run the analysis to see updated route names in the report.\n")
+                    f.write(f"{'='*60}\n")
+            except:
+                pass
+            
+            # Save the geocoding cache after all geocoding is done
+            self.route_namer._save_cache()
+            logger.info("Geocoding cache saved to disk")
+            
+        except Exception as e:
+            logger.error(f"Background geocoding thread failed: {e}", exc_info=True)
+            try:
+                with open(progress_file, 'a') as f:
+                    f.write(f"\n❌ ERROR: {str(e)}\n")
+            except:
+                pass
+    
+    def wait_for_geocoding(self, timeout: float = None) -> bool:
+        """
+        Wait for background geocoding to complete.
+        
+        Args:
+            timeout: Maximum time to wait in seconds (None = wait forever)
+            
+        Returns:
+            True if geocoding completed, False if timeout
+        """
+        if not self._geocoding_thread:
+            return True
+        
+        self._geocoding_thread.join(timeout=timeout)
+        return not self._geocoding_thread.is_alive()
+    
+    def is_geocoding_complete(self) -> bool:
+        """
+        Check if background geocoding is complete.
+        
+        Returns:
+            True if no geocoding thread or thread has finished
+        """
+        return not self._geocoding_thread or not self._geocoding_thread.is_alive()
 
 # Made with Bob

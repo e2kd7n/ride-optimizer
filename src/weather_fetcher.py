@@ -500,16 +500,19 @@ class WindImpactCalculator:
         }
     
     def analyze_route_wind_impact(self, coordinates: List[Tuple[float, float]],
-                                  wind_speed: float, wind_direction: float) -> Dict:
+                                  wind_speed: float, wind_direction: float,
+                                  sample_rate: int = 10) -> Dict:
         """
         Analyze wind impact along entire route.
         
         Uses caching to avoid recalculating for the same route/wind combination.
+        Uses coordinate sampling to reduce computation time while maintaining accuracy.
         
         Args:
             coordinates: List of (lat, lon) tuples
             wind_speed: Wind speed in km/h
             wind_direction: Wind direction in degrees
+            sample_rate: Analyze every Nth coordinate (default: 10 for 90% reduction)
             
         Returns:
             Dictionary with wind impact analysis
@@ -520,7 +523,7 @@ class WindImpactCalculator:
         # Create cache key from coordinates and wind conditions
         coords_str = str(coordinates)
         cache_key = hashlib.sha256(
-            f"{coords_str}_{wind_speed}_{wind_direction}".encode()
+            f"{coords_str}_{wind_speed}_{wind_direction}_{sample_rate}".encode()
         ).hexdigest()
         
         # Check if we have cached result
@@ -534,8 +537,14 @@ class WindImpactCalculator:
         crosswinds = []
         segment_distances = []
         
-        # Analyze each segment
-        for i in range(len(coordinates) - 1):
+        # Sample coordinates for performance (analyze every Nth point)
+        # Always include first and last coordinates
+        sampled_indices = list(range(0, len(coordinates) - 1, sample_rate))
+        if sampled_indices[-1] != len(coordinates) - 2:
+            sampled_indices.append(len(coordinates) - 2)
+        
+        # Analyze sampled segments
+        for i in sampled_indices:
             coord1 = coordinates[i]
             coord2 = coordinates[i + 1]
             

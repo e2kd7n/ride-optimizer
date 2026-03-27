@@ -1,8 +1,35 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-03-27 02:14 UTC
+**Last Updated:** 2026-03-27 02:47 UTC
 
 This file reflects the current state of GitHub issues by priority. Issues are managed via GitHub labels (P0-critical, P1-high, P2-medium, P3-low, P4-future).
+## 🎉 Recently Completed (2026-03-27)
+
+### v2.3.0 Implementations
+- **#21 - Update TECHNICAL_SPEC.md** - Updated 3 major sections with comprehensive implementation details
+  - Route naming algorithm documentation
+  - Security improvements (MD5 → SHA256)
+  - Exception handling enhancements
+
+### v2.0.0 Implementations
+- **#58 - Time-aware next commute recommendations** - Shows separate "to work" and "to home" recommendations
+  - Intelligent time-based logic (morning/midday/evening)
+  - Forecast weather for specific time windows
+  - Wind favorability assessment
+  - See NEXT_COMMUTE_FEATURE.md for details
+
+### v2.2.0 Implementations
+- **JSON Serialization Fix** - Fixed `TypeError: Object of type Route is not JSON serializable` in matched routes modal
+  - Added `_route_to_dict()` helper method in ReportGenerator
+  - Updated template to use serialized route data
+  - Files: src/report_generator.py, templates/report_template.html
+
+- **Performance Optimizations (Phase 1)** - Implemented quick-win optimizations for ~48% performance improvement
+  - Non-blocking browser opening (saves ~6 seconds)
+  - Wind analysis coordinate sampling with 10x reduction in calculations (saves ~2 seconds)
+  - Files: main.py, src/weather_fetcher.py
+  - Expected: 16.8s → 8.8s runtime
+
 
 ## 🔴 P0 - CRITICAL (Drop Everything)
 Issues that make the application unusable or cause data loss.
@@ -17,15 +44,14 @@ Issues that significantly impact core functionality or user experience.
 ### Active P1 Issues
 
 - #71 - UI/UX Improvements for Route Comparison Table and Map (NEW - 2026-03-27)
-- #58 - Show time-aware next commute recommendations (to work & to home)
-- #21 - Update TECHNICAL_SPEC.md with comprehensive implementation details (moved from P2 - 2026-03-27)
 - #41 - Create unit tests for core modules (moved from P3 - 2026-03-27)
 - #42 - Write integration tests for full workflow (moved from P3 - 2026-03-27)
 
 ## 🟡 P2 - MEDIUM (Next Sprint)
 Important improvements that enhance functionality but don't block core workflows.
 
-**None**
+- #73 - Investigate why routes 78 and 62 aren't matching in route grouping
+- #74 - Ensure selected polylines and tooltips appear on top of all map elements
 
 
 
@@ -113,10 +139,10 @@ Issues without priority labels that need to be triaged.
 
 ## Summary Statistics
 
-- **Total Open Issues:** 29
+- **Total Open Issues:** 31
 - **P0 (Critical):** 0 ✅
-- **P1 (High):** 5
-- **P2 (Medium):** 0
+- **P1 (High):** 3
+- **P2 (Medium):** 2
 - **P3 (Low):** 1
 - **P4 (Future):** 6
 - **Unprioritized:** 15
@@ -128,12 +154,13 @@ Issues without priority labels that need to be triaged.
 All recommended actions have been prioritized to P1-high:
 
 1. **#71** - UI/UX Improvements for Route Comparison Table and Map (P1-high) ⭐ NEW
-2. **#58** - Time-aware next commute recommendations (P1-high)
-3. **#21** - Update TECHNICAL_SPEC.md with comprehensive implementation details (P1-high) ⬆️ Moved from P2
-4. **#41** - Create unit tests for core modules (P1-high) ⬆️ Moved from P3
-5. **#42** - Write integration tests for full workflow (P1-high) ⬆️ Moved from P3
+2. **#41** - Create unit tests for core modules (P1-high) ⬆️ Moved from P3
+3. **#42** - Write integration tests for full workflow (P1-high) ⬆️ Moved from P3
 
 ### Additional Actions (Not Issues)
+- **Create GitHub issues** - Create 2 new P2 issues from `plans/v2.2.0/GITHUB_ISSUES_FROM_FUTURE_TODOS.md`
+- **Test v2.2.0 fixes** - Verify JSON serialization fix and performance improvements
+- **Run performance profiling** - Measure actual improvements from Phase 1 optimizations
 - **Test with real data** - Validate segment-based route naming with actual Strava routes
 - **CI/CD Integration** - Set up GitHub Actions with the now-working test suite
 - **Triage unprioritized issues** - Assign priority labels to remaining 15 issues
