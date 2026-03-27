@@ -1,8 +1,8 @@
 up# Release Notes - v2.1.0
 
 **Release Date:** 2026-03-26  
-**Release Type:** Minor Release - Code Quality & Design System  
-**Repository:** commute-optimizer  
+**Release Type:** Minor Release - Code Quality & Design System
+**Repository:** ride-optimizer
 **Status:** ✅ Ready for Production
 
 ---
@@ -229,7 +229,7 @@ This release represents significant planning and foundation work for the future 
 
 ## 📞 Support
 
-- **Issues:** https://github.com/e2kd7n/commute-optimizer/issues
+- **Issues:** https://github.com/e2kd7n/ride-optimizer/issues
 - **Documentation:** See repository README.md
 - **Design System:** DESIGN_PRINCIPLES.md
 
@@ -240,11 +240,11 @@ This release represents significant planning and foundation work for the future 
 - **Version:** v2.1.0
 - **Release Date:** 2026-03-26
 - **Git Tag:** v2.1.0
-- **Repository:** commute-optimizer
+- **Repository:** ride-optimizer
 - **Milestone:** Code Quality & Design System
 - **Issues Closed:** #59, #61
 - **Issues Created:** #62-#69 (UI/UX Epic)
 
 ---
 
-**Full Changelog:** https://github.com/e2kd7n/commute-optimizer/compare/v2.0.0...v2.1.0
+**Full Changelog:** https://github.com/e2kd7n/ride-optimizer/compare/v2.0.0...v2.1.0
