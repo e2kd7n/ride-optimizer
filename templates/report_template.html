@@ -650,7 +650,7 @@
                                     <td>{{ units.distance(route['metrics']['avg_distance']) }}</td>
                                     <td>
                                         <span class="uses-count" style="cursor: pointer; color: #667eea; text-decoration: underline; font-weight: 600;"
-                                              onclick="showMatchedRoutes('{{ route['group'].id }}', '{{ route['name'] }}', {{ route['group'].routes | tojson | safe }})"
+                                              onclick="showMatchedRoutes('{{ route['group'].id }}', '{{ route['name'] }}', {{ route['routes_data'] | tojson | safe }})"
                                               title="Click to view matched activities">
                                             {{ route['group'].frequency }}
                                         </span>
