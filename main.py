@@ -1,4 +1,4 @@
-c#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Strava Commute Route Analyzer - Main Entry Point
 
@@ -678,67 +678,85 @@ def analyze_routes(config, output_dir, n_workers=2, generate_pdf=False, force_re
         # Progress tracking
         total_steps = 8
         
-        with tqdm(total=total_steps, desc="Progress", unit="step", ncols=80,
-                 bar_format='{desc}: {n}/{total} |{bar}| {percentage:3.0f}%', leave=True) as pbar:
-            # Step 1: Get authenticated client
+        def run_step_with_progress(step_name, step_func, show_progress=True):
+            """Run a step with optional progress bar based on duration."""
             step_start = time.time()
-            pbar.set_description("🔐 Authenticating")
+            print(f"{step_name}...", end='', flush=True)
+            
+            # Run the step
+            result = step_func()
+            
+            step_duration = time.time() - step_start
+            
+            # Show progress bar only if step took >= 1 second
+            if step_duration >= 1.0 and show_progress:
+                print(f" done ({step_duration:.1f}s)")
+            else:
+                print(" done")
+            
+            return result, step_duration
+        
+        # Step 1: Get authenticated client
+        def step1():
             debug_logger.info("Step 1: Getting authenticated client...")
             try:
                 client = get_authenticated_client(config)
                 fetcher = StravaDataFetcher(client, config)
-                debug_logger.info(f"Step 1 completed in {time.time() - step_start:.2f}s")
-                pbar.update(1)
-                pbar.refresh()
-                print()  # New line after this phase
+                return (client, fetcher)
             except Exception as e:
                 debug_logger.error(f"Step 1 failed: {e}", exc_info=True)
                 tqdm_module.write(f"\n❌ ERROR at Step 1 (Authentication): {e}")
                 raise
-            
-            # Step 2: Load and filter activities
-            step_start = time.time()
-            pbar.set_description("📥 Loading activities")
+        
+        (client, fetcher), duration = run_step_with_progress("🔐 Authenticating", step1)
+        debug_logger.info(f"Step 1 completed in {duration:.2f}s")
+        
+        # Step 2: Load and filter activities
+        def step2():
             debug_logger.info("Step 2: Loading and filtering activities...")
             try:
                 all_activities, commute_activities = _load_and_filter_activities(fetcher, config)
                 if not all_activities or not commute_activities:
                     debug_logger.error("No activities found or insufficient commute activities")
                     tqdm_module.write("\n❌ ERROR: No activities found or insufficient commute activities")
-                    return
-                debug_logger.info(f"Step 2 completed in {time.time() - step_start:.2f}s")
+                    return None
                 debug_logger.info(f"Loaded {len(all_activities)} total, {len(commute_activities)} commute activities")
-                pbar.update(1)
-                pbar.refresh()
-                print()  # New line after this phase
+                return (all_activities, commute_activities)
             except Exception as e:
                 debug_logger.error(f"Step 2 failed: {e}", exc_info=True)
                 tqdm_module.write(f"\n❌ ERROR at Step 2 (Loading activities): {e}")
                 raise
-            
-            # Step 3: Identify locations
-            step_start = time.time()
-            pbar.set_description("📍 Identifying locations")
+        
+        result, duration = run_step_with_progress("📥 Loading activities", step2)
+        if result is None:
+            return
+        all_activities, commute_activities = result
+        debug_logger.info(f"Step 2 completed in {duration:.2f}s")
+        
+        # Step 3: Identify locations
+        def step3():
             debug_logger.info("Step 3: Identifying home and work locations...")
             try:
                 home, work = _identify_locations(commute_activities, config)
-                debug_logger.info(f"Step 3 completed in {time.time() - step_start:.2f}s")
                 debug_logger.info(f"Home: ({home.lat:.4f}, {home.lon:.4f}), Work: ({work.lat:.4f}, {work.lon:.4f})")
-                pbar.update(1)
-                pbar.refresh()
-                print()  # New line after this phase
+                return (home, work)
             except ValueError as e:
                 debug_logger.error(f"Step 3 failed: {e}", exc_info=True)
                 tqdm_module.write(f"\n❌ ERROR at Step 3 (Identifying locations): {e}")
-                return
+                return None
             except Exception as e:
                 debug_logger.error(f"Step 3 failed with unexpected error: {e}", exc_info=True)
                 tqdm_module.write(f"\n❌ ERROR at Step 3 (Identifying locations): {e}")
                 raise
-            
-            # Step 4: Analyze commute routes
-            step_start = time.time()
-            pbar.set_description("🗺️  Analyzing commute routes")
+        
+        result, duration = run_step_with_progress("📍 Identifying locations", step3)
+        if result is None:
+            return
+        home, work = result
+        debug_logger.info(f"Step 3 completed in {duration:.2f}s")
+        
+        # Step 4: Analyze commute routes
+        def step4():
             debug_logger.info("Step 4: Analyzing commute routes...")
             debug_logger.info(f"Creating RouteAnalyzer with {n_workers} workers, force_reanalysis={force_reanalysis}")
             try:
@@ -750,56 +768,54 @@ def analyze_routes(config, output_dir, n_workers=2, generate_pdf=False, force_re
                 if not route_groups:
                     debug_logger.error("No route groups found")
                     tqdm_module.write("\n❌ ERROR: No route groups found")
-                    return
+                    return None
                 
-                debug_logger.info(f"Step 4 completed in {time.time() - step_start:.2f}s")
                 debug_logger.info(f"Found {len(route_groups)} route groups")
                 _log_route_summary(route_groups)
-                pbar.update(1)
-                pbar.refresh()
-                print()  # New line after this phase
+                return route_groups
             except Exception as e:
                 debug_logger.error(f"Step 4 failed: {e}", exc_info=True)
                 tqdm_module.write(f"\n❌ ERROR at Step 4 (Analyzing routes): {e}")
-                tqdm_module.write(f"   This step took {time.time() - step_start:.1f}s before failing")
                 raise
-            
-            # Step 5: Analyze long rides (optional)
-            step_start = time.time()
-            pbar.set_description("🚵 Analyzing long rides")
+        
+        route_groups, duration = run_step_with_progress("🗺️  Analyzing commute routes", step4)
+        if route_groups is None:
+            return
+        debug_logger.info(f"Step 4 completed in {duration:.2f}s")
+        
+        # Step 5: Analyze long rides (optional)
+        def step5():
             debug_logger.info("Step 5: Analyzing long rides...")
             try:
                 long_rides, long_ride_analyzer = _analyze_long_rides(
                     all_activities, commute_activities, config
                 )
-                debug_logger.info(f"Step 5 completed in {time.time() - step_start:.2f}s")
                 debug_logger.info(f"Found {len(long_rides)} long rides")
-                pbar.update(1)
-                pbar.refresh()
-                print()  # New line after this phase
+                return (long_rides, long_ride_analyzer)
             except Exception as e:
                 debug_logger.error(f"Step 5 failed: {e}", exc_info=True)
                 tqdm_module.write(f"\n❌ ERROR at Step 5 (Analyzing long rides): {e}")
                 raise
-            
-            # Step 6: Optimize routes
-            step_start = time.time()
-            pbar.set_description("⚡ Optimizing routes")
+        
+        (long_rides, long_ride_analyzer), duration = run_step_with_progress("🚵 Analyzing long rides", step5)
+        debug_logger.info(f"Step 5 completed in {duration:.2f}s")
+        
+        # Step 6: Optimize routes
+        def step6():
             debug_logger.info("Step 6: Optimizing routes...")
             try:
                 optimization_results = _optimize_and_rank_routes(route_groups, config)
-                debug_logger.info(f"Step 6 completed in {time.time() - step_start:.2f}s")
-                pbar.update(1)
-                pbar.refresh()
-                print()  # New line after this phase
+                return optimization_results
             except Exception as e:
                 debug_logger.error(f"Step 6 failed: {e}", exc_info=True)
                 tqdm_module.write(f"\n❌ ERROR at Step 6 (Optimizing routes): {e}")
                 raise
-            
-            # Step 6.5: Generate next commute recommendations
-            step_start = time.time()
-            pbar.set_description("🕐 Next commute recommendations")
+        
+        optimization_results, duration = run_step_with_progress("⚡ Optimizing routes", step6)
+        debug_logger.info(f"Step 6 completed in {duration:.2f}s")
+        
+        # Step 6.5: Generate next commute recommendations
+        def step6_5():
             debug_logger.info("Step 6.5: Generating next commute recommendations...")
             try:
                 from src.next_commute_recommender import NextCommuteRecommender
@@ -807,19 +823,19 @@ def analyze_routes(config, output_dir, n_workers=2, generate_pdf=False, force_re
                     route_groups, config, (home.lat, home.lon), (work.lat, work.lon)
                 )
                 next_commutes = next_commute_recommender.get_next_commute_recommendations()
-                debug_logger.info(f"Step 6.5 completed in {time.time() - step_start:.2f}s")
                 debug_logger.info(f"Generated recommendations for {len(next_commutes)} next commutes")
                 logger.info(f"Generated recommendations for {len(next_commutes)} next commutes")
-                pbar.refresh()
-                print()  # New line after this phase
+                return next_commutes
             except Exception as e:
                 debug_logger.error(f"Step 6.5 failed: {e}", exc_info=True)
                 tqdm_module.write(f"\n❌ ERROR at Step 6.5 (Next commute recommendations): {e}")
                 raise
-            
-            # Step 7: Generate visualization
-            step_start = time.time()
-            pbar.set_description("🗺️  Generating map")
+        
+        next_commutes, duration = run_step_with_progress("🕐 Next commute recommendations", step6_5)
+        debug_logger.info(f"Step 6.5 completed in {duration:.2f}s")
+        
+        # Step 7: Generate visualization
+        def step7():
             debug_logger.info("Step 7: Generating visualization...")
             try:
                 map_html, preview_map_html, visualizer = _generate_visualization(
@@ -828,18 +844,17 @@ def analyze_routes(config, output_dir, n_workers=2, generate_pdf=False, force_re
                     optimization_results['optimal_route'],
                     optimization_results['ranked_routes']
                 )
-                debug_logger.info(f"Step 7 completed in {time.time() - step_start:.2f}s")
-                pbar.update(1)
-                pbar.refresh()
-                print()  # New line after this phase
+                return (map_html, preview_map_html, visualizer)
             except Exception as e:
                 debug_logger.error(f"Step 7 failed: {e}", exc_info=True)
                 tqdm_module.write(f"\n❌ ERROR at Step 7 (Generating map): {e}")
                 raise
-            
-            # Step 8: Save report
-            step_start = time.time()
-            pbar.set_description("💾 Saving report")
+        
+        (map_html, preview_map_html, visualizer), duration = run_step_with_progress("🗺️  Generating map", step7)
+        debug_logger.info(f"Step 7 completed in {duration:.2f}s")
+        
+        # Step 8: Save report
+        def step8():
             debug_logger.info("Step 8: Saving report...")
             try:
                 # Build complete analysis results
@@ -861,13 +876,14 @@ def analyze_routes(config, output_dir, n_workers=2, generate_pdf=False, force_re
                 
                 # Save and open report
                 report_path = _save_report(analysis_results, output_dir, generate_pdf)
-                debug_logger.info(f"Step 8 completed in {time.time() - step_start:.2f}s")
-                pbar.update(1)
-                pbar.refresh()
+                return (report_path, analysis_results)
             except Exception as e:
                 debug_logger.error(f"Step 8 failed: {e}", exc_info=True)
                 tqdm_module.write(f"\n❌ ERROR at Step 8 (Saving report): {e}")
                 raise
+        
+        (report_path, analysis_results), duration = run_step_with_progress("💾 Saving report", step8)
+        debug_logger.info(f"Step 8 completed in {duration:.2f}s")
         
         # Calculate runtime
         end_time = time.time()
