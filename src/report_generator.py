@@ -15,6 +15,8 @@ from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 from typing import Dict, Any, List
+# Use standard library for XML generation (safe for creating XML)
+# defusedxml is only needed for parsing untrusted XML input
 from xml.etree import ElementTree as ET
 
 # QR code temporarily disabled - needs debugging before re-enabling
@@ -26,7 +28,7 @@ except ImportError:
     QRCODE_AVAILABLE = False
     qrcode = None
 
-from jinja2 import Template
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 try:
     from weasyprint import HTML
@@ -116,7 +118,7 @@ class ReportGenerator:
         Returns:
             Base64-encoded PNG image data URL or None if qrcode not available
         """
-        if not QRCODE_AVAILABLE:
+        if not QRCODE_AVAILABLE or qrcode is None:
             logger.warning("QR code generation skipped - qrcode module not available")
             return None
             
@@ -140,7 +142,7 @@ class ReportGenerator:
             
             # Convert to base64
             buffer = BytesIO()
-            img.save(buffer, format='PNG')
+            img.save(buffer, 'PNG')
             img_str = base64.b64encode(buffer.getvalue()).decode()
             
             return f"data:image/png;base64,{img_str}"
@@ -478,7 +480,7 @@ class ReportGenerator:
     
     def _render_template(self, context: Dict[str, Any]) -> str:
         """
-        Render HTML template with context.
+        Render HTML template with context using auto-escaping for XSS protection.
         
         Args:
             context: Template context dictionary
@@ -486,13 +488,14 @@ class ReportGenerator:
         Returns:
             Rendered HTML string
         """
-        # Load template from external file
-        template_path = self.template_dir / "report_template.html"
+        # Create Jinja2 environment with auto-escaping enabled for HTML/XML templates
+        # This prevents XSS vulnerabilities by automatically escaping HTML special characters
+        env = Environment(
+            loader=FileSystemLoader(self.template_dir),
+            autoescape=select_autoescape(['html', 'xml'])
+        )
         
-        with open(template_path, 'r', encoding='utf-8') as f:
-            template_str = f.read()
-        
-        template = Template(template_str)
+        template = env.get_template("report_template.html")
         return template.render(**context)
 
 # Made with Bob
