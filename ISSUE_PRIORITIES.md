@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-03-27 16:35 UTC
+**Last Updated:** 2026-03-27 16:39 UTC
 
 This file reflects the current state of GitHub issues by priority. Issues are managed via GitHub labels (P0-critical, P1-high, P2-medium, P3-low, P4-future).
 
@@ -16,15 +16,33 @@ Issues that significantly impact core functionality or user experience.
 
 ### Active P1 Issues
 
-- #71 - UI/UX Improvements for Route Comparison Table and Map
-- #41 - Create unit tests for core modules
-- #42 - Write integration tests for full workflow
+- #41 - Create unit tests for core modules (31% coverage, target 80%)
+- #42 - Write integration tests for full workflow (8 tests, needs more scenarios)
+- #70 - Implement wind-aware route selection in forecast generator
+- #57 - 🎯 EPIC: Long Rides Analysis & Recommendations (consolidates #6, #7, #8, #9)
+  - #6 - Add top 10 longest rides table with Strava links
+  - #7 - Add monthly ride statistics breakdown
+  - #8 - Add average speed and elevation gain metrics
+  - #9 - Add interactive map showing all long ride routes
+- #54 - Weather Dashboard Implementation (Epic)
+- #33 - Add traffic pattern analysis
+- #34 - Add carbon footprint calculations
+- #25 - Implement automatic token refresh for expired Strava tokens
+- #47 - Add Side-by-Side Route Comparison Feature
+
 
 ## 🟡 P2 - MEDIUM (Next Sprint)
 Important improvements that enhance functionality but don't block core workflows.
 
 - #73 - Investigate why routes 78 and 62 aren't matching in route grouping
 - #74 - Ensure selected polylines and tooltips appear on top of all map elements
+- #62 - 🎨 EPIC: Mobile-First UI/UX Redesign & Accessibility
+  - #63 - Mobile-First Responsive Layout (in progress)
+  - #64 - Progressive Disclosure for Metrics
+  - #65 - Touch-Optimized Interactions (in progress)
+  - #66 - Feature Discovery & Onboarding
+  - #67 - Mobile Navigation Patterns
+  - #68 - Visual Hierarchy & Polish
 
 
 
@@ -36,21 +54,6 @@ Nice-to-have improvements and minor UX enhancements.
 ## 📋 P4 - FUTURE ENHANCEMENTS
 Feature requests and enhancements for future releases.
 
-- #70 - Implement wind-aware route selection in forecast generator
-- #62 - 🎨 EPIC: Mobile-First UI/UX Redesign & Accessibility
-  - #63 - Mobile-First Responsive Layout (in progress)
-  - #64 - Progressive Disclosure for Metrics
-  - #65 - Touch-Optimized Interactions (in progress)
-  - #66 - Feature Discovery & Onboarding
-  - #67 - Mobile Navigation Patterns
-  - #68 - Visual Hierarchy & Polish
-- #57 - 🎯 EPIC: Long Rides Analysis & Recommendations (consolidates #6, #7, #8, #9)
-  - #6 - Add top 10 longest rides table with Strava links
-  - #7 - Add monthly ride statistics breakdown
-  - #8 - Add average speed and elevation gain metrics
-  - #9 - Add interactive map showing all long ride routes
-- #54 - Weather Dashboard Implementation (Epic)
-- #33 - Add traffic pattern analysis
 
 
 ## ⚠️ Unprioritized Issues
@@ -58,7 +61,6 @@ Issues without priority labels that need to be triaged.
 
 - #49 - Implement Metric/Imperial Unit Toggle with Complete Consistency
 - #48 - Implement Data Export in JSON, GPX, and CSV Formats
-- #47 - Add Side-by-Side Route Comparison Feature
 - #46 - Add PDF Export Option
 - #45 - Add QR Code Generation for Mobile Transfer
 - #44 - Extract HTML template to external file
@@ -67,8 +69,7 @@ Issues without priority labels that need to be triaged.
 - #37 - Add real-time route suggestions
 - #36 - Create mobile app version
 - #35 - Add integration with other fitness platforms
-- #34 - Add carbon footprint calculations
-- #25 - Implement automatic token refresh for expired Strava tokens
+
 
 
 ## Priority Guidelines
@@ -112,9 +113,9 @@ Issues without priority labels that need to be triaged.
 
 ## Summary Statistics
 
-- **Total Open Issues:** 30
+- **Total Open Issues:** 29
 - **P0 (Critical):** 0 ✅
-- **P1 (High):** 3
+- **P1 (High):** 2
 - **P2 (Medium):** 2
 - **P3 (Low):** 1
 - **P4 (Future):** 9
@@ -126,9 +127,8 @@ Issues without priority labels that need to be triaged.
 
 Focus on P1 issues for next sprint:
 
-1. **#71** - UI/UX Improvements for Route Comparison Table and Map (P1-high)
-2. **#41** - Create unit tests for core modules (P1-high)
-3. **#42** - Write integration tests for full workflow (P1-high)
+1. **#41** - Create unit tests for core modules (P1-high) - Need to reach 80% coverage
+2. **#42** - Write integration tests for full workflow (P1-high) - Need more edge case coverage
 
 ### Additional Actions (Not Issues)
 - **Triage unprioritized issues** - Assign priority labels to remaining 15 issues
@@ -137,6 +137,18 @@ Focus on P1 issues for next sprint:
 ---
 
 ## 🎉 Recently Completed (2026-03-27)
+
+### UI/UX Improvements
+- **#71 - UI/UX Improvements for Route Comparison Table and Map** - All 7 improvements implemented (COMPLETED 2026-03-27)
+  - ✅ Table sorting functionality with visual indicators
+  - ✅ Fixed route group name display (geographic names)
+  - ✅ Updated polyline colors to semantic system (green=optimal)
+  - ✅ Removed "View on Strava" button, made route name clickable
+  - ✅ Made "Uses" column clickable to show matched activities modal
+  - ✅ Fixed page counter display
+  - ✅ Simplified route counter display
+  - Files: templates/report_template.html, src/route_analyzer.py, config/config.yaml
+  - Commits: 373fb12, 32db08f
 
 ### Next Commute UI/UX Improvements
 - **#69 - Map Direction Indicators** - Implemented direction arrows on Next Commute map (COMPLETED 2026-03-27)
