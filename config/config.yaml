@@ -76,6 +76,13 @@ traffic:
   evening_rush_end: 18   # Evening rush hour end
   min_samples: 5         # Minimum rides needed for reliable traffic analysis
 
+carbon:
+  enabled: true
+  co2_per_km_car: 0.171  # kg CO2 per km for average car (EPA 2023)
+  liters_per_100km: 8.9  # Average car fuel consumption
+  usd_per_liter: 1.00    # Average gas price (adjust for your region)
+  calories_per_km: 32    # Approximate calories burned cycling per km
+
 long_rides:
   enabled: true
   min_distance_km: 15  # Minimum distance to be considered a long ride
