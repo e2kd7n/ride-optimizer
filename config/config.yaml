@@ -52,9 +52,9 @@ route_naming:
 optimization:
   weights:
     time: 0.25      # Speed and duration
-    distance: 0.15  # Route length
+    distance: 0.10  # Route length
     safety: 0.35    # Familiarity and road conditions
-    weather: 0.25   # Wind impact on cycling efficiency
+    weather: 0.30   # Wind impact on cycling efficiency
   weather_enabled: true  # Enable real-time weather analysis
 
 visualization:
@@ -67,6 +67,14 @@ visualization:
   route_weight:
     optimal: 5
     alternative: 3
+
+traffic:
+  enabled: true
+  morning_rush_start: 7  # Morning rush hour start (24-hour format)
+  morning_rush_end: 9    # Morning rush hour end
+  evening_rush_start: 16 # Evening rush hour start
+  evening_rush_end: 18   # Evening rush hour end
+  min_samples: 5         # Minimum rides needed for reliable traffic analysis
 
 long_rides:
   enabled: true
