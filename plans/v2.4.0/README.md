@@ -1,10 +1,10 @@
 # v2.4.0 Planning Documents
 
-## ⛔ STATUS: BLOCKED
+## ✅ STATUS: ACTIVE
 
-**This release is currently BLOCKED and cannot proceed.**
+**This release is now UNBLOCKED and ready for development.**
 
-See **BLOCKED_UNTIL_GEOCODING_COMPLETE.md** for full details.
+Geocoding completed successfully (2185/2185 routes). See **BLOCKED_UNTIL_GEOCODING_COMPLETE.md** for verification details.
 
 ---
 
