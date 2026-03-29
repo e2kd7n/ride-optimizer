@@ -76,3 +76,8 @@ units:
   system: "imperial"  # Options: "metric" or "imperial"
   # metric: km, km/h, m/s (wind), °C
   # imperial: mi, mph, mph (wind), °F
+
+preferences:
+  browser: "chrome"  # Browser for OAuth authentication
+  # Options: "chrome", "firefox", "safari", "edge", "default"
+  # "default" uses system default browser
