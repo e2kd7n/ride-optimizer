@@ -1949,114 +1949,143 @@
                 <p class="mb-0 mt-2" style="font-size: 0.95em;">Find the best routes based on wind conditions - prioritizing tailwinds on the return journey</p>
             </div>
             <div class="card-body">
-                <!-- User Input Section -->
-                <div class="row mb-4">
-                    <div class="col-md-6">
-                        <label for="rideDateTime" class="form-label"><strong>📅 When do you plan to ride?</strong></label>
+                <!-- Filter Controls Section -->
+                <div class="row mb-3">
+                    <div class="col-md-2">
+                        <label for="rideDateTime" class="form-label"><strong>📅 When?</strong></label>
                         <input type="datetime-local" class="form-control" id="rideDateTime">
-                        <small class="text-muted">We'll analyze wind conditions for this time</small>
+                        <small class="text-muted">Wind conditions</small>
                     </div>
-                    <div class="col-md-6">
-                        <label for="startLocation" class="form-label"><strong>📍 Starting Location</strong></label>
-                        <div class="input-group">
-                            <input type="text" class="form-control" id="startLocation" placeholder="City, State or ZIP code" value="Chicago, IL">
-                            <button class="btn btn-outline-secondary" type="button" onclick="geocodeLocation()" title="Search location">
+                    <div class="col-md-3">
+                        <label for="startLocation" class="form-label"><strong>📍 Location & Radius</strong></label>
+                        <div class="input-group mb-1">
+                            <input type="text" class="form-control form-control-sm" id="startLocation" placeholder="City/ZIP" value="Chicago, IL">
+                            <button class="btn btn-outline-secondary btn-sm" type="button" onclick="geocodeLocation()" title="Search">
                                 🔍
                             </button>
                         </div>
-                        <small class="text-muted">Enter city name, ZIP code, or coordinates - or click on map</small>
-                        <div id="geocodeStatus" class="mt-1"></div>
+                        <div class="input-group">
+                            <input type="range" class="form-range" id="radiusSlider" min="5" max="50" value="15" step="5" oninput="document.getElementById('radiusValue').textContent = this.value">
+                            <span class="input-group-text" style="font-size: 0.8rem;"><span id="radiusValue">15</span> mi</span>
+                        </div>
+                        <small class="text-muted">Max distance from start</small>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="distanceFilter" class="form-label"><strong>📏 Distance</strong></label>
+                        <div class="input-group">
+                            <input type="number" class="form-control form-control-sm" id="minDistance" placeholder="Min" min="0" step="5">
+                            <span class="input-group-text">-</span>
+                            <input type="number" class="form-control form-control-sm" id="maxDistance" placeholder="Max" min="0" step="5">
+                            <span class="input-group-text">{{ long_rides_stats.get('distance_unit', 'mi') if long_rides_stats else 'mi' }}</span>
+                        </div>
+                        <small class="text-muted">Range</small>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="timeFilter" class="form-label"><strong>⏱️ Time</strong></label>
+                        <div class="input-group">
+                            <input type="number" class="form-control form-control-sm" id="minTime" placeholder="Min" min="0" step="0.5">
+                            <span class="input-group-text">-</span>
+                            <input type="number" class="form-control form-control-sm" id="maxTime" placeholder="Max" min="0" step="0.5">
+                            <span class="input-group-text">hrs</span>
+                        </div>
+                        <small class="text-muted">Duration</small>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="surfaceType" class="form-label"><strong>🛣️ Surface</strong></label>
+                        <select class="form-select" id="surfaceType">
+                            <option value="all">All Surfaces</option>
+                            <option value="road" selected>Road Only</option>
+                        </select>
+                        <small class="text-muted">Road or gravel</small>
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button class="btn btn-primary w-100" onclick="filterAndDisplayRides()" style="margin-bottom: 20px;">
+                            🔍 Filter
+                        </button>
                     </div>
                 </div>
 
-                <button class="btn btn-primary btn-lg mb-4" onclick="loadAndAnalyzeRoutes()">
+                <button class="btn btn-primary btn-lg mb-4" onclick="filterAndDisplayRides()">
                     🔍 Get Recommendations
                 </button>
 
-                <!-- Info Box -->
-                <div class="alert alert-info">
-                    <h5>💡 How Wind Scoring Works</h5>
+                <!-- No Data Message -->
+                {% if not long_rides_geojson or not long_rides_geojson|length %}
+                <div class="alert alert-warning">
+                    <h4>📊 No Long Rides Data Available</h4>
                     <p class="mb-2">
-                        Our recommendation system analyzes wind conditions along each route and calculates a <strong>Wind Score (0-1)</strong>:
+                        You don't have any long rides (> 15km) in your Strava data that aren't classified as commutes.
                     </p>
-                    <ul class="mb-2">
-                        <li><strong>70% weight on second half</strong> - Tailwinds when you're tired are more valuable</li>
-                        <li><strong>30% weight on first half</strong> - Fighting headwinds when fresh is manageable</li>
-                        <li><strong>10% bonus</strong> for routes with strong consistent tailwinds (>0.8 score) on return</li>
-                    </ul>
+                    <p class="mb-2">
+                        <strong>To see long rides recommendations:</strong>
+                    </p>
+                    <ol class="mb-2">
+                        <li>Go to Strava and record some rides longer than 15km</li>
+                        <li>Make sure they're not tagged as commutes</li>
+                        <li>Run <code>python main.py --analyze</code> again to fetch the new data</li>
+                    </ol>
                     <p class="mb-0">
-                        <strong>Score Guide:</strong>
-                        <span class="badge bg-success ms-2">0.80-1.00 = Excellent</span>
-                        <span class="badge bg-primary ms-2">0.65-0.79 = Good</span>
-                        <span class="badge bg-warning ms-2">0.50-0.64 = Fair</span>
-                        <span class="badge bg-danger ms-2">0.00-0.49 = Poor</span>
+                        <strong>Note:</strong> You can adjust the minimum distance threshold in <code>config.yaml</code> under <code>long_rides.min_distance_km</code>
                     </p>
                 </div>
-
-                <!-- Loading State -->
-                <div id="loadingState" class="text-center py-5" style="display: none;">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                    <p class="mt-3">Fetching weather data and analyzing routes...</p>
-                </div>
-
-                <!-- Recommendations Container -->
-                <div id="recommendationsContainer">
-                    <!-- Statistics Cards -->
-                    {% if long_rides_stats %}
-                    <div class="row mb-4">
-                        <div class="col-md-3">
-                            <div class="card text-center">
-                                <div class="card-body">
-                                    <h5 class="card-title">Total Rides</h5>
-                                    <p class="card-text display-6">{{ long_rides_stats.get('total_rides', 0) }}</p>
+                {% else %}
+                
+                <!-- Results Container: Table on Left, Map on Right -->
+                <div class="row" id="resultsContainer">
+                    <!-- Left Column: Rides Table -->
+                    <div class="col-md-5">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">🚴 Recommended Rides <span id="ridesCount" class="badge bg-primary">0</span></h5>
+                                <small class="text-muted">Showing <span id="pageInfo">0-0 of 0</span></small>
+                            </div>
+                            <div class="card-body p-0">
+                                <div class="table-responsive" style="max-height: 700px; overflow-y: auto;">
+                                    <table class="table table-hover table-sm mb-0" id="ridesTable">
+                                        <thead class="sticky-top bg-light">
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Name</th>
+                                                <th>Distance</th>
+                                                <th>Time</th>
+                                                <th>Elevation</th>
+                                                <th>Uses</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="ridesTableBody">
+                                            <!-- Populated by JavaScript -->
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="card text-center">
-                                <div class="card-body">
-                                    <h5 class="card-title">Average Distance</h5>
-                                    <p class="card-text display-6">{{ "%.1f"|format(long_rides_stats.get('avg_distance', 0)) }} {{ long_rides_stats.get('distance_unit', 'km') }}</p>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="card text-center">
-                                <div class="card-body">
-                                    <h5 class="card-title">Loop Rides</h5>
-                                    <p class="card-text display-6">{{ "%.0f"|format(long_rides_stats.get('loop_percentage', 0)) }}%</p>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="card text-center">
-                                <div class="card-body">
-                                    <h5 class="card-title">Point-to-Point</h5>
-                                    <p class="card-text display-6">{{ "%.0f"|format(100 - long_rides_stats.get('loop_percentage', 0)) }}%</p>
-                                </div>
+                            <div class="card-footer">
+                                <!-- Pagination Controls -->
+                                <nav>
+                                    <ul class="pagination pagination-sm mb-0 justify-content-center" id="pagination">
+                                        <!-- Populated by JavaScript -->
+                                    </ul>
+                                </nav>
                             </div>
                         </div>
                     </div>
-                    {% endif %}
-
-                    <!-- Placeholder for recommendations -->
-                    <div class="alert alert-secondary text-center">
-                        <h5>👆 Set your ride time and starting location above to get personalized recommendations</h5>
-                        <p class="mb-0">We'll analyze wind conditions and show you the best routes with detailed maps and wind analysis</p>
-                    </div>
-                </div>
-
-                <!-- Map Container -->
-                <div class="card mt-4" id="longRideMapCard" style="display: none;">
-                    <div class="card-header">
-                        <h5 class="mb-0">🗺️ Route Map</h5>
-                    </div>
-                    <div class="card-body p-0">
-                        <div id="longRideMap" style="height: 600px; width: 100%;"></div>
+                    
+                    <!-- Right Column: Map -->
+                    <div class="col-md-7">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">🗺️ Routes Map</h5>
+                                <div class="mt-2">
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="fitMapToRoutes()">🎯 Fit All</button>
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="clearMapSelection()">🔄 Clear Selection</button>
+                                </div>
+                            </div>
+                            <div class="card-body p-0">
+                                <div id="recommendationsMap" style="height: 700px; width: 100%;"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -2148,68 +2177,6 @@
                 });
             });
         }
-
-        // Initialize distance distribution chart
-        {% if long_rides_stats and distance_bins %}
-        document.addEventListener('DOMContentLoaded', function() {
-            const ctx = document.getElementById('distanceChart').getContext('2d');
-            new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: [
-                        {% for bin in distance_bins %}
-                        '{{ bin.label }}'{% if not loop.last %},{% endif %}
-                        {% endfor %}
-                    ],
-                    datasets: [{
-                        label: 'Number of Rides',
-                        data: [
-                            {% for bin in distance_bins %}
-                            {{ bin.count }}{% if not loop.last %},{% endif %}
-                            {% endfor %}
-                        ],
-                        backgroundColor: 'rgba(54, 162, 235, 0.6)',
-                        borderColor: 'rgba(54, 162, 235, 1)',
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: true,
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                stepSize: 1
-                            },
-                            title: {
-                                display: true,
-                                text: 'Number of Rides'
-                            }
-                        },
-                        x: {
-                            title: {
-                                display: true,
-                                text: 'Distance Range ({{ long_rides_stats['distance_unit'] }})'
-                            }
-                        }
-                    },
-                    plugins: {
-                        legend: {
-                            display: false
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    return context.parsed.y + ' ride' + (context.parsed.y !== 1 ? 's' : '');
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-        });
-        {% endif %}
 
         // Long Ride Recommendations JavaScript
         let longRideMap = null;
@@ -2723,14 +2690,503 @@
         });
         {% endif %}
         
+        // Monthly Statistics Chart (Issue #7)
+        {% if monthly_stats and monthly_stats.labels %}
+        document.addEventListener('DOMContentLoaded', function() {
+            const ctx = document.getElementById('monthlyStatsChart');
+            if (ctx) {
+                new Chart(ctx.getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: {{ monthly_stats.labels | tojson }},
+                        datasets: [{
+                            label: 'Number of Rides',
+                            data: {{ monthly_stats.counts | tojson }},
+                            backgroundColor: 'rgba(102, 126, 234, 0.5)',
+                            borderColor: 'rgba(102, 126, 234, 1)',
+                            borderWidth: 1,
+                            yAxisID: 'y'
+                        }, {
+                            label: 'Total Distance (km)',
+                            data: {{ monthly_stats.distances | tojson }},
+                            backgroundColor: 'rgba(118, 75, 162, 0.5)',
+                            borderColor: 'rgba(118, 75, 162, 1)',
+                            borderWidth: 1,
+                            yAxisID: 'y1'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        interaction: {
+                            mode: 'index',
+                            intersect: false
+                        },
+                        scales: {
+                            y: {
+                                type: 'linear',
+                                display: true,
+                                position: 'left',
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Number of Rides'
+                                }
+                            },
+                            y1: {
+                                type: 'linear',
+                                display: true,
+                                position: 'right',
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Distance (km)'
+                                },
+                                grid: {
+                                    drawOnChartArea: false
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top'
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        let label = context.dataset.label || '';
+                                        if (label) {
+                                            label += ': ';
+                                        }
+                                        if (context.parsed.y !== null) {
+                                            label += context.parsed.y.toFixed(1);
+                                        }
+                                        return label;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        });
+        {% endif %}
+        
+        // Long Rides Recommendations Feature
+        {% if long_rides_geojson %}
+        let recommendationsMap = null;
+        let allRides = {{ long_rides_geojson | tojson }};
+        let filteredRides = [];
+        let currentPage = 1;
+        const ridesPerPage = 10;
+        const maxRides = 30;
+        let mapLayers = [];
+        let selectedRideId = null;
+        let referenceLocation = { lat: {{ home.lat }}, lon: {{ home.lon }}, name: "Home" }; // Default to home location
+        
+        // Haversine distance calculation (returns distance in miles)
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 3959; // Earth's radius in miles
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                     Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                     Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+        
+        // Geocode location using Nominatim (OpenStreetMap)
+        async function geocodeLocation() {
+            const locationInput = document.getElementById('startLocation').value.trim();
+            if (!locationInput) {
+                alert('Please enter a location');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(locationInput)}&limit=1`);
+                const data = await response.json();
+                
+                if (data && data.length > 0) {
+                    referenceLocation = {
+                        lat: parseFloat(data[0].lat),
+                        lon: parseFloat(data[0].lon),
+                        name: data[0].display_name
+                    };
+                    console.log('📍 Geocoded location:', referenceLocation);
+                    alert(`Location found: ${referenceLocation.name}`);
+                    // Re-filter with new location
+                    filterAndDisplayRides();
+                } else {
+                    alert('Location not found. Please try a different search term.');
+                }
+            } catch (error) {
+                console.error('Geocoding error:', error);
+                alert('Error geocoding location. Using default location.');
+            }
+        }
+        
+        // Initialize map when Long Rides tab is shown (not on page load, since it's hidden)
+        function initializeRecommendationsMap() {
+            if (recommendationsMap) {
+                // Map already initialized, just resize it
+                setTimeout(function() {
+                    recommendationsMap.invalidateSize();
+                    console.log('✅ Recommendations map resized');
+                }, 100);
+                return;
+            }
+            
+            const mapElement = document.getElementById('recommendationsMap');
+            if (mapElement) {
+                console.log('🗺️ Initializing recommendations map...');
+                recommendationsMap = L.map('recommendationsMap').setView([{{ home.lat }}, {{ home.lon }}], 11);
+                
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                    attribution: '© OpenStreetMap contributors © CARTO',
+                    maxZoom: 19
+                }).addTo(recommendationsMap);
+                
+                console.log('✅ Recommendations map initialized');
+                
+                // Initialize with all rides after map is ready
+                filterAndDisplayRides();
+            }
+        }
+        
+        // Main filter and display function
+        function filterAndDisplayRides() {
+            console.log('🔍 filterAndDisplayRides() called');
+            console.log('Map exists:', !!recommendationsMap);
+            console.log('Total rides available:', allRides.length);
+            
+            // Ensure map is initialized first
+            if (!recommendationsMap) {
+                console.log('⚠️ Map not initialized, initializing now...');
+                initializeRecommendationsMap();
+                // The initialization function will call filterAndDisplayRides() again
+                return;
+            }
+            
+            console.log('✅ Map is ready, proceeding with filtering...');
+            
+            // Get filter values
+            const minDist = parseFloat(document.getElementById('minDistance').value) || 0;
+            const maxDist = parseFloat(document.getElementById('maxDistance').value) || Infinity;
+            const minTime = parseFloat(document.getElementById('minTime').value) || 0;
+            const maxTime = parseFloat(document.getElementById('maxTime').value) || Infinity;
+            const surfaceType = document.getElementById('surfaceType').value;
+            const maxRadius = parseFloat(document.getElementById('radiusSlider').value) || 15;
+            
+            console.log('Filter values:', { minDist, maxDist, minTime, maxTime, surfaceType, maxRadius });
+            console.log('Reference location:', referenceLocation);
+            console.log('📊 Starting filtering process...');
+            
+            // Filter rides
+            filteredRides = allRides.filter(ride => {
+                // Distance and time filters
+                const matchesDistance = ride.distance >= minDist && ride.distance <= maxDist;
+                const matchesTime = ride.duration_hours >= minTime && ride.duration_hours <= maxTime;
+                
+                // Surface type filter
+                let matchesSurface = true;
+                if (surfaceType === 'road') {
+                    // Exclude gravel rides (GravelRide, MountainBikeRide, etc.)
+                    const typeStr = (ride.type || '').toLowerCase();
+                    matchesSurface = !typeStr.includes('gravel') && !typeStr.includes('mountain');
+                }
+                
+                // Geographic proximity filter
+                let matchesLocation = true;
+                if (ride.coordinates && ride.coordinates.length > 0) {
+                    // Use first coordinate as ride start location
+                    const rideStart = ride.coordinates[0];
+                    const distanceFromRef = calculateDistance(
+                        referenceLocation.lat, referenceLocation.lon,
+                        rideStart[0], rideStart[1]
+                    );
+                    matchesLocation = distanceFromRef <= maxRadius;
+                    
+                    if (!matchesLocation) {
+                        console.log(`❌ Excluding "${ride.name}": ${distanceFromRef.toFixed(1)} mi from ${referenceLocation.name} (max: ${maxRadius} mi)`);
+                    }
+                }
+                
+                return matchesDistance && matchesTime && matchesSurface && matchesLocation;
+            });
+            
+            console.log('✅ Filtering complete. Filtered rides:', filteredRides.length);
+            
+            // Limit to max 30 rides
+            filteredRides = filteredRides.slice(0, maxRides);
+            console.log('📊 After limiting to max 30:', filteredRides.length);
+            
+            // Reset to page 1
+            currentPage = 1;
+            
+            // Update display
+            console.log('🔄 Calling updateTable()...');
+            updateTable();
+            console.log('🗺️ Calling updateMap()...');
+            updateMap();
+            console.log('📄 Calling updatePagination()...');
+            updatePagination();
+            console.log('✅ All updates complete!');
+        }
+        
+        // Update table with current page
+        function updateTable() {
+            console.log('📋 updateTable() called');
+            const tbody = document.getElementById('ridesTableBody');
+            console.log('Table body element:', tbody);
+            if (!tbody) {
+                console.error('❌ Table body element not found!');
+                return;
+            }
+            tbody.innerHTML = '';
+            
+            const start = (currentPage - 1) * ridesPerPage;
+            const end = Math.min(start + ridesPerPage, filteredRides.length);
+            const pageRides = filteredRides.slice(start, end);
+            console.log(`📊 Displaying rides ${start + 1}-${end} of ${filteredRides.length}`);
+            console.log('Page rides:', pageRides.length);
+            
+            pageRides.forEach((ride, index) => {
+                const globalIndex = start + index + 1;
+                const row = document.createElement('tr');
+                row.style.cursor = 'pointer';
+                row.onclick = () => selectRide(ride.activity_id);
+                row.innerHTML = `
+                    <td>${globalIndex}</td>
+                    <td>${ride.name}</td>
+                    <td>${ride.distance.toFixed(1)} ${ride.distance_unit}</td>
+                    <td>${ride.duration_hours.toFixed(1)} h</td>
+                    <td>${ride.elevation.toLocaleString('en-US', {maximumFractionDigits: 0})} ${ride.elevation_unit}</td>
+                    <td>${ride.uses || 1}</td>
+                `;
+                tbody.appendChild(row);
+            });
+            
+            // Update counts
+            document.getElementById('ridesCount').textContent = filteredRides.length;
+            document.getElementById('pageInfo').textContent = `${start + 1}-${end} of ${filteredRides.length}`;
+        }
+        
+        // Update map with all filtered rides
+        function updateMap() {
+            console.log('🗺️ updateMap() called');
+            if (!recommendationsMap) {
+                console.error('❌ Map not initialized!');
+                return;
+            }
+            
+            console.log('Clearing existing layers:', mapLayers.length);
+            // Clear existing layers
+            mapLayers.forEach(layer => recommendationsMap.removeLayer(layer));
+            mapLayers = [];
+            
+            console.log('Adding filtered rides to map:', filteredRides.length);
+            // Add all filtered rides to map
+            filteredRides.forEach(ride => {
+                const color = getColorByDistance(ride.distance_km);
+                
+                const polyline = L.polyline(ride.coordinates, {
+                    color: color,
+                    weight: 3,
+                    opacity: 0.6
+                }).addTo(recommendationsMap);
+                
+                // Store original color for greyscale subduing
+                polyline.originalColor = color;
+                polyline.activityId = ride.activity_id;
+                
+                polyline.bindPopup(`
+                    <strong>${ride.name}</strong><br>
+                    Distance: ${ride.distance.toFixed(1)} ${ride.distance_unit}<br>
+                    Duration: ${ride.duration_hours.toFixed(1)} h<br>
+                    Elevation: ${ride.elevation.toLocaleString('en-US', {maximumFractionDigits: 0})} ${ride.elevation_unit}<br>
+                    Avg Speed: ${ride.speed.toFixed(1)} ${ride.speed_unit}<br>
+                    Type: ${ride.is_loop ? '🔄 Loop' : '➡️ Point-to-Point'}<br>
+                    <a href="https://www.strava.com/activities/${ride.activity_id}" target="_blank" rel="noopener noreferrer">View on Strava</a>
+                `);
+                
+                polyline.on('click', () => selectRide(ride.activity_id));
+                
+                mapLayers.push(polyline);
+            });
+            
+            // Fit bounds
+            if (filteredRides.length > 0) {
+                const bounds = L.latLngBounds(filteredRides.flatMap(r => r.coordinates));
+                recommendationsMap.fitBounds(bounds);
+            }
+        }
+        
+        // Update pagination controls
+        function updatePagination() {
+            console.log('📄 updatePagination() called');
+            const pagination = document.getElementById('pagination');
+            console.log('Pagination element:', pagination);
+            if (!pagination) {
+                console.error('❌ Pagination element not found!');
+                return;
+            }
+            pagination.innerHTML = '';
+            
+            const totalPages = Math.ceil(filteredRides.length / ridesPerPage);
+            console.log('Total pages:', totalPages);
+            
+            // Previous button
+            const prevLi = document.createElement('li');
+            prevLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
+            prevLi.innerHTML = `<a class="page-link" href="#" onclick="changePage(${currentPage - 1}); return false;">Previous</a>`;
+            pagination.appendChild(prevLi);
+            
+            // Page numbers
+            for (let i = 1; i <= totalPages; i++) {
+                const li = document.createElement('li');
+                li.className = `page-item ${i === currentPage ? 'active' : ''}`;
+                li.innerHTML = `<a class="page-link" href="#" onclick="changePage(${i}); return false;">${i}</a>`;
+                pagination.appendChild(li);
+            }
+            
+            // Next button
+            const nextLi = document.createElement('li');
+            nextLi.className = `page-item ${currentPage === totalPages ? 'disabled' : ''}`;
+            nextLi.innerHTML = `<a class="page-link" href="#" onclick="changePage(${currentPage + 1}); return false;">Next</a>`;
+            pagination.appendChild(nextLi);
+        }
+        
+        // Change page
+        function changePage(page) {
+            const totalPages = Math.ceil(filteredRides.length / ridesPerPage);
+            if (page < 1 || page > totalPages) return;
+            currentPage = page;
+            updateTable();
+            updatePagination();
+        }
+        
+        // Select a ride (highlight on map and table)
+        function selectRide(activityId) {
+            selectedRideId = activityId;
+            
+            // Highlight on map with greyscale subduing
+            mapLayers.forEach(layer => {
+                if (layer.activityId === activityId) {
+                    // Highlight selected route - brightest with original color
+                    layer.setStyle({
+                        color: layer.originalColor,
+                        weight: 6,
+                        opacity: 1
+                    });
+                    layer.openPopup();
+                } else {
+                    // Grey out unselected routes
+                    layer.setStyle({
+                        color: '#808080',  // Grey
+                        weight: 3,
+                        opacity: 0.3
+                    });
+                }
+            });
+            
+            // Highlight in table
+            const rows = document.querySelectorAll('#ridesTableBody tr');
+            rows.forEach(row => {
+                row.classList.remove('table-active');
+            });
+            const selectedRow = Array.from(rows).find(row => {
+                const name = row.cells[1].textContent;
+                return filteredRides.some(r => r.name === name && r.activity_id === activityId);
+            });
+            if (selectedRow) {
+                selectedRow.classList.add('table-active');
+            }
+        }
+        
+        // Fit map to all routes
+        function fitMapToRoutes() {
+            if (!recommendationsMap || filteredRides.length === 0) return;
+            const bounds = L.latLngBounds(filteredRides.flatMap(r => r.coordinates));
+            recommendationsMap.fitBounds(bounds);
+        }
+        
+        // Clear selection
+        function clearMapSelection() {
+            selectedRideId = null;
+            mapLayers.forEach(layer => {
+                // Restore original color
+                layer.setStyle({
+                    color: layer.originalColor,
+                    weight: 3,
+                    opacity: 0.6
+                });
+                layer.closePopup();
+            });
+            const rows = document.querySelectorAll('#ridesTableBody tr');
+            rows.forEach(row => row.classList.remove('table-active'));
+        }
+        
+        // Color scale function
+        function getColorByDistance(distance) {
+            if (distance < 20) return '#4CAF50';
+            if (distance < 40) return '#2196F3';
+            if (distance < 60) return '#FF9800';
+            if (distance < 80) return '#F44336';
+            return '#9C27B0';
+        }
+        {% endif %}
+        
+        // Handle tab switching to initialize maps when Long Rides tab is shown
+        document.addEventListener('DOMContentLoaded', function() {
+            const longRidesTab = document.getElementById('longrides-tab');
+            const longRidesPane = document.getElementById('longrides');
+            
+            if (longRidesTab && longRidesPane) {
+                // Fix: Manually ensure tab pane becomes visible when clicked
+                longRidesTab.addEventListener('click', function (event) {
+                    console.log('🚵 Long Rides tab clicked, ensuring visibility...');
+                    
+                    // Force add show class if Bootstrap doesn't (fixes opacity: 0 issue)
+                    setTimeout(function() {
+                        if (!longRidesPane.classList.contains('show')) {
+                            console.log('⚠️ Adding missing "show" class to Long Rides tab');
+                            longRidesPane.classList.add('show');
+                        }
+                        
+                        // Scroll to the Long Rides pane content after it's visible
+                        setTimeout(function() {
+                            longRidesPane.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            console.log('📜 Scrolled to Long Rides content');
+                        }, 150);
+                    }, 50);
+                });
+                
+                longRidesTab.addEventListener('shown.bs.tab', function (event) {
+                    console.log('🚵 Long Rides tab shown, initializing maps...');
+                    
+                    // Ensure show class is present (backup)
+                    if (!longRidesPane.classList.contains('show')) {
+                        longRidesPane.classList.add('show');
+                    }
+                    
+                    // Initialize or resize the recommendations map
+                    initializeRecommendationsMap();
+                });
+            }
+        });
+        
         // Set default date/time and initialize
         document.addEventListener('DOMContentLoaded', function() {
             console.log('🚀 DOMContentLoaded fired');
             const now = new Date();
             now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-            document.getElementById('rideDateTime').value = now.toISOString().slice(0, 16);
-            
-            initializeLongRideMap();
+            const dateTimeInput = document.getElementById('rideDateTime');
+            if (dateTimeInput) {
+                dateTimeInput.value = now.toISOString().slice(0, 16);
+            }
             
             {% if next_commutes %}
             // Initialize next commute map
@@ -2740,11 +3196,14 @@
             console.log('⚠️ next_commutes not available, skipping map initialization');
             {% endif %}
             
-            document.getElementById('startLocation').addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    geocodeLocation();
-                }
-            });
+            const locationInput = document.getElementById('startLocation');
+            if (locationInput) {
+                locationInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        geocodeLocation();
+                    }
+                });
+            }
         });
     </script>
     
