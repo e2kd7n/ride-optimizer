@@ -37,6 +37,8 @@ class LongRide:
     start_location: Tuple[float, float]
     end_location: Tuple[float, float]
     is_loop: bool  # True if start and end are close
+    type: str  # Activity type (Ride, GravelRide, VirtualRide, etc.)
+    uses: int = 1  # Number of times this route has been ridden
     
     @property
     def distance_km(self) -> float:
@@ -105,17 +107,26 @@ class LongRideAnalyzer:
             if activity.id in commute_ids:
                 continue
             
-            # Must be a cycling activity
+            # Must be a cycling activity, but exclude virtual rides
             if 'Ride' not in activity.type:
                 continue
             
-            # Must have GPS data
+            # Skip virtual rides by activity type
+            if 'VirtualRide' in activity.type or 'Virtual' in activity.type:
+                logger.debug(f"Skipping virtual ride: {activity.name} (type={activity.type})")
+                continue
+            
+            # Must have GPS data (virtual rides often don't have real GPS)
             if not activity.start_latlng or not activity.end_latlng or not activity.polyline:
                 continue
             
-            # Skip virtual rides
-            if activity.name and 'virtual' in activity.name.lower():
-                continue
+            # Additional check: Skip by activity name keywords
+            if activity.name:
+                name_lower = activity.name.lower()
+                virtual_keywords = ['zwift', 'trainer', 'indoor', 'rouvy', 'sufferfest', 'peloton']
+                if any(keyword in name_lower for keyword in virtual_keywords):
+                    logger.debug(f"Skipping virtual ride: {activity.name} (name contains virtual keyword)")
+                    continue
             
             # Apply distance filter (configurable, default > 15km for long rides)
             min_distance = self.config.get('long_rides.min_distance_km', 15) * 1000
@@ -213,7 +224,9 @@ class LongRideAnalyzer:
                     average_speed=representative.average_speed,
                     start_location=representative.start_latlng or (0.0, 0.0),
                     end_location=representative.end_latlng or (0.0, 0.0),
-                    is_loop=is_loop
+                    is_loop=is_loop,
+                    type=representative.sport_type if representative.sport_type else representative.type,
+                    uses=len(activities)  # Number of times this route has been ridden
                 )
                 
                 consolidated_rides.append(long_ride)
@@ -396,7 +409,8 @@ class LongRideAnalyzer:
                     average_speed=activity.average_speed,
                     start_location=activity.start_latlng,
                     end_location=activity.end_latlng,
-                    is_loop=is_loop
+                    is_loop=is_loop,
+                    type=activity.sport_type if activity.sport_type else activity.type
                 )
                 
                 long_rides.append(long_ride)
