@@ -284,8 +284,8 @@ def fetch_activities(config, after_date=None, before_date=None, limit=None, repl
         client = get_authenticated_client(config)
         fetcher = StravaDataFetcher(client, config)
         
-        # Fetch activities
-        activities = fetcher.fetch_activities(after=after_date, before=before_date, limit=limit)
+        # Fetch activities (use_cache=False to force fresh fetch from Strava)
+        activities = fetcher.fetch_activities(after=after_date, before=before_date, limit=limit, use_cache=False)
         
         # Cache activities (merge by default, replace if requested)
         cache_stats = fetcher.cache_activities(activities, merge=not replace_cache)

@@ -15307,5 +15307,194 @@
     "neighborhood": "Jewelers Row",
     "landmark": null,
     "feature": null
+  },
+  "details_41.9148,-87.6268": {
+    "street": "Lakefront Trail",
+    "is_major": false,
+    "neighborhood": "Lincoln Park",
+    "landmark": null,
+    "feature": null
+  },
+  "details_41.9760,-87.6472": {
+    "street": "North Simonds Drive",
+    "is_major": false,
+    "neighborhood": "Margate Park",
+    "landmark": null,
+    "feature": null
+  },
+  "details_41.9684,-87.6448": {
+    "street": "Lakefront Trail",
+    "is_major": false,
+    "neighborhood": "Margate Park",
+    "landmark": null,
+    "feature": null
+  },
+  "details_41.9616,-87.6454": {
+    "street": "Lakefront Trail",
+    "is_major": false,
+    "neighborhood": "Buena Park",
+    "landmark": null,
+    "feature": null
+  },
+  "details_41.9017,-87.6220": {
+    "street": "Lakefront Trail",
+    "is_major": false,
+    "neighborhood": "Streeterville",
+    "landmark": null,
+    "feature": null
+  },
+  "details_41.9004,-87.6189": {
+    "street": "Lakefront Trail",
+    "is_major": false,
+    "neighborhood": "Streeterville",
+    "landmark": null,
+    "feature": null
+  },
+  "details_41.8846,-87.6136": {
+    "street": "North Jean Baptiste Point DuSable Lake Shore Drive",
+    "is_major": false,
+    "neighborhood": "Lakeshore East",
+    "landmark": null,
+    "feature": null
+  },
+  "details_41.9684,-87.6443": {
+    "street": "West Lawrence Drive",
+    "is_major": false,
+    "neighborhood": "Margate Park",
+    "landmark": null,
+    "feature": null
+  },
+  "details_41.9674,-87.6425": {
+    "street": "West Lawrence Drive",
+    "is_major": false,
+    "neighborhood": "Margate Park",
+    "landmark": null,
+    "feature": null
+  },
+  "details_41.9626,-87.6424": {
+    "street": "West Montrose Drive",
+    "is_major": false,
+    "neighborhood": "Clarendon Park",
+    "landmark": null,
+    "feature": null
+  },
+  "details_41.9499,-87.6393": {
+    "street": "West Addison Drive",
+    "is_major": false,
+    "neighborhood": "Northalsted",
+    "landmark": null,
+    "feature": null
+  },
+  "details_41.9021,-87.6233": {
+    "street": "Oak Street Access Path",
+    "is_major": false,
+    "neighborhood": "Near North Side",
+    "landmark": null,
+    "feature": null
+  },
+  "details_41.9008,-87.6250": {
+    "street": "East Oak Street",
+    "is_major": false,
+    "neighborhood": "Near North Side",
+    "landmark": null,
+    "feature": null
+  },
+  "details_41.9006,-87.6301": {
+    "street": "West Oak Street",
+    "is_major": false,
+    "neighborhood": "Near North Side",
+    "landmark": null,
+    "feature": null
+  },
+  "details_41.8973,-87.6312": {
+    "street": "North Clark Street Bikeway",
+    "is_major": false,
+    "neighborhood": "Near North Side",
+    "landmark": null,
+    "feature": null
+  },
+  "details_41.9694,-87.6457": {
+    "street": "North Simonds Drive",
+    "is_major": false,
+    "neighborhood": "Margate Park",
+    "landmark": null,
+    "feature": null
+  },
+  "details_41.9653,-87.6398": {
+    "street": "North Simonds Drive",
+    "is_major": false,
+    "neighborhood": "Uptown",
+    "landmark": null,
+    "feature": null
+  },
+  "details_41.9019,-87.6227": {
+    "street": "Lakefront Trail",
+    "is_major": false,
+    "neighborhood": "Streeterville",
+    "landmark": null,
+    "feature": null
+  },
+  "details_41.8871,-87.6136": {
+    "street": "Chicago Riverwalk",
+    "is_major": false,
+    "neighborhood": "Lakeshore East",
+    "landmark": null,
+    "feature": null
+  },
+  "details_41.8799,-87.6342": {
+    "street": "South Wells Street",
+    "is_major": false,
+    "neighborhood": "Financial District",
+    "landmark": null,
+    "feature": null
+  },
+  "details_41.8812,-87.6279": {
+    "street": "South State Street",
+    "is_major": false,
+    "neighborhood": "Jewelers Row",
+    "landmark": null,
+    "feature": null
+  },
+  "details_41.8805,-87.6257": {
+    "street": "East Monroe Street",
+    "is_major": false,
+    "neighborhood": "Jewelers Row",
+    "landmark": null,
+    "feature": null
+  },
+  "details_41.9032,-87.6238": {
+    "street": "Lakefront Trail",
+    "is_major": false,
+    "neighborhood": "Near North Side",
+    "landmark": null,
+    "feature": null
+  },
+  "details_41.9650,-87.6412": {
+    "street": "Lakefront Trail",
+    "is_major": false,
+    "neighborhood": "Uptown",
+    "landmark": null,
+    "feature": null
+  },
+  "details_41.9663,-87.6439": {
+    "street": "Lakefront Trail",
+    "is_major": false,
+    "neighborhood": "Margate Park",
+    "landmark": null,
+    "feature": null
+  },
+  "details_41.9771,-87.6473": {
+    "street": "Lakefront Trail",
+    "is_major": false,
+    "neighborhood": "Edgewater Beach",
+    "landmark": null,
+    "feature": null
+  },
+  "details_41.9795,-87.6512": {
+    "street": "Lakefront Trail",
+    "is_major": false,
+    "neighborhood": "Edgewater Beach",
+    "landmark": null,
+    "feature": null
   }
 }
