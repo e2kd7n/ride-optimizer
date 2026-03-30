@@ -10,15 +10,26 @@ If you encounter this project hosted elsewhere without proper attribution or wit
 
 ## Features
 
+### Commute Analysis
 - 🔍 **Automatic Location Detection**: Identifies your home and work locations from activity patterns
 - 📊 **Multi-Criteria Analysis**: Evaluates routes based on time, distance, safety, and weather
 - 🧮 **Advanced Route Matching**: Uses Fréchet distance algorithm for accurate path similarity detection
 - 🏷️ **Intelligent Route Naming**: Segment-based naming shows complete journey (e.g., "Wells St → Lakefront Trail → North Ave")
 - 🌤️ **Real-Time Weather Analysis**: Considers wind speed and direction for optimal route selection
-- 🗺️ **Interactive Maps**: Generates beautiful HTML reports with interactive route visualizations
-- 📈 **Detailed Statistics**: Provides comprehensive metrics for each route variant
-- ⚡ **Smart Caching**: Minimizes API calls by caching activity data locally
 - 🎯 **Personalized Recommendations**: Suggests optimal routes based on your preferences and current conditions
+
+### Long Rides Analysis (NEW in v2.4.0)
+- 🚵 **Comprehensive Statistics**: View total rides, average distance, longest ride, elevation gain, and more
+- 🏆 **Top 10 Longest Rides**: Table with Strava links showing your most epic adventures
+- 📅 **Monthly Breakdown**: Chart showing ride count and distance trends over time
+- 🗺️ **Interactive Map**: Visualize all your long rides (>15km) with color-coded routes by distance
+- 🔄 **Route Filtering**: Filter between loops and point-to-point rides
+- 📈 **Detailed Metrics**: Speed, elevation, duration, and route type for each ride
+
+### General Features
+- 🗺️ **Interactive Maps**: Generates beautiful HTML reports with interactive route visualizations
+- ⚡ **Smart Caching**: Minimizes API calls by caching activity data locally
+- 📱 **Mobile Responsive**: Works seamlessly on desktop, tablet, and mobile devices
 
 ## How It Works
 

@@ -27,16 +27,17 @@ class Activity:
     id: int
     name: str
     type: str
-    start_date: Optional[str]  # ISO format
-    distance: float  # meters
-    moving_time: int  # seconds
-    elapsed_time: int  # seconds
-    total_elevation_gain: float  # meters
-    start_latlng: Optional[tuple]
-    end_latlng: Optional[tuple]
-    polyline: Optional[str]  # encoded polyline
-    average_speed: float  # m/s
-    max_speed: float  # m/s
+    sport_type: Optional[str] = None  # More specific type (e.g., 'GravelRide', 'Ride')
+    start_date: Optional[str] = None  # ISO format
+    distance: float = 0.0  # meters
+    moving_time: int = 0  # seconds
+    elapsed_time: int = 0  # seconds
+    total_elevation_gain: float = 0.0  # meters
+    start_latlng: Optional[tuple] = None
+    end_latlng: Optional[tuple] = None
+    polyline: Optional[str] = None  # encoded polyline
+    average_speed: float = 0.0  # m/s
+    max_speed: float = 0.0  # m/s
     
     @classmethod
     def from_strava_activity(cls, activity, use_detailed_polyline=False):
@@ -74,6 +75,7 @@ class Activity:
             id=activity.id,
             name=activity.name,
             type=str(activity.type) if activity.type else "Unknown",
+            sport_type=str(getattr(activity.sport_type, 'root', activity.sport_type)) if hasattr(activity, 'sport_type') and activity.sport_type else None,
             start_date=activity.start_date.isoformat() if activity.start_date else None,
             distance=float(activity.distance) if activity.distance else 0.0,
             moving_time=to_seconds(activity.moving_time),

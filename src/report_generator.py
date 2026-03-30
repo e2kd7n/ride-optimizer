@@ -408,9 +408,16 @@ class ReportGenerator:
         long_rides = self.results.get('long_rides', [])
         long_rides_stats = {}
         distance_bins = []
+        top_10_rides = []
+        monthly_stats = {}
+        long_rides_geojson = []
         
         if long_rides:
             distances = [r.distance_km for r in long_rides]
+            durations = [r.duration_hours for r in long_rides]
+            elevations = [r.elevation_gain for r in long_rides]
+            # Use unit converter for speed (m/s to mph or km/h)
+            speeds = [self.units.speed_value(r.average_speed) for r in long_rides]
             loop_count = sum(1 for r in long_rides if r.is_loop)
             
             # Calculate distance distribution bins (10 unit intervals)
@@ -439,16 +446,80 @@ class ReportGenerator:
             
             distance_bins = [{'label': k, 'count': v} for k, v in bins.items()]
             
+            # Top 10 longest rides (Issue #6) - with unit conversions
+            sorted_rides = sorted(long_rides, key=lambda r: r.distance_km, reverse=True)
+            top_10_rides = []
+            for ride in sorted_rides[:10]:
+                top_10_rides.append({
+                    'activity_id': ride.activity_id,
+                    'name': ride.name,
+                    'distance': self.units.distance_value(ride.distance_km * 1000),  # Convert km to meters first
+                    'distance_unit': self.units.distance_unit(),
+                    'duration_hours': ride.duration_hours,
+                    'elevation': self.units.elevation_value(ride.elevation_gain),
+                    'elevation_unit': self.units.elevation_unit(),
+                    'speed': self.units.speed_value(ride.average_speed),
+                    'speed_unit': self.units.speed_unit(),
+                    'timestamp': ride.timestamp,
+                    'is_loop': ride.is_loop
+                })
+            
+            # Monthly statistics (Issue #7)
+            from collections import defaultdict
+            monthly_data = defaultdict(lambda: {'count': 0, 'distance': 0})
+            
+            for ride in long_rides:
+                month_key = ride.timestamp[:7]  # YYYY-MM format
+                monthly_data[month_key]['count'] += 1
+                monthly_data[month_key]['distance'] += ride.distance_km
+            
+            # Sort by month and prepare for Chart.js
+            sorted_months = sorted(monthly_data.keys())
+            monthly_stats = {
+                'labels': sorted_months,
+                'counts': [monthly_data[m]['count'] for m in sorted_months],
+                'distances': [monthly_data[m]['distance'] for m in sorted_months]
+            }
+            
+            # Prepare GeoJSON data for map (Issue #9) - with unit conversions
+            for ride in long_rides:
+                long_rides_geojson.append({
+                    'activity_id': ride.activity_id,
+                    'name': ride.name,
+                    'type': ride.type,  # Activity type (Ride, GravelRide, etc.)
+                    'coordinates': ride.coordinates,
+                    'distance_km': ride.distance_km,  # Keep for color coding
+                    'distance': self.units.distance_value(ride.distance_km * 1000),
+                    'distance_unit': self.units.distance_unit(),
+                    'duration_hours': ride.duration_hours,
+                    'elevation': self.units.elevation_value(ride.elevation_gain),
+                    'elevation_unit': self.units.elevation_unit(),
+                    'speed': self.units.speed_value(ride.average_speed),
+                    'speed_unit': self.units.speed_unit(),
+                    'is_loop': ride.is_loop,
+                    'timestamp': ride.timestamp,
+                    'uses': ride.uses  # Number of times this route has been ridden
+                })
+            
+            # Enhanced statistics (Issue #8)
             long_rides_stats = {
                 'total_rides': len(long_rides),
                 'total_distance': sum(distances),
                 'avg_distance': sum(distances) / len(distances),
                 'min_distance': min(distances),
                 'max_distance': max(distances),
+                'longest_ride': max(distances),
                 'distance_unit': dist_unit,
                 'loop_count': loop_count,
                 'loop_percentage': (loop_count / len(long_rides)) * 100,
-                'point_to_point_count': len(long_rides) - loop_count
+                'point_to_point_count': len(long_rides) - loop_count,
+                # Issue #8: Average speed and elevation gain (using proper units)
+                'avg_speed': sum(speeds) / len(speeds),
+                'speed_unit': self.units.speed_unit(),
+                'total_elevation': sum([self.units.elevation_value(e) for e in elevations]),
+                'avg_elevation': sum([self.units.elevation_value(e) for e in elevations]) / len(elevations),
+                'elevation_unit': self.units.elevation_unit(),
+                'avg_duration_hours': sum(durations) / len(durations)
             }
         
         context = {
@@ -471,6 +542,9 @@ class ReportGenerator:
             'long_rides': long_rides,
             'long_rides_stats': long_rides_stats,
             'distance_bins': distance_bins,
+            'top_10_rides': top_10_rides,  # Issue #6: Top 10 longest rides
+            'monthly_stats': monthly_stats,  # Issue #7: Monthly statistics
+            'long_rides_geojson': long_rides_geojson,  # Issue #9: Map data
             'units': self.units,  # Pass unit converter to template
             'next_commutes': next_commutes,  # Add time-aware next commute recommendations
             'optimizer': self.results.get('optimizer')  # Add optimizer for template access
