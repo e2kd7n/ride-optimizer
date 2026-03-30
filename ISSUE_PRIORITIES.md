@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-03-30 02:57 UTC
+**Last Updated:** 2026-03-30 03:38 UTC
 
 This file reflects the current state of GitHub issues by priority. Issues are managed via GitHub labels (P0-critical, P1-high, P2-medium, P3-low, P4-future).
 
@@ -204,6 +204,45 @@ Focus on P1 issues in this order:
 ---
 
 ## 🎉 Recently Completed
+
+### Completed 2026-03-30
+
+- **Design Principles Issue Audit** (COMPLETED 2026-03-30)
+  - Reviewed all 43 open issues against DESIGN_PRINCIPLES.md
+  - Closed issue #22 (duplicate/superseded by #78)
+  - Updated 13 issues with mobile-first and accessibility requirements
+  - Updated 2 epics (#54, #57) to enforce design principles
+  - Created comprehensive audit document: DESIGN_PRINCIPLES_ISSUE_AUDIT.md
+  - Ensured all UI/UX issues align with design system
+  - Priority: P1-high (quality assurance)
+
+- **v2.4.0 Long Rides Feature - Uses Field Fix** (COMPLETED 2026-03-30)
+  - Fixed 'uses' field to show values >1 in Long Rides recommendations
+  - Implemented hardware-aware parallelism for route matching
+  - Optimized performance with multiprocessing
+  - Files: src/long_ride_analyzer.py, src/route_analyzer.py
+  - Commit: 7bebefc
+  - Priority: P2-medium (polish)
+
+- **v2.4.0 Template Fixes** (COMPLETED 2026-03-30)
+  - Fixed Jinja2 template syntax error (missing endif)
+  - Fixed template rendering error with long rides dictionary keys
+  - Fixed pagination issues for commute routes
+  - Commits: a01f5c7, 88b1cc0
+  - Priority: P0-critical (bug fixes)
+
+- **v2.4.0 Long Rides Polish** (COMPLETED 2026-03-30)
+  - Added sortable table headers to Long Rides recommendations
+  - Added 'uses' column to show route popularity
+  - Improved table UX and data presentation
+  - Commits: 092d6e9, 3bb508a
+  - Priority: P2-medium (polish)
+
+- **v2.5.0/v2.6.0/v2.7.0 Plan Consolidation** (COMPLETED 2026-03-30)
+  - Consolidated scattered plans into unified v2.5.0 roadmap
+  - Organized future features into coherent release plan
+  - Commit: 3aeec14
+  - Priority: P3-low (documentation)
 
 ### Completed 2026-03-29
 
