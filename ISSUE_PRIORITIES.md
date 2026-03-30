@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-03-30 02:23 UTC
+**Last Updated:** 2026-03-30 02:57 UTC
 
 This file reflects the current state of GitHub issues by priority. Issues are managed via GitHub labels (P0-critical, P1-high, P2-medium, P3-low, P4-future).
 
@@ -151,15 +151,21 @@ Issues without priority labels that need to be triaged.
 - **Unprioritized:** 8
 - **Recently Closed:** 18 issues from v2.4.0 Long Rides Epic (see "Recently Completed" section below)
 
-### v2.4.0 Completion Summary
+### v2.4.0 Release Status ✅ COMPLETE
+- **Release Date:** 2026-03-30
 - **Long Rides Epic (#57):** ✅ COMPLETED (18/21 issues)
   - Core functionality: 100% complete
   - Backend improvements (#89, #90, #91): Deferred to v2.6.0+ (not needed for static reports)
   - All user-facing features production-ready
+- **Bug Fixes:** ✅ COMPLETED
+  - Fixed template rendering error (long rides dictionary keys)
+  - Fixed commute route pagination (page-hidden class)
+  - Reorganized long rides section layout
+  - Fixed Jinja2 template syntax error
 - **Code Cleanup:** ✅ COMPLETED
   - Removed 115 console.log statements (8KB saved)
   - Created technical debt documentation
-- **Status:** Ready for release
+- **Status:** Released and deployed
 
 ### v2.5.0 Sprint Planning
 - **Total P1 Issues:** 5
