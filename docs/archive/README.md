@@ -1,0 +1,53 @@
+# Archive
+
+This directory contains archived documentation that is no longer actively maintained but kept for historical reference.
+
+---
+
+## 📚 Archived Documents
+
+### Code Reviews & Audits
+- [`DESIGN_PRINCIPLES_ISSUE_AUDIT.md`](DESIGN_PRINCIPLES_ISSUE_AUDIT.md) - Design principles audit
+- [`SENIOR_DEV_CODE_REVIEW.md`](SENIOR_DEV_CODE_REVIEW.md) - Senior developer code review
+
+### Security Documentation
+- [`SECURITY_AUDIT_PENETRATION_TEST.md`](SECURITY_AUDIT_PENETRATION_TEST.md) - Security audit and penetration testing
+- [`SECURITY_FIX_XXE_VULNERABILITY.md`](SECURITY_FIX_XXE_VULNERABILITY.md) - XXE vulnerability fix
+- [`SECURITY_FIXES_IMPLEMENTED.md`](SECURITY_FIXES_IMPLEMENTED.md) - Implemented security fixes
+- [`SECURITY_MIGRATION_GUIDE.md`](SECURITY_MIGRATION_GUIDE.md) - Security migration guide
+- [`SECURITY_SCAN_REPORT.md`](SECURITY_SCAN_REPORT.md) - Security scan report
+- [`SECURITY.md`](SECURITY.md) - General security documentation
+
+---
+
+## 🗂️ Archive Policy
+
+Documents are moved to the archive when:
+1. They document completed work that is no longer actively referenced
+2. They have been superseded by newer documentation
+3. They are historical records of past decisions or implementations
+4. They are security audits or reviews that have been addressed
+
+---
+
+## 📝 Accessing Archived Documents
+
+While these documents are archived, they remain valuable for:
+- Understanding historical context
+- Reviewing past decisions
+- Learning from previous implementations
+- Compliance and audit trails
+
+---
+
+## 📚 Related Documentation
+
+- **Active Documentation:** [`../`](../)
+- **Release Notes:** [`../releases/`](../releases/)
+- **Guides:** [`../guides/`](../guides/)
+- **Project README:** [`../../README.md`](../../README.md)
+
+---
+
+**Last Updated:** May 5, 2026  
+**Maintained By:** Development Team
