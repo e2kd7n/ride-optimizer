@@ -292,7 +292,7 @@ python main.py --fetch --from-date 2023-01-01 --analyze --output ./my_reports
 
 The generated HTML report is mobile-friendly! You can transfer it to your phone and view it there. Weather data will update automatically when you have an internet connection.
 
-**See [MOBILE_USAGE_GUIDE.md](MOBILE_USAGE_GUIDE.md) for detailed instructions on:**
+**See [MOBILE_USAGE_GUIDE.md](docs/guides/MOBILE_USAGE_GUIDE.md) for detailed instructions on:**
 - How to transfer the report to your phone (AirDrop, email, cloud storage, USB)
 - Opening and viewing on iPhone or Android
 - What features work offline vs. require internet
@@ -318,7 +318,7 @@ optimization:
   weather_enabled: true  # Enable real-time weather analysis
 ```
 
-**Weather Analysis**: The system fetches real-time wind data and calculates the impact on each route. Headwinds slow you down, tailwinds speed you up, and crosswinds affect stability. See [WEATHER_GUIDE.md](WEATHER_GUIDE.md) for details.
+**Weather Analysis**: The system fetches real-time wind data and calculates the impact on each route. Headwinds slow you down, tailwinds speed you up, and crosswinds affect stability. See [WEATHER_GUIDE.md](docs/guides/WEATHER_GUIDE.md) for details.
 
 ### Location Detection
 
@@ -525,7 +525,7 @@ The system uses an advanced **Fréchet distance** algorithm for route similarity
 - Grouping threshold: 0.70 similarity score (configurable)
 - Library: `similaritymeasures` package
 
-See [SIMILARITY_ALGORITHM_CHANGE.md](SIMILARITY_ALGORITHM_CHANGE.md) for complete technical documentation.
+See [SIMILARITY_ALGORITHM_CHANGE.md](archive/completed_analysis/SIMILARITY_ALGORITHM_CHANGE.md) for complete technical documentation.
 
 ## Contributing
 
@@ -614,6 +614,34 @@ A: Yes, use the `--start` and `--end` flags to analyze specific date ranges.
 - 🗺️ Optimal route map preview at top of page
 - 💾 Fréchet distance caching
 
+## Documentation
+
+### 📚 Complete Documentation
+
+All project documentation is organized in the [`docs/`](docs/) directory:
+
+- **[Documentation Index](docs/README.md)** - Complete documentation overview
+- **[User Guides](docs/guides/)** - Setup and feature guides
+  - [Authentication Guide](docs/guides/AUTHENTICATION_GUIDE.md)
+  - [Mobile Usage Guide](docs/guides/MOBILE_USAGE_GUIDE.md)
+  - [Weather Guide](docs/guides/WEATHER_GUIDE.md)
+  - [Parallelism Guide](docs/guides/PARALLELISM_GUIDE.md)
+  - [Implementation Guide](docs/guides/IMPLEMENTATION_GUIDE.md)
+- **[Release Notes](docs/releases/)** - Version history and changelogs
+  - [All Releases](docs/releases/HISTORICAL_RELEASES.md)
+  - [Time Tracking](docs/releases/TIME_TRACKING.md)
+- **[Technical Specification](docs/TECHNICAL_SPEC.md)** - Complete technical details
+- **[Future TODOs](docs/FUTURE_TODOS.md)** - Planned features and improvements
+
+### 📋 Issue Tracking
+
+- **[Issue Priorities](ISSUE_PRIORITIES.md)** - Current sprint priorities
+- **[Issue Tracking](ISSUES_TRACKING.md)** - Active issue management
+
+### 📁 Project Plans
+
+Development plans are organized by version in the [`plans/`](plans/) directory.
+
 ## License
 
 MIT License - feel free to use and modify as needed.
@@ -622,8 +650,9 @@ MIT License - feel free to use and modify as needed.
 
 For issues or questions:
 1. Check the troubleshooting section above
-2. Review the technical specification in `TECHNICAL_SPEC.md`
-3. Check Strava API documentation: https://developers.strava.com/
+2. Review the [Technical Specification](docs/TECHNICAL_SPEC.md)
+3. Check the [Documentation Index](docs/README.md)
+4. Check Strava API documentation: https://developers.strava.com/
 
 ## Acknowledgments
 
