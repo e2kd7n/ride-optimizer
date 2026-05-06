@@ -2,6 +2,26 @@
 
 This directory contains utility scripts, test scripts, and automation tools.
 
+## 🎯 Quick Start: Interactive Menu
+
+The easiest way to run scripts is through the **interactive menu system**:
+
+```bash
+python scripts/menu.py
+# or
+./scripts/menu.py
+```
+
+The menu organizes all scripts into categories:
+- 🧪 **Testing & Validation** - Run test suites and verify setup
+- ✨ **Feature Testing** - Test specific features
+- 🔍 **Debugging & Diagnostics** - Debug and diagnose issues
+- 📊 **Data & Analysis** - Fetch and analyze data
+- 🐙 **GitHub Integration** - Manage GitHub issues
+- 🚀 **Application** - Run the main application
+
+Simply select a category, then choose a script to run. The menu handles all the details!
+
 ## Shell Scripts
 
 ### Testing & Development
@@ -30,9 +50,9 @@ This directory contains utility scripts, test scripts, and automation tools.
 - **find_matched_routes.py** - Find and analyze matched routes
 - **profile_analysis.py** - Profile application performance
 
-## Usage
+## Direct Script Usage
 
-Most scripts can be run directly:
+You can also run scripts directly without the menu:
 
 ```bash
 # Run tests
@@ -44,6 +64,14 @@ python scripts/test_geocoding.py
 # Verify dependencies
 python scripts/verify_dependencies.py
 ```
+
+### Menu System Script
+
+**menu.py** - Interactive menu system for easy script access
+- Organizes all scripts by category
+- Color-coded output for better readability
+- Handles script execution and error reporting
+- Supports both Python and shell scripts
 
 ## Notes
 
