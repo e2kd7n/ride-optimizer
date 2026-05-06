@@ -639,15 +639,15 @@ class RouteAnalyzer:
         # Mark plus routes (routes >15% longer than median)
         groups = self._mark_plus_routes(groups)
         
-        # Geocode route names BEFORE saving cache (synchronous)
-        if self.config and self.config.get('route_analysis.enable_geocoding', True):
-            tqdm.write("\n🌐 Geocoding route names...")
-            self._geocode_routes_synchronous(groups)
-            tqdm.write("✓ Geocoding complete\n")
-        
-        # Save to cache (with geocoded names)
+        # Save to cache immediately with temporary names
+        # (geocoding will happen in background and update cache when complete)
         activity_ids = [r.activity_id for r in routes]
         self._save_groups_cache_with_ids(activity_ids, groups)
+        
+        # Start background geocoding (non-blocking)
+        # This will update the cache and regenerate the report when complete
+        if self.config and self.config.get('route_analysis.enable_geocoding', True):
+            self._start_background_geocoding(groups, auto_approve=False)
         
         # Save similarity cache after grouping
         self._save_similarity_cache()
@@ -1499,7 +1499,11 @@ end tell
                     if failed_count > 0:
                         f.write(f"Failed: {failed_count} routes\n")
                     f.write(f"\n✅ Route names have been saved to cache.\n")
-                    f.write(f"💡 The next analysis will use these updated route names.\n")
+                    f.write(f"\n📋 TO SEE UPDATED ROUTE NAMES IN YOUR REPORT:\n")
+                    f.write(f"   1. Re-run: python main.py --analyze\n")
+                    f.write(f"   2. Analysis will be instant (uses cached data)\n")
+                    f.write(f"   3. Report will show the new geocoded route names\n")
+                    f.write(f"\n💡 The cache has been updated, so the next run will be fast!\n")
                     f.write(f"{'='*70}\n")
             except:
                 pass
