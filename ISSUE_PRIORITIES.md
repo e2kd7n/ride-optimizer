@@ -1,7 +1,6 @@
-
 # Issue Prioritization
 
-**Last Updated:** 2026-05-06 19:42:26 UTC / 2026-05-06 14:42:26 CDT
+**Last Updated:** 2026-05-06 21:09:49 UTC / 2026-05-06 16:09:49 CDT
 
 This file reflects the current state of GitHub issues by priority. Issues are managed via GitHub labels (P0-critical, P1-high, P2-medium, P3-low, P4-future).
 
@@ -13,6 +12,19 @@ Issues that make the application unusable or cause data loss.
 ## 🔴 P1 - HIGH (Current Sprint)
 Issues that significantly impact core functionality or user experience.
 
+- #143 - Create integration test suite for dashboard, commute, planner, route library, TrainerRoad fallback, and degraded-mode workflows
+- #142 - Implement responsive layout, shared navigation shell, and small-screen-friendly decision views
+- #140 - Implement workout-aware commute recommendations that can extend route length to satisfy prescribed sessions
+- #139 - Implement optional TrainerRoad ICS ingestion and normalize workouts into planning constraints
+- #138 - Integrate weather snapshots into dashboard, commute recommendations, and planner ranking
+- #137 - Add scheduled jobs, stage-level status visibility, freshness windows, and last-known-good fallback behavior
+- #135 - Build route library browsing, filtering, and route detail pages
+- #134 - Build long ride planner with ride-intent presets and ranked route suggestions
+- #133 - Implement commute recommendation views with alternatives, weather impact, and confidence framing
+- #132 - Build recommendation-first dashboard with freshness, status, and workout-fit summary
+- #131 - Add SQLite-backed persistence for snapshots, preferences, route summaries, and job state
+- #130 - Extract shared service layer for analysis, recommendations, planner logic, and route-library access
+- #129 - Create Flask app factory, route blueprints, and web-platform skeleton
 - #101 - Update Documentation for Long Rides Feature
 - #100 - Create Comprehensive Integration Tests for All Workflows
 - #99 - Create Comprehensive Unit Tests for All Core Modules
@@ -30,19 +42,14 @@ Issues that significantly impact core functionality or user experience.
 - #83 - Implement Geocoding API Endpoint
 - #82 - Implement Recommendations API Endpoint
 - #81 - Create Flask API Server for Long Rides
-- #80 - Integrate Weather Forecast into Commute Tab
-- #79 - Add "How It Works" Modal
-- #78 - Simplify Navigation from 4 Tabs to 2 Tabs
-- #54 - Weather Dashboard Implementation (Epic)
-- #47 - Add Side-by-Side Route Comparison Feature
 
 ## 🟡 P2 - MEDIUM (Next Sprint)
 Important improvements that enhance functionality but don't block core workflows.
 
-- #98 - Add Animation Performance Optimizations
-- #97 - Optimize Chart Responsiveness
-- #96 - Add Form Validation Feedback
-- #95 - Optimize Mobile Map Performance
+- #141 - Add repeat-a-past-ride flow and saved plan support
+- #136 - Implement settings and preferences page for home/work locations, units, time windows, and planner defaults
+- #128 - Fix "Unnamed Activity" display in Route Comparison uses modal
+- #127 - Reduce excessive whitespace between report sections
 - #74 - Ensure selected polylines and tooltips appear on top of all map elements
 - #73 - Investigate why routes 78 and 62 aren't matching in route grouping
 
@@ -59,8 +66,6 @@ Feature requests and enhancements for future releases.
 ## ⚠️ Unprioritized Issues
 Issues without priority labels that need to be triaged.
 
-- #124 - Improve map polyline and tooltip z-index layering
-- #123 - Investigate route matching issues for routes 78 and 62
 - #122 - [LOW PRIORITY] Grey out unselected routes on map when route is clicked
 - #121 - [LOW PRIORITY] Color code route names to match map line colors
 - #120 - [LOW PRIORITY] Debug and fix Bootstrap tab switching functionality
@@ -80,7 +85,6 @@ Issues without priority labels that need to be triaged.
 - #106 - Add average speed and elevation gain metrics
 - #105 - Add monthly ride statistics breakdown
 - #102 - Refactor report template to extract JavaScript into separate files
-- #69 - 🗺️ Map Direction Indicators
 - #68 - ✨ Visual Hierarchy & Polish
 - #67 - 📱 Mobile Navigation Patterns
 - #66 - 🎓 Feature Discovery & Onboarding
