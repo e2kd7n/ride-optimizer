@@ -6,6 +6,9 @@ This directory contains archived documentation that is no longer actively mainta
 
 ## 📚 Archived Documents
 
+### Issue Tracking (Superseded)
+- [`ISSUES_TRACKING.md`](ISSUES_TRACKING.md) - Manual issue tracking (superseded by GitHub issues + ISSUE_PRIORITIES.md)
+
 ### Project Planning & Proposals
 - [`WEB_PLATFORM_PROPOSAL.md`](WEB_PLATFORM_PROPOSAL.md) - Future web platform proposal (2026-03-30)
 - [`DOCUMENTATION_REORGANIZATION.md`](DOCUMENTATION_REORGANIZATION.md) - Documentation reorganization summary (2026-05-05)
