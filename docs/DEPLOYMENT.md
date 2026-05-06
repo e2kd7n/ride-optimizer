@@ -60,8 +60,29 @@ STRAVA_CLIENT_SECRET=your_client_secret_here
 
 ### 3. Build and Run with Podman
 
+**Option A: Using the optimized build script (Recommended for Raspberry Pi)**
+
 ```bash
-# Build the container image (this may take 10-20 minutes on Raspberry Pi)
+# Run the Raspberry Pi optimized build script
+./scripts/build_pi.sh
+
+# Start the container
+podman-compose up -d
+
+# View logs
+podman-compose logs -f
+
+# Access the interactive menu
+podman-compose exec ride-optimizer python scripts/menu.py
+```
+
+**Option B: Manual build with network workaround**
+
+```bash
+# Build with host network to avoid slirp4netns issues
+podman build --network=host -t ride-optimizer:latest .
+
+# Or with podman-compose
 podman-compose build
 
 # Start the container
@@ -283,23 +304,57 @@ podman run -d \
 
 ### Build Issues
 
+**Problem**: `slirp4netns failed` error during build
+```bash
+# Solution 1: Use host networking (recommended)
+podman build --network=host -t ride-optimizer:latest .
+
+# Solution 2: Build as root
+sudo podman build -t ride-optimizer:latest .
+
+# Solution 3: Use the optimized build script
+./scripts/build_pi.sh
+```
+
 **Problem**: Build takes too long or fails
 ```bash
-# Build with more verbose output
-podman build --log-level=debug -t ride-optimizer:latest .
+# Use the optimized Raspberry Pi build script
+./scripts/build_pi.sh
+
+# Or build with more verbose output
+podman build --network=host --log-level=debug -t ride-optimizer:latest .
 
 # Or build with no cache
-podman build --no-cache -t ride-optimizer:latest .
+podman build --network=host --no-cache -t ride-optimizer:latest .
 ```
 
 **Problem**: Out of memory during build
 ```bash
-# Increase swap space
+# Check current memory and swap
+free -h
+
+# Increase swap space (recommended for Pi with <4GB RAM)
 sudo dphys-swapfile swapoff
 sudo nano /etc/dphys-swapfile
-# Set CONF_SWAPSIZE=2048
+# Set CONF_SWAPSIZE=2048 (or 4096 for Pi 3)
 sudo dphys-swapfile setup
 sudo dphys-swapfile swapon
+
+# Verify new swap size
+free -h
+
+# Then retry build
+./scripts/build_pi.sh
+```
+
+**Problem**: `error running container: EOF` during build
+```bash
+# This is related to slirp4netns networking issues
+# Solution: Use host networking
+podman build --network=host -t ride-optimizer:latest .
+
+# Or use the build script which handles this automatically
+./scripts/build_pi.sh
 ```
 
 ### Runtime Issues

@@ -38,8 +38,9 @@ services:
     stdin_open: true
     tty: true
     
-    # Network mode
-    network_mode: bridge
+    # Network mode - host mode avoids slirp4netns issues on Raspberry Pi
+    # Use 'host' for better compatibility with rootless Podman on ARM
+    network_mode: host
     
     # Health check
     healthcheck:
