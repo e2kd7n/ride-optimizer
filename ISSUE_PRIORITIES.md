@@ -1,105 +1,163 @@
+
+[14:42:06] 🔍 Running Intelligent Issue Management...
+
+[14:42:06] Checking for duplicate issues...
+[14:42:07] ✅ No duplicate issues detected
+[14:42:07] Checking recent commits for completed work...
+[14:42:08] Issue #101 mentioned in commits but not marked as resolved
+  Last mention: - Updated 13 issues with design requirements (#45-49, #85-88
+[14:42:09] Issue #123 mentioned in commits but not marked as resolved
+  Last mention: Link FUTURE_TODOS to GitHub issues
+[14:42:10] Issue #124 mentioned in commits but not marked as resolved
+  Last mention: - Created issue #124 for map UI/UX improvements
+[14:42:13] Issue #45 mentioned in commits but not marked as resolved
+  Last mention: - Updated 13 issues with design requirements (#45-49, #85-88
+[14:42:14] Issue #54 mentioned in commits but not marked as resolved
+  Last mention: - Updated 2 epics with design enforcement (#54, #57)
+[14:42:15] Issue #69 appears resolved (pattern: conventional commit with issue reference)
+  Would close #69 (use --auto-close to enable)
+  Commit: docs: Update ISSUE_PRIORITIES.md for next release
+[14:42:17] Issue #73 mentioned in commits but not marked as resolved
+  Last mention:   - #73: Route matching investigation (P2)
+[14:42:17] Issue #74 mentioned in commits but not marked as resolved
+  Last mention:   - #74: Map z-index improvements (P2)
+[14:42:19] Issue #78 appears resolved (pattern: close.*#78)
+  Would close #78 (use --auto-close to enable)
+  Commit: - Closed #22 (superseded by #78)
+[14:42:20] Issue #85 mentioned in commits but not marked as resolved
+  Last mention: - Updated 13 issues with design requirements (#45-49, #85-88
+[14:42:20] Issue #95 appears resolved (pattern: complete.*#95)
+  Would close #95 (use --auto-close to enable)
+  Commit: Issues Completed: #95, #96, #97, #98
+[14:42:21] Issue #96 appears resolved (pattern: complete.*#96)
+  Would close #96 (use --auto-close to enable)
+  Commit: Issues Completed: #95, #96, #97, #98
+[14:42:21] Issue #97 appears resolved (pattern: complete.*#97)
+  Would close #97 (use --auto-close to enable)
+  Commit: Issues Completed: #95, #96, #97, #98
+[14:42:22] Issue #98 appears resolved (pattern: complete.*#98)
+  Would close #98 (use --auto-close to enable)
+  Commit: Issues Completed: #95, #96, #97, #98
+
+[14:42:22] Checking for issues that need label updates...
+[14:42:22] Adding 'bug' label to issue #120
+https://github.com/e2kd7n/ride-optimizer/issues/120
+[14:42:24] Adding 'bug' label to issue #93
+https://github.com/e2kd7n/ride-optimizer/issues/93
+[14:42:26] ✅ All issue labels are up to date
+
+[14:42:26] Analyzing recent development activity for priority updates...
+
+[14:42:26] Checking for TODO comments that should become issues...
+[14:42:26] ✅ No TODO comments marked for issue creation
+
+
+[14:42:26] 📊 Generating Issue Priority Report...
+
 # Issue Prioritization
 
-**Last Updated:** 2026-03-30 03:38 UTC
+**Last Updated:** 2026-05-06 19:42:26 UTC / 2026-05-06 14:42:26 CDT
 
 This file reflects the current state of GitHub issues by priority. Issues are managed via GitHub labels (P0-critical, P1-high, P2-medium, P3-low, P4-future).
 
 ## 🔴 P0 - CRITICAL (Drop Everything)
 Issues that make the application unusable or cause data loss.
 
-### Active P0 Issues
+- #76 - Background Geocoding with Progressive Report Updates
 
-**None** ✅
-
-## 🔴 P1 - HIGH (v2.5.0 Sprint)
+## 🔴 P1 - HIGH (Current Sprint)
 Issues that significantly impact core functionality or user experience.
 
-### Active P1 Issues (v2.5.0)
-
-**Testing & Quality Assurance** (Deferred from v2.4.0)
-- #99 - Create Comprehensive Unit Tests for All Core Modules (8-10h)
-  - Target: 80% code coverage (currently 30%)
-  - Modules: long_ride_analyzer, auth_secure, carbon_calculator, traffic_analyzer, next_commute_recommender, visualizer, route_analyzer, weather_fetcher, report_generator, api/long_rides_api
-  - Supersedes #41
-  
-- #100 - Create Comprehensive Integration Tests for All Workflows (8-10h)
-  - Long Rides workflow
-  - Route comparison workflow
-  - Weather dashboard data flow
-  - Commute analysis with all features
-  - Supersedes #42
-
-- #101 - Update Documentation for Long Rides Feature (3h)
-  - Update README.md with v2.4.0 features
-  - Document Long Rides API endpoints
-  - Create user guide updates
-  - Add screenshots and examples
-
-**Major Features** (Deferred from v2.4.0)
-- #47 - Add Side-by-Side Route Comparison Feature (12-16h)
-  - Implementation plan: `/plans/v2.5.0/ROUTE_COMPARISON_IMPLEMENTATION_PLAN.md`
-  - Select 2-3 routes for comparison
-  - Side-by-side metrics display
-  - Interactive map visualization
-  - Decision support with recommendations
-  
-- #54 - Weather Dashboard Implementation (Epic) (16-20h)
-  - Implementation plan: `/plans/v2.5.0/WEATHER_DASHBOARD_IMPLEMENTATION_PLAN.md`
-  - Current conditions widget
-  - 24-hour hourly forecast
-  - 7-day daily forecast
-  - Weather alerts and recommendations
-  - Ride suitability scoring
-
+- #101 - Update Documentation for Long Rides Feature
+- #100 - Create Comprehensive Integration Tests for All Workflows
+- #99 - Create Comprehensive Unit Tests for All Core Modules
+- #94 - Implement Accessibility Improvements
+- #93 - Implement Comprehensive Error States
+- #92 - Add Loading States with Skeleton Loaders
+- #91 - Add Rate Limiting to API Endpoints
+- #90 - Implement Input Validation with Marshmallow
+- #89 - Add Data Persistence Layer for API
+- #88 - Integrate Map with Recommendation System
+- #87 - Create Recommendation Results Display Component
+- #86 - Implement Frontend API Integration
+- #85 - Create Interactive Recommendation Input Form
+- #84 - Implement Weather API Endpoint
+- #83 - Implement Geocoding API Endpoint
+- #82 - Implement Recommendations API Endpoint
+- #81 - Create Flask API Server for Long Rides
+- #80 - Integrate Weather Forecast into Commute Tab
+- #79 - Add "How It Works" Modal
+- #78 - Simplify Navigation from 4 Tabs to 2 Tabs
+- #54 - Weather Dashboard Implementation (Epic)
+- #47 - Add Side-by-Side Route Comparison Feature
 
 ## 🟡 P2 - MEDIUM (Next Sprint)
 Important improvements that enhance functionality but don't block core workflows.
 
-- #73 - Investigate why routes 78 and 62 aren't matching in route grouping
+- #98 - Add Animation Performance Optimizations
+- #97 - Optimize Chart Responsiveness
+- #96 - Add Form Validation Feedback
+- #95 - Optimize Mobile Map Performance
 - #74 - Ensure selected polylines and tooltips appear on top of all map elements
-- #62 - 🎨 EPIC: Mobile-First UI/UX Redesign & Accessibility
-  - #63 - Mobile-First Responsive Layout (in progress)
-  - #64 - Progressive Disclosure for Metrics
-  - #65 - Touch-Optimized Interactions (in progress)
-  - #66 - Feature Discovery & Onboarding
-  - #67 - Mobile Navigation Patterns
-  - #68 - Visual Hierarchy & Polish
-
-### P2 Issues from Long Rides Feature (Polish & Optimization)
-- #95 - Optimize Mobile Map Performance (3h)
-- #96 - Add Form Validation Feedback (2h)
-- #97 - Optimize Chart Responsiveness (2h)
-- #98 - Add Animation Performance Optimizations (2h)
-
-
-
-
+- #73 - Investigate why routes 78 and 62 aren't matching in route grouping
 
 ## 🟢 P3 - LOW (Backlog)
 Nice-to-have improvements and minor UX enhancements.
 
-- #22 - Debug and fix Bootstrap tab switching functionality
+**No P3 issues currently open** ✅
 
 ## 📋 P4 - FUTURE ENHANCEMENTS
 Feature requests and enhancements for future releases.
 
-
+**No P4 issues currently open** ✅
 
 ## ⚠️ Unprioritized Issues
 Issues without priority labels that need to be triaged.
 
+- #124 - Improve map polyline and tooltip z-index layering
+- #123 - Investigate route matching issues for routes 78 and 62
+- #122 - [LOW PRIORITY] Grey out unselected routes on map when route is clicked
+- #121 - [LOW PRIORITY] Color code route names to match map line colors
+- #120 - [LOW PRIORITY] Debug and fix Bootstrap tab switching functionality
+- #119 - Update TECHNICAL_SPEC.md with comprehensive implementation details
+- #118 - Re-enable geocoding after rate limit expires
+- #117 - Fix map zoom to show start and finish when route is selected
+- #116 - Add visual weather icons and color coding
+- #115 - Display optimal departure time suggestions
+- #114 - Add transit recommendations when conditions are poor
+- #113 - Show optimal route recommendations based on wind
+- #112 - Add weather severity indicators (good/fair/poor/miserable icons)
+- #111 - Add evening commute window (3-6 PM) weather display
+- #110 - Add morning commute window (7-9 AM) weather display
+- #109 - Design 7-day forecast card layout
+- #108 - Integrate forecast generator into main.py workflow
+- #107 - Add interactive map showing all long ride routes
+- #106 - Add average speed and elevation gain metrics
+- #105 - Add monthly ride statistics breakdown
+- #102 - Refactor report template to extract JavaScript into separate files
+- #69 - 🗺️ Map Direction Indicators
+- #68 - ✨ Visual Hierarchy & Polish
+- #67 - 📱 Mobile Navigation Patterns
+- #66 - 🎓 Feature Discovery & Onboarding
+- #65 - 👆 Touch-Optimized Interactions
+- #64 - 📊 Progressive Disclosure for Metrics
+- #63 - 📱 Mobile-First Responsive Layout
+- #62 - 🎨 EPIC: Mobile-First UI/UX Redesign & Accessibility
 - #49 - Implement Metric/Imperial Unit Toggle with Complete Consistency
 - #48 - Implement Data Export in JSON, GPX, and CSV Formats
 - #46 - Add PDF Export Option
 - #45 - Add QR Code Generation for Mobile Transfer
-- #44 - Extract HTML template to external file
+- #44 - Extract HTML Template to External File
 - #39 - Evaluate Photon API as Nominatim alternative
 - #38 - Add social features (compare with other commuters)
 - #37 - Add real-time route suggestions
 - #36 - Create mobile app version
 - #35 - Add integration with other fitness platforms
 
+## 📝 Workspace TODOs & Tasks
+Code comments and inline tasks found in the workspace that may need attention.
 
+**No TODO/FIXME comments found in code** ✅
 
 ## Priority Guidelines
 
@@ -136,255 +194,14 @@ Issues without priority labels that need to be triaged.
 ## How to Update Priorities
 
 1. Use GitHub labels to set priority (P0-critical, P1-high, P2-medium, P3-low, P4-future)
-2. Update this file manually or via script
+2. Run `./scripts/update-issue-priorities.sh` to regenerate this file
 3. Commit changes with descriptive message
 4. Communicate priority changes to team
 
-## Summary Statistics
+## Managing Workspace TODOs
 
-- **Total Open Issues:** 14
-- **P0 (Critical):** 0 ✅
-- **P1 (High):** 5 (v2.5.0 sprint)
-- **P2 (Medium):** 10 (includes 4 Long Rides polish issues)
-- **P3 (Low):** 1
-- **P4 (Future):** 0
-- **Unprioritized:** 8
-- **Recently Closed:** 18 issues from v2.4.0 Long Rides Epic (see "Recently Completed" section below)
-
-### v2.4.0 Release Status ✅ COMPLETE
-- **Release Date:** 2026-03-30
-- **Long Rides Epic (#57):** ✅ COMPLETED (18/21 issues)
-  - Core functionality: 100% complete
-  - Backend improvements (#89, #90, #91): Deferred to v2.6.0+ (not needed for static reports)
-  - All user-facing features production-ready
-- **Bug Fixes:** ✅ COMPLETED
-  - Fixed template rendering error (long rides dictionary keys)
-  - Fixed commute route pagination (page-hidden class)
-  - Reorganized long rides section layout
-  - Fixed Jinja2 template syntax error
-- **Code Cleanup:** ✅ COMPLETED
-  - Removed 115 console.log statements (8KB saved)
-  - Created technical debt documentation
-- **Status:** Released and deployed
-
-### v2.5.0 Sprint Planning
-- **Total P1 Issues:** 5
-- **Estimated Total Effort:** 48-60 hours (6-8 weeks at 8-10 hours/week)
-- **Focus Areas:**
-  1. Testing & Quality (16-20h)
-  2. Route Comparison Feature (12-16h)
-  3. Weather Dashboard (16-20h)
-  4. Documentation (3h)
-- **Release Plan:** `/plans/v2.5.0/README.md`
-
-**Note:** Completed issues are documented in release notes (RELEASE_NOTES.md) and version-specific plans (plans/v2.x.0/).
-
-## Recommended Next Actions (v2.5.0)
-
-Focus on P1 issues in this order:
-
-1. **Testing Infrastructure First** (Weeks 1-2)
-   - #99 - Comprehensive unit tests (8-10h)
-   - #100 - Integration tests (8-10h)
-   - #101 - Documentation updates (3h)
-   - Rationale: Establish quality foundation before adding features
-
-2. **Route Comparison Feature** (Weeks 3-4)
-   - #47 - Side-by-side route comparison (12-16h)
-   - See implementation plan: `/plans/v2.5.0/ROUTE_COMPARISON_IMPLEMENTATION_PLAN.md`
-
-3. **Weather Dashboard** (Weeks 5-7)
-   - #54 - Weather dashboard (16-20h)
-   - See implementation plan: `/plans/v2.5.0/WEATHER_DASHBOARD_IMPLEMENTATION_PLAN.md`
-
-### Additional Actions (Not Issues)
-- **CI/CD Integration** - Set up GitHub Actions with expanded test suite
-- **Performance Monitoring** - Establish baseline metrics
-
----
-
-## 🎉 Recently Completed
-
-### Completed 2026-03-30
-
-- **Design Principles Issue Audit** (COMPLETED 2026-03-30)
-  - Reviewed all 43 open issues against DESIGN_PRINCIPLES.md
-  - Closed issue #22 (duplicate/superseded by #78)
-  - Updated 13 issues with mobile-first and accessibility requirements
-  - Updated 2 epics (#54, #57) to enforce design principles
-  - Created comprehensive audit document: DESIGN_PRINCIPLES_ISSUE_AUDIT.md
-  - Ensured all UI/UX issues align with design system
-  - Priority: P1-high (quality assurance)
-
-- **v2.4.0 Long Rides Feature - Uses Field Fix** (COMPLETED 2026-03-30)
-  - Fixed 'uses' field to show values >1 in Long Rides recommendations
-  - Implemented hardware-aware parallelism for route matching
-  - Optimized performance with multiprocessing
-  - Files: src/long_ride_analyzer.py, src/route_analyzer.py
-  - Commit: 7bebefc
-  - Priority: P2-medium (polish)
-
-- **v2.4.0 Template Fixes** (COMPLETED 2026-03-30)
-  - Fixed Jinja2 template syntax error (missing endif)
-  - Fixed template rendering error with long rides dictionary keys
-  - Fixed pagination issues for commute routes
-  - Commits: a01f5c7, 88b1cc0
-  - Priority: P0-critical (bug fixes)
-
-- **v2.4.0 Long Rides Polish** (COMPLETED 2026-03-30)
-  - Added sortable table headers to Long Rides recommendations
-  - Added 'uses' column to show route popularity
-  - Improved table UX and data presentation
-  - Commits: 092d6e9, 3bb508a
-  - Priority: P2-medium (polish)
-
-- **v2.5.0/v2.6.0/v2.7.0 Plan Consolidation** (COMPLETED 2026-03-30)
-  - Consolidated scattered plans into unified v2.5.0 roadmap
-  - Organized future features into coherent release plan
-  - Commit: 3aeec14
-  - Priority: P3-low (documentation)
-
-### Completed 2026-03-29
-
-- **#34 - Add carbon footprint calculations** (COMPLETED 2026-03-29)
-  - Created comprehensive CarbonCalculator module for environmental impact analysis
-  - Calculates CO2 emissions saved vs driving
-  - Tracks gasoline saved and money saved on fuel
-  - Calculates calories burned and health benefits
-  - Provides tree equivalency and environmental impact statements
-  - Supports time-based projections (daily/weekly/monthly/yearly)
-  - Route-by-route carbon footprint breakdown
-  - Added carbon configuration to config.yaml
-  - Supports both metric and imperial units
-  - Files: src/carbon_calculator.py, config/config.yaml
-  - Commit: 56e83fc
-  - Priority: P1-high
-
-- **#33 - Add traffic pattern analysis** (COMPLETED 2026-03-29)
-  - Created comprehensive TrafficAnalyzer module for analyzing commute patterns
-  - Analyzes usage by hour of day and day of week
-  - Identifies peak/off-peak times and rush hour penalties
-  - Calculates optimal departure times based on historical data
-  - Provides traffic scores for route comparison at specific times
-  - Added traffic configuration to config.yaml
-  - Supports configurable rush hour windows
-  - Files: src/traffic_analyzer.py, config/config.yaml
-  - Commit: 40e910f
-  - Priority: P1-high
-
-- **#77 - Add user preferences configuration for browser, units, and other toggleable settings** (COMPLETED 2026-03-29)
-  - Implemented user preferences system with config file support
-  - Added browser selection (Chrome, Firefox, Safari, Edge, Brave)
-  - Added unit system toggle (metric/imperial)
-  - Added auto-open browser preference
-  - Files: src/config.py, config/config.yaml
-  - Priority: P1-high
-
-- **#70 - Implement wind-aware route selection in forecast generator** (COMPLETED 2026-03-29)
-  - Enhanced forecast generator to consider wind conditions
-  - Integrated wind speed and direction into route recommendations
-  - Added wind favorability scoring
-  - Files: src/forecast_generator.py
-  - Priority: P1-high
-
-- **#58 - Show time-aware next commute recommendations (to work & to home)** (COMPLETED 2026-03-29)
-  - Implemented intelligent time-based recommendations
-  - Separate "to work" and "to home" route suggestions
-  - Forecast weather for specific time windows
-  - Wind favorability assessment
-  - See NEXT_COMMUTE_FEATURE.md for details
-  - Priority: P1-high
-
-- **#25 - Implement automatic token refresh for expired Strava tokens** (COMPLETED 2026-03-29)
-  - Added automatic token refresh mechanism
-  - Improved authentication flow
-  - Better error handling for expired tokens
-  - Files: src/auth_secure.py
-  - Priority: P1-high
-
-- **#42 - Write integration tests for full workflow** (COMPLETED 2026-03-29)
-  - Created comprehensive integration test suite
-  - Covers full workflow from data fetching to report generation
-  - Includes edge cases and error scenarios
-  - Files: tests/test_integration.py
-  - Priority: P1-high
-  - Note: Superseded by #100 for expanded coverage
-
-- **#41 - Create unit tests for core modules** (COMPLETED 2026-03-29)
-  - Implemented unit tests for core functionality
-  - Covers route analyzer, data fetcher, and other modules
-  - Improved code coverage
-  - Files: tests/test_route_analyzer.py, tests/test_data_fetcher.py, tests/test_units.py
-  - Priority: P1-high
-  - Note: Superseded by #99 for expanded coverage
-
-### Completed 2026-03-27
-
-- **#72 - Test: Investigate why routes 78 and 62 aren't matching** (COMPLETED 2026-03-27)
-  - Investigated route matching algorithm
-  - Identified and resolved matching issues
-  - Improved route grouping logic
-  - Priority: P2-medium
-
-- **#61 - Code Quality: Improve exception handling (remove bare except)** (COMPLETED 2026-03-27)
-  - Removed bare except clauses
-  - Added specific exception handling
-  - Improved error messages and logging
-  - Priority: P3-low
-
-- **#60 - Security: Upgrade vulnerable dependencies (requests, tornado, pygments)** (COMPLETED 2026-03-27)
-  - Updated vulnerable dependencies to secure versions
-  - Resolved security vulnerabilities
-  - Updated requirements.txt
-  - Priority: P1-high, security
-
-- **#59 - Security: Replace MD5 hash with SHA256 for cache keys** (COMPLETED 2026-03-27)
-  - Migrated from MD5 to SHA256 for cache key generation
-  - Improved security posture
-  - Updated cache handling logic
-  - Priority: P2-medium, security
-
-- **#56 - Implement percentile-based route similarity to reduce over-clustering** (COMPLETED 2026-03-27)
-  - Implemented percentile-based similarity algorithm
-  - Reduced over-clustering of routes
-  - Improved route grouping accuracy
-  - Priority: P1-high
-
-### UI/UX Improvements
-- **#71 - UI/UX Improvements for Route Comparison Table and Map** (COMPLETED 2026-03-27)
-  - All 7 improvements implemented
-  - Table sorting functionality with visual indicators
-  - Fixed route group name display (geographic names)
-  - Updated polyline colors to semantic system (green=optimal)
-  - Removed "View on Strava" button, made route name clickable
-  - Made "Uses" column clickable to show matched activities modal
-  - Fixed page counter display
-  - Simplified route counter display
-  - Files: templates/report_template.html, src/route_analyzer.py, config/config.yaml
-  - Priority: P1-high
-
-- **#69 - Map Direction Indicators** (COMPLETED 2026-03-27)
-  - Implemented direction arrows on Next Commute map
-  - Stacked card layout for "To Work" and "To Home" recommendations
-  - Dense information display with 6 compact metrics per card
-  - Interactive map with color-coded routes (green for "to work", blue for "to home")
-  - Direction arrows using screen-space bearing calculation
-  - Click handlers to highlight and zoom to specific routes
-  - Responsive design with mobile breakpoints
-  - Files: templates/report_template.html
-  - Priority: P1-high
-
-- **#75 - Add current weather conditions display to map** (COMPLETED 2026-03-27)
-  - Shows real-time weather on interactive map
-  - Temperature with unit conversion
-  - Wind speed and direction (cardinal + degrees)
-  - Precipitation amount
-  - Integrates with WeatherFetcher and Open-Meteo API
-  - Priority: P2-medium
-
-- **#21 - Update TECHNICAL_SPEC.md** (COMPLETED 2026-03-27)
-  - Updated 3 major sections with comprehensive implementation details
-  - Route naming algorithm documentation
-  - Security improvements (MD5 → SHA256)
-  - Exception handling enhancements
-  - Priority: P2-medium
+- Review code comments regularly and convert important ones to GitHub issues
+- Use `TODO:` for tasks that should become issues
+- Use `FIXME:` for bugs that need attention
+- Use `HACK:` for temporary solutions that need proper fixes
+- Use `NOTE:` for important information or context
