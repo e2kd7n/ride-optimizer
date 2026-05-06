@@ -9,6 +9,7 @@ This document tracks known issues and bugs in the Ride Optimizer application.
 **Component:** UI/UX - Report Layout
 **Reported:** 2026-03-29
 **Status:** Open
+**GitHub Issue:** [#127](https://github.com/e2kd7n/ride-optimizer/issues/127)
 
 **Description:**
 There is excessive whitespace between the "Alternative Routes" section and the "Long Ride Recommendations" tab content, creating poor visual flow and wasting screen space.
@@ -35,10 +36,11 @@ Large whitespace gap exists between sections, making the interface feel disconne
 ---
 
 ### Issue #2: "Unnamed Activity" in Uses Modal
-**Priority:** P2 (Medium)  
-**Component:** Route Comparison / Uses Modal  
-**Reported:** 2026-03-29  
+**Priority:** P2 (Medium)
+**Component:** Route Comparison / Uses Modal
+**Reported:** 2026-03-29
 **Status:** Open
+**GitHub Issue:** [#128](https://github.com/e2kd7n/ride-optimizer/issues/128)
 
 **Description:**
 When clicking the "uses" count in the Route Comparison table to view matched activities, the modal displays "Unnamed Activity" instead of the actual Strava activity names.
@@ -78,6 +80,7 @@ The activity data being passed to the modal likely doesn't include the `name` fi
 **Component:** Architecture / Report Generation
 **Reported:** 2026-03-29
 **Status:** Open
+**GitHub Issue:** [#102](https://github.com/e2kd7n/ride-optimizer/issues/102) (Already tracked as "Refactor report template to extract JavaScript into separate files")
 
 **Description:**
 The `templates/report_template.html` file has grown to over 3000 lines and contains a mix of HTML structure, inline CSS, and extensive JavaScript. This makes the template difficult to maintain, debug, and extend.
