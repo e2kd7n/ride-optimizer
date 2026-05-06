@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-05-06 21:09:49 UTC / 2026-05-06 16:09:49 CDT
+**Last Updated:** 2026-05-06 21:34:18 UTC / 2026-05-06 16:34:18 CDT
 
 This file reflects the current state of GitHub issues by priority. Issues are managed via GitHub labels (P0-critical, P1-high, P2-medium, P3-low, P4-future).
 
@@ -12,6 +12,8 @@ Issues that make the application unusable or cause data loss.
 ## 🔴 P1 - HIGH (Current Sprint)
 Issues that significantly impact core functionality or user experience.
 
+- #146 - 🧪 EPIC: Beta Release & User Feedback Program
+- #144 - 🌐 EPIC: Personal Web Platform Migration (v3.0.0)
 - #143 - Create integration test suite for dashboard, commute, planner, route library, TrainerRoad fallback, and degraded-mode workflows
 - #142 - Implement responsive layout, shared navigation shell, and small-screen-friendly decision views
 - #140 - Implement workout-aware commute recommendations that can extend route length to satisfy prescribed sessions
@@ -25,12 +27,13 @@ Issues that significantly impact core functionality or user experience.
 - #131 - Add SQLite-backed persistence for snapshots, preferences, route summaries, and job state
 - #130 - Extract shared service layer for analysis, recommendations, planner logic, and route-library access
 - #129 - Create Flask app factory, route blueprints, and web-platform skeleton
+- #119 - Update TECHNICAL_SPEC.md with comprehensive implementation details
+- #118 - Re-enable geocoding after rate limit expires
+- #117 - Fix map zoom to show start and finish when route is selected
+- #102 - Refactor report template to extract JavaScript into separate files
 - #101 - Update Documentation for Long Rides Feature
 - #100 - Create Comprehensive Integration Tests for All Workflows
 - #99 - Create Comprehensive Unit Tests for All Core Modules
-- #94 - Implement Accessibility Improvements
-- #93 - Implement Comprehensive Error States
-- #92 - Add Loading States with Skeleton Loaders
 - #91 - Add Rate Limiting to API Endpoints
 - #90 - Implement Input Validation with Marshmallow
 - #89 - Add Data Persistence Layer for API
@@ -39,9 +42,6 @@ Issues that significantly impact core functionality or user experience.
 - #86 - Implement Frontend API Integration
 - #85 - Create Interactive Recommendation Input Form
 - #84 - Implement Weather API Endpoint
-- #83 - Implement Geocoding API Endpoint
-- #82 - Implement Recommendations API Endpoint
-- #81 - Create Flask API Server for Long Rides
 
 ## 🟡 P2 - MEDIUM (Next Sprint)
 Important improvements that enhance functionality but don't block core workflows.
@@ -50,28 +50,8 @@ Important improvements that enhance functionality but don't block core workflows
 - #136 - Implement settings and preferences page for home/work locations, units, time windows, and planner defaults
 - #128 - Fix "Unnamed Activity" display in Route Comparison uses modal
 - #127 - Reduce excessive whitespace between report sections
-- #74 - Ensure selected polylines and tooltips appear on top of all map elements
-- #73 - Investigate why routes 78 and 62 aren't matching in route grouping
-
-## 🟢 P3 - LOW (Backlog)
-Nice-to-have improvements and minor UX enhancements.
-
-**No P3 issues currently open** ✅
-
-## 📋 P4 - FUTURE ENHANCEMENTS
-Feature requests and enhancements for future releases.
-
-**No P4 issues currently open** ✅
-
-## ⚠️ Unprioritized Issues
-Issues without priority labels that need to be triaged.
-
 - #122 - [LOW PRIORITY] Grey out unselected routes on map when route is clicked
 - #121 - [LOW PRIORITY] Color code route names to match map line colors
-- #120 - [LOW PRIORITY] Debug and fix Bootstrap tab switching functionality
-- #119 - Update TECHNICAL_SPEC.md with comprehensive implementation details
-- #118 - Re-enable geocoding after rate limit expires
-- #117 - Fix map zoom to show start and finish when route is selected
 - #116 - Add visual weather icons and color coding
 - #115 - Display optimal departure time suggestions
 - #114 - Add transit recommendations when conditions are poor
@@ -84,7 +64,29 @@ Issues without priority labels that need to be triaged.
 - #107 - Add interactive map showing all long ride routes
 - #106 - Add average speed and elevation gain metrics
 - #105 - Add monthly ride statistics breakdown
-- #102 - Refactor report template to extract JavaScript into separate files
+- #94 - Implement Accessibility Improvements
+- #93 - Implement Comprehensive Error States
+- #92 - Add Loading States with Skeleton Loaders
+- #74 - Ensure selected polylines and tooltips appear on top of all map elements
+- #73 - Investigate why routes 78 and 62 aren't matching in route grouping
+
+## 🟢 P3 - LOW (Backlog)
+Nice-to-have improvements and minor UX enhancements.
+
+- #145 - 🌤️ EPIC: Weather Dashboard & Forecast Integration
+- #120 - [LOW PRIORITY] Debug and fix Bootstrap tab switching functionality
+- #54 - Weather Dashboard Implementation (Epic)
+- #49 - Implement Metric/Imperial Unit Toggle with Complete Consistency
+- #48 - Implement Data Export in JSON, GPX, and CSV Formats
+- #46 - Add PDF Export Option
+- #45 - Add QR Code Generation for Mobile Transfer
+- #44 - Extract HTML Template to External File
+
+## 📋 P4 - FUTURE ENHANCEMENTS
+Feature requests and enhancements for future releases.
+
+- #80 - Integrate Weather Forecast into Commute Tab
+- #79 - Add "How It Works" Modal
 - #68 - ✨ Visual Hierarchy & Polish
 - #67 - 📱 Mobile Navigation Patterns
 - #66 - 🎓 Feature Discovery & Onboarding
@@ -92,16 +94,17 @@ Issues without priority labels that need to be triaged.
 - #64 - 📊 Progressive Disclosure for Metrics
 - #63 - 📱 Mobile-First Responsive Layout
 - #62 - 🎨 EPIC: Mobile-First UI/UX Redesign & Accessibility
-- #49 - Implement Metric/Imperial Unit Toggle with Complete Consistency
-- #48 - Implement Data Export in JSON, GPX, and CSV Formats
-- #46 - Add PDF Export Option
-- #45 - Add QR Code Generation for Mobile Transfer
-- #44 - Extract HTML Template to External File
+- #47 - Add Side-by-Side Route Comparison Feature
 - #39 - Evaluate Photon API as Nominatim alternative
 - #38 - Add social features (compare with other commuters)
 - #37 - Add real-time route suggestions
 - #36 - Create mobile app version
 - #35 - Add integration with other fitness platforms
+
+## ⚠️ Unprioritized Issues
+Issues without priority labels that need to be triaged.
+
+**No unprioritized issues** ✅
 
 ## 📝 Workspace TODOs & Tasks
 Code comments and inline tasks found in the workspace that may need attention.
