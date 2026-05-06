@@ -1,0 +1,384 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard | Ride Optimizer{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+    <header class="dashboard-header">
+        <h1>Welcome back, {{ user_name }}! 🚴</h1>
+        <p class="dashboard-subtitle">{{ current_time.strftime('%A, %B %d, %Y') }}</p>
+    </header>
+    
+    <!-- Status Banner -->
+    <div class="status-banner">
+        <div class="status-item">
+            <span class="status-label">Data Freshness:</span>
+            <span class="status-value status-{{ status.data_freshness }}">
+                {{ status.data_freshness|title }}
+            </span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">Last Analysis:</span>
+            <span class="status-value">
+                {% if status.last_analysis %}
+                    {{ status.last_analysis }}
+                {% else %}
+                    Never
+                {% endif %}
+            </span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">Geocoding:</span>
+            <span class="status-value status-{{ status.geocoding_status }}">
+                {{ status.geocoding_status|title }}
+            </span>
+        </div>
+    </div>
+    
+    <!-- Quick Stats -->
+    <div class="quick-stats">
+        <div class="stat-card">
+            <div class="stat-icon">📊</div>
+            <div class="stat-content">
+                <div class="stat-value">{{ quick_stats.total_routes }}</div>
+                <div class="stat-label">Commute Routes</div>
+            </div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-icon">🚴</div>
+            <div class="stat-content">
+                <div class="stat-value">{{ quick_stats.total_activities }}</div>
+                <div class="stat-label">Activities</div>
+            </div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-icon">🗺️</div>
+            <div class="stat-content">
+                <div class="stat-value">{{ quick_stats.total_long_rides }}</div>
+                <div class="stat-label">Long Rides</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Recommendations -->
+    <div class="recommendations">
+        <div class="recommendation-card primary-recommendation">
+            <h2>🚴 Next Commute</h2>
+            {% if recommendations.commute %}
+                <div class="recommendation-content">
+                    <div class="recommendation-header">
+                        <h3>{{ recommendations.commute.route_name }}</h3>
+                        <span class="recommendation-score">
+                            Score: {{ "%.1f"|format(recommendations.commute.score * 100) }}%
+                        </span>
+                    </div>
+                    <div class="recommendation-details">
+                        <div class="detail-item">
+                            <span class="detail-icon">📍</span>
+                            <span class="detail-label">Direction:</span>
+                            <span class="detail-value">{{ recommendations.commute.direction|replace('_', ' ')|title }}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-icon">📏</span>
+                            <span class="detail-label">Distance:</span>
+                            <span class="detail-value">{{ "%.1f"|format(recommendations.commute.distance) }} km</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-icon">⏱️</span>
+                            <span class="detail-label">Duration:</span>
+                            <span class="detail-value">{{ "%.0f"|format(recommendations.commute.duration) }} min</span>
+                        </div>
+                        {% if recommendations.commute.departure_time %}
+                        <div class="detail-item">
+                            <span class="detail-icon">🕐</span>
+                            <span class="detail-label">Best Time:</span>
+                            <span class="detail-value">{{ recommendations.commute.departure_time }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <a href="{{ url_for('commute.index') }}" class="btn btn-primary btn-block">
+                        View Details & Alternatives
+                    </a>
+                </div>
+            {% else %}
+                <p class="no-data">No commute recommendation available yet.</p>
+                <p class="no-data-hint">Run analysis to get personalized commute recommendations.</p>
+                <a href="{{ url_for('api.analyze') }}" class="btn btn-primary" data-method="POST">
+                    Run Analysis
+                </a>
+            {% endif %}
+        </div>
+        
+        <div class="recommendation-card">
+            <h2>🏋️ Workout Fit</h2>
+            {% if recommendations.workout_fit %}
+                <div class="recommendation-content">
+                    {{ recommendations.workout_fit }}
+                </div>
+            {% else %}
+                <p class="no-data">Connect TrainerRoad to see workout fit analysis.</p>
+                <p class="no-data-hint">Integrate your training plan for smarter commute recommendations.</p>
+                <a href="{{ url_for('settings.trainerroad') }}" class="btn btn-secondary">
+                    Connect TrainerRoad
+                </a>
+            {% endif %}
+        </div>
+        
+        <div class="recommendation-card">
+            <h2>🗺️ Best Long Ride</h2>
+            {% if recommendations.long_ride %}
+                <div class="recommendation-content">
+                    <div class="recommendation-header">
+                        <h3>{{ recommendations.long_ride.ride_name }}</h3>
+                        <span class="recommendation-score">
+                            Score: {{ "%.1f"|format(recommendations.long_ride.score * 100) }}%
+                        </span>
+                    </div>
+                    <div class="recommendation-details">
+                        <div class="detail-item">
+                            <span class="detail-icon">📅</span>
+                            <span class="detail-label">Best Day:</span>
+                            <span class="detail-value">{{ recommendations.long_ride.day }}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-icon">📏</span>
+                            <span class="detail-label">Distance:</span>
+                            <span class="detail-value">{{ "%.1f"|format(recommendations.long_ride.distance) }} km</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-icon">⏱️</span>
+                            <span class="detail-label">Duration:</span>
+                            <span class="detail-value">{{ "%.0f"|format(recommendations.long_ride.duration) }} min</span>
+                        </div>
+                    </div>
+                    <a href="{{ url_for('planner.index') }}" class="btn btn-primary btn-block">
+                        View 7-Day Forecast
+                    </a>
+                </div>
+            {% else %}
+                <p class="no-data">No long ride recommendation available yet.</p>
+                <p class="no-data-hint">Plan your next adventure with weather-optimized suggestions.</p>
+                <a href="{{ url_for('planner.index') }}" class="btn btn-primary">
+                    Plan Long Ride
+                </a>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Quick Actions -->
+    <div class="quick-actions">
+        <h2>Quick Actions</h2>
+        <div class="action-buttons">
+            <a href="{{ url_for('api.sync') }}" class="action-btn" data-method="POST">
+                <span class="action-icon">🔄</span>
+                <span class="action-label">Sync Data</span>
+            </a>
+            <a href="{{ url_for('commute.analyze') }}" class="action-btn" data-method="POST">
+                <span class="action-icon">🔍</span>
+                <span class="action-label">Analyze Commute</span>
+            </a>
+            <a href="{{ url_for('planner.analyze') }}" class="action-btn" data-method="POST">
+                <span class="action-icon">📅</span>
+                <span class="action-label">Plan Long Ride</span>
+            </a>
+            <a href="{{ url_for('route_library.index') }}" class="action-btn">
+                <span class="action-icon">📚</span>
+                <span class="action-label">Browse Routes</span>
+            </a>
+        </div>
+    </div>
+</div>
+
+<style>
+.dashboard {
+    padding: 2rem 0;
+}
+
+.dashboard-header {
+    margin-bottom: 2rem;
+}
+
+.dashboard-header h1 {
+    font-size: 2.5rem;
+    color: #2c3e50;
+    margin: 0 0 0.5rem 0;
+}
+
+.dashboard-subtitle {
+    font-size: 1.1rem;
+    color: #7f8c8d;
+}
+
+.status-banner {
+    display: flex;
+    gap: 2rem;
+    padding: 1.5rem;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    margin-bottom: 2rem;
+}
+
+.status-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.status-label {
+    font-size: 0.85rem;
+    color: #7f8c8d;
+    font-weight: 500;
+}
+
+.status-value {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.status-complete { color: #27ae60; }
+.status-unknown { color: #95a5a6; }
+.status-fresh { color: #27ae60; }
+.status-stale { color: #e67e22; }
+
+.quick-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.stat-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.5rem;
+    background-color: white;
+    border: 1px solid #e1e8ed;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.stat-icon {
+    font-size: 2.5rem;
+}
+
+.stat-value {
+    font-size: 2rem;
+    font-weight: bold;
+    color: #2c3e50;
+}
+
+.stat-label {
+    font-size: 0.9rem;
+    color: #7f8c8d;
+}
+
+.recommendations {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.recommendation-card {
+    padding: 1.5rem;
+    background-color: white;
+    border: 1px solid #e1e8ed;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.recommendation-card h2 {
+    font-size: 1.3rem;
+    margin: 0 0 1rem 0;
+    color: #2c3e50;
+}
+
+.no-data {
+    color: #7f8c8d;
+    margin-bottom: 1rem;
+}
+
+.btn {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    text-decoration: none;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.btn-primary {
+    background-color: #3498db;
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: #2980b9;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(52, 152, 219, 0.3);
+}
+
+.btn-secondary {
+    background-color: #95a5a6;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background-color: #7f8c8d;
+    transform: translateY(-1px);
+}
+
+.btn-block {
+    display: block;
+    width: 100%;
+    text-align: center;
+}
+
+.quick-actions {
+    margin-top: 2rem;
+}
+
+.quick-actions h2 {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+    color: #2c3e50;
+}
+
+.action-buttons {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+}
+
+.action-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1.5rem;
+    background-color: white;
+    border: 2px solid #e1e8ed;
+    border-radius: 8px;
+    text-decoration: none;
+    transition: all 0.3s ease;
+}
+
+.action-btn:hover {
+    border-color: #3498db;
+    box-shadow: 0 4px 8px rgba(52, 152, 219, 0.2);
+}
+
+.action-icon {
+    font-size: 2rem;
+}
+
+.action-label {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #2c3e50;
+}
+</style>
+{% endblock %}

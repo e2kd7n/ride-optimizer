@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+
+{% block title %}500 - Server Error | Ride Optimizer{% endblock %}
+
+{% block content %}
+<div class="error-page">
+    <div class="error-content">
+        <h1 class="error-code">500</h1>
+        <h2 class="error-title">Internal Server Error</h2>
+        <p class="error-message">
+            Something went wrong on our end. We're working to fix it.
+        </p>
+        
+        <div class="error-actions">
+            <a href="{{ url_for('dashboard.index') }}" class="btn btn-primary">
+                Go to Dashboard
+            </a>
+            <a href="javascript:location.reload()" class="btn btn-secondary">
+                Try Again
+            </a>
+        </div>
+        
+        <div class="error-details">
+            <h3>What you can do:</h3>
+            <ul>
+                <li>Wait a few moments and try again</li>
+                <li>Check the <a href="{{ url_for('api.status') }}">system status</a> page</li>
+                <li>Clear your browser cache and cookies</li>
+                <li>Contact support if the problem persists</li>
+            </ul>
+        </div>
+        
+        {% if config.DEBUG %}
+        <div class="error-debug">
+            <h3>Debug Information:</h3>
+            <p class="debug-note">This information is only visible in debug mode.</p>
+            <pre>{{ error_details }}</pre>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+.error-page {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 60vh;
+    text-align: center;
+}
+
+.error-content {
+    max-width: 600px;
+    padding: 2rem;
+}
+
+.error-code {
+    font-size: 6rem;
+    font-weight: bold;
+    color: #e74c3c;
+    margin: 0;
+    line-height: 1;
+}
+
+.error-title {
+    font-size: 2rem;
+    margin: 1rem 0;
+    color: #2c3e50;
+}
+
+.error-message {
+    font-size: 1.1rem;
+    color: #7f8c8d;
+    margin: 1rem 0 2rem;
+}
+
+.error-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    margin: 2rem 0;
+}
+
+.btn {
+    padding: 0.75rem 1.5rem;
+    border-radius: 4px;
+    text-decoration: none;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.btn-primary {
+    background-color: #3498db;
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: #2980b9;
+}
+
+.btn-secondary {
+    background-color: #95a5a6;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background-color: #7f8c8d;
+}
+
+.error-details {
+    margin-top: 3rem;
+    text-align: left;
+}
+
+.error-details h3 {
+    color: #2c3e50;
+    margin-bottom: 1rem;
+}
+
+.error-details ul {
+    list-style: disc;
+    padding-left: 2rem;
+}
+
+.error-details li {
+    margin: 0.5rem 0;
+    color: #555;
+}
+
+.error-details a {
+    color: #3498db;
+    text-decoration: none;
+}
+
+.error-details a:hover {
+    text-decoration: underline;
+}
+
+.error-debug {
+    margin-top: 3rem;
+    padding: 1rem;
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    text-align: left;
+}
+
+.error-debug h3 {
+    color: #e74c3c;
+    margin-top: 0;
+}
+
+.debug-note {
+    color: #856404;
+    background-color: #fff3cd;
+    padding: 0.5rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+.error-debug pre {
+    background-color: #fff;
+    padding: 1rem;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 0.85rem;
+    color: #333;
+}
+</style>
+{% endblock %}
