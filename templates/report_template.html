@@ -848,6 +848,26 @@
             </div>
         </div>
 
+        <!-- Geocoding In Progress Banner -->
+        {% if geocoding_in_progress %}
+        <div class="alert alert-info" role="alert" style="margin-bottom: 16px; border-left: 4px solid #667eea;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div class="loading-spinner"></div>
+                <div style="flex: 1;">
+                    <h5 style="margin: 0 0 8px 0;">⏳ Route Names Being Geocoded</h5>
+                    <p style="margin: 0; font-size: 0.9em;">
+                        {{ routes_needing_geocoding }} of {{ total_routes }} routes are being geocoded in the background.
+                        Route names will show as "Route X to Work/Home" until geocoding completes.
+                    </p>
+                    <p style="margin: 8px 0 0 0; font-size: 0.85em; color: #6c757d;">
+                        <strong>To see updated names:</strong> Re-run <code>python main.py --analyze</code> after geocoding completes (check the geocoding terminal for progress).
+                        The next analysis will be instant since data is cached.
+                    </p>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- Navigation Tabs (Simplified to 2 tabs) -->
         <ul class="nav nav-tabs" id="reportTabs" role="tablist">
             <li class="nav-item" role="presentation">
