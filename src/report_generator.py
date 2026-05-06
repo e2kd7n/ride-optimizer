@@ -523,6 +523,12 @@ class ReportGenerator:
                 'avg_duration_hours': sum(durations) / len(durations)
             }
         
+        # Check if geocoding is in progress (routes have temporary names)
+        route_groups = self.results.get('route_groups', [])
+        routes_with_temp_names = sum(1 for g in route_groups
+                                     if g.name and ("Route" in g.name and ("to Work" in g.name or "to Home" in g.name)))
+        geocoding_in_progress = routes_with_temp_names > 0
+        
         context = {
             'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'optimal': optimal,
@@ -548,7 +554,10 @@ class ReportGenerator:
             'long_rides_geojson': long_rides_geojson,  # Issue #9: Map data
             'units': self.units,  # Pass unit converter to template
             'next_commutes': next_commutes,  # Add time-aware next commute recommendations
-            'optimizer': self.results.get('optimizer')  # Add optimizer for template access
+            'optimizer': self.results.get('optimizer'),  # Add optimizer for template access
+            'geocoding_in_progress': geocoding_in_progress,  # Flag for geocoding status banner
+            'routes_needing_geocoding': routes_with_temp_names,  # Count of routes being geocoded
+            'total_routes': len(route_groups)  # Total route count
         }
         
         return context
