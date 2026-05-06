@@ -40,6 +40,31 @@ This directory contains historical debug and analysis scripts used during develo
   - Investigated Strava API data issues
   - Helped establish robust error handling
 
+### GitHub Issue Management Scripts (Archived 2026-05-06)
+- **create_issues.sh** - One-time issue creation script
+  - Created initial GitHub issues from TODO lists
+  - Superseded by intelligent issue management
+  
+- **create_p2_issues.sh** - One-time P2 priority issue creation
+  - Created batch of P2 priority issues
+  - No longer needed after initial setup
+  
+- **create_uiux_epic_issues_temp.sh** - Temporary UI/UX epic creation
+  - Created UI/UX improvement epic and related issues
+  - Temporary script for one-time use
+  
+- **create_v2.5.0_issue_updates.sh** - One-time v2.5.0 issue updates
+  - Updated issues for v2.5.0 release
+  - Version-specific, no longer needed
+  
+- **cleanup-issue-titles.sh** - One-time issue title cleanup
+  - Cleaned up inconsistent issue titles
+  - Completed, no longer needed
+  
+- **close-duplicate-issues.sh** - One-time duplicate issue closure
+  - Closed duplicate GitHub issues
+  - Completed, no longer needed
+
 ## Why Archived?
 
 These scripts served their purpose during development:
@@ -67,5 +92,5 @@ The following scripts remain in the root directory as they're still useful:
 
 ---
 
-**Last Updated:** 2026-03-26
+**Last Updated:** 2026-05-06
 **Archived By:** Bob (AI Assistant)

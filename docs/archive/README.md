@@ -6,6 +6,10 @@ This directory contains archived documentation that is no longer actively mainta
 
 ## 📚 Archived Documents
 
+### Project Planning & Proposals
+- [`WEB_PLATFORM_PROPOSAL.md`](WEB_PLATFORM_PROPOSAL.md) - Future web platform proposal (2026-03-30)
+- [`DOCUMENTATION_REORGANIZATION.md`](DOCUMENTATION_REORGANIZATION.md) - Documentation reorganization summary (2026-05-05)
+
 ### Code Reviews & Audits
 - [`DESIGN_PRINCIPLES_ISSUE_AUDIT.md`](DESIGN_PRINCIPLES_ISSUE_AUDIT.md) - Design principles audit
 - [`SENIOR_DEV_CODE_REVIEW.md`](SENIOR_DEV_CODE_REVIEW.md) - Senior developer code review
