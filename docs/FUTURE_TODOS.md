@@ -1,12 +1,14 @@
 # Future TODO Items
 
 ## Route Matching Issues
+- **GitHub Issue**: [#123](https://github.com/e2kd7n/ride-optimizer/issues/123)
 - **TODO**: Examine why routes 78 and 62 aren't matching
   - Need to investigate route similarity algorithm
   - Check if these routes should be grouped together
   - Review distance/coordinate comparison thresholds
 
 ## Map UI/UX Improvements
+- **GitHub Issue**: [#124](https://github.com/e2kd7n/ride-optimizer/issues/124)
 - **TODO**: Ensure polylines and tooltips selected are on top of all subdued lines
   - Selected routes should have higher z-index
   - Tooltips should appear above all map elements
