@@ -28,6 +28,14 @@ def create_app(config_name='default'):
     # Load configuration
     app.config.from_object(f'app.config.{config_name.capitalize()}Config')
     
+    # Initialize database
+    from app.models import db
+    db.init_app(app)
+    
+    # Create tables if they don't exist
+    with app.app_context():
+        db.create_all()
+    
     # Enable CORS for API endpoints
     CORS(app, resources={r"/api/*": {"origins": "*"}})
     
