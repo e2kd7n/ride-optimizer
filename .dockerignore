@@ -1,0 +1,70 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info
+dist
+build
+*.egg
+.pytest_cache
+.coverage
+htmlcov
+.tox
+.venv
+venv
+ENV
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Documentation
+*.md
+!README.md
+docs/
+plans/
+archive/
+
+# Data and cache (will be mounted as volumes)
+data/*
+cache/*
+logs/*
+htmlcov/*
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Test files
+tests/
+*.test.py
+
+# CI/CD
+.github
+.gitlab-ci.yml
+.travis.yml
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Misc
+*.log
+*.pid
+*.seed
+*.pid.lock
+.coverage.*
+coverage.json
