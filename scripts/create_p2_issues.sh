@@ -8,7 +8,7 @@ echo "Creating P2 GitHub issues..."
 # Issue 1: Route matching investigation
 gh issue create \
   --title "Investigate why routes 78 and 62 aren't matching in route grouping" \
-  --label "P2-medium,bug,route-analysis" \
+  --label "P2-medium,bug,backend" \
   --body "During route analysis, routes 78 and 62 are not being grouped together despite potentially being similar routes. This needs investigation to determine if:
 
 1. The routes should actually be grouped together
@@ -31,7 +31,7 @@ gh issue create \
 # Issue 2: Map visual hierarchy
 gh issue create \
   --title "Ensure selected polylines and tooltips appear on top of all map elements" \
-  --label "P2-medium,enhancement,ui-ux,map" \
+  --label "P2-medium,enhancement,ux,frontend" \
   --body "When a route is selected on the interactive map, the polyline and tooltip should appear on top of all other map elements for better visibility. Currently, selected routes may be obscured by other route lines.
 
 **Current Behavior:**
