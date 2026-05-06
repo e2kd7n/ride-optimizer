@@ -1,0 +1,338 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-3 py-4">
+    <!-- Error Message -->
+    {% if error %}
+    <div class="alert alert-danger" role="alert">
+        <i class="bi bi-exclamation-triangle"></i> {{ error }}
+    </div>
+    <div class="text-center py-5">
+        <a href="{{ url_for('route_library.index') }}" class="btn btn-primary">
+            <i class="bi bi-arrow-left"></i> Back to Route Library
+        </a>
+    </div>
+    {% elif route %}
+    
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item">
+                        <a href="{{ url_for('route_library.index') }}">Route Library</a>
+                    </li>
+                    <li class="breadcrumb-item active" aria-current="page">{{ route.name }}</li>
+                </ol>
+            </nav>
+            
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <h1 class="h3 mb-2">{{ route.name }}</h1>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <!-- Type Badge -->
+                        {% if route.type == 'commute' %}
+                        <span class="badge bg-primary">
+                            <i class="bi bi-briefcase"></i> Commute Route
+                        </span>
+                        {% else %}
+                        <span class="badge bg-success">
+                            <i class="bi bi-bicycle"></i> Long Ride
+                        </span>
+                        {% endif %}
+                        
+                        <!-- Direction Badge -->
+                        {% if route.direction %}
+                        <span class="badge bg-secondary">
+                            {% if route.direction == 'to_work' %}
+                            <i class="bi bi-arrow-right"></i> To Work
+                            {% else %}
+                            <i class="bi bi-arrow-left"></i> To Home
+                            {% endif %}
+                        </span>
+                        {% endif %}
+                        
+                        <!-- Loop Badge -->
+                        {% if route.is_loop %}
+                        <span class="badge bg-info">
+                            <i class="bi bi-arrow-repeat"></i> Loop Route
+                        </span>
+                        {% endif %}
+                        
+                        <!-- Plus Route Badge -->
+                        {% if route.is_plus_route %}
+                        <span class="badge bg-warning text-dark">
+                            <i class="bi bi-plus-circle"></i> Plus Route
+                        </span>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <button class="btn btn-outline-danger favorite-btn" 
+                        data-route-id="{{ route.id }}"
+                        data-is-favorite="{{ 'true' if route.is_favorite else 'false' }}">
+                    <i class="bi bi-heart{% if route.is_favorite %}-fill{% endif %}"></i>
+                    {% if route.is_favorite %}Unfavorite{% else %}Favorite{% endif %}
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Stats -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <i class="bi bi-rulers display-6 text-primary mb-2"></i>
+                    <div class="h3 mb-1">{{ "%.1f"|format(route.distance) }}</div>
+                    <div class="text-muted">Distance (km)</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <i class="bi bi-clock display-6 text-success mb-2"></i>
+                    <div class="h3 mb-1">{{ "%.0f"|format(route.duration) }}</div>
+                    <div class="text-muted">Duration (min)</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <i class="bi bi-graph-up display-6 text-info mb-2"></i>
+                    <div class="h3 mb-1">{{ route.elevation }}</div>
+                    <div class="text-muted">Elevation (m)</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <i class="bi bi-activity display-6 text-warning mb-2"></i>
+                    <div class="h3 mb-1">{{ route.uses }}</div>
+                    <div class="text-muted">Times Used</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Map Placeholder -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-map"></i> Route Map
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="bg-light rounded d-flex align-items-center justify-content-center" 
+                         style="height: 400px;">
+                        <div class="text-center text-muted">
+                            <i class="bi bi-map display-1"></i>
+                            <p class="mt-3">Map visualization coming soon</p>
+                            <small>Will display route path with elevation profile</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Additional Details for Commute Routes -->
+    {% if route.type == 'commute' and route.routes %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-list-ul"></i> Route Variations ({{ route.routes|length }})
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Activity</th>
+                                    <th class="text-end">Distance</th>
+                                    <th class="text-end">Duration</th>
+                                    <th class="text-end">Avg Speed</th>
+                                    <th class="text-end">Elevation</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for r in route.routes %}
+                                <tr>
+                                    <td>{{ r.timestamp[:10] if r.timestamp else 'N/A' }}</td>
+                                    <td>
+                                        <small class="text-muted">{{ r.activity_name or 'Activity ' + r.activity_id|string }}</small>
+                                    </td>
+                                    <td class="text-end">{{ "%.1f"|format(r.distance) }} km</td>
+                                    <td class="text-end">{{ "%.0f"|format(r.duration) }} min</td>
+                                    <td class="text-end">{{ "%.1f"|format(r.average_speed) }} km/h</td>
+                                    <td class="text-end">{{ r.elevation }} m</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Additional Details for Long Rides -->
+    {% if route.type == 'long_ride' %}
+    <div class="row g-3 mb-4">
+        <!-- Route Type -->
+        {% if route.ride_type %}
+        <div class="col-12 col-md-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Ride Type</h6>
+                    <p class="mb-0">
+                        <span class="badge bg-secondary">{{ route.ride_type }}</span>
+                    </p>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Average Speed -->
+        {% if route.average_speed %}
+        <div class="col-12 col-md-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Average Speed</h6>
+                    <p class="mb-0 h5">{{ "%.1f"|format(route.average_speed) }} km/h</p>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Start/End Locations -->
+        {% if route.start_location and route.end_location %}
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h6 class="text-muted mb-3">Route Endpoints</h6>
+                    <div class="row">
+                        <div class="col-6">
+                            <strong>Start:</strong><br>
+                            <small class="text-muted">
+                                {{ "%.4f"|format(route.start_location[0]) }}, 
+                                {{ "%.4f"|format(route.start_location[1]) }}
+                            </small>
+                        </div>
+                        <div class="col-6">
+                            <strong>End:</strong><br>
+                            <small class="text-muted">
+                                {{ "%.4f"|format(route.end_location[0]) }}, 
+                                {{ "%.4f"|format(route.end_location[1]) }}
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Activity History -->
+        {% if route.activity_dates %}
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-calendar-event"></i> Activity History
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex flex-wrap gap-2">
+                        {% for date in route.activity_dates %}
+                        <span class="badge bg-light text-dark border">
+                            {{ date[:10] if date else 'N/A' }}
+                        </span>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Actions -->
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex gap-2">
+                <a href="{{ url_for('route_library.index') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left"></i> Back to Library
+                </a>
+                {% if route.type == 'commute' %}
+                <a href="{{ url_for('commute.index') }}" class="btn btn-primary">
+                    <i class="bi bi-briefcase"></i> View Commute Recommendations
+                </a>
+                {% else %}
+                <a href="{{ url_for('planner.index') }}" class="btn btn-primary">
+                    <i class="bi bi-calendar-week"></i> View Ride Planner
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    {% endif %}
+</div>
+
+<!-- Favorite Toggle Script -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const favoriteBtn = document.querySelector('.favorite-btn');
+    
+    if (favoriteBtn) {
+        favoriteBtn.addEventListener('click', async function(e) {
+            e.preventDefault();
+            const routeId = this.dataset.routeId;
+            const isFavorite = this.dataset.isFavorite === 'true';
+            const icon = this.querySelector('i');
+            const text = this.childNodes[this.childNodes.length - 1];
+            
+            try {
+                const response = await fetch(`/routes/api/${routeId}/favorite`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ favorite: !isFavorite })
+                });
+                
+                if (response.ok) {
+                    // Toggle state
+                    this.dataset.isFavorite = (!isFavorite).toString();
+                    
+                    // Update icon and text
+                    if (!isFavorite) {
+                        icon.classList.remove('bi-heart');
+                        icon.classList.add('bi-heart-fill');
+                        text.textContent = 'Unfavorite';
+                    } else {
+                        icon.classList.remove('bi-heart-fill');
+                        icon.classList.add('bi-heart');
+                        text.textContent = 'Favorite';
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to toggle favorite:', error);
+            }
+        });
+    }
+});
+</script>
+{% endblock %}
