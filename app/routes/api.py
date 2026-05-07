@@ -415,9 +415,9 @@ def analytics_summary():
                 {
                     'id': rg.id,
                     'name': rg.name,
-                    'uses_count': rg.uses_count
+                    'uses_count': rg.frequency
                 }
-                for rg in sorted(route_groups, key=lambda x: x.uses_count, reverse=True)[:5]
+                for rg in sorted(route_groups, key=lambda x: x.frequency, reverse=True)[:5]
             ]
         },
         'long_rides': {
