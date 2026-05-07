@@ -5,12 +5,12 @@ This package contains all Flask blueprints organized by feature area.
 """
 
 # Import blueprints for easy access
-from app.routes.dashboard import bp as dashboard_bp
-from app.routes.commute import bp as commute_bp
-from app.routes.planner import bp as planner_bp
-from app.routes.route_library import bp as route_library_bp
-from app.routes.settings import bp as settings_bp
-from app.routes.api import bp as api_bp
+from app.routes_DEPRECATED_FLASK.dashboard import bp as dashboard_bp
+from app.routes_DEPRECATED_FLASK.commute import bp as commute_bp
+from app.routes_DEPRECATED_FLASK.planner import bp as planner_bp
+from app.routes_DEPRECATED_FLASK.route_library import bp as route_library_bp
+from app.routes_DEPRECATED_FLASK.settings import bp as settings_bp
+from app.routes_DEPRECATED_FLASK.api import bp as api_bp
 
 __all__ = [
     'dashboard_bp',
