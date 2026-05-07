@@ -15,6 +15,8 @@ from datetime import datetime, timedelta
 from src.long_ride_analyzer import LongRideAnalyzer, LongRide, RideRecommendation
 from src.weather_fetcher import WeatherFetcher
 from src.config import Config
+from app.services.weather_service import WeatherService
+from app.models.weather import WeatherSnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +41,7 @@ class PlannerService:
         """
         self.config = config
         self.weather_fetcher = WeatherFetcher()
+        self.weather_service = WeatherService(config)
         self._long_rides: Optional[List[LongRide]] = None
     
     def initialize(self, long_rides: List[LongRide]):
@@ -367,22 +370,109 @@ class PlannerService:
         return scored_rides
     
     def _get_weather_for_ride(self, ride: LongRide, target_date: datetime.date) -> Dict[str, Any]:
-        """Get weather forecast for a ride on a specific date."""
-        # TODO: Implement actual weather fetching
-        # For now, return placeholder
-        return {
-            'temperature': 70.0,
-            'conditions': 'Clear',
-            'wind_speed': 5.0,
-            'wind_direction': 'N',
-            'precipitation': 0.0
-        }
+        """
+        Get weather forecast for a ride on a specific date.
+        
+        Args:
+            ride: LongRide object with coordinates
+            target_date: Date to get forecast for
+            
+        Returns:
+            Dictionary with weather data including comfort_score and cycling_favorability
+        """
+        try:
+            # Calculate days ahead for forecast
+            days_ahead = (target_date - datetime.now().date()).days
+            
+            if days_ahead < 0:
+                logger.warning(f"Cannot get forecast for past date: {target_date}")
+                return {}
+            
+            # Get forecast for ride start location
+            lat, lon = ride.start_location
+            
+            # Get forecast from WeatherService
+            forecast_data = self.weather_fetcher.get_forecast(lat, lon, days=min(days_ahead + 1, 7))
+            
+            if not forecast_data or 'daily' not in forecast_data:
+                logger.warning(f"No forecast data available for {target_date}")
+                return {}
+            
+            # Find the forecast for target date
+            daily_forecasts = forecast_data['daily']
+            if days_ahead < len(daily_forecasts):
+                day_forecast = daily_forecasts[days_ahead]
+                
+                # Create WeatherSnapshot to calculate comfort metrics
+                snapshot = WeatherSnapshot.create_from_weather_data(
+                    day_forecast,
+                    location_name=ride.name,
+                    is_current=False,
+                    forecast_time=datetime.combine(target_date, datetime.min.time())
+                )
+                
+                if snapshot:
+                    return snapshot.to_dict()
+            
+            logger.warning(f"Forecast not available for day {days_ahead}")
+            return {}
+            
+        except Exception as e:
+            logger.error(f"Failed to get weather for ride {ride.activity_id}: {e}", exc_info=True)
+            return {}
     
     def _calculate_weather_score(self, weather: Dict[str, Any]) -> float:
-        """Calculate weather suitability score (0-1)."""
-        # TODO: Implement actual weather scoring
-        # For now, return placeholder
-        return 0.8
+        """
+        Calculate weather suitability score (0-1) for cycling.
+        
+        Uses the comfort_score from WeatherSnapshot if available,
+        otherwise calculates based on temperature, wind, and precipitation.
+        
+        Args:
+            weather: Weather data dictionary
+            
+        Returns:
+            Score from 0.0 (terrible) to 1.0 (perfect)
+        """
+        if not weather:
+            return 0.5  # Neutral score if no weather data
+        
+        # Use pre-calculated comfort_score if available
+        if 'comfort_score' in weather:
+            return weather['comfort_score']
+        
+        # Fallback: calculate score manually
+        score = 1.0
+        
+        # Temperature scoring (optimal: 15-25°C / 59-77°F)
+        temp_c = weather.get('temperature_c', weather.get('temperature', 20))
+        if isinstance(temp_c, (int, float)):
+            if temp_c < 0:
+                score -= 0.4
+            elif temp_c < 10:
+                score -= 0.2
+            elif temp_c > 30:
+                score -= 0.3
+            elif temp_c > 35:
+                score -= 0.5
+        
+        # Wind scoring (unfavorable above 20 kph / 12 mph)
+        wind_kph = weather.get('wind_speed_kph', weather.get('wind_speed', 0))
+        if isinstance(wind_kph, (int, float)):
+            if wind_kph > 30:
+                score -= 0.3
+            elif wind_kph > 20:
+                score -= 0.15
+        
+        # Precipitation scoring
+        precip_mm = weather.get('precipitation_mm', weather.get('precipitation', 0))
+        if isinstance(precip_mm, (int, float)) and precip_mm > 0:
+            if precip_mm > 5:
+                score -= 0.4
+            else:
+                score -= 0.2
+        
+        return max(0.0, min(1.0, score))
     
     def _get_weather_summary(self, weather: Optional[Dict[str, Any]]) -> str:
         """Generate human-readable weather summary."""
