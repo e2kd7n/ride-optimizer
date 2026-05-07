@@ -364,3 +364,120 @@ html {
 }
 
 /* Made with Bob */
+
+/* Weather Favorability Badges */
+.weather-favorability {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    background-color: var(--light-gray);
+    border-radius: 8px;
+}
+
+.weather-favorability .badge {
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.weather-favorability .badge-success {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.weather-favorability .badge-warning {
+    background-color: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeaa7;
+}
+
+.weather-favorability .badge-danger {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.weather-favorability .comfort-score {
+    color: var(--medium-gray);
+    font-size: 0.9rem;
+}
+
+/* Wind Impact Analysis */
+.wind-impact {
+    margin-top: 1rem;
+    padding: 1rem;
+    background-color: #f0f8ff;
+    border-left: 4px solid var(--primary-color);
+    border-radius: 4px;
+}
+
+.wind-impact h4 {
+    margin-bottom: 0.75rem;
+    color: var(--dark-gray);
+    font-size: 1rem;
+}
+
+.wind-impact-details {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0.75rem;
+}
+
+.wind-detail {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem;
+    background-color: white;
+    border-radius: 4px;
+}
+
+.wind-detail.highlight {
+    background-color: #e3f2fd;
+    font-weight: 600;
+}
+
+.wind-label {
+    color: var(--medium-gray);
+}
+
+.wind-value {
+    color: var(--dark-gray);
+    font-weight: 500;
+}
+
+/* Weather Warning */
+.weather-warning {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    padding: 0.75rem;
+    background-color: #fff3cd;
+    border-left: 4px solid var(--warning-color);
+    border-radius: 4px;
+}
+
+.weather-warning .warning-icon {
+    font-size: 1.2rem;
+}
+
+.weather-warning .warning-text {
+    color: #856404;
+    font-size: 0.9rem;
+}
+
+/* Mobile Responsiveness for Weather Components */
+@media (max-width: 768px) {
+    .weather-favorability {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .wind-impact-details {
+        grid-template-columns: 1fr;
+    }
+}
