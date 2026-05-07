@@ -724,8 +724,9 @@ class RouteLibraryService:
                 # Add layer control
                 folium.LayerControl().add_to(map_obj)
                 
-                # Return HTML
-                return map_obj._repr_html_()
+                # Return HTML - use get_root().render() for proper HTML output
+                # _repr_html_() returns iframe-based output for Jupyter, which doesn't work in web apps
+                return map_obj.get_root().render()
                 
             elif route_type == 'long_ride' and long_ride:
                 coords = long_ride.get('coordinates', []) if isinstance(long_ride, dict) else long_ride.coordinates
@@ -814,13 +815,518 @@ class RouteLibraryService:
                 # Add layer control
                 folium.LayerControl().add_to(map_obj)
                 
-                # Return HTML
-                return map_obj._repr_html_()
+                # Return HTML - use get_root().render() for proper HTML output
+                # _repr_html_() returns iframe-based output for Jupyter, which doesn't work in web apps
+                return map_obj.get_root().render()
             
             return None
             
         except Exception as e:
             logger.error(f"Failed to generate map for route {route_id}: {e}", exc_info=True)
             return None
+    
+    def get_routes(self,
+                   route_type: str = 'all',
+                   sort_by: str = 'uses',
+                   limit: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Get routes with optional filtering and sorting.
+        
+        This is the primary method for retrieving routes from the library.
+        It's an alias for get_all_routes() to provide a cleaner API interface.
+        
+        Args:
+            route_type: Filter by type - 'all', 'commute', or 'long_ride'
+            sort_by: Sort criteria - 'uses', 'distance', 'recent', or 'name'
+            limit: Maximum number of routes to return (None for all)
+            
+        Returns:
+            Dictionary with routes and metadata:
+            {
+                'status': 'success' | 'error',
+                'routes': List[Dict],  # List of route objects
+                'total_count': int,    # Total number of routes returned
+                'filters': {
+                    'type': str,       # Applied route type filter
+                    'sort_by': str     # Applied sort criteria
+                }
+            }
+            
+        Example:
+            >>> service.get_routes(route_type='commute', sort_by='distance', limit=10)
+            {
+                'status': 'success',
+                'routes': [...],
+                'total_count': 10,
+                'filters': {'type': 'commute', 'sort_by': 'distance'}
+            }
+        """
+        return self.get_all_routes(route_type=route_type, sort_by=sort_by, limit=limit)
+    
+    def get_route_history(self, route_id: str) -> Dict[str, Any]:
+        """
+        Get usage history for a specific route.
+        
+        Returns all instances when this route was used, including dates,
+        times, and performance metrics for each use.
+        
+        Args:
+            route_id: Route identifier (group ID for commutes, activity ID for long rides)
+            
+        Returns:
+            Dictionary with route history:
+            {
+                'status': 'success' | 'error',
+                'route_id': str,
+                'route_name': str,
+                'route_type': 'commute' | 'long_ride',
+                'total_uses': int,
+                'first_used': str,  # ISO timestamp
+                'last_used': str,   # ISO timestamp
+                'history': [
+                    {
+                        'activity_id': int,
+                        'date': str,        # ISO timestamp
+                        'distance': float,  # km
+                        'duration': float,  # minutes
+                        'elevation': float, # meters
+                        'average_speed': float  # km/h
+                    },
+                    ...
+                ]
+            }
+            
+        Example:
+            >>> service.get_route_history('route_123')
+            {
+                'status': 'success',
+                'route_id': 'route_123',
+                'route_name': 'Main Commute',
+                'total_uses': 45,
+                'history': [...]
+            }
+        """
+        try:
+            # Load cached data if not already loaded
+            self._load_from_cache()
+            
+            # Search in commute routes
+            if self._route_groups:
+                for group in self._route_groups:
+                    group_id = group.get('id') if isinstance(group, dict) else group.id
+                    if group_id == route_id:
+                        # Found commute route
+                        routes_data = group.get('routes', []) if isinstance(group, dict) else group.routes
+                        name = group.get('name') if isinstance(group, dict) else group.name
+                        
+                        history = []
+                        for route in routes_data:
+                            if isinstance(route, dict):
+                                history.append({
+                                    'activity_id': route.get('activity_id'),
+                                    'date': route.get('timestamp'),
+                                    'distance': route.get('distance', 0) / 1000,  # km
+                                    'duration': route.get('duration', 0) / 60,  # minutes
+                                    'elevation': route.get('elevation_gain', 0),
+                                    'average_speed': route.get('average_speed', 0) * 3.6  # km/h
+                                })
+                            else:
+                                history.append({
+                                    'activity_id': route.activity_id,
+                                    'date': route.timestamp,
+                                    'distance': route.distance / 1000,
+                                    'duration': route.duration / 60,
+                                    'elevation': route.elevation_gain,
+                                    'average_speed': route.average_speed * 3.6
+                                })
+                        
+                        # Sort by date (most recent first)
+                        history.sort(key=lambda x: x['date'], reverse=True)
+                        
+                        return {
+                            'status': 'success',
+                            'route_id': route_id,
+                            'route_name': name or f"Route {route_id}",
+                            'route_type': 'commute',
+                            'total_uses': len(history),
+                            'first_used': history[-1]['date'] if history else None,
+                            'last_used': history[0]['date'] if history else None,
+                            'history': history
+                        }
+            
+            # Search in long rides
+            if self._long_rides:
+                for ride in self._long_rides:
+                    ride_id = str(ride.get('activity_id') if isinstance(ride, dict) else ride.activity_id)
+                    if ride_id == route_id:
+                        # Found long ride
+                        if isinstance(ride, dict):
+                            activity_ids = ride.get('activity_ids', [ride.get('activity_id')])
+                            activity_dates = ride.get('activity_dates', [ride.get('timestamp')])
+                            name = ride.get('name')
+                            distance = ride.get('distance_km')
+                            duration = ride.get('duration_hours') * 60
+                            elevation = ride.get('elevation_gain', 0)
+                            avg_speed = (ride.get('distance', 0) / ride.get('duration', 1)) * 3.6 if ride.get('duration') else 0
+                        else:
+                            activity_ids = ride.activity_ids or [ride.activity_id]
+                            activity_dates = ride.activity_dates or [ride.timestamp]
+                            name = ride.name
+                            distance = ride.distance_km
+                            duration = ride.duration_hours * 60
+                            elevation = ride.elevation_gain
+                            avg_speed = ride.average_speed * 3.6
+                        
+                        history = []
+                        for act_id, act_date in zip(activity_ids, activity_dates):
+                            history.append({
+                                'activity_id': act_id,
+                                'date': act_date,
+                                'distance': distance,
+                                'duration': duration,
+                                'elevation': elevation,
+                                'average_speed': avg_speed
+                            })
+                        
+                        # Sort by date (most recent first)
+                        history.sort(key=lambda x: x['date'], reverse=True)
+                        
+                        return {
+                            'status': 'success',
+                            'route_id': route_id,
+                            'route_name': name,
+                            'route_type': 'long_ride',
+                            'total_uses': len(history),
+                            'first_used': history[-1]['date'] if history else None,
+                            'last_used': history[0]['date'] if history else None,
+                            'history': history
+                        }
+            
+            # Route not found
+            return {
+                'status': 'error',
+                'message': f'Route {route_id} not found',
+                'route_id': route_id,
+                'total_uses': 0,
+                'history': []
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to get route history for {route_id}: {e}", exc_info=True)
+            return {
+                'status': 'error',
+                'message': f'Failed to retrieve route history: {str(e)}',
+                'route_id': route_id,
+                'total_uses': 0,
+                'history': []
+            }
+    
+    def compare_routes(self, route_ids: List[str]) -> Dict[str, Any]:
+        """
+        Compare multiple routes side-by-side.
+        
+        Provides detailed comparison of route metrics including relative
+        differences (e.g., "20% longer", "15% more elevation").
+        
+        Args:
+            route_ids: List of route IDs to compare (max 5)
+            
+        Returns:
+            Dictionary with comparison data:
+            {
+                'status': 'success' | 'error',
+                'routes': [
+                    {
+                        'id': str,
+                        'name': str,
+                        'type': str,
+                        'distance': float,      # km
+                        'duration': float,      # minutes
+                        'elevation': float,     # meters
+                        'average_speed': float, # km/h
+                        'uses': int,
+                        'last_used': str,       # ISO timestamp
+                        'relative_distance': str,    # e.g., "+20%"
+                        'relative_duration': str,    # e.g., "-5%"
+                        'relative_elevation': str    # e.g., "+15%"
+                    },
+                    ...
+                ],
+                'summary': {
+                    'shortest_route': str,  # route name
+                    'fastest_route': str,
+                    'flattest_route': str,
+                    'most_used_route': str
+                }
+            }
+            
+        Example:
+            >>> service.compare_routes(['route_1', 'route_2', 'route_3'])
+            {
+                'status': 'success',
+                'routes': [...],
+                'summary': {
+                    'shortest_route': 'Main Commute',
+                    'fastest_route': 'Highway Route',
+                    ...
+                }
+            }
+        """
+        try:
+            # Validate input
+            if not route_ids:
+                return {
+                    'status': 'error',
+                    'message': 'No route IDs provided',
+                    'routes': []
+                }
+            
+            if len(route_ids) > 5:
+                return {
+                    'status': 'error',
+                    'message': 'Maximum 5 routes can be compared at once',
+                    'routes': []
+                }
+            
+            # Load cached data if not already loaded
+            self._load_from_cache()
+            
+            # Collect route data
+            routes_data = []
+            for route_id in route_ids:
+                route_info = None
+                
+                # Search in commute routes
+                if self._route_groups:
+                    for group in self._route_groups:
+                        group_id = group.get('id') if isinstance(group, dict) else group.id
+                        if group_id == route_id:
+                            route_info = self._format_commute_route(group)
+                            # Get last used date from routes
+                            routes = group.get('routes', []) if isinstance(group, dict) else group.routes
+                            if routes:
+                                last_route = max(routes, key=lambda r: r.get('timestamp') if isinstance(r, dict) else r.timestamp)
+                                route_info['last_used'] = last_route.get('timestamp') if isinstance(last_route, dict) else last_route.timestamp
+                            else:
+                                route_info['last_used'] = None
+                            break
+                
+                # Search in long rides if not found
+                if not route_info and self._long_rides:
+                    for ride in self._long_rides:
+                        ride_id = str(ride.get('activity_id') if isinstance(ride, dict) else ride.activity_id)
+                        if ride_id == route_id:
+                            route_info = self._format_long_ride(ride)
+                            route_info['last_used'] = ride.get('timestamp') if isinstance(ride, dict) else ride.timestamp
+                            break
+                
+                if route_info:
+                    routes_data.append(route_info)
+                else:
+                    logger.warning(f"Route {route_id} not found for comparison")
+            
+            if not routes_data:
+                return {
+                    'status': 'error',
+                    'message': 'None of the specified routes were found',
+                    'routes': []
+                }
+            
+            # Calculate relative metrics (compare to first route as baseline)
+            baseline = routes_data[0]
+            baseline_distance = baseline['distance']
+            baseline_duration = baseline['duration']
+            baseline_elevation = baseline['elevation']
+            
+            for route in routes_data:
+                # Calculate relative differences
+                if baseline_distance > 0:
+                    dist_diff = ((route['distance'] - baseline_distance) / baseline_distance) * 100
+                    route['relative_distance'] = f"{dist_diff:+.1f}%" if dist_diff != 0 else "baseline"
+                else:
+                    route['relative_distance'] = "N/A"
+                
+                if baseline_duration > 0:
+                    dur_diff = ((route['duration'] - baseline_duration) / baseline_duration) * 100
+                    route['relative_duration'] = f"{dur_diff:+.1f}%" if dur_diff != 0 else "baseline"
+                else:
+                    route['relative_duration'] = "N/A"
+                
+                if baseline_elevation > 0:
+                    elev_diff = ((route['elevation'] - baseline_elevation) / baseline_elevation) * 100
+                    route['relative_elevation'] = f"{elev_diff:+.1f}%" if elev_diff != 0 else "baseline"
+                else:
+                    route['relative_elevation'] = "N/A"
+                
+                # Add average speed if not present
+                if 'average_speed' not in route and route['duration'] > 0:
+                    route['average_speed'] = (route['distance'] / (route['duration'] / 60))  # km/h
+            
+            # Generate summary
+            summary = {
+                'shortest_route': min(routes_data, key=lambda r: r['distance'])['name'],
+                'fastest_route': min(routes_data, key=lambda r: r['duration'])['name'],
+                'flattest_route': min(routes_data, key=lambda r: r['elevation'])['name'],
+                'most_used_route': max(routes_data, key=lambda r: r['uses'])['name']
+            }
+            
+            return {
+                'status': 'success',
+                'routes': routes_data,
+                'summary': summary
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to compare routes: {e}", exc_info=True)
+            return {
+                'status': 'error',
+                'message': f'Failed to compare routes: {str(e)}',
+                'routes': []
+            }
+    
+    def export_routes(self, format: str = 'json', route_type: str = 'all') -> Dict[str, Any]:
+        """
+        Export routes in various formats.
+        
+        Supports JSON, CSV, and GPX formats for route data export.
+        
+        Args:
+            format: Export format - 'json', 'csv', or 'gpx'
+            route_type: Filter routes - 'all', 'commute', or 'long_ride'
+            
+        Returns:
+            Dictionary with export data:
+            {
+                'status': 'success' | 'error',
+                'format': str,
+                'data': str | dict,  # Exported data in requested format
+                'route_count': int
+            }
+            
+        Formats:
+            - JSON: Structured route data with all fields
+            - CSV: Tabular format with key metrics (distance, duration, etc.)
+            - GPX: GPS Exchange Format with coordinates and metadata
+            
+        Example:
+            >>> service.export_routes(format='csv', route_type='commute')
+            {
+                'status': 'success',
+                'format': 'csv',
+                'data': 'id,name,type,distance,...',
+                'route_count': 15
+            }
+        """
+        try:
+            # Validate format
+            if format not in ['json', 'csv', 'gpx']:
+                return {
+                    'status': 'error',
+                    'message': f"Unsupported format: {format}. Use 'json', 'csv', or 'gpx'",
+                    'format': format,
+                    'data': None
+                }
+            
+            # Get routes
+            routes_result = self.get_all_routes(route_type=route_type)
+            if routes_result['status'] != 'success':
+                return {
+                    'status': 'error',
+                    'message': 'Failed to retrieve routes for export',
+                    'format': format,
+                    'data': None
+                }
+            
+            routes = routes_result['routes']
+            
+            if format == 'json':
+                # JSON export - return structured data
+                export_data = {
+                    'exported_at': datetime.now().isoformat(),
+                    'route_type': route_type,
+                    'route_count': len(routes),
+                    'routes': routes
+                }
+                
+                return {
+                    'status': 'success',
+                    'format': 'json',
+                    'data': export_data,
+                    'route_count': len(routes)
+                }
+            
+            elif format == 'csv':
+                # CSV export - tabular format
+                csv_lines = []
+                csv_lines.append('id,name,type,distance_km,duration_min,elevation_m,uses,average_speed_kmh')
+                
+                for route in routes:
+                    avg_speed = (route['distance'] / (route['duration'] / 60)) if route['duration'] > 0 else 0
+                    csv_lines.append(
+                        f"{route['id']},"
+                        f"\"{route['name']}\","
+                        f"{route['type']},"
+                        f"{route['distance']:.2f},"
+                        f"{route['duration']:.1f},"
+                        f"{route['elevation']:.1f},"
+                        f"{route['uses']},"
+                        f"{avg_speed:.2f}"
+                    )
+                
+                csv_data = '\n'.join(csv_lines)
+                
+                return {
+                    'status': 'success',
+                    'format': 'csv',
+                    'data': csv_data,
+                    'route_count': len(routes)
+                }
+            
+            elif format == 'gpx':
+                # GPX export - GPS Exchange Format
+                gpx_lines = []
+                gpx_lines.append('<?xml version="1.0" encoding="UTF-8"?>')
+                gpx_lines.append('<gpx version="1.1" creator="Ride Optimizer">')
+                gpx_lines.append(f'  <metadata>')
+                gpx_lines.append(f'    <time>{datetime.now().isoformat()}</time>')
+                gpx_lines.append(f'  </metadata>')
+                
+                # Get detailed route data with coordinates
+                for route in routes:
+                    route_details = self.get_route_details(route['id'], route['type'])
+                    if route_details['status'] == 'success':
+                        route_data = route_details['route']
+                        coords = route_data.get('coordinates', [])
+                        
+                        if coords:
+                            gpx_lines.append(f'  <trk>')
+                            gpx_lines.append(f'    <name>{route["name"]}</name>')
+                            gpx_lines.append(f'    <type>{route["type"]}</type>')
+                            gpx_lines.append(f'    <trkseg>')
+                            
+                            for lat, lon in coords:
+                                gpx_lines.append(f'      <trkpt lat="{lat}" lon="{lon}"/>')
+                            
+                            gpx_lines.append(f'    </trkseg>')
+                            gpx_lines.append(f'  </trk>')
+                
+                gpx_lines.append('</gpx>')
+                gpx_data = '\n'.join(gpx_lines)
+                
+                return {
+                    'status': 'success',
+                    'format': 'gpx',
+                    'data': gpx_data,
+                    'route_count': len(routes)
+                }
+            
+        except Exception as e:
+            logger.error(f"Failed to export routes: {e}", exc_info=True)
+            return {
+                'status': 'error',
+                'message': f'Failed to export routes: {str(e)}',
+                'format': format,
+                'data': None
+            }
 
 # Made with Bob

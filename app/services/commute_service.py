@@ -80,6 +80,40 @@ class CommuteService:
         
         logger.info("Commute recommender initialized")
     
+    def get_recommendation(self, direction: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Get commute recommendation for next ride.
+        
+        This is the primary recommendation method that wraps get_next_commute()
+        functionality. It automatically determines if the next commute is to work
+        (morning) or to home (evening) based on current time, unless direction
+        is explicitly specified.
+        
+        Args:
+            direction: Optional direction override ("to_work" or "to_home")
+            
+        Returns:
+            Dictionary with recommendation (same format as get_next_commute):
+            {
+                'status': 'success' | 'error',
+                'direction': 'to_work' | 'to_home',
+                'time_window': str,
+                'route': {
+                    'id': str,
+                    'name': str,
+                    'distance': float,
+                    'duration': float,
+                    'elevation': float
+                },
+                'score': float,
+                'breakdown': {...},
+                'weather': {...},
+                'alternatives': List[Dict],
+                'is_today': bool
+            }
+        """
+        return self.get_next_commute(direction=direction)
+    
     def get_next_commute(self, direction: Optional[str] = None) -> Dict[str, Any]:
         """
         Get recommendation for next commute.
