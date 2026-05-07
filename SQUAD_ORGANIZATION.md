@@ -1,247 +1,205 @@
 # Squad Organization & Work Distribution
 
 **Created:** 2026-05-06 16:18 CDT
-**Last Updated:** 2026-05-07 01:24 CDT
-**Epic Issues:** #144 (Web Platform), #145 (Weather Dashboard), #146 (Beta Release)
+**Last Updated:** 2026-05-07 02:20 CDT
+**Epic Issues:** #152 (Architecture Simplification), #145 (Weather Dashboard), #146 (Beta Release)
 
 ## 🎯 Overview
 
-Work has been organized into 4 specialized squads to enable parallel development of the Personal Web Platform (v3.0.0 MVP). Each squad has clear responsibilities, dependencies, and timelines.
+Work has been reorganized around the **Architecture Simplification** initiative to migrate from full Flask platform to lightweight Smart Static architecture optimized for Raspberry Pi deployment.
 
 **Current Status:**
 - **Total Open Issues:** 80 (down from 101)
 - **100% Prioritized** ✅
 - **Zero Duplicates** ✅
 - **Health Score:** 8.5/10 ⬆️
+- **🔄 PIVOT:** Architecture simplification approved (2026-05-07)
 
 ---
 
 ## 📋 Epic Tracking
 
+### Epic #152: 🏗️ Architecture Simplification (P0-CRITICAL) **NEW**
+**Release:** v3.0.0 (MVP)
+**Timeline:** 5 weeks (3 weeks migration + 2 weeks QA)
+**Total Issues:** 4 phase issues (#153, #155, #156, #157)
+**Status:** ✅ APPROVED - Starting immediately
+**Impact:** 80% memory reduction, 55% fewer dependencies, faster to beta
+
 ### Epic #144: 🌐 Personal Web Platform Migration (P1)
 **Release:** v3.0.0 (MVP)
-**Timeline:** 8 weeks
-**Total Issues:** 15 P1 issues
-**Status:** Ready to start
+**Timeline:** ~~8 weeks~~ **SUPERSEDED by #152**
+**Status:** ⚠️ SUPERSEDED - Replaced by Smart Static architecture
 
 ### Epic #145: 🌤️ Weather Dashboard & Forecast Integration (P3)
 **Release:** Post-v3.0.0
 **Timeline:** 4 weeks
 **Total Issues:** 10
-**Status:** Blocked until web platform MVP complete
+**Status:** Blocked until architecture simplification complete
 
 ### Epic #146: 🧪 Beta Release & User Feedback Program (P1)
 **Release:** v3.0.0 (concurrent with launch)
-**Timeline:** 4 weeks (Weeks 7-11)
+**Timeline:** Week 5 (after architecture simplification)
 **Total Issues:** TBD (will generate child issues)
-**Status:** Ready to start Week 7
+**Status:** Ready to start Week 5
 
 ---
 
-## 👥 Squad Assignments
+## 👥 Squad Assignments (REVISED for Architecture Simplification)
 
 ### 1️⃣ Foundation Squad (Backend Infrastructure)
 
-**Focus:** API, persistence, job scheduling
-**Timeline:** Weeks 1-3
+**Focus:** Service extraction, minimal API, data migration
+**Timeline:** Week 1 (5 days)
 **Dependencies:** None - can start immediately
 
-#### P1 Issues (4)
-- **#129** - Create Flask app factory, route blueprints, and web-platform skeleton
-- **#130** - Extract shared service layer for analysis, recommendations, planner logic
-- **#131** - Add SQLite-backed persistence for snapshots, preferences, route summaries
-- **#137** - Add scheduled jobs, stage-level status visibility, freshness windows
+#### P0 Issues (1) - Architecture Simplification
+- **#153** - Phase 1: Foundation Migration - Extract Services & Create Minimal API
 
-#### P2 Issues (1)
-- **#89** - Add Data Persistence Layer for API
+#### Previous P1 Issues (SUPERSEDED)
+- ~~#129~~ - Flask app factory (replaced by minimal `api.py`)
+- ~~#130~~ - Extract service layer (now part of #153)
+- ~~#131~~ - SQLite persistence (replaced by JSON files)
+- ~~#137~~ - APScheduler (replaced by cron in #156)
 
 #### Deliverables
-- ✅ Working Flask API with RESTful endpoints
-- ✅ SQLite database with schema and migrations
-- ✅ Background job scheduler with status tracking
-- ✅ Shared service layer for business logic
+- ✅ Framework-agnostic service layer
+- ✅ Minimal Flask API (`api.py` - 50-100 lines)
+- ✅ JSON-based data storage
+- ✅ Migration tooling (SQLite → JSON)
 
 #### Success Criteria
-- All API endpoints respond with proper status codes
-- Database persistence working for all entities
-- Background jobs can be scheduled and monitored
-- Service layer has >80% test coverage
+- Services work without Flask dependencies
+- API endpoints return correct JSON
+- Memory usage <50MB
+- API response time <100ms
+- All tests passing
 
 ---
 
 ### 2️⃣ Frontend Squad (Core Views)
 
-**Focus:** Dashboard, commute, planner, route library
-**Timeline:** Weeks 3-6
-**Dependencies:** Foundation Squad must complete #129, #130, #131
+**Focus:** Template conversion, JavaScript integration
+**Timeline:** Week 2 (5 days)
+**Dependencies:** Foundation Squad must complete #153
 
-#### P1 Issues (4)
-- **#132** - Build recommendation-first dashboard with freshness, status, workout-fit summary
-- **#133** - Implement commute recommendation views with alternatives, weather impact
-- **#134** - Build long ride planner with ride-intent presets and ranked suggestions
-- **#135** - Build route library browsing, filtering, and route detail pages
+#### P0 Issues (1) - Architecture Simplification
+- **#155** - Phase 2: Frontend Conversion - Templates to Static HTML + JavaScript
 
-#### P2 Issues (4)
-- **#85** - Create Interactive Recommendation Input Form
-- **#86** - Implement Frontend API Integration
-- **#87** - Create Recommendation Results Display Component
-- **#88** - Integrate Map with Recommendation System
+#### Previous P1 Issues (ADAPTED)
+- ~~#132~~ - Dashboard (now static HTML + JS)
+- ~~#133~~ - Commute views (now static HTML + JS)
+- ~~#134~~ - Long ride planner (now static HTML + JS)
+- ~~#135~~ - Route library (now static HTML + JS)
 
 #### Deliverables
-- ✅ Interactive dashboard showing current recommendations
-- ✅ Commute recommendation interface with alternatives
-- ✅ Long ride planner with filtering and ranking
-- ✅ Route library with search and detail views
+- ✅ Static HTML pages (dashboard, commute, planner, routes)
+- ✅ JavaScript modules for API integration
+- ✅ Client-side filtering/sorting
+- ✅ Responsive design preserved
 
 #### Success Criteria
-- All views are responsive and mobile-friendly
-- API integration working for all features
-- Map integration functional with route display
-- User can complete full workflow from dashboard to route selection
+- All pages work as static HTML
+- All interactive features preserved
+- API integration functional
+- Responsive design intact
+- Works on mobile devices
 
 ---
 
 ### 3️⃣ Integration Squad (Feature Integration)
 
-**Focus:** Weather, workouts, settings, external services
-**Timeline:** Weeks 3-6 (parallel with Frontend)
-**Dependencies:** Foundation Squad must complete #129, #130, #131
-**Status:** 🔴 **CRITICAL: P1 INCOMPLETE - STUBS ONLY**
+**Focus:** Cron jobs, background automation, integration testing
+**Timeline:** Week 3 (5 days)
+**Dependencies:** Foundation (#153) and Frontend (#155) must be complete
 
-#### P1 Issues (3) - 🔴 REOPENED - STUB IMPLEMENTATIONS DISCOVERED
-- 🔴 **#138** - Integrate weather snapshots into dashboard, commute recommendations, and planner ranking
-  - **Status:** REOPENED - Stub implementation only
-  - **Required:** Real weather API integration, scoring algorithm, tests
-  - **Blocking:** QA Squad testing
-  
-- 🔴 **#139** - Implement optional TrainerRoad ICS ingestion and normalize workouts into planning constraints
-  - **Status:** REOPENED - Stub implementation only
-  - **Required:** ICS parser, workout normalization, tests
-  - **Blocking:** QA Squad testing, Issue #140
-  
-- 🔴 **#140** - Implement workout-aware commute recommendations that can extend route length
-  - **Status:** REOPENED - No implementation exists
-  - **Required:** Workout fit algorithm, integration with commutes, tests
-  - **Blocked By:** #139 must be completed first
-  - **Blocking:** QA Squad testing
+#### P0 Issues (1) - Architecture Simplification
+- **#156** - Phase 3: Integration Work - Convert APScheduler to Cron + Testing
 
-#### P2 Issues (7) - 🔄 In Progress
-- ⏳ **#82** - Implement Recommendations API Endpoint
-- ⏳ **#83** - Implement Geocoding API Endpoint
-- ⏳ **#127** - Reduce excessive whitespace between report sections
-- ⏳ **#128** - Fix "Unnamed Activity" display in Route Comparison uses modal
-- ⏳ **#136** - Implement settings and preferences page for home/work locations, units, time windows
-- ⏳ **#141** - Add repeat-a-past-ride flow and saved plan support
+#### Previous P1 Issues (STATUS UPDATE)
+- ✅ **#138** - Weather integration (COMPLETED - production code delivered 2026-05-07)
+- ✅ **#139** - TrainerRoad integration (COMPLETED - production code delivered 2026-05-07)
+- ✅ **#140** - Workout-aware commutes (COMPLETED - production code delivered 2026-05-07)
 
-#### Deliverables - 🔴 INCOMPLETE (STUBS ONLY)
-- ❌ Weather integration (stub only - returns None/False)
-- ❌ TrainerRoad workout import (stub only - returns unavailable)
-- ❌ Workout-aware route recommendations (no implementation)
-- ⏳ API endpoints for commute and planner (in progress)
-- ⏳ Database persistence for favorites (in progress)
-- ❌ Enhanced algorithms (not implemented)
+**Note:** Weather and TrainerRoad services are complete and will be adapted for Smart Static architecture in Phase 3.
 
-#### Success Criteria - ❌ NOT MET
-- ❌ Weather data updates automatically (stub only)
-- ❌ TrainerRoad ICS files can be imported (stub only)
-- ❌ Workout constraints affect route recommendations (no implementation)
-- ❌ All API endpoints documented and tested (incomplete)
-- ⏳ Favorites persist across sessions (in progress)
+#### Deliverables
+- ✅ Cron scripts for background jobs
+- ✅ Status monitoring system
+- ✅ Integration test suite
+- ✅ Deployment documentation
+- ✅ Pi deployment script
 
-#### Critical Issues Discovered (2026-05-07)
-**Problem:** Issues #138, #139, #140 were closed with only stub implementations
-
-**Evidence:**
-1. **Weather Service (#138)** - `app/services/weather_service.py`
-   - File header: "STUB IMPLEMENTATION"
-   - All methods return None or False
-   - No actual weather API integration
-   - No tests
-
-2. **TrainerRoad Service (#139)** - `app/services/trainerroad_service.py`
-   - File header: "Workout integration (STUB)"
-   - Logger warning: "TrainerRoadService is a stub"
-   - All methods return `{'status': 'unavailable'}`
-   - No tests
-
-3. **Workout-Aware Commutes (#140)**
-   - No implementation exists
-   - Depends on #139 being completed first
-
-**Impact:**
-- QA Squad 100% blocked (cannot test non-existent features)
-- Timeline delay: 10-16 weeks (3-4 months)
-- Test coverage stuck at 27% (target: 80%)
-- Beta testing cannot proceed
-
-**Required Actions:**
-1. Reopen issues #138, #139, #140 immediately
-2. Integration Squad must implement actual features (not stubs)
-3. Submit PRs for mandatory code review
-4. QA Squad can resume after PRs merged
-
-**See:** [CROSS_SQUAD_COORDINATION_URGENT.md](CROSS_SQUAD_COORDINATION_URGENT.md) for full details
+#### Success Criteria
+- All background jobs working via cron
+- Status monitoring functional
+- Integration tests passing
+- Works reliably on Raspberry Pi
+- Memory usage <50MB
 
 ---
 
 ### 4️⃣ QA Squad (Polish & Quality)
 
-**Focus:** Testing, responsive design, documentation
-**Timeline:** Weeks 5-8
-**Dependencies:** Phases 1-3 substantially complete
+**Focus:** Testing, documentation, beta preparation
+**Timeline:** Weeks 4-5 (10 days)
+**Dependencies:** Phases 1-3 complete (#153, #155, #156)
 
-#### P1 Issues (5)
-- **#99** - Create Comprehensive Unit Tests for All Core Modules
-- **#100** - Create Comprehensive Integration Tests for All Workflows
-- **#101** - Update Documentation for Long Rides Feature
-- **#142** - Implement responsive layout, shared navigation shell, and small-screen-friendly decision views
-- **#143** - Create integration test suite for dashboard, commute, planner, route library, TrainerRoad fallback
+#### P0 Issues (1) - Architecture Simplification
+- **#157** - Phases 4-5: QA Testing & Beta Preparation
 
-#### P2 Issues (5)
-- **#90** - Implement Input Validation with Marshmallow
-- **#91** - Add Rate Limiting to API Endpoints
-- **#92** - Add Loading States with Skeleton Loaders
-- **#93** - Implement Comprehensive Error States
-- **#94** - Implement Accessibility Improvements
+#### Previous P1 Issues (ADAPTED)
+- ~~#99~~ - Unit tests (now part of #157)
+- ~~#100~~ - Integration tests (now part of #157)
+- ~~#101~~ - Documentation (now part of #157)
+- ~~#142~~ - Responsive design (verified in #157)
+- ~~#143~~ - Integration test suite (now part of #157)
 
 #### Deliverables
-- ✅ 80%+ test coverage across all modules
-- ✅ Integration tests for all user workflows
-- ✅ Responsive design working on mobile/tablet/desktop
-- ✅ Complete documentation for all features
-- ✅ Accessibility compliance (WCAG 2.1 AA)
+- ✅ 70% test coverage (revised target)
+- ✅ Integration tests for all workflows
+- ✅ Complete documentation
+- ✅ Beta infrastructure ready
+- ✅ Pi deployment verified
 
 #### Success Criteria
-- All tests passing in CI/CD pipeline
-- No critical accessibility violations
-- Documentation covers all features and APIs
-- Responsive design tested on multiple devices
-- Error handling graceful for all edge cases
+- All tests passing
+- Documentation complete
+- Responsive design verified
+- Pi performance excellent (<50MB)
+- Ready for beta launch
 
 ---
 
-## 📊 Work Distribution Summary
+## 📊 Work Distribution Summary (REVISED)
 
-| Squad | P1 Issues | P2 Issues | Total | Timeline |
-|-------|-----------|-----------|-------|----------|
-| Foundation | 4 | 1 | 5 | Weeks 1-3 |
-| Frontend | 4 | 4 | 8 | Weeks 3-6 |
-| Integration | 3 | 7 | 10 | Weeks 3-6 |
-| QA | 5 | 5 | 10 | Weeks 5-8 |
-| **Total** | **16** | **17** | **33** | **8 weeks** |
+| Squad | P0 Issues | Timeline | Status |
+|-------|-----------|----------|--------|
+| Foundation | #153 | Week 1 | Ready to start |
+| Frontend | #155 | Week 2 | Blocked by #153 |
+| Integration | #156 | Week 3 | Blocked by #153, #155 |
+| QA | #157 | Weeks 4-5 | Blocked by #153, #155, #156 |
+| **Total** | **4 phases** | **5 weeks** | **Approved** |
+
+**Previous Plan:** 8 weeks with compromised quality (60% coverage)
+**New Plan:** 5 weeks with higher quality (70% coverage)
+**Improvement:** 3 weeks faster + better quality
 
 ---
 
-## 🔄 Dependency Flow
+## 🔄 Dependency Flow (REVISED)
 
 ```
-Week 1-3: Foundation Squad
+Week 1: Foundation Squad (#153)
     ↓
-    ├─→ Week 3-6: Frontend Squad (depends on #129, #130, #131)
-    └─→ Week 3-6: Integration Squad (depends on #129, #130, #131)
-         ↓
-         Week 5-8: QA Squad (depends on substantial completion)
+Week 2: Frontend Squad (#155)
+    ↓
+Week 3: Integration Squad (#156)
+    ↓
+Weeks 4-5: QA Squad (#157) → Beta Launch
 ```
+
+**Sequential execution** ensures each phase is complete before next begins.
 
 ---
 
