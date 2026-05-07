@@ -16,6 +16,7 @@ from datetime import datetime
 from src.route_analyzer import RouteGroup, Route
 from src.long_ride_analyzer import LongRide
 from src.config import Config
+from app.models import db, FavoriteRoute
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +43,18 @@ class RouteLibraryService:
         self.config = config
         self._route_groups: Optional[List[RouteGroup]] = None
         self._long_rides: Optional[List[LongRide]] = None
-        self._favorites: set = set()  # TODO: Persist to database
+        self._favorites: set = set()
+        self._load_favorites()
+    
+    def _load_favorites(self):
+        """Load favorites from database into memory cache."""
+        try:
+            favorites = FavoriteRoute.query.all()
+            self._favorites = {fav.route_id for fav in favorites}
+            logger.info(f"Loaded {len(self._favorites)} favorites from database")
+        except Exception as e:
+            logger.error(f"Error loading favorites: {e}")
+            self._favorites = set()
     
     def initialize(self, route_groups: List[RouteGroup], long_rides: List[LongRide]):
         """
@@ -295,18 +307,55 @@ class RouteLibraryService:
         Returns:
             Dictionary with updated status
         """
-        if is_favorite:
-            self._favorites.add(route_id)
-        else:
-            self._favorites.discard(route_id)
+        try:
+            if is_favorite:
+                # Add to favorites
+                self._favorites.add(route_id)
+                
+                # Check if already in database
+                existing = FavoriteRoute.query.filter_by(route_id=route_id).first()
+                if not existing:
+                    # Determine route type based on route_id format or lookup
+                    route_type = 'long_ride'  # Default
+                    if self._route_groups:
+                        for group in self._route_groups:
+                            if group.group_id == route_id:
+                                route_type = 'commute'
+                                break
+                    
+                    favorite = FavoriteRoute(
+                        route_id=route_id,
+                        route_type=route_type
+                    )
+                    db.session.add(favorite)
+                    db.session.commit()
+                    logger.info(f"Added favorite: {route_id}")
+            else:
+                # Remove from favorites
+                self._favorites.discard(route_id)
+                
+                # Remove from database
+                favorite = FavoriteRoute.query.filter_by(route_id=route_id).first()
+                if favorite:
+                    db.session.delete(favorite)
+                    db.session.commit()
+                    logger.info(f"Removed favorite: {route_id}")
+            
+            return {
+                'status': 'success',
+                'route_id': route_id,
+                'is_favorite': is_favorite
+            }
         
-        # TODO: Persist to database
-        
-        return {
-            'status': 'success',
-            'route_id': route_id,
-            'is_favorite': is_favorite
-        }
+        except Exception as e:
+            logger.error(f"Error toggling favorite: {e}")
+            db.session.rollback()
+            return {
+                'status': 'error',
+                'message': str(e),
+                'route_id': route_id,
+                'is_favorite': is_favorite
+            }
     
     def get_favorites(self) -> Dict[str, Any]:
         """

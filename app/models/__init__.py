@@ -19,6 +19,7 @@ from .routes import RouteGroup, LongRide
 from .preferences import UserPreference
 from .jobs import JobHistory
 from .workouts import WorkoutMetadata
+from .favorites import FavoriteRoute
 
 __all__ = [
     'Base',
@@ -29,4 +30,5 @@ __all__ = [
     'UserPreference',
     'JobHistory',
     'WorkoutMetadata',
+    'FavoriteRoute',
 ]
