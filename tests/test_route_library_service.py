@@ -83,7 +83,7 @@ def mock_long_ride():
 
 
 @pytest.fixture
-@patch('app.services.route_library_service.FavoriteRoute')
+@patch('app.models.favorites.FavoriteRoute')
 def route_library_service(mock_favorite_route, mock_config):
     """Create a RouteLibraryService instance."""
     # Mock query to return empty list (no favorites in database)
@@ -326,7 +326,7 @@ class TestFavoriteManagement:
     """Test favorite route management."""
     
     @patch('app.services.route_library_service.db')
-    @patch('app.services.route_library_service.FavoriteRoute')
+    @patch('app.models.favorites.FavoriteRoute')
     def test_toggle_favorite_add(self, mock_favorite_route, mock_db, initialized_service):
         """Test adding route to favorites."""
         # Mock database session
@@ -350,7 +350,7 @@ class TestFavoriteManagement:
         mock_session.commit.assert_called_once()
     
     @patch('app.services.route_library_service.db')
-    @patch('app.services.route_library_service.FavoriteRoute')
+    @patch('app.models.favorites.FavoriteRoute')
     def test_toggle_favorite_remove(self, mock_favorite_route, mock_db, initialized_service):
         """Test removing route from favorites."""
         # Mock database session
