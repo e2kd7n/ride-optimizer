@@ -118,6 +118,7 @@ check_commits_for_completed_work() {
   log_action "Checking recent commits for completed work..."
   
   local closed_count=0
+  local SHOULD_CLOSE_COUNT=0
   local temp_file=$(mktemp)
   local commit_details=$(mktemp)
   local completion_docs=$(mktemp)
@@ -225,6 +226,7 @@ check_commits_for_completed_work() {
       fi
       
       if [ "$should_close" = true ]; then
+        ((SHOULD_CLOSE_COUNT++))
         local commit_summary=$(echo "$issue_commits" | head -1 | cut -d'|' -f2 | cut -c1-80)
         log_action "Issue #$issue_num appears resolved (pattern: $matching_pattern)"
         
@@ -264,6 +266,19 @@ check_commits_for_completed_work() {
   if [ $closed_count -gt 0 ]; then
     log_success "Auto-closed $closed_count issues based on analysis"
   fi
+  
+  # ENHANCEMENT: Prompt for immediate action if issues found but not auto-closed
+  if [ "$AUTO_CLOSE" = false ] && [ $SHOULD_CLOSE_COUNT -gt 0 ]; then
+    echo "" >&2
+    log_warning "Found $SHOULD_CLOSE_COUNT issues that appear complete but are still open"
+    echo "Run with --auto-close to close them automatically" >&2
+    echo "Or close manually with detailed completion comments" >&2
+    echo "" >&2
+    echo "Example closure command:" >&2
+    echo "  gh issue close <issue_num> --comment \"Completed in commit <hash> - <description>\"" >&2
+    echo "" >&2
+  fi
+  
   echo "" >&2
 }
 
