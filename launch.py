@@ -321,6 +321,373 @@ def get_status():
         }), 500
 
 
+@app.route('/api/maps/<page_type>')
+def get_map_data(page_type):
+    """
+    Get map data for client-side rendering.
+    
+    Supported page types:
+    - dashboard: Overview map with all route groups
+    - commute: Commute comparison map with route options
+    - planner: Long rides map with weather overlay
+    - route_detail: Single route detail map
+    
+    Query params (route_detail only):
+    - route_id: Route ID to display
+    - route_type: 'commute' or 'long_ride'
+    
+    Returns:
+        JSON with map data:
+        {
+            'status': 'success' | 'error',
+            'center': [lat, lon],
+            'zoom': int,
+            'routes': [
+                {
+                    'name': str,
+                    'coordinates': [[lat, lon], ...],
+                    'color': str,
+                    'weight': int,
+                    'opacity': float,
+                    'popup_html': str,
+                    'tooltip': str
+                }
+            ],
+            'markers': [
+                {
+                    'position': [lat, lon],
+                    'icon': {'color': str, 'icon': str, 'prefix': str},
+                    'popup_html': str,
+                    'tooltip': str
+                }
+            ],
+            'layers': [
+                {
+                    'name': str,
+                    'show': bool,
+                    'routes': [...],
+                    'markers': [...]
+                }
+            ]
+        }
+    """
+    initialize_services()
+    
+    try:
+        if page_type == 'dashboard':
+            # Get dashboard overview map data
+            route_groups = _analysis_service.get_route_groups()
+            home, work = _analysis_service.get_locations()
+            
+            if not route_groups or not home or not work:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'No route data available'
+                }), 404
+            
+            # Calculate center point between home and work
+            center_lat = (home['lat'] + work['lat']) / 2
+            center_lon = (home['lon'] + work['lon']) / 2
+            
+            map_data = {
+                'status': 'success',
+                'center': [center_lat, center_lon],
+                'zoom': 12,
+                'routes': [],
+                'markers': [
+                    {
+                        'position': [home['lat'], home['lon']],
+                        'icon': {'color': 'green', 'icon': 'home', 'prefix': 'fa'},
+                        'popup_html': f"<b>Home</b><br>{home.get('name', 'Home Location')}",
+                        'tooltip': 'Home'
+                    },
+                    {
+                        'position': [work['lat'], work['lon']],
+                        'icon': {'color': 'blue', 'icon': 'briefcase', 'prefix': 'fa'},
+                        'popup_html': f"<b>Work</b><br>{work.get('name', 'Work Location')}",
+                        'tooltip': 'Work'
+                    }
+                ],
+                'layers': []
+            }
+            
+            # Add route groups as layers
+            for group in route_groups[:10]:  # Limit to 10 groups for performance
+                group_name = group.get('name', 'Unknown Route')
+                frequency = group.get('frequency', 0)
+                rep_route = group.get('representative_route', {})
+                coordinates = rep_route.get('coordinates', [])
+                
+                if coordinates:
+                    layer_routes = [{
+                        'name': group_name,
+                        'coordinates': coordinates,
+                        'color': '#007bff',
+                        'weight': 4,
+                        'opacity': 0.8,
+                        'popup_html': f"<b>{group_name}</b><br>Uses: {frequency}",
+                        'tooltip': f"{group_name} ({frequency} uses)"
+                    }]
+                    
+                    map_data['layers'].append({
+                        'name': f"{group_name} ({frequency} uses)",
+                        'show': frequency > 5,  # Show frequently used routes by default
+                        'routes': layer_routes,
+                        'markers': []
+                    })
+            
+            return jsonify(map_data)
+        
+        elif page_type == 'commute':
+            # Get commute comparison map data
+            route_groups = _analysis_service.get_route_groups()
+            home, work = _analysis_service.get_locations()
+            
+            if not route_groups or not home or not work:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'No commute data available'
+                }), 404
+            
+            # Initialize commute service
+            _commute_service.initialize(route_groups, home, work)
+            commute_data = _commute_service.get_workout_aware_commute()
+            
+            if commute_data.get('status') != 'success':
+                return jsonify({
+                    'status': 'error',
+                    'message': 'No commute recommendation available'
+                }), 404
+            
+            # Get alternative routes
+            alternatives = commute_data.get('alternatives', [])
+            all_routes = [commute_data.get('route')] + alternatives
+            
+            center_lat = (home['lat'] + work['lat']) / 2
+            center_lon = (home['lon'] + work['lon']) / 2
+            
+            map_data = {
+                'status': 'success',
+                'center': [center_lat, center_lon],
+                'zoom': 13,
+                'routes': [],
+                'markers': [
+                    {
+                        'position': [home['lat'], home['lon']],
+                        'icon': {'color': 'green', 'icon': 'home', 'prefix': 'fa'},
+                        'popup_html': f"<b>Home</b>",
+                        'tooltip': 'Home'
+                    },
+                    {
+                        'position': [work['lat'], work['lon']],
+                        'icon': {'color': 'blue', 'icon': 'briefcase', 'prefix': 'fa'},
+                        'popup_html': f"<b>Work</b>",
+                        'tooltip': 'Work'
+                    }
+                ],
+                'layers': []
+            }
+            
+            # Add each route as a layer
+            for idx, route in enumerate(all_routes):
+                if not route or not route.get('coordinates'):
+                    continue
+                
+                is_recommended = idx == 0
+                route_name = route.get('name', 'Unknown Route')
+                score = route.get('score', 0)
+                
+                layer_routes = [{
+                    'name': route_name,
+                    'coordinates': route['coordinates'],
+                    'color': '#28a745' if is_recommended else '#6c757d',
+                    'weight': 5 if is_recommended else 3,
+                    'opacity': 0.95 if is_recommended else 0.75,
+                    'popup_html': f"<b>{route_name}</b><br>Score: {int(score * 100)}%",
+                    'tooltip': f"{route_name} • {int(score * 100)}%"
+                }]
+                
+                map_data['layers'].append({
+                    'name': f"{route_name} ({int(score * 100)}%)",
+                    'show': True,
+                    'routes': layer_routes,
+                    'markers': []
+                })
+            
+            return jsonify(map_data)
+        
+        elif page_type == 'planner':
+            # Get long rides map data
+            long_rides = _analysis_service.get_long_rides()
+            home, _ = _analysis_service.get_locations()
+            
+            if not long_rides:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'No long rides available'
+                }), 404
+            
+            # Use home as center or calculate from rides
+            if home:
+                center_lat, center_lon = home['lat'], home['lon']
+            else:
+                # Calculate center from first ride
+                first_ride = long_rides[0]
+                coords = first_ride.get('coordinates', [])
+                if coords:
+                    center_lat = sum(c[0] for c in coords) / len(coords)
+                    center_lon = sum(c[1] for c in coords) / len(coords)
+                else:
+                    center_lat, center_lon = 0, 0
+            
+            map_data = {
+                'status': 'success',
+                'center': [center_lat, center_lon],
+                'zoom': 11,
+                'routes': [],
+                'markers': [],
+                'layers': []
+            }
+            
+            # Add home marker if available
+            if home:
+                map_data['markers'].append({
+                    'position': [home['lat'], home['lon']],
+                    'icon': {'color': 'green', 'icon': 'home', 'prefix': 'fa'},
+                    'popup_html': f"<b>Home</b>",
+                    'tooltip': 'Home'
+                })
+            
+            # Add each long ride as a layer
+            for ride in long_rides[:15]:  # Limit to 15 rides
+                ride_name = ride.get('name', 'Long Ride')
+                coordinates = ride.get('coordinates', [])
+                distance = ride.get('distance', 0) / 1000  # Convert to km
+                
+                if coordinates:
+                    layer_routes = [{
+                        'name': ride_name,
+                        'coordinates': coordinates,
+                        'color': '#007bff',
+                        'weight': 4,
+                        'opacity': 0.8,
+                        'popup_html': f"<b>{ride_name}</b><br>Distance: {distance:.1f} km",
+                        'tooltip': ride_name
+                    }]
+                    
+                    # Add start marker
+                    start_coord = coordinates[0]
+                    layer_markers = [{
+                        'position': start_coord,
+                        'icon': {'color': 'green', 'icon': 'play', 'prefix': 'fa'},
+                        'popup_html': f"<b>Start</b><br>{ride_name}",
+                        'tooltip': 'Start'
+                    }]
+                    
+                    # Add end marker if not a loop
+                    if not ride.get('is_loop'):
+                        end_coord = coordinates[-1]
+                        layer_markers.append({
+                            'position': end_coord,
+                            'icon': {'color': 'red', 'icon': 'stop', 'prefix': 'fa'},
+                            'popup_html': f"<b>End</b><br>{ride_name}",
+                            'tooltip': 'End'
+                        })
+                    
+                    map_data['layers'].append({
+                        'name': f"{ride_name} ({distance:.1f} km)",
+                        'show': False,  # Don't show all rides by default
+                        'routes': layer_routes,
+                        'markers': layer_markers
+                    })
+            
+            return jsonify(map_data)
+        
+        elif page_type == 'route_detail':
+            # Get single route detail map data
+            route_id = request.args.get('route_id')
+            route_type = request.args.get('route_type', 'commute')
+            
+            if not route_id:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'route_id parameter required'
+                }), 400
+            
+            # Get route data from route library service
+            if route_type == 'commute':
+                route_groups = _analysis_service.get_route_groups()
+                route = next((g for g in route_groups if g.get('id') == route_id), None)
+            else:
+                long_rides = _analysis_service.get_long_rides()
+                route = next((r for r in long_rides if r.get('id') == route_id), None)
+            
+            if not route:
+                return jsonify({
+                    'status': 'error',
+                    'message': f'Route {route_id} not found'
+                }), 404
+            
+            coordinates = route.get('coordinates', [])
+            if not coordinates:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Route has no coordinates'
+                }), 404
+            
+            # Calculate center
+            center_lat = sum(c[0] for c in coordinates) / len(coordinates)
+            center_lon = sum(c[1] for c in coordinates) / len(coordinates)
+            
+            route_name = route.get('name', 'Unknown Route')
+            distance = route.get('distance', 0) / 1000
+            
+            map_data = {
+                'status': 'success',
+                'center': [center_lat, center_lon],
+                'zoom': 14,
+                'routes': [{
+                    'name': route_name,
+                    'coordinates': coordinates,
+                    'color': '#007bff',
+                    'weight': 5,
+                    'opacity': 0.9,
+                    'popup_html': f"<b>{route_name}</b><br>Distance: {distance:.1f} km",
+                    'tooltip': route_name
+                }],
+                'markers': [
+                    {
+                        'position': coordinates[0],
+                        'icon': {'color': 'green', 'icon': 'play', 'prefix': 'fa'},
+                        'popup_html': f"<b>Start</b><br>{route_name}",
+                        'tooltip': 'Start'
+                    },
+                    {
+                        'position': coordinates[-1],
+                        'icon': {'color': 'red', 'icon': 'stop', 'prefix': 'fa'},
+                        'popup_html': f"<b>End</b><br>{route_name}",
+                        'tooltip': 'End'
+                    }
+                ],
+                'layers': []
+            }
+            
+            return jsonify(map_data)
+        
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': f'Unknown page type: {page_type}'
+            }), 400
+        
+    except Exception as e:
+        logger.error(f"Error getting map data for {page_type}: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
 @app.errorhandler(404)
 def not_found(error):
     """Handle 404 errors."""
