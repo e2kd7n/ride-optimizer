@@ -79,6 +79,23 @@
         {% if recommendation.weather %}
         <div class="weather-info">
             <h3>🌤️ Weather Conditions</h3>
+            
+            <!-- Cycling Favorability Badge -->
+            {% if recommendation.weather.cycling_favorability %}
+            <div class="weather-favorability">
+                {% if recommendation.weather.cycling_favorability == 'favorable' %}
+                <span class="badge badge-success">✓ Favorable Cycling Conditions</span>
+                {% elif recommendation.weather.cycling_favorability == 'neutral' %}
+                <span class="badge badge-warning">⚠ Neutral Cycling Conditions</span>
+                {% else %}
+                <span class="badge badge-danger">⚠ Unfavorable Cycling Conditions</span>
+                {% endif %}
+                {% if recommendation.weather.comfort_score %}
+                <span class="comfort-score">Comfort: {{ "%.0f"|format(recommendation.weather.comfort_score * 100) }}%</span>
+                {% endif %}
+            </div>
+            {% endif %}
+            
             <div class="weather-grid">
                 {% if recommendation.weather.temperature %}
                 <div class="weather-item">
@@ -104,7 +121,54 @@
                     <span class="weather-value">{{ "%.0f"|format(recommendation.weather.precipitation) }}% chance</span>
                 </div>
                 {% endif %}
+                {% if recommendation.weather.humidity %}
+                <div class="weather-item">
+                    <span class="weather-icon">💧</span>
+                    <span class="weather-value">{{ "%.0f"|format(recommendation.weather.humidity) }}%</span>
+                </div>
+                {% endif %}
             </div>
+            
+            <!-- Wind Impact Analysis -->
+            {% if recommendation.weather.wind_impact %}
+            <div class="wind-impact">
+                <h4>💨 Wind Impact on Route</h4>
+                <div class="wind-impact-details">
+                    {% if recommendation.weather.wind_impact.headwind_pct %}
+                    <div class="wind-detail">
+                        <span class="wind-label">Headwind:</span>
+                        <span class="wind-value">{{ "%.0f"|format(recommendation.weather.wind_impact.headwind_pct) }}% of route</span>
+                    </div>
+                    {% endif %}
+                    {% if recommendation.weather.wind_impact.tailwind_pct %}
+                    <div class="wind-detail">
+                        <span class="wind-label">Tailwind:</span>
+                        <span class="wind-value">{{ "%.0f"|format(recommendation.weather.wind_impact.tailwind_pct) }}% of route</span>
+                    </div>
+                    {% endif %}
+                    {% if recommendation.weather.wind_impact.crosswind_pct %}
+                    <div class="wind-detail">
+                        <span class="wind-label">Crosswind:</span>
+                        <span class="wind-value">{{ "%.0f"|format(recommendation.weather.wind_impact.crosswind_pct) }}% of route</span>
+                    </div>
+                    {% endif %}
+                    {% if recommendation.weather.wind_impact.avg_speed_impact_kph %}
+                    <div class="wind-detail highlight">
+                        <span class="wind-label">Speed Impact:</span>
+                        <span class="wind-value">{{ "%+.1f"|format(recommendation.weather.wind_impact.avg_speed_impact_kph) }} km/h</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Staleness Warning -->
+            {% if recommendation.weather.is_stale %}
+            <div class="weather-warning">
+                <span class="warning-icon">⚠️</span>
+                <span class="warning-text">Weather data is {{ recommendation.weather.age_hours }} hours old. Conditions may have changed.</span>
+            </div>
+            {% endif %}
         </div>
         {% endif %}
     </div>
