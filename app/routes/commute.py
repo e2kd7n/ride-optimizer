@@ -9,10 +9,25 @@ Provides intelligent commute route recommendations based on:
 - Departure timing optimization
 """
 
-from flask import Blueprint, render_template, request, jsonify, current_app
+from flask import Blueprint, render_template, request, jsonify, current_app, g
 from datetime import datetime, timedelta
+import traceback
+
+from app.services import AnalysisService, CommuteService
+from src.config import Config
 
 bp = Blueprint('commute', __name__, url_prefix='/commute')
+
+
+def get_services():
+    """Get or create service instances for this request."""
+    if 'services' not in g:
+        config = Config('config/config.yaml')
+        g.services = {
+            'analysis': AnalysisService(config),
+            'commute': CommuteService(config)
+        }
+    return g.services
 
 
 @bp.route('/')
@@ -29,15 +44,88 @@ def index():
     """
     current_app.logger.info('Commute recommendations accessed')
     
-    # TODO: Replace with actual service layer calls (Issue #130)
+    services = get_services()
+    analysis_service = services['analysis']
+    commute_service = services['commute']
+    
+    # Get direction from query param or auto-detect
+    direction = request.args.get('direction')
+    
+    # Initialize commute service
+    recommendation = None
+    alternatives = []
+    departure_windows = []
+    
+    try:
+        route_groups = analysis_service.get_route_groups()
+        home, work = analysis_service.get_locations()
+        
+        if route_groups and home and work:
+            commute_service.initialize(route_groups, home, work)
+            
+            # Get primary recommendation
+            rec_data = commute_service.get_next_commute(direction=direction)
+            
+            if rec_data.get('status') == 'success':
+                route = rec_data.get('route', {})
+                recommendation = {
+                    'direction': rec_data.get('direction'),
+                    'direction_display': rec_data.get('direction', '').replace('_', ' ').title(),
+                    'route_name': route.get('name', 'Unknown Route'),
+                    'route_id': route.get('id'),
+                    'distance': route.get('distance', 0) / 1000,  # km
+                    'duration': route.get('duration', 0) / 60,  # minutes
+                    'elevation': route.get('elevation', 0),  # meters
+                    'score': rec_data.get('score', 0),
+                    'breakdown': rec_data.get('breakdown', {}),
+                    'weather': rec_data.get('weather', {}),
+                    'departure_time': rec_data.get('departure_time'),
+                    'confidence': rec_data.get('confidence', 'medium')
+                }
+                
+                # Get alternatives
+                alt_direction = rec_data.get('direction')
+                if alt_direction:
+                    alt_data = commute_service.get_all_commute_options(alt_direction)
+                    if alt_data.get('status') == 'success':
+                        options = alt_data.get('options', [])
+                        # Skip the first one (it's the primary recommendation)
+                        for opt in options[1:4]:  # Get up to 3 alternatives
+                            route = opt.get('route', {})
+                            alternatives.append({
+                                'route_name': route.get('name', 'Unknown'),
+                                'route_id': route.get('id'),
+                                'distance': route.get('distance', 0) / 1000,
+                                'duration': route.get('duration', 0) / 60,
+                                'elevation': route.get('elevation', 0),
+                                'score': opt.get('score', 0),
+                                'breakdown': opt.get('breakdown', {})
+                            })
+            
+            # Get departure windows
+            windows_data = commute_service.get_departure_windows()
+            if windows_data.get('status') == 'success':
+                for window in windows_data.get('windows', []):
+                    departure_windows.append({
+                        'direction': window.get('direction'),
+                        'direction_display': window.get('direction', '').replace('_', ' ').title(),
+                        'start_time': window.get('start_time'),
+                        'end_time': window.get('end_time'),
+                        'optimal_time': window.get('optimal_time'),
+                        'score': window.get('score', 0)
+                    })
+                    
+    except Exception as e:
+        current_app.logger.error(f"Error getting commute recommendations: {e}")
+        current_app.logger.debug(traceback.format_exc())
+    
     context = {
         'page_title': 'Next Commute',
         'current_time': datetime.now(),
-        'recommendation': None,  # TODO: Get from next_commute_recommender service
-        'alternatives': [],  # TODO: Get alternative routes
-        'weather': None,  # TODO: Get weather forecast
-        'workout_fit': None,  # TODO: Get TrainerRoad workout fit
-        'departure_windows': []  # TODO: Calculate optimal departure times
+        'recommendation': recommendation,
+        'alternatives': alternatives,
+        'departure_windows': departure_windows,
+        'workout_fit': None  # TODO: TrainerRoad integration (Issue #139)
     }
     
     return render_template('commute/index.html', **context)

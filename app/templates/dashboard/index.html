@@ -41,7 +41,7 @@
             <div class="stat-icon">📊</div>
             <div class="stat-content">
                 <div class="stat-value">{{ quick_stats.total_routes }}</div>
-                <div class="stat-label">Total Routes</div>
+                <div class="stat-label">Commute Routes</div>
             </div>
         </div>
         
@@ -54,32 +54,59 @@
         </div>
         
         <div class="stat-card">
-            <div class="stat-icon">⭐</div>
+            <div class="stat-icon">🗺️</div>
             <div class="stat-content">
-                <div class="stat-value">
-                    {% if quick_stats.favorite_route %}
-                        {{ quick_stats.favorite_route }}
-                    {% else %}
-                        -
-                    {% endif %}
-                </div>
-                <div class="stat-label">Favorite Route</div>
+                <div class="stat-value">{{ quick_stats.total_long_rides }}</div>
+                <div class="stat-label">Long Rides</div>
             </div>
         </div>
     </div>
     
     <!-- Recommendations -->
     <div class="recommendations">
-        <div class="recommendation-card">
+        <div class="recommendation-card primary-recommendation">
             <h2>🚴 Next Commute</h2>
             {% if recommendations.commute %}
                 <div class="recommendation-content">
-                    {{ recommendations.commute }}
+                    <div class="recommendation-header">
+                        <h3>{{ recommendations.commute.route_name }}</h3>
+                        <span class="recommendation-score">
+                            Score: {{ "%.1f"|format(recommendations.commute.score * 100) }}%
+                        </span>
+                    </div>
+                    <div class="recommendation-details">
+                        <div class="detail-item">
+                            <span class="detail-icon">📍</span>
+                            <span class="detail-label">Direction:</span>
+                            <span class="detail-value">{{ recommendations.commute.direction|replace('_', ' ')|title }}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-icon">📏</span>
+                            <span class="detail-label">Distance:</span>
+                            <span class="detail-value">{{ "%.1f"|format(recommendations.commute.distance) }} km</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-icon">⏱️</span>
+                            <span class="detail-label">Duration:</span>
+                            <span class="detail-value">{{ "%.0f"|format(recommendations.commute.duration) }} min</span>
+                        </div>
+                        {% if recommendations.commute.departure_time %}
+                        <div class="detail-item">
+                            <span class="detail-icon">🕐</span>
+                            <span class="detail-label">Best Time:</span>
+                            <span class="detail-value">{{ recommendations.commute.departure_time }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <a href="{{ url_for('commute.index') }}" class="btn btn-primary btn-block">
+                        View Details & Alternatives
+                    </a>
                 </div>
             {% else %}
                 <p class="no-data">No commute recommendation available yet.</p>
-                <a href="{{ url_for('commute.index') }}" class="btn btn-primary">
-                    Get Recommendation
+                <p class="no-data-hint">Run analysis to get personalized commute recommendations.</p>
+                <a href="{{ url_for('api.analyze') }}" class="btn btn-primary" data-method="POST">
+                    Run Analysis
                 </a>
             {% endif %}
         </div>
@@ -92,6 +119,7 @@
                 </div>
             {% else %}
                 <p class="no-data">Connect TrainerRoad to see workout fit analysis.</p>
+                <p class="no-data-hint">Integrate your training plan for smarter commute recommendations.</p>
                 <a href="{{ url_for('settings.trainerroad') }}" class="btn btn-secondary">
                     Connect TrainerRoad
                 </a>
@@ -102,10 +130,36 @@
             <h2>🗺️ Best Long Ride</h2>
             {% if recommendations.long_ride %}
                 <div class="recommendation-content">
-                    {{ recommendations.long_ride }}
+                    <div class="recommendation-header">
+                        <h3>{{ recommendations.long_ride.ride_name }}</h3>
+                        <span class="recommendation-score">
+                            Score: {{ "%.1f"|format(recommendations.long_ride.score * 100) }}%
+                        </span>
+                    </div>
+                    <div class="recommendation-details">
+                        <div class="detail-item">
+                            <span class="detail-icon">📅</span>
+                            <span class="detail-label">Best Day:</span>
+                            <span class="detail-value">{{ recommendations.long_ride.day }}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-icon">📏</span>
+                            <span class="detail-label">Distance:</span>
+                            <span class="detail-value">{{ "%.1f"|format(recommendations.long_ride.distance) }} km</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-icon">⏱️</span>
+                            <span class="detail-label">Duration:</span>
+                            <span class="detail-value">{{ "%.0f"|format(recommendations.long_ride.duration) }} min</span>
+                        </div>
+                    </div>
+                    <a href="{{ url_for('planner.index') }}" class="btn btn-primary btn-block">
+                        View 7-Day Forecast
+                    </a>
                 </div>
             {% else %}
                 <p class="no-data">No long ride recommendation available yet.</p>
+                <p class="no-data-hint">Plan your next adventure with weather-optimized suggestions.</p>
                 <a href="{{ url_for('planner.index') }}" class="btn btn-primary">
                     Plan Long Ride
                 </a>
@@ -263,6 +317,8 @@
 
 .btn-primary:hover {
     background-color: #2980b9;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(52, 152, 219, 0.3);
 }
 
 .btn-secondary {
@@ -272,6 +328,13 @@
 
 .btn-secondary:hover {
     background-color: #7f8c8d;
+    transform: translateY(-1px);
+}
+
+.btn-block {
+    display: block;
+    width: 100%;
+    text-align: center;
 }
 
 .quick-actions {

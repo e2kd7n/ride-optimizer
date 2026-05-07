@@ -1,0 +1,740 @@
+{% extends "base.html" %}
+
+{% block title %}Next Commute | Ride Optimizer{% endblock %}
+
+{% block content %}
+<div class="commute-page">
+    <header class="page-header">
+        <h1>🚴 Next Commute Recommendation</h1>
+        <p class="page-subtitle">{{ current_time.strftime('%A, %B %d, %Y at %I:%M %p') }}</p>
+    </header>
+    
+    {% if recommendation %}
+    <!-- Primary Recommendation -->
+    <div class="primary-recommendation">
+        <div class="recommendation-badge">
+            <span class="badge-icon">⭐</span>
+            <span class="badge-text">Best Route</span>
+        </div>
+        
+        <div class="recommendation-header">
+            <div class="route-info">
+                <h2>{{ recommendation.route_name }}</h2>
+                <span class="direction-badge">{{ recommendation.direction_display }}</span>
+            </div>
+            <div class="score-display">
+                <div class="score-circle">
+                    <span class="score-value">{{ "%.0f"|format(recommendation.score * 100) }}</span>
+                    <span class="score-label">Score</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="recommendation-details">
+            <div class="detail-grid">
+                <div class="detail-card">
+                    <span class="detail-icon">📏</span>
+                    <span class="detail-value">{{ "%.1f"|format(recommendation.distance) }} km</span>
+                    <span class="detail-label">Distance</span>
+                </div>
+                <div class="detail-card">
+                    <span class="detail-icon">⏱️</span>
+                    <span class="detail-value">{{ "%.0f"|format(recommendation.duration) }} min</span>
+                    <span class="detail-label">Duration</span>
+                </div>
+                <div class="detail-card">
+                    <span class="detail-icon">⛰️</span>
+                    <span class="detail-value">{{ "%.0f"|format(recommendation.elevation) }} m</span>
+                    <span class="detail-label">Elevation</span>
+                </div>
+                {% if recommendation.departure_time %}
+                <div class="detail-card highlight">
+                    <span class="detail-icon">🕐</span>
+                    <span class="detail-value">{{ recommendation.departure_time }}</span>
+                    <span class="detail-label">Best Time</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Score Breakdown -->
+        {% if recommendation.breakdown %}
+        <div class="score-breakdown">
+            <h3>Why This Route?</h3>
+            <div class="breakdown-bars">
+                {% for factor, score in recommendation.breakdown.items() %}
+                <div class="breakdown-item">
+                    <div class="breakdown-label">{{ factor|replace('_', ' ')|title }}</div>
+                    <div class="breakdown-bar-container">
+                        <div class="breakdown-bar" style="width: {{ (score * 100)|int }}%"></div>
+                    </div>
+                    <div class="breakdown-value">{{ "%.0f"|format(score * 100) }}%</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Weather Info -->
+        {% if recommendation.weather %}
+        <div class="weather-info">
+            <h3>🌤️ Weather Conditions</h3>
+            <div class="weather-grid">
+                {% if recommendation.weather.temperature %}
+                <div class="weather-item">
+                    <span class="weather-icon">🌡️</span>
+                    <span class="weather-value">{{ "%.0f"|format(recommendation.weather.temperature) }}°F</span>
+                </div>
+                {% endif %}
+                {% if recommendation.weather.conditions %}
+                <div class="weather-item">
+                    <span class="weather-icon">☁️</span>
+                    <span class="weather-value">{{ recommendation.weather.conditions }}</span>
+                </div>
+                {% endif %}
+                {% if recommendation.weather.wind_speed %}
+                <div class="weather-item">
+                    <span class="weather-icon">💨</span>
+                    <span class="weather-value">{{ "%.0f"|format(recommendation.weather.wind_speed) }} mph {{ recommendation.weather.wind_direction or '' }}</span>
+                </div>
+                {% endif %}
+                {% if recommendation.weather.precipitation %}
+                <div class="weather-item">
+                    <span class="weather-icon">🌧️</span>
+                    <span class="weather-value">{{ "%.0f"|format(recommendation.weather.precipitation) }}% chance</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    
+    <!-- Alternative Routes -->
+    {% if alternatives %}
+    <div class="alternatives-section">
+        <h2>Alternative Routes</h2>
+        <p class="section-subtitle">Consider these options if conditions change</p>
+        
+        <div class="alternatives-grid">
+            {% for alt in alternatives %}
+            <div class="alternative-card">
+                <div class="alt-header">
+                    <h3>{{ alt.route_name }}</h3>
+                    <span class="alt-score">{{ "%.0f"|format(alt.score * 100) }}%</span>
+                </div>
+                <div class="alt-details">
+                    <div class="alt-detail">
+                        <span class="alt-icon">📏</span>
+                        <span>{{ "%.1f"|format(alt.distance) }} km</span>
+                    </div>
+                    <div class="alt-detail">
+                        <span class="alt-icon">⏱️</span>
+                        <span>{{ "%.0f"|format(alt.duration) }} min</span>
+                    </div>
+                    <div class="alt-detail">
+                        <span class="alt-icon">⛰️</span>
+                        <span>{{ "%.0f"|format(alt.elevation) }} m</span>
+                    </div>
+                </div>
+                {% if alt.breakdown %}
+                <div class="alt-breakdown">
+                    {% for factor, score in alt.breakdown.items() %}
+                    <div class="alt-breakdown-item">
+                        <span class="alt-breakdown-label">{{ factor|replace('_', ' ')|title }}:</span>
+                        <span class="alt-breakdown-value">{{ "%.0f"|format(score * 100) }}%</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Departure Windows -->
+    {% if departure_windows %}
+    <div class="departure-windows">
+        <h2>⏰ Optimal Departure Times</h2>
+        <div class="windows-grid">
+            {% for window in departure_windows %}
+            <div class="window-card">
+                <h3>{{ window.direction_display }}</h3>
+                <div class="window-time">
+                    <span class="time-range">{{ window.start_time }} - {{ window.end_time }}</span>
+                    {% if window.optimal_time %}
+                    <span class="optimal-time">Best: {{ window.optimal_time }}</span>
+                    {% endif %}
+                </div>
+                <div class="window-score">
+                    Score: {{ "%.0f"|format(window.score * 100) }}%
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Workout Fit (placeholder for TrainerRoad integration) -->
+    {% if workout_fit %}
+    <div class="workout-fit">
+        <h2>🏋️ Workout Fit Analysis</h2>
+        {{ workout_fit }}
+    </div>
+    {% else %}
+    <div class="workout-fit-placeholder">
+        <p>💡 <strong>Tip:</strong> Connect TrainerRoad to see how your commute fits with today's workout.</p>
+        <a href="{{ url_for('settings.trainerroad') }}" class="btn btn-secondary">Connect TrainerRoad</a>
+    </div>
+    {% endif %}
+    
+    {% else %}
+    <!-- No Recommendation Available -->
+    <div class="no-recommendation">
+        <div class="no-rec-icon">🚴</div>
+        <h2>No Commute Recommendation Available</h2>
+        <p>Run analysis to get personalized commute recommendations based on weather, traffic, and your riding history.</p>
+        <a href="{{ url_for('api.analyze') }}" class="btn btn-primary btn-large" data-method="POST">
+            Run Analysis Now
+        </a>
+    </div>
+    {% endif %}
+    
+    <!-- Quick Actions -->
+    <div class="quick-actions">
+        <a href="{{ url_for('dashboard.index') }}" class="action-link">
+            <span class="action-icon">🏠</span>
+            <span>Back to Dashboard</span>
+        </a>
+        <a href="{{ url_for('commute.index', direction='to_work') }}" class="action-link">
+            <span class="action-icon">🏢</span>
+            <span>To Work</span>
+        </a>
+        <a href="{{ url_for('commute.index', direction='to_home') }}" class="action-link">
+            <span class="action-icon">🏠</span>
+            <span>To Home</span>
+        </a>
+        <a href="{{ url_for('route_library.index') }}" class="action-link">
+            <span class="action-icon">📚</span>
+            <span>Route Library</span>
+        </a>
+    </div>
+</div>
+
+<style>
+.commute-page {
+    padding: 2rem 0;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.page-header {
+    margin-bottom: 2rem;
+}
+
+.page-header h1 {
+    font-size: 2.5rem;
+    color: #2c3e50;
+    margin: 0 0 0.5rem 0;
+}
+
+.page-subtitle {
+    font-size: 1.1rem;
+    color: #7f8c8d;
+}
+
+/* Primary Recommendation */
+.primary-recommendation {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 12px;
+    padding: 2rem;
+    color: white;
+    margin-bottom: 2rem;
+    box-shadow: 0 8px 16px rgba(102, 126, 234, 0.3);
+}
+
+.recommendation-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background-color: rgba(255, 255, 255, 0.2);
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    margin-bottom: 1rem;
+    font-weight: 600;
+}
+
+.badge-icon {
+    font-size: 1.2rem;
+}
+
+.recommendation-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1.5rem;
+}
+
+.route-info h2 {
+    font-size: 2rem;
+    margin: 0 0 0.5rem 0;
+    color: white;
+}
+
+.direction-badge {
+    display: inline-block;
+    background-color: rgba(255, 255, 255, 0.3);
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.score-display {
+    text-align: center;
+}
+
+.score-circle {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100px;
+    height: 100px;
+    background-color: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    border: 3px solid rgba(255, 255, 255, 0.5);
+}
+
+.score-value {
+    font-size: 2rem;
+    font-weight: bold;
+    line-height: 1;
+}
+
+.score-label {
+    font-size: 0.8rem;
+    opacity: 0.9;
+}
+
+.detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.detail-card {
+    background-color: rgba(255, 255, 255, 0.15);
+    padding: 1rem;
+    border-radius: 8px;
+    text-align: center;
+    backdrop-filter: blur(10px);
+}
+
+.detail-card.highlight {
+    background-color: rgba(255, 255, 255, 0.25);
+    border: 2px solid rgba(255, 255, 255, 0.5);
+}
+
+.detail-icon {
+    font-size: 2rem;
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+.detail-value {
+    display: block;
+    font-size: 1.3rem;
+    font-weight: bold;
+    margin-bottom: 0.25rem;
+}
+
+.detail-label {
+    display: block;
+    font-size: 0.85rem;
+    opacity: 0.9;
+}
+
+/* Score Breakdown */
+.score-breakdown {
+    background-color: rgba(255, 255, 255, 0.1);
+    padding: 1.5rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+}
+
+.score-breakdown h3 {
+    margin: 0 0 1rem 0;
+    font-size: 1.2rem;
+}
+
+.breakdown-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.breakdown-item {
+    display: grid;
+    grid-template-columns: 120px 1fr 60px;
+    align-items: center;
+    gap: 1rem;
+}
+
+.breakdown-label {
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.breakdown-bar-container {
+    background-color: rgba(255, 255, 255, 0.2);
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.breakdown-bar {
+    height: 100%;
+    background-color: #27ae60;
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+.breakdown-value {
+    text-align: right;
+    font-weight: 600;
+}
+
+/* Weather Info */
+.weather-info {
+    background-color: rgba(255, 255, 255, 0.1);
+    padding: 1.5rem;
+    border-radius: 8px;
+}
+
+.weather-info h3 {
+    margin: 0 0 1rem 0;
+    font-size: 1.2rem;
+}
+
+.weather-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+}
+
+.weather-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.weather-icon {
+    font-size: 1.5rem;
+}
+
+.weather-value {
+    font-size: 0.95rem;
+    font-weight: 500;
+}
+
+/* Alternatives Section */
+.alternatives-section {
+    margin-bottom: 2rem;
+}
+
+.alternatives-section h2 {
+    font-size: 1.8rem;
+    color: #2c3e50;
+    margin-bottom: 0.5rem;
+}
+
+.section-subtitle {
+    color: #7f8c8d;
+    margin-bottom: 1.5rem;
+}
+
+.alternatives-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+}
+
+.alternative-card {
+    background-color: white;
+    border: 2px solid #e1e8ed;
+    border-radius: 8px;
+    padding: 1.5rem;
+    transition: all 0.3s ease;
+}
+
+.alternative-card:hover {
+    border-color: #3498db;
+    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.2);
+    transform: translateY(-2px);
+}
+
+.alt-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #ecf0f1;
+}
+
+.alt-header h3 {
+    font-size: 1.2rem;
+    color: #2c3e50;
+    margin: 0;
+}
+
+.alt-score {
+    background-color: #3498db;
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.alt-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.alt-detail {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.95rem;
+    color: #2c3e50;
+}
+
+.alt-icon {
+    font-size: 1.2rem;
+}
+
+.alt-breakdown {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid #ecf0f1;
+}
+
+.alt-breakdown-item {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+}
+
+.alt-breakdown-label {
+    color: #7f8c8d;
+}
+
+.alt-breakdown-value {
+    color: #2c3e50;
+    font-weight: 600;
+}
+
+/* Departure Windows */
+.departure-windows {
+    margin-bottom: 2rem;
+}
+
+.departure-windows h2 {
+    font-size: 1.8rem;
+    color: #2c3e50;
+    margin-bottom: 1.5rem;
+}
+
+.windows-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+}
+
+.window-card {
+    background-color: white;
+    border: 2px solid #e1e8ed;
+    border-radius: 8px;
+    padding: 1.5rem;
+    text-align: center;
+}
+
+.window-card h3 {
+    font-size: 1.2rem;
+    color: #2c3e50;
+    margin: 0 0 1rem 0;
+}
+
+.window-time {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.time-range {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.optimal-time {
+    font-size: 0.9rem;
+    color: #27ae60;
+    font-weight: 500;
+}
+
+.window-score {
+    font-size: 0.95rem;
+    color: #7f8c8d;
+}
+
+/* Workout Fit Placeholder */
+.workout-fit-placeholder {
+    background-color: #fff3cd;
+    border: 2px solid #ffc107;
+    border-radius: 8px;
+    padding: 1.5rem;
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.workout-fit-placeholder p {
+    margin: 0 0 1rem 0;
+    color: #856404;
+}
+
+/* No Recommendation */
+.no-recommendation {
+    text-align: center;
+    padding: 4rem 2rem;
+    background-color: #f8f9fa;
+    border-radius: 12px;
+    margin-bottom: 2rem;
+}
+
+.no-rec-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+}
+
+.no-recommendation h2 {
+    font-size: 1.8rem;
+    color: #2c3e50;
+    margin-bottom: 1rem;
+}
+
+.no-recommendation p {
+    color: #7f8c8d;
+    margin-bottom: 2rem;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* Quick Actions */
+.quick-actions {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-top: 2rem;
+}
+
+.action-link {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    background-color: white;
+    border: 2px solid #e1e8ed;
+    border-radius: 8px;
+    text-decoration: none;
+    color: #2c3e50;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.action-link:hover {
+    border-color: #3498db;
+    background-color: #f8f9fa;
+}
+
+.action-icon {
+    font-size: 1.2rem;
+}
+
+/* Buttons */
+.btn {
+    display: inline-block;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    border: none;
+    cursor: pointer;
+}
+
+.btn-primary {
+    background-color: #3498db;
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: #2980b9;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(52, 152, 219, 0.3);
+}
+
+.btn-secondary {
+    background-color: #95a5a6;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background-color: #7f8c8d;
+}
+
+.btn-large {
+    padding: 1rem 2rem;
+    font-size: 1.1rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .recommendation-header {
+        flex-direction: column;
+        gap: 1rem;
+    }
+    
+    .score-display {
+        align-self: flex-start;
+    }
+    
+    .detail-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .breakdown-item {
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+    }
+    
+    .breakdown-value {
+        text-align: left;
+    }
+    
+    .alternatives-grid {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+{% endblock %}
