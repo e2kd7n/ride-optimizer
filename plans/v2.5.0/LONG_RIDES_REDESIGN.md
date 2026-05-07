@@ -456,7 +456,7 @@ def start_api_server(long_rides, long_ride_analyzer, config):
     initialize_api(long_rides, long_ride_analyzer, config)
     
     # Start server in background thread
-    port = config.get('api.port', 5000)
+    port = config.get('api.port', 8080)
     server_thread = threading.Thread(
         target=lambda: app.run(host='localhost', port=port, debug=False)
     )
@@ -624,7 +624,7 @@ long_rides:
 api:
   enabled: true
   host: "localhost"
-  port: 5000
+  port: 8080
   cors_enabled: true
   rate_limit: 100  # requests per minute
 ```
@@ -1036,7 +1036,7 @@ flask-limiter==3.5.0
 api:
   enabled: true
   host: "localhost"
-  port: 5000
+  port: 8080
   debug: true
   cors_enabled: true
 ```

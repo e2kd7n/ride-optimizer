@@ -32,7 +32,7 @@ from typing import Dict, List, Tuple
 class PerformanceTest:
     """Performance testing for Smart Static architecture."""
     
-    def __init__(self, api_url: str = "http://localhost:5000", duration: int = 60):
+    def __init__(self, api_url: str = "http://localhost:8080", duration: int = 60):
         self.api_url = api_url
         self.duration = duration
         self.results = {
@@ -380,7 +380,7 @@ class PerformanceTest:
 def main():
     parser = argparse.ArgumentParser(description='Performance testing for Smart Static architecture')
     parser.add_argument('--duration', type=int, default=60, help='Test duration in seconds')
-    parser.add_argument('--api-url', type=str, default='http://localhost:5000', help='API base URL')
+    parser.add_argument('--api-url', type=str, default='http://localhost:8080', help='API base URL')
     parser.add_argument('--output', type=str, default='performance_test_results.json', help='Output file')
     
     args = parser.parse_args()

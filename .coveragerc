@@ -1,0 +1,34 @@
+[run]
+source = app, src
+omit =
+    */tests/*
+    */test_*.py
+    */__pycache__/*
+    */site-packages/*
+    # Legacy modules not used in Smart Static architecture
+    src/auth_secure.py
+    src/visualizer.py
+    src/traffic_analyzer.py
+    src/carbon_calculator.py
+    src/secure_cache.py
+    src/api/long_rides_api.py
+
+[report]
+exclude_lines =
+    # Standard exclusions
+    pragma: no cover
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    @abstractmethod
+    # Defensive programming
+    except ImportError
+    except Exception as e:
+    logger.error
+    logger.warning
+    logger.debug
+
+[html]
+directory = htmlcov

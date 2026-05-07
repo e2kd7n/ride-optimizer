@@ -117,7 +117,7 @@ Plenty of version numbers available for development before declaring production-
 
 All existing features will be preserved in v1.0.0:
 
-| Feature | v2.5.0 | v1.0.0 | Implementation |
+| Feature | v0.10.0 | v1.0.0 | Implementation |
 |---------|--------|--------|----------------|
 | Strava Integration | ✅ | ✅ | Keep existing |
 | Route Analysis | ✅ | ✅ | Keep existing |
@@ -141,17 +141,17 @@ All existing features will be preserved in v1.0.0:
 ## 📊 Resource Impact
 
 ### Memory Usage
-- **v2.5.0:** 250-300MB (Flask + SQLAlchemy + APScheduler)
+- **v0.10.0:** 250-300MB (Flask + SQLAlchemy + APScheduler)
 - **v1.0.0:** 50MB (Static files + minimal API)
 - **Reduction:** 80%
 
 ### Dependencies
-- **v2.5.0:** 27 packages (Flask, SQLAlchemy, APScheduler, etc.)
+- **v0.10.0:** 27 packages (Flask, SQLAlchemy, APScheduler, etc.)
 - **v1.0.0:** 12 packages (core libraries only)
 - **Reduction:** 55%
 
 ### Startup Time
-- **v2.5.0:** 5-8 seconds (Flask app initialization)
+- **v0.10.0:** 5-8 seconds (Flask app initialization)
 - **v1.0.0:** <1 second (static files served immediately)
 - **Improvement:** 8x faster
 
@@ -187,11 +187,11 @@ After v1.0.0 is stable, consider these enhancements **only if needed**:
 
 ## 📝 Version History
 
-- **v2.5.0** (2026-03-30): Last pre-production release with complex architecture
-- **v2.4.0** (2026-03-30): Long rides feature & polish
-- **v2.3.0** (2026-03-30): Segment-based route naming
-- **v2.2.0** (2026-03-30): Test infrastructure
-- **v2.1.0** (2026-03-26): Code quality & design system
+- **v0.10.0** (2026-03-30): Last pre-production release with complex architecture (formerly v2.5.0)
+- **v0.9.0** (2026-03-30): Long rides feature & polish (formerly v2.4.0)
+- **v0.8.0** (2026-03-30): Segment-based route naming (formerly v2.3.0)
+- **v0.7.0** (2026-03-30): Test infrastructure (formerly v2.2.0)
+- **v0.6.0** (2026-03-26): Code quality & design system (formerly v2.1.0)
 - **v1.0.0** (Target: 2026-06): First production-ready release with simplified architecture
 
 ---

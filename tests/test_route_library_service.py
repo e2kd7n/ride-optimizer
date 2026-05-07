@@ -88,7 +88,10 @@ def route_library_service(mock_favorite_route, mock_config):
     """Create a RouteLibraryService instance."""
     # Mock query to return empty list (no favorites in database)
     mock_favorite_route.query.all.return_value = []
-    return RouteLibraryService(mock_config)
+    service = RouteLibraryService(mock_config)
+    # Prevent cache loading during tests
+    service._cache_loaded = True
+    return service
 
 
 @pytest.fixture
@@ -122,6 +125,9 @@ class TestGetAllRoutes:
     
     def test_get_all_routes_uninitialized(self, route_library_service):
         """Test getting routes when service not initialized."""
+        # Ensure no data is loaded
+        route_library_service._route_groups = None
+        route_library_service._long_rides = None
         result = route_library_service.get_all_routes()
         assert result['status'] == 'error'
         assert 'not initialized' in result['message']
