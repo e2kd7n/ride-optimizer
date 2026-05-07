@@ -1439,7 +1439,7 @@ end tell
             try:
                 with open(progress_file, 'a') as f:
                     f.write(f"\n{'-'*70}\n")
-                    f.write(f"[{timestamp()}] Phase 2/3: Saving geocoding cache\n")
+                    f.write(f"[{timestamp()}] Phase 2/4: Saving geocoding cache\n")
                     f.write(f"{'-'*70}\n")
             except:
                 pass
@@ -1457,7 +1457,7 @@ end tell
             try:
                 with open(progress_file, 'a') as f:
                     f.write(f"\n{'-'*70}\n")
-                    f.write(f"[{timestamp()}] Phase 3/3: Saving route groups cache with updated names\n")
+                    f.write(f"[{timestamp()}] Phase 3/4: Saving route groups cache with updated names\n")
                     f.write(f"{'-'*70}\n")
             except:
                 pass
@@ -1484,6 +1484,50 @@ end tell
             logger.info(f"Background geocoding completed: {geocoded_count}/{len(groups_to_geocode)} routes successfully named")
             
             # Write completion summary with timezone
+            # Phase 4: Migrate to web app data directory
+            try:
+                with open(progress_file, 'a') as f:
+                    f.write(f"\n{'-'*70}\n")
+                    f.write(f"[{timestamp()}] Phase 4/4: Migrating to web app data directory\n")
+                    f.write(f"{'-'*70}\n")
+            except:
+                pass
+            
+            migration_success = False
+            try:
+                # Run migration script to copy data to web app directory
+                import subprocess
+                result = subprocess.run(
+                    [sys.executable, 'scripts/migrate_cache_to_json_storage.py'],
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+                migration_success = (result.returncode == 0)
+                
+                if migration_success:
+                    logger.info("Successfully migrated geocoded data to web app directory")
+                    try:
+                        with open(progress_file, 'a') as f:
+                            f.write(f"[{timestamp()}] ✓ Data migrated to web app (data/route_groups.json)\n")
+                    except:
+                        pass
+                else:
+                    logger.warning(f"Migration script failed: {result.stderr}")
+                    try:
+                        with open(progress_file, 'a') as f:
+                            f.write(f"[{timestamp()}] ⚠️  Migration failed (see logs)\n")
+                    except:
+                        pass
+            except Exception as e:
+                logger.warning(f"Failed to run migration script: {e}")
+                try:
+                    with open(progress_file, 'a') as f:
+                        f.write(f"[{timestamp()}] ⚠️  Migration error: {str(e)[:50]}\n")
+                except:
+                    pass
+            
+            # Write completion summary with timezone
             try:
                 import time as time_module
                 tz_name = time_module.tzname[time_module.daylight]
@@ -1499,10 +1543,17 @@ end tell
                     if failed_count > 0:
                         f.write(f"Failed: {failed_count} routes\n")
                     f.write(f"\n✅ Route names have been saved to cache.\n")
-                    f.write(f"\n📋 TO SEE UPDATED ROUTE NAMES IN YOUR REPORT:\n")
-                    f.write(f"   1. Re-run: python main.py --analyze\n")
-                    f.write(f"   2. Analysis will be instant (uses cached data)\n")
-                    f.write(f"   3. Report will show the new geocoded route names\n")
+                    if migration_success:
+                        f.write(f"✅ Geocoded names migrated to web app.\n")
+                        f.write(f"\n📋 TO SEE UPDATED ROUTE NAMES:\n")
+                        f.write(f"   • Refresh your web dashboard - names are already updated!\n")
+                        f.write(f"   • Or re-run: python main.py --analyze\n")
+                    else:
+                        f.write(f"\n📋 TO SEE UPDATED ROUTE NAMES IN WEB APP:\n")
+                        f.write(f"   1. Run: python3 scripts/migrate_cache_to_json_storage.py\n")
+                        f.write(f"   2. Refresh your web dashboard\n")
+                        f.write(f"\n📋 TO SEE UPDATED ROUTE NAMES IN CLI REPORT:\n")
+                        f.write(f"   • Re-run: python main.py --analyze\n")
                     f.write(f"\n💡 The cache has been updated, so the next run will be fast!\n")
                     f.write(f"{'='*70}\n")
             except:
