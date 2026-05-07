@@ -85,94 +85,78 @@ def run_daily_analysis() -> None:
     - If geocoding fails: Continue with existing location data
     - If weather fails: Skip weather analysis, continue with routes
     """
-    job = _record_job_start('analysis', 'Daily analysis refresh')
+    from app.scheduler.scheduler import scheduler
     
-    try:
-        # Get analysis service
-        analysis_service = AnalysisService()
+    # Ensure we have Flask app context for database access
+    with scheduler.app.app_context():
+        job = _record_job_start('analysis', 'Daily analysis refresh')
         
-        # Run analysis (this will use existing service layer logic)
-        result = analysis_service.run_full_analysis(
-            fetch_new_activities=True,
-            force_refresh=False
-        )
-        
-        # Create snapshot record
-        snapshot = AnalysisSnapshot(
-            status='completed' if result.get('success') else 'degraded',
-            activities_count=result.get('activities_count', 0),
-            route_groups_count=result.get('route_groups_count', 0),
-            long_rides_count=result.get('long_rides_count', 0),
-            cache_file_path=result.get('cache_path'),
-            metadata={
-                'fetch_new': True,
-                'degraded_reason': result.get('degraded_reason')
-            }
-        )
-        db.session.add(snapshot)
-        db.session.commit()
-        
-        _record_job_completion(job, result={
-            'snapshot_id': snapshot.id,
-            'activities_count': snapshot.activities_count,
-            'route_groups_count': snapshot.route_groups_count
-        })
-        
-    except Exception as e:
-        _record_job_failure(job, e)
-        raise
+        try:
+            # Get analysis service
+            analysis_service = AnalysisService()
+            
+            # Run analysis (this will use existing service layer logic)
+            result = analysis_service.run_full_analysis(
+                fetch_new_activities=True,
+                force_refresh=False
+            )
+            
+            # Create snapshot record
+            snapshot = AnalysisSnapshot(
+                status='completed' if result.get('success') else 'degraded',
+                activities_count=result.get('activities_count', 0),
+                route_groups_count=result.get('route_groups_count', 0),
+                long_rides_count=result.get('long_rides_count', 0),
+                cache_file_path=result.get('cache_path'),
+                metadata={
+                    'fetch_new': True,
+                    'degraded_reason': result.get('degraded_reason')
+                }
+            )
+            db.session.add(snapshot)
+            db.session.commit()
+            
+            _record_job_completion(job, result={
+                'snapshot_id': snapshot.id,
+                'activities_count': snapshot.activities_count,
+                'route_groups_count': snapshot.route_groups_count
+            })
+            
+        except Exception as e:
+            _record_job_failure(job, e)
+            raise
 
 
 def run_weather_refresh() -> None:
     """Refresh weather data for active routes.
     
-    Updates weather forecasts for frequently used routes.
-    Uses last-known-good data if weather API is unavailable.
+    NOTE: This job is currently disabled pending Issue #138 (Weather Integration).
+    The weather refresh logic requires the WeatherService to be fully implemented.
     
-    Degraded Mode Behavior:
-    - If weather API fails: Keep existing cached weather data
+    When enabled, this job will:
+    - Update weather forecasts for frequently used routes
+    - Use last-known-good data if weather API is unavailable
     - Mark weather data as stale but still usable
-    - Log warning for monitoring
     """
-    job = _record_job_start('weather_refresh', 'Weather data refresh')
+    from app.scheduler.scheduler import scheduler
     
-    try:
-        from src.weather_fetcher import WeatherFetcher
+    # Ensure we have Flask app context for database access
+    with scheduler.app.app_context():
+        job = _record_job_start('weather_refresh', 'Weather data refresh (disabled)')
         
-        weather_fetcher = WeatherFetcher()
-        
-        # Get latest snapshot to find active routes
-        latest_snapshot = AnalysisSnapshot.query.order_by(
-            AnalysisSnapshot.analysis_date.desc()
-        ).first()
-        
-        if not latest_snapshot:
-            logger.warning("No analysis snapshot found, skipping weather refresh")
-            _record_job_completion(job, result={'skipped': True})
-            return
-        
-        # Refresh weather for route groups
-        refreshed_count = 0
-        failed_count = 0
-        
-        for route_group in latest_snapshot.route_groups:
-            try:
-                # This would call weather API for route location
-                # Implementation depends on existing weather_fetcher logic
-                refreshed_count += 1
-            except Exception as e:
-                logger.warning(f"Failed to refresh weather for route {route_group.id}: {e}")
-                failed_count += 1
-        
-        _record_job_completion(job, result={
-            'refreshed_count': refreshed_count,
-            'failed_count': failed_count,
-            'snapshot_id': latest_snapshot.id
-        })
-        
-    except Exception as e:
-        _record_job_failure(job, e)
-        # Don't raise - weather refresh failure shouldn't crash the app
+        try:
+            # Job is disabled until Issue #138 is complete
+            logger.info("Weather refresh job is disabled - waiting for Issue #138 completion")
+            _record_job_completion(job, result={
+                'status': 'disabled',
+                'reason': 'Waiting for Issue #138 (Weather Integration)',
+                'refreshed_count': 0
+            })
+            
+        except Exception as e:
+            _record_job_failure(job, e)
+            logger.warning(f"Weather refresh job failed: {e}")
+            # Don't raise - weather refresh failure shouldn't crash the app
 
 
 def run_cache_cleanup() -> None:
@@ -187,58 +171,62 @@ def run_cache_cleanup() -> None:
     - Route similarity cache: Keep last 90 days
     - Geocoding cache: Keep indefinitely (grows slowly)
     """
-    job = _record_job_start('cache_cleanup', 'Cache cleanup and rotation')
+    from app.scheduler.scheduler import scheduler
     
-    try:
-        cache_dir = Path('cache')
-        if not cache_dir.exists():
-            logger.warning("Cache directory not found")
-            _record_job_completion(job, result={'skipped': True})
-            return
+    # Ensure we have Flask app context
+    with scheduler.app.app_context():
+        job = _record_job_start('cache_cleanup', 'Cache cleanup and rotation')
         
-        now = datetime.now(timezone.utc)
-        retention_days = {
-            'activities_cache': 30,
-            'weather_cache': 7,
-            'route_similarity_cache': 90,
-            'route_groups_cache': 30
-        }
-        
-        cleaned_files = []
-        total_size_freed = 0
-        
-        for cache_file in cache_dir.glob('*.json'):
-            # Skip geocoding cache (keep indefinitely)
-            if 'geocoding' in cache_file.name:
-                continue
+        try:
+            cache_dir = Path('cache')
+            if not cache_dir.exists():
+                logger.warning("Cache directory not found")
+                _record_job_completion(job, result={'skipped': True})
+                return
             
-            # Check file age
-            file_age_days = (now - datetime.fromtimestamp(
-                cache_file.stat().st_mtime, tz=timezone.utc
-            )).days
+            now = datetime.now(timezone.utc)
+            retention_days = {
+                'activities_cache': 30,
+                'weather_cache': 7,
+                'route_similarity_cache': 90,
+                'route_groups_cache': 30
+            }
             
-            # Determine retention period
-            retention = 30  # default
-            for pattern, days in retention_days.items():
-                if pattern in cache_file.name:
-                    retention = days
-                    break
+            cleaned_files = []
+            total_size_freed = 0
             
-            # Remove if older than retention period
-            if file_age_days > retention:
-                file_size = cache_file.stat().st_size
-                cache_file.unlink()
-                cleaned_files.append(cache_file.name)
-                total_size_freed += file_size
-                logger.info(f"Removed old cache file: {cache_file.name} ({file_age_days} days old)")
-        
-        _record_job_completion(job, result={
-            'files_removed': len(cleaned_files),
-            'size_freed_mb': round(total_size_freed / (1024 * 1024), 2)
-        })
-        
-    except Exception as e:
-        _record_job_failure(job, e)
+            for cache_file in cache_dir.glob('*.json'):
+                # Skip geocoding cache (keep indefinitely)
+                if 'geocoding' in cache_file.name:
+                    continue
+                
+                # Check file age
+                file_age_days = (now - datetime.fromtimestamp(
+                    cache_file.stat().st_mtime, tz=timezone.utc
+                )).days
+                
+                # Determine retention period
+                retention = 30  # default
+                for pattern, days in retention_days.items():
+                    if pattern in cache_file.name:
+                        retention = days
+                        break
+                
+                # Remove if older than retention period
+                if file_age_days > retention:
+                    file_size = cache_file.stat().st_size
+                    cache_file.unlink()
+                    cleaned_files.append(cache_file.name)
+                    total_size_freed += file_size
+                    logger.info(f"Removed old cache file: {cache_file.name} ({file_age_days} days old)")
+            
+            _record_job_completion(job, result={
+                'files_removed': len(cleaned_files),
+                'size_freed_mb': round(total_size_freed / (1024 * 1024), 2)
+            })
+            
+        except Exception as e:
+            _record_job_failure(job, e)
 
 
 def run_log_rotation() -> None:
@@ -251,51 +239,55 @@ def run_log_rotation() -> None:
     - Compress logs 7-30 days old
     - Delete logs older than 30 days
     """
-    job = _record_job_start('log_rotation', 'Log rotation and compression')
+    from app.scheduler.scheduler import scheduler
     
-    try:
-        logs_dir = Path('logs')
-        if not logs_dir.exists():
-            logger.warning("Logs directory not found")
-            _record_job_completion(job, result={'skipped': True})
-            return
+    # Ensure we have Flask app context
+    with scheduler.app.app_context():
+        job = _record_job_start('log_rotation', 'Log rotation and compression')
         
-        now = datetime.now(timezone.utc)
-        rotated_count = 0
-        deleted_count = 0
-        
-        for log_file in logs_dir.glob('*.log'):
-            # Skip current log files
-            if log_file.name in ['app.log', 'security_audit.log']:
-                continue
+        try:
+            logs_dir = Path('logs')
+            if not logs_dir.exists():
+                logger.warning("Logs directory not found")
+                _record_job_completion(job, result={'skipped': True})
+                return
             
-            file_age_days = (now - datetime.fromtimestamp(
-                log_file.stat().st_mtime, tz=timezone.utc
-            )).days
+            now = datetime.now(timezone.utc)
+            rotated_count = 0
+            deleted_count = 0
             
-            # Delete logs older than 30 days
-            if file_age_days > 30:
-                log_file.unlink()
-                deleted_count += 1
-                logger.info(f"Deleted old log: {log_file.name}")
+            for log_file in logs_dir.glob('*.log'):
+                # Skip current log files
+                if log_file.name in ['app.log', 'security_audit.log']:
+                    continue
+                
+                file_age_days = (now - datetime.fromtimestamp(
+                    log_file.stat().st_mtime, tz=timezone.utc
+                )).days
+                
+                # Delete logs older than 30 days
+                if file_age_days > 30:
+                    log_file.unlink()
+                    deleted_count += 1
+                    logger.info(f"Deleted old log: {log_file.name}")
+                
+                # Compress logs 7-30 days old
+                elif file_age_days > 7 and not log_file.name.endswith('.gz'):
+                    import gzip
+                    with open(log_file, 'rb') as f_in:
+                        with gzip.open(f"{log_file}.gz", 'wb') as f_out:
+                            shutil.copyfileobj(f_in, f_out)
+                    log_file.unlink()
+                    rotated_count += 1
+                    logger.info(f"Compressed log: {log_file.name}")
             
-            # Compress logs 7-30 days old
-            elif file_age_days > 7 and not log_file.name.endswith('.gz'):
-                import gzip
-                with open(log_file, 'rb') as f_in:
-                    with gzip.open(f"{log_file}.gz", 'wb') as f_out:
-                        shutil.copyfileobj(f_in, f_out)
-                log_file.unlink()
-                rotated_count += 1
-                logger.info(f"Compressed log: {log_file.name}")
-        
-        _record_job_completion(job, result={
-            'rotated_count': rotated_count,
-            'deleted_count': deleted_count
-        })
-        
-    except Exception as e:
-        _record_job_failure(job, e)
+            _record_job_completion(job, result={
+                'rotated_count': rotated_count,
+                'deleted_count': deleted_count
+            })
+            
+        except Exception as e:
+            _record_job_failure(job, e)
 
 
 def check_system_health() -> None:
@@ -310,33 +302,42 @@ def check_system_health() -> None:
     
     Records health status for monitoring dashboard.
     """
-    job = _record_job_start('health_check', 'System health check')
+    from app.scheduler.scheduler import scheduler
     
-    try:
-        from app.scheduler.health import HealthChecker
+    # Ensure we have Flask app context for database access
+    with scheduler.app.app_context():
+        job = _record_job_start('health_check', 'System health check')
         
-        health_checker = HealthChecker()
-        health_status = health_checker.check_all()
-        
-        _record_job_completion(job, result={
-            'overall_status': health_status.overall_status,
-            'checks_passed': health_status.checks_passed,
-            'checks_failed': health_status.checks_failed,
-            'warnings': health_status.warnings
-        })
-        
-        # Log warnings
-        if health_status.warnings:
-            for warning in health_status.warnings:
-                logger.warning(f"Health check warning: {warning}")
-        
-        # Log failures
-        if health_status.checks_failed > 0:
-            logger.error(
-                f"Health check failed: {health_status.checks_failed} checks failed"
-            )
-        
-    except Exception as e:
-        _record_job_failure(job, e)
+        try:
+            from app.scheduler.health import HealthChecker
+            
+            health_checker = HealthChecker()
+            health_status = health_checker.check_all()
+            
+            _record_job_completion(job, result={
+                'overall_status': health_status.overall_status,
+                'checks_passed': health_status.checks_passed,
+                'checks_failed': health_status.checks_failed,
+                'warnings': health_status.warnings
+            })
+            
+            # Log warnings
+            if health_status.warnings:
+                for warning in health_status.warnings:
+                    logger.warning(f"Health check warning: {warning}")
+            
+            # Log failures and make them visible
+            if health_status.checks_failed > 0:
+                logger.error(
+                    f"Health check failed: {health_status.checks_failed} checks failed"
+                )
+                # Make failures visible in monitoring
+                for check in health_status.checks:
+                    if check.status == 'unhealthy':
+                        logger.error(f"UNHEALTHY: {check.name} - {check.message}")
+            
+        except Exception as e:
+            _record_job_failure(job, e)
+            logger.error(f"Health check job failed: {e}", exc_info=True)
 
 # Made with Bob
