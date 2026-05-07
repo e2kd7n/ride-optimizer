@@ -166,7 +166,7 @@ def main():
     if all_success:
         logger.info("\n🎉 All migrations completed successfully!")
         logger.info("\nNext steps:")
-        logger.info("1. Restart the API server: python3 api.py")
+        logger.info("1. Restart the API server: python3 launch.py")
         logger.info("2. Refresh the dashboard in your browser")
         logger.info("3. You should now see your routes and statistics!")
         return 0

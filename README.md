@@ -2,6 +2,8 @@
 
 A Python application that analyzes your Strava cycling activities to determine the optimal commute route between home and work, considering time, distance, and safety factors.
 
+**Quick Start:** `python launch.py` to start the web application
+
 ## 🔒 Security Notice
 
 **This application requires valid Strava API credentials to run.** The program will not execute without proper authentication credentials configured in your `.env` file. This protects against unauthorized use and ensures the application only runs for legitimate users with their own Strava API access.

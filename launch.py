@@ -14,6 +14,9 @@ from flask import Flask, jsonify, send_from_directory, request
 from pathlib import Path
 import logging
 from datetime import datetime
+import webbrowser
+import threading
+import time
 
 from src.config import Config
 from src.json_storage import JSONStorage
@@ -266,6 +269,35 @@ def internal_error(error):
     }), 500
 
 
+def open_browser(port):
+    """Open Chrome browser after a short delay to ensure server is ready."""
+    time.sleep(1.5)  # Wait for server to start
+    url = f'http://localhost:{port}'
+    try:
+        # Try to open in Chrome specifically
+        chrome_path = None
+        import platform
+        system = platform.system()
+        
+        if system == 'Darwin':  # macOS
+            chrome_path = 'open -a /Applications/Google\\ Chrome.app %s'
+        elif system == 'Windows':
+            chrome_path = 'C:/Program Files/Google/Chrome/Application/chrome.exe %s'
+        elif system == 'Linux':
+            chrome_path = '/usr/bin/google-chrome %s'
+        
+        if chrome_path:
+            webbrowser.get(chrome_path).open(url)
+        else:
+            # Fallback to default browser
+            webbrowser.open(url)
+        
+        logger.info(f"Opened browser at {url}")
+    except Exception as e:
+        logger.warning(f"Could not open browser automatically: {e}")
+        logger.info(f"Please open your browser manually to: {url}")
+
+
 if __name__ == '__main__':
     # Development server
     import os
@@ -278,6 +310,9 @@ if __name__ == '__main__':
     logger.info("  GET /api/routes - All routes for library")
     logger.info("  GET /api/status - System health and freshness")
     logger.info(f"Server will run on port {port}")
+    
+    # Open browser in a separate thread after server starts
+    threading.Thread(target=open_browser, args=(port,), daemon=True).start()
     
     app.run(host='0.0.0.0', port=port, debug=False)
 

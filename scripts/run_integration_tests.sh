@@ -81,7 +81,7 @@ echo ""
 if [ "$1" == "coverage" ]; then
     echo "Generating coverage report..."
     pytest tests/test_api_integration.py tests/test_api.py tests/test_json_storage.py \
-        --cov=api --cov=src.json_storage \
+        --cov=launch --cov=src.json_storage \
         --cov-report=html --cov-report=term
     
     echo ""
