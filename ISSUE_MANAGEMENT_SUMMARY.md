@@ -78,7 +78,7 @@ git commit -m "docs: Weekly issue priority update"
 3. **[OUTSTANDING_ACTIONS.md](OUTSTANDING_ACTIONS.md)** - Detailed action items
 
 ### Epic Issues
-- **#144** - Web Platform Migration (v3.0.0)
+- **#144** - Web Platform Migration (v1.0.0 (future production))
 - **#146** - Beta Release & User Feedback
 - **#145** - Weather Dashboard Integration
 
@@ -119,7 +119,7 @@ git commit -m "docs: Weekly issue priority update"
 ### This Week
 - [ ] Reduce P1 count to <25 (move 8 issues to P2)
 - [ ] Start Sprint 1 with #76 (Background Geocoding)
-- [ ] Create v3.0.0 milestone
+- [ ] Create v1.0.0 (future production) milestone
 - [ ] Set up weekly maintenance routine
 
 ### This Month
@@ -129,7 +129,7 @@ git commit -m "docs: Weekly issue priority update"
 - [ ] Update TECHNICAL_SPEC.md
 
 ### 3 Months
-- [ ] Web platform v3.0.0 MVP released
+- [ ] Web platform v0.11.0 (simplified architecture) released
 - [ ] Test coverage >70%
 - [ ] P1 count maintained at <15
 - [ ] Health score maintained at 8.5+/10

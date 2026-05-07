@@ -1,25 +1,37 @@
 # Release Roadmap
 
-**Created:** 2026-05-06 16:23 CDT  
-**Updated:** 2026-05-07 (Version Rebaseline)  
+**Created:** 2026-05-06 16:23 CDT
+**Updated:** 2026-05-07 (Version Rebaseline - 0.x.x Scheme)
 **Based on:** Architecture Simplification (Issue #152)
 
 ---
 
 ## 🎯 Current Status
 
-**Current Release:** v2.5.0 (Pre-Production)  
-**Next Release:** v1.0.0 (First Production-Ready Release)  
+**Current Release:** v0.10.0 (formerly v2.5.0)
+**Next Release:** v0.11.0 (Architecture Simplification)
+**Future Release:** v1.0.0 (Production-Ready, when truly stable)
 **Target:** Single-user Raspberry Pi deployment
 
 ---
 
-## 📅 Release Schedule
+## 📅 Release History
 
-### v2.5.0 - Current Release (Pre-Production)
-**Status:** Released  
-**Focus:** CLI-based ride analysis with web dashboard prototype  
+### v0.5.0 - Original Prototype
+**Status:** Original
+**Architecture:** CLI + Static HTML
+**Notes:** Simple, lightweight, worked well
+
+### v0.6.0 - v0.10.0 - Flask Experiment
+**Status:** Released (formerly v2.1.0-v2.5.0)
 **Architecture:** Flask + SQLAlchemy + APScheduler + Docker
+
+**Releases:**
+- v0.6.0 (formerly v2.1.0) - Code quality & design system
+- v0.7.0 (formerly v2.2.0) - Test infrastructure
+- v0.8.0 (formerly v2.3.0) - Segment-based route naming
+- v0.9.0 (formerly v2.4.0) - Long rides feature & polish
+- v0.10.0 (formerly v2.5.0) - Current release
 
 **Key Features:**
 - Strava integration for activity fetching
@@ -36,9 +48,11 @@
 
 ---
 
-### v1.0.0 - First Production Release (Target: 5 weeks)
-**Status:** In Planning (Issue #152)  
-**Focus:** Simplified architecture optimized for Raspberry Pi  
+## 📅 Planned Releases
+
+### v0.11.0 - Architecture Simplification (Target: 5 weeks)
+**Status:** In Planning (Issue #152)
+**Focus:** Return to simplified architecture like v0.5.0
 **Architecture:** Static HTML + Minimal API + JSON files + Cron
 
 **Goals:**
@@ -73,33 +87,29 @@
 
 ---
 
-## 🚫 Deprecated Releases
+### v0.12.0 - v0.99.0 - Future Development
+**Status:** Headroom for future releases
+**Purpose:** Incremental improvements, bug fixes, new features
 
-The following planned releases have been **deprecated** and merged into v1.0.0 scope:
+Plenty of version numbers available for development before declaring production-ready.
 
-### ~~v0.9.0 - Web Platform MVP~~
-**Status:** Deprecated  
-**Reason:** Over-engineered for single-user Pi deployment  
-**Merged Into:** v1.0.0 (simplified architecture)
+---
 
-### ~~v0.9.1 - UX Enhancements~~
-**Status:** Deprecated  
-**Reason:** Unnecessary complexity for personal tool  
-**Merged Into:** v1.0.0 (core features only)
+### v1.0.0 - Production Ready (Future)
+**Status:** Reserved for true production readiness
+**Requirements:**
+- Architecture proven stable on Raspberry Pi
+- Used successfully in daily production for 3+ months
+- All core features complete and tested
+- Documentation comprehensive
+- No major known issues
+- Confident in long-term API stability
 
-### ~~v0.9.2 - Mobile Optimization~~
-**Status:** Deprecated  
-**Reason:** Responsive design sufficient for single user  
-**Merged Into:** v1.0.0 (mobile-first CSS)
-
-### ~~v0.9.3 - External Integrations~~
-**Status:** Deprecated  
-**Reason:** Strava integration sufficient for personal use  
-**Merged Into:** Future consideration (post-v1.0.0)
-
-### ~~v3.0.0 - Web Platform~~
-**Status:** Deprecated (version number confusion)  
-**Replaced By:** v1.0.0 (correct semantic versioning)
+**Not Ready Yet Because:**
+- Still refining architecture (v0.11.0)
+- Not yet battle-tested in daily use
+- API and features may still change
+- Being honest about maturity level
 
 ---
 

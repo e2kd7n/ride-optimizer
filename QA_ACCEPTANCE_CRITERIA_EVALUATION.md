@@ -121,7 +121,7 @@
 **Blockers**:
 - **Critical**: No Long Rides feature implemented
 - **Critical**: No Long Rides API exists
-- **Note**: This issue may be obsolete - Long Rides was implemented in v2.4.0 as CLI feature, not web API
+- **Note**: This issue may be obsolete - Long Rides was implemented in v0.9.0 as CLI feature, not web API
 
 **Recommendation**: Close this issue or retarget to web platform documentation
 

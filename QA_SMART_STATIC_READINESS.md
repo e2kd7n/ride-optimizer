@@ -21,8 +21,8 @@ QA Squad is **READY** to support the Smart Static architecture migration (Issue 
 ## Alignment with Project Plans
 
 ### Version Rebaseline (VERSION_REBASELINE_PLAN.md)
-- ✅ All QA documentation references **v1.0.0** (not v3.0.0)
-- ✅ Understands v2.5.0 is current pre-production release
+- ✅ All QA documentation references **v1.0.0** (not v1.0.0 (future production))
+- ✅ Understands v0.10.0 is current pre-production release
 - ✅ Aligned with "first production-ready release" messaging
 - ✅ No references to deprecated v0.9.x versions
 
@@ -122,7 +122,7 @@ job = JobHistory.create_job(
 
 ## Test Coverage Status
 
-### Current Coverage (v2.5.0 Codebase)
+### Current Coverage (v0.10.0 Codebase)
 | Component | Coverage | Tests | Reusable? |
 |-----------|----------|-------|-----------|
 | **Service Layer** | 65% | 45 tests | ✅ YES |
@@ -367,10 +367,10 @@ jobs:
 
 ---
 
-## Lessons Learned (Applied to v1.0.0)
+## Lessons Learned (Applied to v0.11.0)
 
 ### From Bug Fixes
-1. ✅ **Comprehensive testing catches critical bugs** - Applied to v1.0.0 strategy
+1. ✅ **Comprehensive testing catches critical bugs** - Applied to v0.11.0 strategy
 2. ✅ **Schema validation essential** - Will add to CI/CD
 3. ✅ **Service layer tests are reusable** - Preserved for migration
 4. ✅ **Clear error messages speed debugging** - Maintained in new tests
@@ -421,13 +421,13 @@ jobs:
 - [ ] Complete documentation
 - [ ] Set up beta infrastructure
 - [ ] Final verification
-- [ ] Launch v1.0.0 beta
+- [ ] Launch v0.11.0 beta
 
 ---
 
 ## Conclusion
 
-QA Squad is **READY** to support the Smart Static migration to v1.0.0. Critical bugs are fixed, comprehensive strategy is documented, and reusable tests are preserved. The 5-week timeline is achievable with 70%+ coverage target (higher than old 60% compromise).
+QA Squad is **READY** to support the Smart Static migration to v0.11.0. Critical bugs are fixed, comprehensive strategy is documented, and reusable tests are preserved. The 5-week timeline is achievable with 70%+ coverage target (higher than old 60% compromise).
 
 **Status:** ✅ READY FOR PHASE 1  
 **Confidence:** HIGH  
@@ -447,7 +447,9 @@ QA Squad is **READY** to support the Smart Static migration to v1.0.0. Critical 
 
 ---
 
-**Prepared By:** QA Squad Lead (Bob)  
-**Date:** 2026-05-07 02:34 UTC  
-**Target Release:** v1.0.0 (First Production Release)  
+**Prepared By:** QA Squad Lead (Bob)
+**Date:** 2026-05-07 02:34 UTC
+**Updated:** 2026-05-07 02:48 UTC (Version scheme corrected)
+**Target Release:** v0.11.0 (Architecture Simplification)
+**Future Release:** v1.0.0 (Production-ready after 3+ months stable use)
 **Status:** Ready to support Smart Static migration

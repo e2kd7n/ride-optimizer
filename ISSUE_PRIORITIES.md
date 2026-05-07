@@ -1,24 +1,45 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-05-07 (Version Rebaseline)
+**Last Updated:** 2026-05-07 (Version Rebaseline Complete - 0.x.x Scheme)
 
 This file reflects the current state of GitHub issues by priority. Issues are managed via GitHub labels (P0-critical, P1-high, P2-medium, P3-low, P4-future).
+
+---
+
+## 📌 VERSION SCHEME CLARIFICATION
+
+**IMPORTANT:** All version numbers now use 0.x.x scheme until production-ready:
+
+- **v0.5.0** = Original CLI + static HTML prototype
+- **v0.6.0-v0.10.0** = Flask experiment (formerly mislabeled as v2.1.0-v2.5.0)
+  - v0.6.0 (was v2.1.0) - Code quality & design
+  - v0.7.0 (was v2.2.0) - Test infrastructure
+  - v0.8.0 (was v2.3.0) - Route naming
+  - v0.9.0 (was v2.4.0) - Long rides
+  - v0.10.0 (was v2.5.0) - **CURRENT RELEASE**
+- **v0.11.0** = Next release (architecture simplification - Issue #152)
+- **v0.12.0-v0.99.0** = Future development (plenty of headroom)
+- **v1.0.0** = Production-ready (when truly stable, battle-tested, confident)
+
+**Why 0.x.x?** Honest about pre-production status. Version 1.0.0 reserved for first truly production-ready release after 3+ months of stable daily use.
+
+---
 
 ## 🔴 P0 - CRITICAL (Drop Everything)
 Issues that make the application unusable or cause data loss.
 
-- #152 - 🏗️ EPIC: Architecture Simplification for Raspberry Pi
+- #152 - 🏗️ EPIC: Architecture Simplification for Raspberry Pi (v0.11.0)
 - #76 - Background Geocoding with Progressive Report Updates
 
 ## 🔴 P1 - HIGH (Current Sprint)
 Issues that significantly impact core functionality or user experience.
 
-- #153 - Phase 1: Foundation Migration (Week 1)
-- #155 - Phase 2: Frontend Conversion (Week 2)
-- #156 - Phase 3: Integration Work (Week 3)
-- #157 - Phases 4-5: QA & Beta Prep (Weeks 4-5)
+- #153 - Phase 1: Foundation Migration (Week 1) - v0.11.0
+- #155 - Phase 2: Frontend Conversion (Week 2) - v0.11.0
+- #156 - Phase 3: Integration Work (Week 3) - v0.11.0
+- #157 - Phases 4-5: QA & Beta Prep (Weeks 4-5) - v0.11.0
 - ~~#146 - 🧪 EPIC: Beta Release & User Feedback Program~~ (CLOSED - bloat for single-user)
-- ~~#144 - 🌐 EPIC: Personal Web Platform Migration (v3.0.0)~~ (SUPERSEDED by #152 - v1.0.0)
+- ~~#144 - 🌐 EPIC: Personal Web Platform Migration~~ (SUPERSEDED by #152)
 - #143 - Create integration test suite for dashboard, commute, planner, route library, TrainerRoad fallback, and degraded-mode workflows
 - #142 - Implement responsive layout, shared navigation shell, and small-screen-friendly decision views
 - #140 - Implement workout-aware commute recommendations that can extend route length to satisfy prescribed sessions

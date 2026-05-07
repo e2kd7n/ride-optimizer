@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-QA Squad has begun comprehensive testing of the Personal Web Platform v3.0.0 MVP. Initial work has uncovered **critical architectural issues** that are blocking testing and must be addressed immediately.
+QA Squad has begun comprehensive testing of the Personal Web Platform v0.11.0 (simplified architecture). Initial work has uncovered **critical architectural issues** that are blocking testing and must be addressed immediately.
 
 ## Accomplishments
 
