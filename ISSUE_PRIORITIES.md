@@ -1,17 +1,13 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-05-07 13:50:31 UTC / 2026-05-07 08:50:31 CDT
+**Last Updated:** 2026-05-07 14:11:39 UTC / 2026-05-07 09:11:39 CDT
 
 This file reflects the current state of GitHub issues by priority. Issues are managed via GitHub labels (P0-critical, P1-high, P2-medium, P3-low, P4-future).
 
 ## 🔴 P0 - CRITICAL (Drop Everything)
 Issues that make the application unusable or cause data loss.
 
-- #157 - Phases 4-5: QA Testing & Beta Preparation
-- #156 - Phase 3: Integration Work - Convert APScheduler to Cron + Testing
-- #155 - Phase 2: Frontend Conversion - Templates to Static HTML + JavaScript
-- #153 - Phase 1: Foundation Migration - Extract Services & Create Minimal API
-- #76 - Background Geocoding with Progressive Report Updates
+**No P0 issues currently open** ✅
 
 ## 🔴 P1 - HIGH (Current Sprint)
 Issues that significantly impact core functionality or user experience.
@@ -41,7 +37,6 @@ Issues that significantly impact core functionality or user experience.
 Important improvements that enhance functionality but don't block core workflows.
 
 - #165 - Test Coverage: route_namer.py (15% → 50%)
-- #160 - Fix authentication mocking in API integration tests
 - #158 - 📋 Version Rebaseline Complete - Documentation Record
 - #141 - Add repeat-a-past-ride flow and saved plan support
 - #136 - Implement settings and preferences page for home/work locations, units, time windows, and planner defaults
@@ -101,7 +96,7 @@ Feature requests and enhancements for future releases.
 ## ⚠️ Unprioritized Issues
 Issues without priority labels that need to be triaged.
 
-**No unprioritized issues** ✅
+- #166 - Complete and review full analysis with Fréchet algorithm
 
 ## 📝 Workspace TODOs & Tasks
 Code comments and inline tasks found in the workspace that may need attention.

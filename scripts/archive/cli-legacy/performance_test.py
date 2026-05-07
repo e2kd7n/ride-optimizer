@@ -85,14 +85,14 @@ class PerformanceTest:
         for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
             try:
                 cmdline = proc.info['cmdline']
-                if cmdline and 'api.py' in ' '.join(cmdline):
+                if cmdline and 'launch.py' in ' '.join(cmdline):
                     api_process = psutil.Process(proc.info['pid'])
                     break
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
         
         if not api_process:
-            print("  ⚠️  API process not found. Start with: python3 api.py")
+            print("  ⚠️  API process not found. Start with: python3 launch.py")
             return {'error': 'API process not found'}
         
         # Measure memory over time

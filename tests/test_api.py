@@ -1,5 +1,5 @@
 """
-Unit tests for minimal API (api.py).
+Unit tests for minimal API (launch.py).
 
 Tests all 4 endpoints, query parameters, error handling, and service initialization.
 """
@@ -14,14 +14,14 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import api
+import launch
 
 
 @pytest.fixture
 def client():
     """Create test client for Flask app."""
-    api.app.config['TESTING'] = True
-    with api.app.test_client() as client:
+    launch.app.config['TESTING'] = True
+    with launch.app.test_client() as client:
         yield client
 
 
