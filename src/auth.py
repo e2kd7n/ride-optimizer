@@ -202,10 +202,16 @@ class StravaAuthenticator:
         if not self.credentials_path.exists():
             return None
         
-        with open(self.credentials_path, 'r') as f:
-            tokens = json.load(f)
-        
-        return tokens
+        try:
+            with open(self.credentials_path, 'r') as f:
+                tokens = json.load(f)
+            return tokens
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.warning(f"Invalid token file format: {e}. Re-authentication required.")
+            return None
+        except Exception as e:
+            logger.error(f"Error loading tokens: {e}")
+            return None
     
     def authenticate(self) -> Dict[str, any]:
         """
