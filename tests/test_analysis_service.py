@@ -485,4 +485,85 @@ class TestAnalysisServiceIntegration:
         assert status['has_data'] is False
         assert len(analysis_service.get_activities()) == 0
 
+@pytest.mark.unit
+class TestDashboardWeatherOverlays:
+    """Test dashboard weather overlay behavior."""
+    
+    def test_generate_dashboard_overview_map_includes_weather_layers(self, analysis_service, mock_location):
+        """Dashboard map should include current weather and forecast layers."""
+        home, work = mock_location
+        analysis_service._home_location = home
+        analysis_service._work_location = work
+        analysis_service._route_groups = [{
+            'id': 'route_1',
+            'name': 'Main Route',
+            'frequency': 3,
+            'direction': 'home_to_work',
+            'is_plus_route': False,
+            'routes': [{
+                'distance': 10000,
+                'duration': 1800,
+                'coordinates': [(home.lat, home.lon), (work.lat, work.lon)]
+            }],
+            'representative_route': {
+                'distance': 10000,
+                'duration': 1800,
+                'coordinates': [(home.lat, home.lon), (work.lat, work.lon)]
+            }
+        }]
+        
+        analysis_service.weather_service.get_current_weather = Mock(return_value={
+            'conditions': 'Clear',
+            'temperature_c': 20,
+            'wind_speed_kph': 8,
+            'wind_direction_cardinal': 'NW',
+            'precipitation_mm': 0,
+            'cycling_favorability': 'favorable'
+        })
+        analysis_service.weather_service.fetcher.get_hourly_forecast = Mock(return_value=[
+            {
+                'timestamp': '2026-05-07T12:00',
+                'temp_c': 20,
+                'wind_speed_kph': 8,
+                'wind_direction_deg': 315,
+                'precipitation_prob': 10
+            }
+        ] * 48)
+        
+        html = analysis_service.generate_dashboard_overview_map()
+        
+        assert html is not None
+        assert 'Weather Overlay' in html
+        assert '24-48h Forecast' in html
+    
+    def test_generate_dashboard_overview_map_gracefully_handles_weather_failures(self, analysis_service, mock_location):
+        """Dashboard map should render even if weather overlay fails."""
+        home, work = mock_location
+        analysis_service._home_location = home
+        analysis_service._work_location = work
+        analysis_service._route_groups = [{
+            'id': 'route_1',
+            'name': 'Main Route',
+            'frequency': 3,
+            'direction': 'home_to_work',
+            'is_plus_route': False,
+            'routes': [{
+                'distance': 10000,
+                'duration': 1800,
+                'coordinates': [(home.lat, home.lon), (work.lat, work.lon)]
+            }],
+            'representative_route': {
+                'distance': 10000,
+                'duration': 1800,
+                'coordinates': [(home.lat, home.lon), (work.lat, work.lon)]
+            }
+        }]
+        
+        analysis_service.weather_service.get_current_weather = Mock(side_effect=Exception('weather fail'))
+        
+        html = analysis_service.generate_dashboard_overview_map()
+        
+        assert html is not None
+        assert 'folium-map' in html
+
 # Made with Bob

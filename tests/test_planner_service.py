@@ -514,4 +514,71 @@ class TestEdgeCases:
         # May or may not find rides depending on exact locations
 
 
+@pytest.mark.unit
+class TestPlannerMapWeatherOverlays:
+    """Test planner weather overlay rendering."""
+    
+    def test_generate_long_rides_map_includes_weather_overlay(self, initialized_service, mock_long_ride):
+        """Planner map should include weather overlay and semantic route colors."""
+        recommendations = [{
+            'date': '2026-05-07',
+            'day_name': 'Thursday',
+            'rides': [{
+                'ride_id': mock_long_ride.activity_id,
+                'name': mock_long_ride.name,
+                'distance': mock_long_ride.distance_km,
+                'duration': mock_long_ride.duration_hours,
+                'elevation': mock_long_ride.elevation_gain,
+                'score': 0.85,
+                'weather_score': 0.8,
+                'variety_score': 0.4,
+                'weather': {
+                    'temperature': 72,
+                    'conditions': 'Clear',
+                    'wind_speed': 8,
+                    'precipitation': 0
+                },
+                'start_location': list(mock_long_ride.start_location),
+                'is_loop': mock_long_ride.is_loop
+            }]
+        }]
+        
+        html = initialized_service.generate_long_rides_map(
+            recommendations,
+            home_location=mock_long_ride.start_location
+        )
+        
+        assert html is not None
+        assert 'Weather Overlay' in html
+        assert 'Favorable' in html
+        assert '#28a745' in html
+    
+    def test_generate_long_rides_map_handles_empty_weather(self, initialized_service, mock_long_ride):
+        """Planner map should still render when forecast data is missing."""
+        recommendations = [{
+            'date': '2026-05-07',
+            'day_name': 'Thursday',
+            'rides': [{
+                'ride_id': mock_long_ride.activity_id,
+                'name': mock_long_ride.name,
+                'distance': mock_long_ride.distance_km,
+                'duration': mock_long_ride.duration_hours,
+                'elevation': mock_long_ride.elevation_gain,
+                'score': 0.55,
+                'weather_score': 0.5,
+                'variety_score': 0.4,
+                'weather': {},
+                'start_location': list(mock_long_ride.start_location),
+                'is_loop': mock_long_ride.is_loop
+            }]
+        }]
+        
+        html = initialized_service.generate_long_rides_map(
+            recommendations,
+            home_location=mock_long_ride.start_location
+        )
+        
+        assert html is not None
+        assert 'Acceptable' in html
+
 # Made with Bob

@@ -37,9 +37,15 @@ def mock_config():
 def mock_route():
     """Create a mock route."""
     route = Mock(spec=Route)
+    route.activity_id = "12345"
     route.distance = 10.5
     route.duration = 1800  # 30 minutes
     route.elevation_gain = 150.0
+    route.coordinates = [
+        (40.7128, -74.0060),
+        (40.7300, -74.0000),
+        (40.7589, -73.9851)
+    ]
     return route
 
 
@@ -51,7 +57,9 @@ def mock_route_group(mock_route):
     group.name = "Main Commute Route"
     group.representative_route = mock_route
     group.frequency = 25
+    group.direction = "home_to_work"
     group.is_plus_route = False
+    group.routes = [mock_route]
     return group
 
 
@@ -465,5 +473,78 @@ class TestCommuteServiceIntegration:
         mock_recommender.get_all_recommendations.return_value = [mock_rec]
         options = commute_service.get_all_commute_options('to_work')
         assert options['count'] == 1
+
+@pytest.mark.unit
+class TestCommuteMapWeatherOverlay:
+    """Test commute comparison map weather overlays."""
+    
+    def test_generate_comparison_map_includes_weather_layer(self, commute_service, mock_route_group, mock_location):
+        """Map should include toggleable weather overlay and weather summary widget."""
+        home, work = mock_location
+        mock_route_group.representative_route.coordinates = [
+            (40.7128, -74.0060),
+            (40.7300, -74.0000),
+            (40.7589, -73.9851)
+        ]
+        
+        commute_service._recommender = Mock()
+        commute_service._recommender.route_groups = [mock_route_group]
+        commute_service.weather_service.get_current_weather = Mock(return_value={
+            'conditions': 'Clear',
+            'temperature_c': 20,
+            'wind_speed_kph': 10,
+            'wind_direction_cardinal': 'NW',
+            'precipitation_mm': 0,
+            'cycling_favorability': 'favorable',
+            'timestamp': datetime.now(timezone.utc).isoformat()
+        })
+        
+        routes = [{
+            'route': {
+                'id': 'route_123',
+                'name': 'Main Commute Route',
+                'coordinates': mock_route_group.representative_route.coordinates,
+                'distance': 10500,
+                'duration': 1800,
+                'elevation': 150
+            },
+            'score': 0.9,
+            'weather': {'conditions': 'Clear'}
+        }]
+        
+        html = commute_service.generate_comparison_map(routes, home, work)
+        
+        assert html is not None
+        assert 'Weather Overlay' in html
+        assert 'Main Commute Route' in html
+    
+    def test_generate_comparison_map_gracefully_handles_weather_failures(self, commute_service, mock_route_group, mock_location):
+        """Map should still render if weather fetch fails."""
+        home, work = mock_location
+        mock_route_group.representative_route.coordinates = [
+            (40.7128, -74.0060),
+            (40.7589, -73.9851)
+        ]
+        
+        commute_service._recommender = Mock()
+        commute_service._recommender.route_groups = [mock_route_group]
+        commute_service.weather_service.get_current_weather = Mock(side_effect=Exception("weather down"))
+        
+        routes = [{
+            'route': {
+                'id': 'route_123',
+                'name': 'Main Commute Route',
+                'coordinates': mock_route_group.representative_route.coordinates,
+                'distance': 10500,
+                'duration': 1800,
+                'elevation': 150
+            },
+            'score': 0.9
+        }]
+        
+        html = commute_service.generate_comparison_map(routes, home, work)
+        
+        assert html is not None
+        assert 'Main Commute Route' in html
 
 # Made with Bob

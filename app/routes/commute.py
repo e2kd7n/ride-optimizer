@@ -58,6 +58,9 @@ def index():
     alternatives = []
     departure_windows = []
     route_weather = None
+    comparison_map_html = None
+    commute_options = []
+    map_error = None
     
     try:
         route_groups = analysis_service.get_route_groups()
@@ -99,14 +102,36 @@ def index():
                     'confidence': rec_data.get('confidence', 'medium')
                 }
                 
-                # Get alternatives
+                # Get alternatives and all route options for comparison map
                 alt_direction = rec_data.get('direction')
                 if alt_direction:
                     alt_data = commute_service.get_all_commute_options(alt_direction)
                     if alt_data.get('status') == 'success':
                         options = alt_data.get('options', [])
+                        commute_options = options
+                        
+                        # Enrich options with route weather for list + popups
+                        for opt in commute_options:
+                            option_route = opt.get('route', {})
+                            option_coords = option_route.get('coordinates', [])
+                            if option_coords:
+                                try:
+                                    opt['weather'] = weather_service.get_route_weather(
+                                        option_coords,
+                                        route_name=option_route.get('name', 'Route')
+                                    )
+                                except Exception as weather_error:
+                                    current_app.logger.error(
+                                        f"Error getting route weather for comparison map route {option_route.get('id')}: {weather_error}"
+                                    )
+                        
+                        # Use enriched weather on the primary recommendation when available
+                        if commute_options:
+                            route_weather = commute_options[0].get('weather') or route_weather
+                            recommendation['weather'] = route_weather
+                        
                         # Skip the first one (it's the primary recommendation)
-                        for opt in options[1:4]:  # Get up to 3 alternatives
+                        for opt in commute_options[1:4]:
                             route = opt.get('route', {})
                             alternatives.append({
                                 'route_name': route.get('name', 'Unknown'),
@@ -115,8 +140,24 @@ def index():
                                 'duration': route.get('duration', 0) / 60,
                                 'elevation': route.get('elevation', 0),
                                 'score': opt.get('score', 0),
-                                'breakdown': opt.get('breakdown', {})
+                                'breakdown': opt.get('breakdown', {}),
+                                'weather': opt.get('weather')
                             })
+                        
+                        try:
+                            comparison_map_html = commute_service.generate_comparison_map(
+                                commute_options,
+                                home,
+                                work
+                            )
+                            if not comparison_map_html:
+                                map_error = 'Unable to generate route comparison map.'
+                        except Exception as map_generation_error:
+                            map_error = 'Route comparison map is temporarily unavailable.'
+                            current_app.logger.error(
+                                f"Commute comparison map generation error: {map_generation_error}",
+                                exc_info=True
+                            )
             
             # Get departure windows
             windows_data = commute_service.get_departure_windows()
@@ -142,6 +183,9 @@ def index():
         'alternatives': alternatives,
         'departure_windows': departure_windows,
         'route_weather': route_weather,
+        'commute_options': commute_options,
+        'comparison_map_html': comparison_map_html,
+        'map_error': map_error,
         'workout_fit': None  # TODO: TrainerRoad integration (Issue #139)
     }
     

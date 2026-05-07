@@ -17,6 +17,8 @@ from src.route_analyzer import RouteGroup, Route
 from src.long_ride_analyzer import LongRide
 from src.config import Config
 from src.json_storage import JSONStorage
+from src.visualizer import RouteVisualizer
+from src.location_finder import Location
 
 logger = logging.getLogger(__name__)
 
@@ -246,8 +248,18 @@ class RouteLibraryService:
         Returns:
             Dictionary with route details
         """
+        # Load cached data if not already loaded
+        self._load_from_cache()
+        
         if route_type == 'commute' and self._route_groups:
-            group = next((g for g in self._route_groups if g.id == route_id), None)
+            # Handle both dict and RouteGroup objects
+            group = None
+            for g in self._route_groups:
+                g_id = g.get('id') if isinstance(g, dict) else g.id
+                if g_id == route_id:
+                    group = g
+                    break
+            
             if group:
                 return {
                     'status': 'success',
@@ -255,7 +267,14 @@ class RouteLibraryService:
                 }
         
         elif route_type == 'long_ride' and self._long_rides:
-            ride = next((r for r in self._long_rides if str(r.activity_id) == route_id), None)
+            # Handle both dict and LongRide objects
+            ride = None
+            for r in self._long_rides:
+                r_id = str(r.get('activity_id') if isinstance(r, dict) else r.activity_id)
+                if r_id == route_id:
+                    ride = r
+                    break
+            
             if ride:
                 return {
                     'status': 'success',
@@ -478,24 +497,49 @@ class RouteLibraryService:
                 'is_favorite': str(ride.activity_id) in self._favorites
             }
     
-    def _format_commute_route_detailed(self, group: RouteGroup) -> Dict[str, Any]:
+    def _format_commute_route_detailed(self, group) -> Dict[str, Any]:
         """Format detailed commute route information."""
         base = self._format_commute_route(group)
-        base.update({
-            'routes': [
-                {
-                    'activity_id': r.activity_id,
-                    'distance': r.distance / 1000,
-                    'duration': r.duration / 60,
-                    'elevation': r.elevation_gain,
-                    'timestamp': r.timestamp,
-                    'average_speed': r.average_speed * 3.6,  # km/h
-                    'activity_name': r.activity_name
-                }
-                for r in group.routes
-            ],
-            'coordinates': group.representative_route.coordinates
-        })
+        
+        # Handle both dict and RouteGroup objects
+        if isinstance(group, dict):
+            routes_data = group.get('routes', [])
+            rep_route = group.get('representative_route', {})
+            coordinates = rep_route.get('coordinates', [])
+            
+            base.update({
+                'routes': [
+                    {
+                        'activity_id': r.get('activity_id'),
+                        'distance': r.get('distance', 0) / 1000,
+                        'duration': r.get('duration', 0) / 60,
+                        'elevation': r.get('elevation_gain', 0),
+                        'timestamp': r.get('timestamp'),
+                        'average_speed': r.get('average_speed', 0) * 3.6,  # km/h
+                        'activity_name': r.get('activity_name', '')
+                    }
+                    for r in routes_data
+                ],
+                'coordinates': coordinates
+            })
+        else:
+            # RouteGroup object
+            base.update({
+                'routes': [
+                    {
+                        'activity_id': r.activity_id,
+                        'distance': r.distance / 1000,
+                        'duration': r.duration / 60,
+                        'elevation': r.elevation_gain,
+                        'timestamp': r.timestamp,
+                        'average_speed': r.average_speed * 3.6,  # km/h
+                        'activity_name': r.activity_name
+                    }
+                    for r in group.routes
+                ],
+                'coordinates': group.representative_route.coordinates
+            })
+        
         return base
     
     def _format_long_ride_detailed(self, ride: LongRide) -> Dict[str, Any]:
@@ -522,5 +566,261 @@ class RouteLibraryService:
             return sorted(routes, key=lambda r: r['name'])
         else:  # 'recent' or default
             return routes
+    
+    def generate_route_map(self, route_id: str, route_type: str) -> Optional[str]:
+        """
+        Generate interactive map HTML for a specific route.
+        
+        Args:
+            route_id: Route identifier
+            route_type: 'commute' or 'long_ride'
+            
+        Returns:
+            HTML string of the map, or None if route not found or error occurs
+        """
+        try:
+            # Load cached data if not already loaded
+            self._load_from_cache()
+            
+            # Get route data
+            route_group = None
+            long_ride = None
+            
+            if route_type == 'commute' and self._route_groups:
+                # Find the route group (handle both dict and RouteGroup objects)
+                for group in self._route_groups:
+                    group_id = group.get('id') if isinstance(group, dict) else group.id
+                    if group_id == route_id:
+                        route_group = group
+                        break
+                
+                if not route_group:
+                    logger.warning(f"Commute route {route_id} not found")
+                    return None
+                
+                # Convert dict to RouteGroup if needed
+                if isinstance(route_group, dict):
+                    # For now, we'll work with the dict directly
+                    # In a full implementation, we'd deserialize to RouteGroup
+                    pass
+                
+            elif route_type == 'long_ride' and self._long_rides:
+                # Find the long ride
+                for ride in self._long_rides:
+                    ride_id = str(ride.get('activity_id') if isinstance(ride, dict) else ride.activity_id)
+                    if ride_id == route_id:
+                        long_ride = ride
+                        break
+                
+                if not long_ride:
+                    logger.warning(f"Long ride {route_id} not found")
+                    return None
+            
+            else:
+                logger.warning(f"Invalid route type or no routes available: {route_type}")
+                return None
+            
+            # Create dummy home/work locations for map centering
+            # In production, these should come from config or be calculated from route
+            if route_type == 'commute' and route_group:
+                coords = route_group.get('representative_route', {}).get('coordinates', []) if isinstance(route_group, dict) else route_group.representative_route.coordinates
+                if not coords:
+                    logger.warning(f"Route {route_id} has no coordinates")
+                    return None
+                
+                # Use first and last coordinates as home/work
+                start_coord = coords[0]
+                end_coord = coords[-1]
+                home = Location(lat=start_coord[0], lon=start_coord[1], name="Start", activity_count=1)
+                work = Location(lat=end_coord[0], lon=end_coord[1], name="End", activity_count=1)
+                
+                # Create visualizer with single route
+                visualizer = RouteVisualizer(
+                    route_groups=[route_group] if not isinstance(route_group, dict) else [],
+                    home=home,
+                    work=work,
+                    config=self.config
+                )
+                
+                # Create base map
+                map_obj = visualizer.create_base_map()
+                visualizer.map = map_obj
+                
+                # Determine route color based on frequency/quality
+                frequency = route_group.get('frequency', 0) if isinstance(route_group, dict) else route_group.frequency
+                if frequency > 10:
+                    color = '#28a745'  # Green for frequently used routes
+                elif frequency > 5:
+                    color = '#007bff'  # Blue for moderately used
+                else:
+                    color = '#ffc107'  # Yellow for less used
+                
+                # Add route layer (handle dict case)
+                if isinstance(route_group, dict):
+                    # Manually add polyline for dict case
+                    import folium
+                    rep_route = route_group.get('representative_route', {})
+                    route_name = route_group.get('name', f"Route {route_id}")
+                    
+                    # Create popup HTML
+                    popup_html = f"""
+                    <div style="font-family: Arial, sans-serif;">
+                        <h4 style="margin: 0 0 10px 0;">{route_name}</h4>
+                        <table style="width: 100%; font-size: 12px;">
+                            <tr>
+                                <td><b>Direction:</b></td>
+                                <td>{route_group.get('direction', 'N/A').replace('_', ' ').title()}</td>
+                            </tr>
+                            <tr>
+                                <td><b>Uses:</b></td>
+                                <td>{frequency} times</td>
+                            </tr>
+                            <tr>
+                                <td><b>Distance:</b></td>
+                                <td>{rep_route.get('distance', 0) / 1000:.1f} km</td>
+                            </tr>
+                            <tr>
+                                <td><b>Duration:</b></td>
+                                <td>{rep_route.get('duration', 0) / 60:.1f} min</td>
+                            </tr>
+                            <tr>
+                                <td><b>Elevation:</b></td>
+                                <td>{rep_route.get('elevation_gain', 0)} m</td>
+                            </tr>
+                        </table>
+                    </div>
+                    """
+                    
+                    folium.PolyLine(
+                        coords,
+                        color=color,
+                        weight=5,
+                        opacity=0.8,
+                        popup=folium.Popup(popup_html, max_width=300),
+                        tooltip=f"{route_name} ({frequency} uses)"
+                    ).add_to(map_obj)
+                else:
+                    visualizer.add_route_layer(route_group, color, weight=5, is_optimal=True)
+                
+                # Add start/end markers
+                import folium
+                folium.Marker(
+                    [start_coord[0], start_coord[1]],
+                    popup='<b>Start</b>',
+                    tooltip='Start',
+                    icon=folium.Icon(color='green', icon='play', prefix='fa')
+                ).add_to(map_obj)
+                
+                folium.Marker(
+                    [end_coord[0], end_coord[1]],
+                    popup='<b>End</b>',
+                    tooltip='End',
+                    icon=folium.Icon(color='red', icon='stop', prefix='fa')
+                ).add_to(map_obj)
+                
+                # Fit map to route bounds
+                map_obj.fit_bounds(coords)
+                
+                # Add layer control
+                folium.LayerControl().add_to(map_obj)
+                
+                # Return HTML
+                return map_obj._repr_html_()
+                
+            elif route_type == 'long_ride' and long_ride:
+                coords = long_ride.get('coordinates', []) if isinstance(long_ride, dict) else long_ride.coordinates
+                if not coords:
+                    logger.warning(f"Long ride {route_id} has no coordinates")
+                    return None
+                
+                # Use start/end coordinates
+                start_coord = coords[0]
+                end_coord = coords[-1]
+                home = Location(lat=start_coord[0], lon=start_coord[1], name="Start", activity_count=1)
+                work = Location(lat=end_coord[0], lon=end_coord[1], name="End", activity_count=1)
+                
+                # Create visualizer
+                visualizer = RouteVisualizer(
+                    route_groups=[],
+                    home=home,
+                    work=work,
+                    config=self.config
+                )
+                
+                # Create base map
+                map_obj = visualizer.create_base_map()
+                
+                # Add route polyline
+                import folium
+                ride_name = long_ride.get('name', 'Long Ride') if isinstance(long_ride, dict) else long_ride.name
+                distance_km = long_ride.get('distance_km', 0) if isinstance(long_ride, dict) else long_ride.distance_km
+                duration_hours = long_ride.get('duration_hours', 0) if isinstance(long_ride, dict) else long_ride.duration_hours
+                elevation = long_ride.get('elevation_gain', 0) if isinstance(long_ride, dict) else long_ride.elevation_gain
+                is_loop = long_ride.get('is_loop', False) if isinstance(long_ride, dict) else long_ride.is_loop
+                
+                popup_html = f"""
+                <div style="font-family: Arial, sans-serif;">
+                    <h4 style="margin: 0 0 10px 0;">{ride_name}</h4>
+                    <table style="width: 100%; font-size: 12px;">
+                        <tr>
+                            <td><b>Type:</b></td>
+                            <td>Long Ride {'(Loop)' if is_loop else ''}</td>
+                        </tr>
+                        <tr>
+                            <td><b>Distance:</b></td>
+                            <td>{distance_km:.1f} km</td>
+                        </tr>
+                        <tr>
+                            <td><b>Duration:</b></td>
+                            <td>{duration_hours:.1f} hrs</td>
+                        </tr>
+                        <tr>
+                            <td><b>Elevation:</b></td>
+                            <td>{elevation} m</td>
+                        </tr>
+                    </table>
+                </div>
+                """
+                
+                folium.PolyLine(
+                    coords,
+                    color='#8B008B',  # Purple for long rides
+                    weight=5,
+                    opacity=0.8,
+                    popup=folium.Popup(popup_html, max_width=300),
+                    tooltip=ride_name
+                ).add_to(map_obj)
+                
+                # Add start marker
+                folium.Marker(
+                    [start_coord[0], start_coord[1]],
+                    popup='<b>Start</b>',
+                    tooltip='Start',
+                    icon=folium.Icon(color='green', icon='play', prefix='fa')
+                ).add_to(map_obj)
+                
+                # Add end marker (only if not a loop)
+                if not is_loop:
+                    folium.Marker(
+                        [end_coord[0], end_coord[1]],
+                        popup='<b>End</b>',
+                        tooltip='End',
+                        icon=folium.Icon(color='red', icon='stop', prefix='fa')
+                    ).add_to(map_obj)
+                
+                # Fit map to route bounds
+                map_obj.fit_bounds(coords)
+                
+                # Add layer control
+                folium.LayerControl().add_to(map_obj)
+                
+                # Return HTML
+                return map_obj._repr_html_()
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Failed to generate map for route {route_id}: {e}", exc_info=True)
+            return None
 
 # Made with Bob
