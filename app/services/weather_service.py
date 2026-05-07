@@ -16,8 +16,14 @@ class WeatherService:
     Real implementation will be provided by Integration Squad (Issue #138).
     """
     
-    def __init__(self):
-        """Initialize stub weather service."""
+    def __init__(self, config=None):
+        """
+        Initialize stub weather service.
+        
+        Args:
+            config: Optional configuration object (ignored in stub)
+        """
+        self.config = config
         self.enabled = False
     
     def get_current_weather(self, location: str = None) -> Optional[Dict[str, Any]]:
