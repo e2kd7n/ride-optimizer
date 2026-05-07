@@ -1,5 +1,123 @@
 # Technical Specification - Strava Commute Route Analyzer
 
+## Architecture Overview
+
+### Smart Static Web Platform
+
+The application uses a **Smart Static architecture** optimized for single-user deployment:
+
+**Components:**
+- **Static Frontend** (`static/*.html`, `static/js/*.js`) - Client-side rendering with vanilla JavaScript
+- **Minimal Flask API** (`launch.py`) - JSON endpoints for data retrieval
+- **Service Layer** (`app/services/`) - Business logic and data processing
+- **Core Analysis** (`src/`) - Route analysis, weather, and optimization algorithms
+- **JSON Storage** (`data/*.json`) - Persistent data storage without database
+
+**Design Principles:**
+- No server-side templates (Jinja2 deprecated)
+- No sessions or authentication middleware
+- CORS enabled for API endpoints
+- Lazy service initialization on first request
+- Optimized for Raspberry Pi deployment
+
+### Web Application Structure
+
+```
+ride-optimizer/
+├── launch.py                 # Flask API server (port 8083)
+├── static/                   # Static HTML pages
+│   ├── dashboard.html        # Main dashboard
+│   ├── commute.html          # Commute recommendations
+│   ├── planner.html          # Long ride planner
+│   └── js/                   # Client-side JavaScript
+│       ├── api-client.js     # API communication
+│       ├── dashboard.js      # Dashboard logic
+│       ├── commute.js        # Commute page logic
+│       └── map-renderer.js   # Map visualization
+├── app/                      # Application package
+│   ├── services/             # Business logic services
+│   │   ├── analysis_service.py
+│   │   ├── commute_service.py
+│   │   ├── weather_service.py
+│   │   ├── planner_service.py
+│   │   └── route_library_service.py
+│   ├── models/               # Data models
+│   └── scheduler/            # Background jobs
+├── src/                      # Core analysis modules
+│   ├── auth.py               # Strava OAuth
+│   ├── data_fetcher.py       # Activity fetching
+│   ├── route_analyzer.py     # Route grouping
+│   ├── weather_fetcher.py    # Weather API
+│   └── ...
+└── data/                     # JSON storage
+    ├── route_groups.json
+    ├── favorite_routes.json
+    ├── weather_cache.json
+    └── status.json
+```
+
+### API Endpoints (`launch.py`)
+
+#### Core Data Endpoints
+
+```python
+GET /api/weather
+# Returns current weather data with comfort score
+# Query params: lat, lon, location (optional)
+# Response: {status, current: {temperature, wind_speed, ...}, timestamp}
+
+GET /api/recommendation
+# Returns next commute recommendation
+# Query params: direction ('to_work' | 'to_home', optional)
+# Response: {status, recommended_route, score, factors}
+
+GET /api/routes
+# Returns all routes for library
+# Query params: type ('all'|'commute'|'long_ride'), sort, limit
+# Response: {status, routes: [...], total_count}
+
+GET /api/status
+# Returns system health and data freshness
+# Response: {status, timestamp, services, data, last_update}
+
+GET /api/maps/<page_type>
+# Returns map data for client-side rendering
+# page_type: 'dashboard' | 'commute' | 'planner' | 'route_detail'
+# Query params (route_detail): route_id, route_type
+# Response: {status, center, zoom, routes, markers, layers}
+```
+
+### Service Layer (`app/services/`)
+
+#### AnalysisService
+- Manages route groups and long rides data
+- Provides location information (home/work)
+- Handles analysis status and metadata
+
+#### CommuteService
+- Generates next commute recommendations
+- Integrates weather and workout data
+- Provides alternative route suggestions
+
+#### WeatherService
+- Fetches current weather conditions
+- Calculates comfort scores
+- Provides cycling favorability ratings
+
+#### PlannerService
+- Long ride planning with weather forecasts
+- Route suggestions based on conditions
+- Calendar integration
+
+#### RouteLibraryService
+- Browse and search all routes
+- Filter by type, distance, date
+- Manage favorite routes
+
+---
+
+## Core Analysis Modules
+
 ## 1. Authentication Module (`auth.py`)
 
 ### Purpose
