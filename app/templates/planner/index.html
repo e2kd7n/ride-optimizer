@@ -1,0 +1,721 @@
+{% extends "base.html" %}
+
+{% block title %}Long Ride Planner | Ride Optimizer{% endblock %}
+
+{% block content %}
+<div class="planner-page">
+    <header class="page-header">
+        <h1>🗺️ Long Ride Planner</h1>
+        <p class="page-subtitle">{{ forecast_days }}-Day Weather-Optimized Recommendations</p>
+    </header>
+    
+    <!-- Filter Controls -->
+    <div class="filter-controls">
+        <form method="get" class="filter-form">
+            <div class="filter-group">
+                <label for="days">Forecast Days:</label>
+                <select name="days" id="days" onchange="this.form.submit()">
+                    <option value="3" {% if forecast_days == 3 %}selected{% endif %}>3 Days</option>
+                    <option value="7" {% if forecast_days == 7 %}selected{% endif %}>7 Days</option>
+                    <option value="14" {% if forecast_days == 14 %}selected{% endif %}>14 Days</option>
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <label for="min_distance">Min Distance (km):</label>
+                <input type="number" name="min_distance" id="min_distance" 
+                       value="{{ min_distance }}" min="10" max="200" step="5">
+            </div>
+            
+            <div class="filter-group">
+                <label for="max_distance">Max Distance (km):</label>
+                <input type="number" name="max_distance" id="max_distance" 
+                       value="{{ max_distance }}" min="20" max="300" step="10">
+            </div>
+            
+            <button type="submit" class="btn btn-primary">Update</button>
+        </form>
+    </div>
+    
+    {% if recommendations %}
+    <!-- Summary Banner -->
+    <div class="summary-banner">
+        <div class="summary-item">
+            <span class="summary-icon">📅</span>
+            <div class="summary-content">
+                <span class="summary-value">{{ recommendations|length }}</span>
+                <span class="summary-label">Days Analyzed</span>
+            </div>
+        </div>
+        <div class="summary-item">
+            <span class="summary-icon">🚴</span>
+            <div class="summary-content">
+                <span class="summary-value">{{ total_rides }}</span>
+                <span class="summary-label">Total Rides</span>
+            </div>
+        </div>
+        {% if best_day %}
+        <div class="summary-item highlight">
+            <span class="summary-icon">⭐</span>
+            <div class="summary-content">
+                <span class="summary-value">{{ best_day }}</span>
+                <span class="summary-label">Best Day</span>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    
+    <!-- Daily Recommendations -->
+    <div class="daily-recommendations">
+        {% for day in recommendations %}
+        <div class="day-card {% if day.day_name == best_day %}best-day{% endif %}">
+            <div class="day-header">
+                <div class="day-info">
+                    <h2>{{ day.day_name }}</h2>
+                    <span class="day-date">{{ day.date }}</span>
+                </div>
+                {% if day.day_name == best_day %}
+                <span class="best-day-badge">⭐ Best Day</span>
+                {% endif %}
+            </div>
+            
+            {% if day.weather_summary %}
+            <div class="weather-summary">
+                <span class="weather-icon">🌤️</span>
+                <span class="weather-text">{{ day.weather_summary }}</span>
+            </div>
+            {% endif %}
+            
+            {% if day.best_ride %}
+            <!-- Top Recommendation for the Day -->
+            <div class="top-ride">
+                <div class="top-ride-header">
+                    <h3>{{ day.best_ride.name }}</h3>
+                    <span class="ride-score">{{ "%.0f"|format(day.best_ride.score * 100) }}%</span>
+                </div>
+                
+                <div class="ride-stats">
+                    <div class="stat">
+                        <span class="stat-icon">📏</span>
+                        <span class="stat-value">{{ "%.1f"|format(day.best_ride.distance) }} km</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-icon">⏱️</span>
+                        <span class="stat-value">{{ "%.0f"|format(day.best_ride.duration) }} min</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-icon">⛰️</span>
+                        <span class="stat-value">{{ "%.0f"|format(day.best_ride.elevation) }} m</span>
+                    </div>
+                </div>
+                
+                {% if day.best_ride.weather %}
+                <div class="ride-weather">
+                    {% if day.best_ride.weather.temperature %}
+                    <span class="weather-detail">🌡️ {{ "%.0f"|format(day.best_ride.weather.temperature) }}°F</span>
+                    {% endif %}
+                    {% if day.best_ride.weather.wind_speed %}
+                    <span class="weather-detail">💨 {{ "%.0f"|format(day.best_ride.weather.wind_speed) }} mph</span>
+                    {% endif %}
+                    {% if day.best_ride.weather.precipitation %}
+                    <span class="weather-detail">🌧️ {{ "%.0f"|format(day.best_ride.weather.precipitation) }}%</span>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+            
+            <!-- Alternative Rides for the Day -->
+            {% if day.rides|length > 1 %}
+            <div class="alternative-rides">
+                <button class="toggle-alternatives" onclick="toggleAlternatives(this)">
+                    <span class="toggle-text">Show {{ day.rides|length - 1 }} More Options</span>
+                    <span class="toggle-icon">▼</span>
+                </button>
+                
+                <div class="alternatives-list" style="display: none;">
+                    {% for ride in day.rides[1:] %}
+                    <div class="alt-ride">
+                        <div class="alt-ride-header">
+                            <span class="alt-ride-name">{{ ride.name }}</span>
+                            <span class="alt-ride-score">{{ "%.0f"|format(ride.score * 100) }}%</span>
+                        </div>
+                        <div class="alt-ride-stats">
+                            <span>📏 {{ "%.1f"|format(ride.distance) }} km</span>
+                            <span>⏱️ {{ "%.0f"|format(ride.duration) }} min</span>
+                            <span>⛰️ {{ "%.0f"|format(ride.elevation) }} m</span>
+                            {% if ride.is_loop %}
+                            <span class="loop-badge">🔄 Loop</span>
+                            {% endif %}
+                        </div>
+                        <div class="alt-ride-scores">
+                            <div class="score-bar">
+                                <span class="score-label">Weather:</span>
+                                <div class="score-bar-fill" style="width: {{ (ride.weather_score * 100)|int }}%"></div>
+                                <span class="score-value">{{ "%.0f"|format(ride.weather_score * 100) }}%</span>
+                            </div>
+                            <div class="score-bar">
+                                <span class="score-label">Variety:</span>
+                                <div class="score-bar-fill" style="width: {{ (ride.variety_score * 100)|int }}%"></div>
+                                <span class="score-value">{{ "%.0f"|format(ride.variety_score * 100) }}%</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    
+    <!-- Workout Schedule Placeholder -->
+    {% if workout_schedule %}
+    <div class="workout-schedule">
+        <h2>🏋️ Workout Schedule</h2>
+        {{ workout_schedule }}
+    </div>
+    {% else %}
+    <div class="workout-tip">
+        <p>💡 <strong>Tip:</strong> Connect TrainerRoad to see how rides fit with your training plan.</p>
+        <a href="{{ url_for('settings.trainerroad') }}" class="btn btn-secondary">Connect TrainerRoad</a>
+    </div>
+    {% endif %}
+    
+    {% else %}
+    <!-- No Recommendations -->
+    <div class="no-recommendations">
+        <div class="no-rec-icon">🗺️</div>
+        <h2>No Long Ride Recommendations Available</h2>
+        <p>Run analysis to get weather-optimized long ride recommendations for the next {{ forecast_days }} days.</p>
+        <a href="{{ url_for('api.analyze') }}" class="btn btn-primary btn-large" data-method="POST">
+            Run Analysis Now
+        </a>
+    </div>
+    {% endif %}
+    
+    <!-- Quick Actions -->
+    <div class="quick-actions">
+        <a href="{{ url_for('dashboard.index') }}" class="action-link">
+            <span class="action-icon">🏠</span>
+            <span>Dashboard</span>
+        </a>
+        <a href="{{ url_for('route_library.index') }}" class="action-link">
+            <span class="action-icon">📚</span>
+            <span>Route Library</span>
+        </a>
+        <a href="{{ url_for('commute.index') }}" class="action-link">
+            <span class="action-icon">🚴</span>
+            <span>Commute</span>
+        </a>
+    </div>
+</div>
+
+<script>
+function toggleAlternatives(button) {
+    const list = button.nextElementSibling;
+    const icon = button.querySelector('.toggle-icon');
+    const text = button.querySelector('.toggle-text');
+    
+    if (list.style.display === 'none') {
+        list.style.display = 'block';
+        icon.textContent = '▲';
+        text.textContent = text.textContent.replace('Show', 'Hide');
+    } else {
+        list.style.display = 'none';
+        icon.textContent = '▼';
+        text.textContent = text.textContent.replace('Hide', 'Show');
+    }
+}
+</script>
+
+<style>
+.planner-page {
+    padding: 2rem 0;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.page-header {
+    margin-bottom: 2rem;
+}
+
+.page-header h1 {
+    font-size: 2.5rem;
+    color: #2c3e50;
+    margin: 0 0 0.5rem 0;
+}
+
+.page-subtitle {
+    font-size: 1.1rem;
+    color: #7f8c8d;
+}
+
+/* Filter Controls */
+.filter-controls {
+    background-color: white;
+    border: 2px solid #e1e8ed;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.filter-form {
+    display: flex;
+    gap: 1.5rem;
+    align-items: flex-end;
+    flex-wrap: wrap;
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.filter-group label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.filter-group select,
+.filter-group input {
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 1rem;
+}
+
+/* Summary Banner */
+.summary-banner {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.summary-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.5rem;
+    background-color: white;
+    border: 2px solid #e1e8ed;
+    border-radius: 8px;
+}
+
+.summary-item.highlight {
+    border-color: #f39c12;
+    background-color: #fff9e6;
+}
+
+.summary-icon {
+    font-size: 2.5rem;
+}
+
+.summary-content {
+    display: flex;
+    flex-direction: column;
+}
+
+.summary-value {
+    font-size: 1.8rem;
+    font-weight: bold;
+    color: #2c3e50;
+}
+
+.summary-label {
+    font-size: 0.9rem;
+    color: #7f8c8d;
+}
+
+/* Daily Recommendations */
+.daily-recommendations {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.day-card {
+    background-color: white;
+    border: 2px solid #e1e8ed;
+    border-radius: 12px;
+    padding: 1.5rem;
+    transition: all 0.3s ease;
+}
+
+.day-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.day-card.best-day {
+    border-color: #f39c12;
+    background: linear-gradient(to right, #fff9e6 0%, white 100%);
+}
+
+.day-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #ecf0f1;
+}
+
+.day-info h2 {
+    font-size: 1.5rem;
+    color: #2c3e50;
+    margin: 0 0 0.25rem 0;
+}
+
+.day-date {
+    font-size: 0.9rem;
+    color: #7f8c8d;
+}
+
+.best-day-badge {
+    background-color: #f39c12;
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.weather-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    background-color: #e8f4f8;
+    border-radius: 6px;
+    margin-bottom: 1rem;
+}
+
+.weather-icon {
+    font-size: 1.5rem;
+}
+
+.weather-text {
+    color: #2c3e50;
+    font-size: 0.95rem;
+}
+
+/* Top Ride */
+.top-ride {
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.top-ride-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.top-ride-header h3 {
+    font-size: 1.3rem;
+    color: #2c3e50;
+    margin: 0;
+}
+
+.ride-score {
+    background-color: #27ae60;
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.ride-stats {
+    display: flex;
+    gap: 2rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.stat {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.stat-icon {
+    font-size: 1.3rem;
+}
+
+.stat-value {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.ride-weather {
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.weather-detail {
+    font-size: 0.9rem;
+    color: #7f8c8d;
+}
+
+/* Alternative Rides */
+.alternative-rides {
+    margin-top: 1rem;
+}
+
+.toggle-alternatives {
+    width: 100%;
+    padding: 0.75rem;
+    background-color: #ecf0f1;
+    border: none;
+    border-radius: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    font-weight: 600;
+    color: #2c3e50;
+    transition: background-color 0.3s ease;
+}
+
+.toggle-alternatives:hover {
+    background-color: #d5dbdb;
+}
+
+.alternatives-list {
+    margin-top: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.alt-ride {
+    padding: 1rem;
+    background-color: white;
+    border: 1px solid #e1e8ed;
+    border-radius: 6px;
+}
+
+.alt-ride-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+}
+
+.alt-ride-name {
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.alt-ride-score {
+    background-color: #3498db;
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.alt-ride-stats {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+    flex-wrap: wrap;
+    font-size: 0.9rem;
+    color: #7f8c8d;
+}
+
+.loop-badge {
+    background-color: #9b59b6;
+    color: white;
+    padding: 0.15rem 0.5rem;
+    border-radius: 10px;
+    font-size: 0.8rem;
+}
+
+.alt-ride-scores {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.score-bar {
+    display: grid;
+    grid-template-columns: 80px 1fr 50px;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.score-label {
+    font-size: 0.85rem;
+    color: #7f8c8d;
+}
+
+.score-bar-fill {
+    height: 6px;
+    background-color: #3498db;
+    border-radius: 3px;
+}
+
+.score-value {
+    text-align: right;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+/* Workout Tip */
+.workout-tip {
+    background-color: #fff3cd;
+    border: 2px solid #ffc107;
+    border-radius: 8px;
+    padding: 1.5rem;
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.workout-tip p {
+    margin: 0 0 1rem 0;
+    color: #856404;
+}
+
+/* No Recommendations */
+.no-recommendations {
+    text-align: center;
+    padding: 4rem 2rem;
+    background-color: #f8f9fa;
+    border-radius: 12px;
+    margin-bottom: 2rem;
+}
+
+.no-rec-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+}
+
+.no-recommendations h2 {
+    font-size: 1.8rem;
+    color: #2c3e50;
+    margin-bottom: 1rem;
+}
+
+.no-recommendations p {
+    color: #7f8c8d;
+    margin-bottom: 2rem;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* Quick Actions */
+.quick-actions {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-top: 2rem;
+}
+
+.action-link {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    background-color: white;
+    border: 2px solid #e1e8ed;
+    border-radius: 8px;
+    text-decoration: none;
+    color: #2c3e50;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.action-link:hover {
+    border-color: #3498db;
+    background-color: #f8f9fa;
+}
+
+.action-icon {
+    font-size: 1.2rem;
+}
+
+/* Buttons */
+.btn {
+    display: inline-block;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    border: none;
+    cursor: pointer;
+}
+
+.btn-primary {
+    background-color: #3498db;
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: #2980b9;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(52, 152, 219, 0.3);
+}
+
+.btn-secondary {
+    background-color: #95a5a6;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background-color: #7f8c8d;
+}
+
+.btn-large {
+    padding: 1rem 2rem;
+    font-size: 1.1rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .filter-form {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .filter-group {
+        width: 100%;
+    }
+    
+    .summary-banner {
+        grid-template-columns: 1fr;
+    }
+    
+    .day-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+    
+    .ride-stats {
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+    
+    .alt-ride-stats {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+}
+</style>
+{% endblock %}

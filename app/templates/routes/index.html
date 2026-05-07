@@ -1,0 +1,351 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-3 py-4">
+    <!-- Header with Stats -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="h3 mb-3">
+                <i class="bi bi-map"></i> Route Library
+            </h1>
+            
+            {% if stats %}
+            <div class="row g-3 mb-4">
+                <div class="col-6 col-md-3">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-body text-center">
+                            <div class="h2 mb-1 text-primary">{{ stats.total_routes }}</div>
+                            <div class="text-muted small">Total Routes</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-body text-center">
+                            <div class="h2 mb-1 text-success">{{ stats.total_activities }}</div>
+                            <div class="text-muted small">Total Rides</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-body text-center">
+                            <div class="h2 mb-1 text-info">{{ "%.0f"|format(stats.total_distance) }}</div>
+                            <div class="text-muted small">Total km</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-body text-center">
+                            <div class="h2 mb-1 text-warning">{{ filters.favorite }}</div>
+                            <div class="text-muted small">Favorites</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Search and Filters -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <form method="get" action="{{ url_for('route_library.index') }}" class="row g-3">
+                        <!-- Search -->
+                        <div class="col-12 col-md-4">
+                            <label for="search" class="form-label small text-muted">Search Routes</label>
+                            <input type="text" 
+                                   class="form-control" 
+                                   id="search" 
+                                   name="search" 
+                                   value="{{ search_term }}"
+                                   placeholder="Search by name...">
+                        </div>
+                        
+                        <!-- Filter by Type -->
+                        <div class="col-6 col-md-2">
+                            <label for="filter" class="form-label small text-muted">Type</label>
+                            <select class="form-select" id="filter" name="filter">
+                                <option value="all" {% if filter_by == 'all' %}selected{% endif %}>
+                                    All ({{ filters.commute + filters.long_ride }})
+                                </option>
+                                <option value="commute" {% if filter_by == 'commute' %}selected{% endif %}>
+                                    Commute ({{ filters.commute }})
+                                </option>
+                                <option value="long_ride" {% if filter_by == 'long_ride' %}selected{% endif %}>
+                                    Long Rides ({{ filters.long_ride }})
+                                </option>
+                                <option value="favorite" {% if filter_by == 'favorite' %}selected{% endif %}>
+                                    Favorites ({{ filters.favorite }})
+                                </option>
+                            </select>
+                        </div>
+                        
+                        <!-- Sort By -->
+                        <div class="col-6 col-md-2">
+                            <label for="sort" class="form-label small text-muted">Sort By</label>
+                            <select class="form-select" id="sort" name="sort">
+                                <option value="uses" {% if sort_by == 'uses' %}selected{% endif %}>Most Used</option>
+                                <option value="distance" {% if sort_by == 'distance' %}selected{% endif %}>Distance</option>
+                                <option value="name" {% if sort_by == 'name' %}selected{% endif %}>Name</option>
+                                <option value="recent" {% if sort_by == 'recent' %}selected{% endif %}>Recent</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Actions -->
+                        <div class="col-12 col-md-4 d-flex align-items-end gap-2">
+                            <button type="submit" class="btn btn-primary flex-grow-1">
+                                <i class="bi bi-search"></i> Apply
+                            </button>
+                            <a href="{{ url_for('route_library.index') }}" class="btn btn-outline-secondary">
+                                <i class="bi bi-x-circle"></i> Clear
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Message -->
+    {% if error %}
+    <div class="alert alert-warning" role="alert">
+        <i class="bi bi-exclamation-triangle"></i> {{ error }}
+    </div>
+    {% endif %}
+
+    <!-- Routes List -->
+    {% if routes %}
+    <div class="row g-3 mb-4">
+        {% for route in routes %}
+        <div class="col-12 col-md-6 col-lg-4">
+            <div class="card h-100 border-0 shadow-sm hover-shadow">
+                <div class="card-body">
+                    <!-- Route Header -->
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div class="flex-grow-1">
+                            <h5 class="card-title mb-1">
+                                <a href="{{ url_for('route_library.detail', route_type=route.type, route_id=route.id) }}" 
+                                   class="text-decoration-none text-dark">
+                                    {{ route.name }}
+                                </a>
+                            </h5>
+                            <div class="d-flex gap-2 flex-wrap">
+                                <!-- Type Badge -->
+                                {% if route.type == 'commute' %}
+                                <span class="badge bg-primary">
+                                    <i class="bi bi-briefcase"></i> Commute
+                                </span>
+                                {% else %}
+                                <span class="badge bg-success">
+                                    <i class="bi bi-bicycle"></i> Long Ride
+                                </span>
+                                {% endif %}
+                                
+                                <!-- Direction Badge (Commute) -->
+                                {% if route.direction %}
+                                <span class="badge bg-secondary">
+                                    {% if route.direction == 'to_work' %}
+                                    <i class="bi bi-arrow-right"></i> To Work
+                                    {% else %}
+                                    <i class="bi bi-arrow-left"></i> To Home
+                                    {% endif %}
+                                </span>
+                                {% endif %}
+                                
+                                <!-- Loop Badge (Long Ride) -->
+                                {% if route.is_loop %}
+                                <span class="badge bg-info">
+                                    <i class="bi bi-arrow-repeat"></i> Loop
+                                </span>
+                                {% endif %}
+                                
+                                <!-- Plus Route Badge -->
+                                {% if route.is_plus_route %}
+                                <span class="badge bg-warning text-dark">
+                                    <i class="bi bi-plus-circle"></i> Plus
+                                </span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <!-- Favorite Button -->
+                        <button class="btn btn-sm btn-outline-danger favorite-btn" 
+                                data-route-id="{{ route.id }}"
+                                data-is-favorite="{{ 'true' if route.is_favorite else 'false' }}">
+                            <i class="bi bi-heart{% if route.is_favorite %}-fill{% endif %}"></i>
+                        </button>
+                    </div>
+                    
+                    <!-- Route Stats -->
+                    <div class="row g-2 mb-3">
+                        <div class="col-4">
+                            <div class="text-center p-2 bg-light rounded">
+                                <div class="fw-bold text-primary">{{ "%.1f"|format(route.distance) }}</div>
+                                <div class="small text-muted">km</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="text-center p-2 bg-light rounded">
+                                <div class="fw-bold text-success">{{ "%.0f"|format(route.duration) }}</div>
+                                <div class="small text-muted">min</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="text-center p-2 bg-light rounded">
+                                <div class="fw-bold text-info">{{ route.elevation }}</div>
+                                <div class="small text-muted">m</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Uses Count -->
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="text-muted small">
+                            <i class="bi bi-activity"></i> Used {{ route.uses }} time{{ 's' if route.uses != 1 else '' }}
+                        </span>
+                        <a href="{{ url_for('route_library.detail', route_type=route.type, route_id=route.id) }}" 
+                           class="btn btn-sm btn-outline-primary">
+                            View Details <i class="bi bi-arrow-right"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <!-- Pagination -->
+    {% if total_pages > 1 %}
+    <nav aria-label="Route pagination">
+        <ul class="pagination justify-content-center">
+            <!-- Previous -->
+            <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+                <a class="page-link" 
+                   href="{{ url_for('route_library.index', page=page-1, sort=sort_by, filter=filter_by, search=search_term) }}">
+                    <i class="bi bi-chevron-left"></i> Previous
+                </a>
+            </li>
+            
+            <!-- Page Numbers -->
+            {% for p in range(1, total_pages + 1) %}
+                {% if p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
+                <li class="page-item {% if p == page %}active{% endif %}">
+                    <a class="page-link" 
+                       href="{{ url_for('route_library.index', page=p, sort=sort_by, filter=filter_by, search=search_term) }}">
+                        {{ p }}
+                    </a>
+                </li>
+                {% elif p == page - 3 or p == page + 3 %}
+                <li class="page-item disabled">
+                    <span class="page-link">...</span>
+                </li>
+                {% endif %}
+            {% endfor %}
+            
+            <!-- Next -->
+            <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+                <a class="page-link" 
+                   href="{{ url_for('route_library.index', page=page+1, sort=sort_by, filter=filter_by, search=search_term) }}">
+                    Next <i class="bi bi-chevron-right"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    {% endif %}
+    
+    {% else %}
+    <!-- No Routes -->
+    <div class="text-center py-5">
+        <i class="bi bi-map display-1 text-muted"></i>
+        <h3 class="mt-3">No Routes Found</h3>
+        <p class="text-muted">
+            {% if search_term %}
+            No routes match your search "{{ search_term }}".
+            {% elif filter_by != 'all' %}
+            No {{ filter_by.replace('_', ' ') }} routes available.
+            {% else %}
+            Run analysis to discover routes from your activities.
+            {% endif %}
+        </p>
+        {% if search_term or filter_by != 'all' %}
+        <a href="{{ url_for('route_library.index') }}" class="btn btn-primary">
+            <i class="bi bi-arrow-left"></i> View All Routes
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<!-- Favorite Toggle Script -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle favorite button clicks
+    document.querySelectorAll('.favorite-btn').forEach(btn => {
+        btn.addEventListener('click', async function(e) {
+            e.preventDefault();
+            const routeId = this.dataset.routeId;
+            const isFavorite = this.dataset.isFavorite === 'true';
+            const icon = this.querySelector('i');
+            
+            try {
+                const response = await fetch(`/routes/api/${routeId}/favorite`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ favorite: !isFavorite })
+                });
+                
+                if (response.ok) {
+                    // Toggle state
+                    this.dataset.isFavorite = (!isFavorite).toString();
+                    
+                    // Update icon
+                    if (!isFavorite) {
+                        icon.classList.remove('bi-heart');
+                        icon.classList.add('bi-heart-fill');
+                    } else {
+                        icon.classList.remove('bi-heart-fill');
+                        icon.classList.add('bi-heart');
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to toggle favorite:', error);
+            }
+        });
+    });
+});
+</script>
+
+<style>
+.hover-shadow {
+    transition: box-shadow 0.3s ease;
+}
+
+.hover-shadow:hover {
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+}
+
+.favorite-btn {
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.favorite-btn:hover {
+    background-color: #dc3545;
+    border-color: #dc3545;
+    color: white;
+}
+</style>
+{% endblock %}
