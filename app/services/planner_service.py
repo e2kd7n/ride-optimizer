@@ -13,8 +13,8 @@ from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
 
 from src.long_ride_analyzer import LongRideAnalyzer, LongRide, RideRecommendation
-from src.weather_fetcher import WeatherFetcher
 from src.config import Config
+from app.services.weather_service import WeatherService
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ class PlannerService:
             config: Configuration object
         """
         self.config = config
-        self.weather_fetcher = WeatherFetcher()
+        self.weather_service = WeatherService(config)
         self._long_rides: Optional[List[LongRide]] = None
     
     def initialize(self, long_rides: List[LongRide]):
@@ -368,21 +368,97 @@ class PlannerService:
     
     def _get_weather_for_ride(self, ride: LongRide, target_date: datetime.date) -> Dict[str, Any]:
         """Get weather forecast for a ride on a specific date."""
-        # TODO: Implement actual weather fetching
-        # For now, return placeholder
+        try:
+            # Get weather snapshot for the ride's start location and target date
+            snapshot = self.weather_service.get_weather_snapshot(
+                lat=ride.start_location[0],
+                lon=ride.start_location[1],
+                target_date=target_date
+            )
+            
+            if snapshot:
+                return {
+                    'temperature': snapshot.temperature_f,
+                    'conditions': snapshot.conditions,
+                    'wind_speed': snapshot.wind_speed_mph,
+                    'wind_direction': snapshot.wind_direction,
+                    'precipitation': snapshot.precipitation_in,
+                    'humidity': snapshot.humidity_percent,
+                    'feels_like': snapshot.feels_like_f
+                }
+        except Exception as e:
+            logger.error(f"Error fetching weather for ride {ride.activity_id}: {e}")
+        
+        # Return default values if weather fetch fails
         return {
             'temperature': 70.0,
-            'conditions': 'Clear',
-            'wind_speed': 5.0,
+            'conditions': 'Unknown',
+            'wind_speed': 0.0,
             'wind_direction': 'N',
-            'precipitation': 0.0
+            'precipitation': 0.0,
+            'humidity': 50.0,
+            'feels_like': 70.0
         }
     
     def _calculate_weather_score(self, weather: Dict[str, Any]) -> float:
-        """Calculate weather suitability score (0-1)."""
-        # TODO: Implement actual weather scoring
-        # For now, return placeholder
-        return 0.8
+        """
+        Calculate weather suitability score (0-1).
+        
+        Scoring factors:
+        - Temperature: Ideal 60-75°F
+        - Wind: Penalize >15 mph
+        - Precipitation: Penalize any rain
+        - Conditions: Bonus for clear/partly cloudy
+        """
+        score = 1.0
+        
+        # Temperature scoring (ideal 60-75°F)
+        temp = weather.get('temperature', 70.0)
+        if temp < 40:
+            score *= 0.3
+        elif temp < 50:
+            score *= 0.6
+        elif temp < 60:
+            score *= 0.8
+        elif temp <= 75:
+            score *= 1.0  # Ideal range
+        elif temp <= 85:
+            score *= 0.9
+        elif temp <= 95:
+            score *= 0.7
+        else:
+            score *= 0.4
+        
+        # Wind scoring (penalize >15 mph)
+        wind = weather.get('wind_speed', 0.0)
+        if wind > 25:
+            score *= 0.4
+        elif wind > 20:
+            score *= 0.6
+        elif wind > 15:
+            score *= 0.8
+        
+        # Precipitation scoring (any rain is bad)
+        precip = weather.get('precipitation', 0.0)
+        if precip > 0.5:
+            score *= 0.2
+        elif precip > 0.1:
+            score *= 0.5
+        elif precip > 0:
+            score *= 0.8
+        
+        # Conditions bonus
+        conditions = weather.get('conditions', '').lower()
+        if 'clear' in conditions or 'sunny' in conditions:
+            score *= 1.1
+        elif 'partly' in conditions or 'mostly' in conditions:
+            score *= 1.0
+        elif 'cloudy' in conditions or 'overcast' in conditions:
+            score *= 0.95
+        elif 'rain' in conditions or 'storm' in conditions:
+            score *= 0.3
+        
+        return min(score, 1.0)  # Cap at 1.0
     
     def _get_weather_summary(self, weather: Optional[Dict[str, Any]]) -> str:
         """Generate human-readable weather summary."""
