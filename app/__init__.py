@@ -51,9 +51,14 @@ def create_app(config_name='default'):
     
     # Initialize and start scheduler (unless in testing mode)
     if not app.testing:
-        from app.scheduler import start_scheduler
-        start_scheduler(app)
-        app.logger.info("Background scheduler started")
+        try:
+            from app.scheduler import start_scheduler
+            start_scheduler(app)
+            app.logger.info("Background scheduler started")
+        except Exception as e:
+            app.logger.error(f"Failed to start scheduler: {e}", exc_info=True)
+            app.logger.warning("Application will continue without background scheduler")
+            # App continues without scheduler - degraded mode
     
     # Log startup
     app.logger.info(f"Ride Optimizer web platform initialized (config: {config_name})")
