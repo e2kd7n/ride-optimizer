@@ -21,6 +21,7 @@ Organized archive of completed project work, including:
 
 ### Issue Tracking (Superseded)
 - [`ISSUES_TRACKING.md`](ISSUES_TRACKING.md) - Manual issue tracking (superseded by GitHub issues + ISSUE_PRIORITIES.md)
+- [`FUTURE_TODOS.md`](FUTURE_TODOS.md) - Future TODOs and planned features (superseded by ISSUE_PRIORITIES.md and GitHub issue tracking)
 
 ### Project Planning & Proposals
 - [`WEB_PLATFORM_PROPOSAL.md`](WEB_PLATFORM_PROPOSAL.md) - Future web platform proposal (2026-03-30)

@@ -45,7 +45,6 @@ Archived documentation for historical reference, including:
 
 ### Root-Level Documents
 - [`TECHNICAL_SPEC.md`](TECHNICAL_SPEC.md) - Complete technical specification
-- [`FUTURE_TODOS.md`](FUTURE_TODOS.md) - Planned features and improvements
 - [`TEST_COVERAGE_ROADMAP.md`](TEST_COVERAGE_ROADMAP.md) - Test coverage roadmap and strategy
 - [`VERSION_REBASELINE_PLAN.md`](VERSION_REBASELINE_PLAN.md) - Version rebaseline plan
 
@@ -74,8 +73,8 @@ Archived documentation for historical reference, including:
 - [Latest Release Notes](releases/)
 
 **Planning:**
-- [Future TODOs](FUTURE_TODOS.md)
 - [Technical Specification](TECHNICAL_SPEC.md)
+- [Issue Priorities](../ISSUE_PRIORITIES.md)
 
 ### By Version
 - **v2.0.0:** [Release Notes](releases/v2.0.0/RELEASE_NOTES.md)
