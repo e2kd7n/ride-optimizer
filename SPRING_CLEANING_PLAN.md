@@ -23,7 +23,7 @@ Move to `archive/debug_scripts/`:
 - [x] `scripts/create_issues.sh` - One-time issue creation
 - [x] `scripts/create_p2_issues.sh` - One-time issue creation
 - [x] `scripts/create_uiux_epic_issues_temp.sh` - Temporary script
-- [x] `scripts/create_v2.5.0_issue_updates.sh` - One-time update
+- [x] `scripts/create_v0.10.0_issue_updates.sh` - One-time update
 - [x] `scripts/cleanup-issue-titles.sh` - One-time cleanup
 - [x] `scripts/close-duplicate-issues.sh` - One-time cleanup
 - [x] `scripts/rewrite_git_history.sh` - Dangerous, should be archived

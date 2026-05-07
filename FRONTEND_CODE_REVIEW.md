@@ -4,7 +4,7 @@
 2026-05-07
 
 ## Scope
-Complete review of all Frontend Squad deliverables for Personal Web Platform v3.0.0 MVP.
+Complete review of all Frontend Squad deliverables for Personal Web Platform v0.11.0 (simplified architecture).
 
 ## Files Reviewed
 

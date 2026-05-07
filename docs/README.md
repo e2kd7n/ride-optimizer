@@ -61,8 +61,8 @@ Archived documentation for historical reference, including:
 **Features:**
 - [Mobile Usage](guides/MOBILE_USAGE_GUIDE.md)
 - [Weather Integration](guides/WEATHER_GUIDE.md)
-- [Next Commute](releases/v2.3.0/NEXT_COMMUTE_FEATURE.md)
-- [Long Rides](releases/v2.4.0/LONG_RIDES_IMPLEMENTATION_SUMMARY.md)
+- [Next Commute](releases/v0.8.0/NEXT_COMMUTE_FEATURE.md)
+- [Long Rides](releases/v0.9.0/LONG_RIDES_IMPLEMENTATION_SUMMARY.md)
 
 **Performance:**
 - [Parallelism Guide](guides/PARALLELISM_GUIDE.md)
@@ -77,11 +77,11 @@ Archived documentation for historical reference, including:
 
 ### By Version
 - **v2.0.0:** [Release Notes](releases/v2.0.0/RELEASE_NOTES.md)
-- **v2.1.0:** [Release Notes](releases/v2.1.0/RELEASE_NOTES_v2.1.0.md)
-- **v2.2.0:** [Features](releases/v2.2.0/)
-- **v2.3.0:** [Next Commute](releases/v2.3.0/NEXT_COMMUTE_FEATURE.md)
-- **v2.4.0:** [Long Rides](releases/v2.4.0/LONG_RIDES_IMPLEMENTATION_SUMMARY.md)
-- **v2.5.0:** [Background Geocoding](releases/v2.5.0/BACKGROUND_GEOCODING_IMPLEMENTATION.md)
+- **v0.6.0:** [Release Notes](releases/v0.6.0/RELEASE_NOTES_v0.6.0.md)
+- **v0.7.0:** [Features](releases/v0.7.0/)
+- **v0.8.0:** [Next Commute](releases/v0.8.0/NEXT_COMMUTE_FEATURE.md)
+- **v0.9.0:** [Long Rides](releases/v0.9.0/LONG_RIDES_IMPLEMENTATION_SUMMARY.md)
+- **v0.10.0:** [Background Geocoding](releases/v0.10.0/BACKGROUND_GEOCODING_IMPLEMENTATION.md)
 
 ---
 

@@ -1,8 +1,30 @@
 # Squad Progress Monitoring Guide
 
 **Created:** 2026-05-06
-**Last Updated:** 2026-05-07 01:50 UTC
-**Purpose:** Track progress of all 4 squads working on Personal Web Platform v3.0.0 MVP
+**Last Updated:** 2026-05-07 02:46 UTC (Version Rebaseline Complete)
+**Purpose:** Track progress of all 4 squads working on Architecture Simplification v0.11.0
+
+---
+
+## 📌 VERSION SCHEME CLARIFICATION
+
+**IMPORTANT FOR ALL SQUADS:** Version numbering has been corrected to 0.x.x scheme:
+
+- **Current Release:** v0.10.0 (formerly mislabeled as v2.5.0)
+- **Target Release:** v0.11.0 (architecture simplification - Issue #152)
+- **Future Production:** v1.0.0 (when truly stable after 3+ months daily use)
+
+**Why the change?**
+- Honest about pre-production status (0.x.x = not production-ready)
+- Leaves headroom for development (v0.11.0 → v0.99.0 before v1.0.0)
+- Follows semantic versioning correctly
+
+**What changed:**
+- GitHub tags retagged: v2.1.0→v0.6.0, v2.2.0→v0.7.0, v2.3.0→v0.8.0, v2.4.0→v0.9.0, v2.5.0→v0.10.0
+- All documentation updated to reflect 0.x.x scheme
+- Historical docs (archive/, docs/releases/, plans/v*) preserved unchanged
+
+**For squad leads:** When referencing versions in issues, PRs, or discussions, use v0.x.0 format.
 
 ---
 

@@ -1,6 +1,6 @@
 # Ride Optimizer Web Application
 
-Flask-based web platform for the Ride Optimizer project (v3.0.0).
+Flask-based web platform for the Ride Optimizer project (v1.0.0 (future production)).
 
 ## Structure
 
