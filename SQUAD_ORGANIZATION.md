@@ -106,12 +106,24 @@ Work has been organized into 4 specialized squads to enable parallel development
 **Focus:** Weather, workouts, settings, external services
 **Timeline:** Weeks 3-6 (parallel with Frontend)
 **Dependencies:** Foundation Squad must complete #129, #130, #131
-**Status:** ✅ **P1 COMPLETE** | 🔄 P2 In Progress
+**Status:** 🔴 **CRITICAL: P1 INCOMPLETE - STUBS ONLY**
 
-#### P1 Issues (3) - ✅ ALL COMPLETE
-- ✅ **#138** - Integrate weather snapshots into dashboard, commute recommendations, and planner ranking
-- ✅ **#139** - Implement optional TrainerRoad ICS ingestion and normalize workouts into planning constraints
-- ✅ **#140** - Implement workout-aware commute recommendations that can extend route length
+#### P1 Issues (3) - 🔴 REOPENED - STUB IMPLEMENTATIONS DISCOVERED
+- 🔴 **#138** - Integrate weather snapshots into dashboard, commute recommendations, and planner ranking
+  - **Status:** REOPENED - Stub implementation only
+  - **Required:** Real weather API integration, scoring algorithm, tests
+  - **Blocking:** QA Squad testing
+  
+- 🔴 **#139** - Implement optional TrainerRoad ICS ingestion and normalize workouts into planning constraints
+  - **Status:** REOPENED - Stub implementation only
+  - **Required:** ICS parser, workout normalization, tests
+  - **Blocking:** QA Squad testing, Issue #140
+  
+- 🔴 **#140** - Implement workout-aware commute recommendations that can extend route length
+  - **Status:** REOPENED - No implementation exists
+  - **Required:** Workout fit algorithm, integration with commutes, tests
+  - **Blocked By:** #139 must be completed first
+  - **Blocking:** QA Squad testing
 
 #### P2 Issues (7) - 🔄 In Progress
 - ⏳ **#82** - Implement Recommendations API Endpoint
@@ -121,55 +133,54 @@ Work has been organized into 4 specialized squads to enable parallel development
 - ⏳ **#136** - Implement settings and preferences page for home/work locations, units, time windows
 - ⏳ **#141** - Add repeat-a-past-ride flow and saved plan support
 
-#### Deliverables - ✅ ALL COMPLETE
-- ✅ Weather integration in all relevant views
-- ✅ TrainerRoad workout import and parsing
-- ✅ Workout-aware route recommendations
-- ✅ API endpoints for commute and planner
-- ✅ Database persistence for favorites
-- ✅ Enhanced algorithms (weather scoring, workout fit, optimal timing)
+#### Deliverables - 🔴 INCOMPLETE (STUBS ONLY)
+- ❌ Weather integration (stub only - returns None/False)
+- ❌ TrainerRoad workout import (stub only - returns unavailable)
+- ❌ Workout-aware route recommendations (no implementation)
+- ⏳ API endpoints for commute and planner (in progress)
+- ⏳ Database persistence for favorites (in progress)
+- ❌ Enhanced algorithms (not implemented)
 
-#### Success Criteria - ✅ ALL MET
-- ✅ Weather data updates automatically
-- ✅ TrainerRoad ICS files can be imported
-- ✅ Workout constraints affect route recommendations
-- ✅ All API endpoints documented and tested
-- ✅ Favorites persist across sessions
+#### Success Criteria - ❌ NOT MET
+- ❌ Weather data updates automatically (stub only)
+- ❌ TrainerRoad ICS files can be imported (stub only)
+- ❌ Workout constraints affect route recommendations (no implementation)
+- ❌ All API endpoints documented and tested (incomplete)
+- ⏳ Favorites persist across sessions (in progress)
 
-#### Implementation Summary (2026-05-07)
-**Branch:** `feature/issue-137-scheduler-integration`
-**Commits:** 8 total, all pushed
-**Lines Added:** ~1,000+ production code
+#### Critical Issues Discovered (2026-05-07)
+**Problem:** Issues #138, #139, #140 were closed with only stub implementations
 
-**Key Achievements:**
-1. **Weather Integration (#138)**
-   - Replaced WeatherFetcher with WeatherService
-   - Implemented comprehensive weather scoring algorithm
-   - Integrated weather into dashboard, commute, and planner
-   - Weather-based optimal departure time calculation
+**Evidence:**
+1. **Weather Service (#138)** - `app/services/weather_service.py`
+   - File header: "STUB IMPLEMENTATION"
+   - All methods return None or False
+   - No actual weather API integration
+   - No tests
 
-2. **TrainerRoad Integration (#139)**
-   - ICS feed parser with secure credential storage
-   - Workout normalization into planning constraints
-   - Calendar view with workout schedule display
-   - Workout metadata model with database persistence
+2. **TrainerRoad Service (#139)** - `app/services/trainerroad_service.py`
+   - File header: "Workout integration (STUB)"
+   - Logger warning: "TrainerRoadService is a stub"
+   - All methods return `{'status': 'unavailable'}`
+   - No tests
 
 3. **Workout-Aware Commutes (#140)**
-   - Enhanced workout fit algorithm (4-factor scoring)
-   - Route extension capability for workout integration
-   - Workout-aware commute method with fallback
-   - Detailed fit reasons for transparency
+   - No implementation exists
+   - Depends on #139 being completed first
 
-4. **Additional Implementations:**
-   - 5 API endpoints (analyze, history, route detail, calendar)
-   - FavoriteRoute model with database persistence
-   - In-memory caching with database backing
-   - Comprehensive error handling and logging
+**Impact:**
+- QA Squad 100% blocked (cannot test non-existent features)
+- Timeline delay: 10-16 weeks (3-4 months)
+- Test coverage stuck at 27% (target: 80%)
+- Beta testing cannot proceed
 
-**Test Coverage:**
-- 3 comprehensive QA test harnesses created
-- Self-contained with sample data
-- Located in `scripts/` directory
+**Required Actions:**
+1. Reopen issues #138, #139, #140 immediately
+2. Integration Squad must implement actual features (not stubs)
+3. Submit PRs for mandatory code review
+4. QA Squad can resume after PRs merged
+
+**See:** [CROSS_SQUAD_COORDINATION_URGENT.md](CROSS_SQUAD_COORDINATION_URGENT.md) for full details
 
 ---
 
@@ -266,11 +277,11 @@ The critical path for v3.0.0 release:
 - [ ] Route library browsable
 
 ### Milestone 3: Feature Integration Complete (Week 6)
-- [x] Weather integration complete ✅
-- [x] TrainerRoad import functional ✅
-- [x] Workout-aware recommendations ✅
-- [x] API endpoints implemented ✅
-- [x] Database persistence for favorites ✅
+- [ ] Weather integration complete 🔴 STUB ONLY - REOPENED
+- [ ] TrainerRoad import functional 🔴 STUB ONLY - REOPENED
+- [ ] Workout-aware recommendations 🔴 NOT IMPLEMENTED - REOPENED
+- [ ] API endpoints implemented ⏳ IN PROGRESS
+- [ ] Database persistence for favorites ⏳ IN PROGRESS
 
 ### Milestone 4: Production Ready (Week 8)
 - [ ] 80%+ test coverage
