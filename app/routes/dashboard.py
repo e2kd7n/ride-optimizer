@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 import traceback
 
 from app.services import AnalysisService, CommuteService, PlannerService
+from app.services.weather_service import WeatherService
 from src.config import Config
 
 bp = Blueprint('dashboard', __name__)
@@ -22,7 +23,8 @@ def get_services():
         g.services = {
             'analysis': AnalysisService(config),
             'commute': CommuteService(config),
-            'planner': PlannerService(config)
+            'planner': PlannerService(config),
+            'weather': WeatherService()
         }
     return g.services
 
@@ -47,6 +49,7 @@ def index():
     analysis_service = services['analysis']
     commute_service = services['commute']
     planner_service = services['planner']
+    weather_service = services['weather']
     
     # Get analysis status
     try:
@@ -62,6 +65,21 @@ def index():
             'route_groups_count': 0,
             'long_rides_count': 0
         }
+    
+    # Get current weather for home location
+    current_weather = None
+    try:
+        home, work = analysis_service.get_locations()
+        if home:
+            current_weather = weather_service.get_weather_summary(
+                home['lat'],
+                home['lon'],
+                location_name='Home'
+            )
+            current_app.logger.info(f"Weather: {current_weather.get('favorability', 'unknown')}")
+    except Exception as e:
+        current_app.logger.error(f"Error getting weather: {e}")
+        current_app.logger.debug(traceback.format_exc())
     
     # Get commute recommendation
     commute_recommendation = None
@@ -144,6 +162,7 @@ def index():
             'total_activities': status_data.get('activities_count', 0),
             'total_long_rides': status_data.get('long_rides_count', 0)
         },
+        'weather': current_weather,
         'recommendations': {
             'commute': commute_recommendation,
             'workout_fit': None,  # TODO: TrainerRoad integration (Issue #139)
