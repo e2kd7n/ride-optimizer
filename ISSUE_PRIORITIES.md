@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-05-07 12:50:32 UTC / 2026-05-07 07:50:32 CDT
+**Last Updated:** 2026-05-07 13:50:31 UTC / 2026-05-07 08:50:31 CDT
 
 This file reflects the current state of GitHub issues by priority. Issues are managed via GitHub labels (P0-critical, P1-high, P2-medium, P3-low, P4-future).
 
@@ -11,18 +11,20 @@ Issues that make the application unusable or cause data loss.
 - #156 - Phase 3: Integration Work - Convert APScheduler to Cron + Testing
 - #155 - Phase 2: Frontend Conversion - Templates to Static HTML + JavaScript
 - #153 - Phase 1: Foundation Migration - Extract Services & Create Minimal API
-- #152 - Architecture Simplification: Migrate to Smart Static for Pi Optimization
 - #76 - Background Geocoding with Progressive Report Updates
 
 ## 🔴 P1 - HIGH (Current Sprint)
 Issues that significantly impact core functionality or user experience.
 
-- #144 - 🌐 EPIC: Personal Web Platform Migration (v1.0.0)
+- #164 - Test Coverage: report_generator.py (47% → 80%)
+- #163 - Test Coverage: data_fetcher.py (49% → 80%)
+- #162 - Test Coverage: long_ride_analyzer.py (13% → 50%)
+- #161 - Test Coverage: route_analyzer.py (20% → 50%)
+- #144 - 🌐 EPIC: Personal Web Platform Migration (v3.0.0)
 - #119 - Update TECHNICAL_SPEC.md with comprehensive implementation details
 - #118 - Re-enable geocoding after rate limit expires
 - #117 - Fix map zoom to show start and finish when route is selected
 - #102 - Refactor report template to extract JavaScript into separate files
-- #101 - Update Documentation for Long Rides Feature
 - #91 - Add Rate Limiting to API Endpoints
 - #90 - Implement Input Validation with Marshmallow
 - #89 - Add Data Persistence Layer for API
@@ -38,6 +40,7 @@ Issues that significantly impact core functionality or user experience.
 ## 🟡 P2 - MEDIUM (Next Sprint)
 Important improvements that enhance functionality but don't block core workflows.
 
+- #165 - Test Coverage: route_namer.py (15% → 50%)
 - #160 - Fix authentication mocking in API integration tests
 - #158 - 📋 Version Rebaseline Complete - Documentation Record
 - #141 - Add repeat-a-past-ride flow and saved plan support
