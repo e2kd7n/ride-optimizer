@@ -268,14 +268,18 @@ def internal_error(error):
 
 if __name__ == '__main__':
     # Development server
+    import os
+    port = int(os.environ.get('PORT', 5000))
+    
     logger.info("Starting Ride Optimizer API server...")
     logger.info("API endpoints:")
     logger.info("  GET /api/weather - Current weather data")
     logger.info("  GET /api/recommendation - Next commute recommendation")
     logger.info("  GET /api/routes - All routes for library")
     logger.info("  GET /api/status - System health and freshness")
+    logger.info(f"Server will run on port {port}")
     
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    app.run(host='0.0.0.0', port=port, debug=False)
 
 
 # Made with Bob

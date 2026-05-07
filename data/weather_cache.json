@@ -1,0 +1,22 @@
+{
+  "locations": {
+    "40.7128_-74.0060": {
+      "weather_data": {
+        "timestamp": "2026-05-07T00:15",
+        "temp_c": 13.0,
+        "wind_speed_kph": 11.2,
+        "wind_gust_kph": 29.9,
+        "wind_direction_deg": 310,
+        "wind_direction_cardinal": "NW",
+        "humidity": 80,
+        "precipitation_mm": 0.0,
+        "lat": 40.7128,
+        "lon": -74.006,
+        "comfort_score": 1.0,
+        "cycling_favorability": "favorable"
+      },
+      "timestamp": "2026-05-06T23:23:16.324788",
+      "location_name": "Location (40.71, -74.01)"
+    }
+  }
+}
