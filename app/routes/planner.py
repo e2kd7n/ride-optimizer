@@ -13,7 +13,7 @@ from flask import Blueprint, render_template, request, jsonify, current_app, g
 from datetime import datetime, timedelta
 import traceback
 
-from app.services import AnalysisService, PlannerService
+from app.services import AnalysisService, PlannerService, WeatherService
 from src.config import Config
 
 bp = Blueprint('planner', __name__, url_prefix='/planner')
@@ -25,7 +25,8 @@ def get_services():
         config = Config('config/config.yaml')
         g.services = {
             'analysis': AnalysisService(config),
-            'planner': PlannerService(config)
+            'planner': PlannerService(config),
+            'weather': WeatherService(config)
         }
     return g.services
 
