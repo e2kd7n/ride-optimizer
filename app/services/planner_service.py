@@ -313,7 +313,338 @@ class PlannerService:
             }
         }
     
-    def _score_rides_for_day(self, 
+    def analyze_long_ride(self,
+                         distance: float,
+                         duration: float,
+                         date: Optional[datetime.date] = None) -> Dict[str, Any]:
+        """
+        Analyze long ride parameters and provide recommendations.
+        
+        Evaluates ride difficulty based on distance and duration, integrates
+        weather forecast if a date is provided, and returns actionable
+        recommendations for the ride.
+        
+        Args:
+            distance: Ride distance in kilometers
+            duration: Ride duration in hours
+            date: Optional date for weather integration (defaults to today)
+            
+        Returns:
+            Dictionary with analysis:
+            {
+                'status': 'success' | 'error',
+                'distance_km': float,
+                'duration_hours': float,
+                'date': str (YYYY-MM-DD),
+                'difficulty': {
+                    'level': str ('easy'|'moderate'|'hard'|'extreme'),
+                    'score': float (0-1),
+                    'factors': List[str]
+                },
+                'weather': {
+                    'available': bool,
+                    'suitability': str ('favorable'|'neutral'|'unfavorable'),
+                    'conditions': {...},
+                    'recommendations': List[str]
+                },
+                'recommendations': List[str],
+                'warnings': List[str]
+            }
+        """
+        try:
+            # Use today if no date provided
+            if date is None:
+                date = datetime.now().date()
+            
+            logger.info(f"Analyzing long ride: {distance}km, {duration}h on {date}")
+            
+            # Calculate difficulty
+            difficulty = self._calculate_ride_difficulty(distance, duration)
+            
+            # Get weather forecast if date is in the future
+            weather_analysis = self._analyze_ride_weather(distance, duration, date)
+            
+            # Generate recommendations
+            recommendations = self._generate_ride_recommendations(
+                distance, duration, difficulty, weather_analysis
+            )
+            
+            # Generate warnings
+            warnings = self._generate_ride_warnings(
+                distance, duration, difficulty, weather_analysis
+            )
+            
+            return {
+                'status': 'success',
+                'distance_km': distance,
+                'duration_hours': duration,
+                'date': date.isoformat(),
+                'difficulty': difficulty,
+                'weather': weather_analysis,
+                'recommendations': recommendations,
+                'warnings': warnings
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to analyze long ride: {e}", exc_info=True)
+            return {
+                'status': 'error',
+                'message': f'Failed to analyze ride: {str(e)}',
+                'distance_km': distance,
+                'duration_hours': duration
+            }
+    
+    def _calculate_ride_difficulty(self,
+                                   distance: float,
+                                   duration: float) -> Dict[str, Any]:
+        """
+        Calculate ride difficulty based on distance and duration.
+        
+        Args:
+            distance: Distance in kilometers
+            duration: Duration in hours
+            
+        Returns:
+            Dictionary with difficulty assessment
+        """
+        # Calculate average speed
+        avg_speed = distance / duration if duration > 0 else 0
+        
+        # Difficulty factors
+        factors = []
+        difficulty_score = 0.0
+        
+        # Distance scoring
+        if distance < 30:
+            factors.append("Short distance - good for recovery or easy rides")
+            difficulty_score += 0.2
+        elif distance < 60:
+            factors.append("Moderate distance - standard long ride")
+            difficulty_score += 0.4
+        elif distance < 100:
+            factors.append("Long distance - requires good endurance")
+            difficulty_score += 0.6
+        else:
+            factors.append("Very long distance - significant endurance challenge")
+            difficulty_score += 0.8
+        
+        # Duration scoring
+        if duration < 2:
+            factors.append("Short duration - manageable time commitment")
+            difficulty_score += 0.1
+        elif duration < 4:
+            factors.append("Moderate duration - typical long ride")
+            difficulty_score += 0.2
+        elif duration < 6:
+            factors.append("Long duration - requires good fitness")
+            difficulty_score += 0.3
+        else:
+            factors.append("Very long duration - endurance event level")
+            difficulty_score += 0.4
+        
+        # Speed analysis
+        if avg_speed < 20:
+            factors.append(f"Leisurely pace ({avg_speed:.1f} km/h) - scenic or hilly route")
+        elif avg_speed < 25:
+            factors.append(f"Moderate pace ({avg_speed:.1f} km/h) - typical recreational ride")
+        elif avg_speed < 30:
+            factors.append(f"Brisk pace ({avg_speed:.1f} km/h) - fitness-focused ride")
+        else:
+            factors.append(f"Fast pace ({avg_speed:.1f} km/h) - high-intensity effort")
+            difficulty_score += 0.1
+        
+        # Normalize score to 0-1
+        difficulty_score = min(1.0, difficulty_score)
+        
+        # Determine difficulty level
+        if difficulty_score < 0.3:
+            level = 'easy'
+        elif difficulty_score < 0.6:
+            level = 'moderate'
+        elif difficulty_score < 0.8:
+            level = 'hard'
+        else:
+            level = 'extreme'
+        
+        return {
+            'level': level,
+            'score': difficulty_score,
+            'factors': factors,
+            'average_speed_kph': avg_speed
+        }
+    
+    def _analyze_ride_weather(self,
+                             distance: float,
+                             duration: float,
+                             date: datetime.date) -> Dict[str, Any]:
+        """
+        Analyze weather conditions for the ride date.
+        
+        Args:
+            distance: Distance in kilometers
+            duration: Duration in hours
+            date: Ride date
+            
+        Returns:
+            Dictionary with weather analysis
+        """
+        try:
+            # Calculate days ahead
+            days_ahead = (date - datetime.now().date()).days
+            
+            if days_ahead < 0:
+                return {
+                    'available': False,
+                    'message': 'Cannot get forecast for past dates',
+                    'suitability': 'unknown',
+                    'recommendations': []
+                }
+            
+            if days_ahead > 14:
+                return {
+                    'available': False,
+                    'message': 'Forecast only available for next 14 days',
+                    'suitability': 'unknown',
+                    'recommendations': []
+                }
+            
+            # Get forecast (use home location from config if available)
+            # For now, use a default location - in production this should use
+            # the ride's actual location
+            home_lat = self.config.get('location.home.lat', 41.8781)
+            home_lon = self.config.get('location.home.lon', -87.6298)
+            
+            forecast = self.weather_service.get_daily_forecast(
+                home_lat, home_lon, days=days_ahead + 1
+            )
+            
+            if not forecast or days_ahead >= len(forecast):
+                return {
+                    'available': False,
+                    'message': 'Weather forecast unavailable',
+                    'suitability': 'unknown',
+                    'recommendations': []
+                }
+            
+            # Get the forecast for the target date
+            day_forecast = forecast[days_ahead]
+            
+            # Analyze suitability
+            comfort_score = day_forecast.get('comfort_score', 0.5)
+            favorability = day_forecast.get('cycling_favorability', 'neutral')
+            
+            # Generate weather-specific recommendations
+            weather_recommendations = []
+            
+            temp_c = day_forecast.get('temperature_c', 20)
+            wind_kph = day_forecast.get('wind_speed_kph', 0)
+            precip_mm = day_forecast.get('precipitation_mm', 0)
+            
+            if temp_c < 10:
+                weather_recommendations.append("Cold weather - dress in layers")
+            elif temp_c > 30:
+                weather_recommendations.append("Hot weather - bring extra water and electrolytes")
+            
+            if wind_kph > 25:
+                weather_recommendations.append("Strong winds expected - plan route accordingly")
+            
+            if precip_mm > 0:
+                weather_recommendations.append("Rain expected - bring rain gear and be cautious on descents")
+            
+            if favorability == 'favorable':
+                weather_recommendations.append("Excellent weather conditions for cycling")
+            elif favorability == 'unfavorable':
+                weather_recommendations.append("Consider rescheduling if possible")
+            
+            return {
+                'available': True,
+                'suitability': favorability,
+                'comfort_score': comfort_score,
+                'conditions': day_forecast,
+                'recommendations': weather_recommendations
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to analyze ride weather: {e}", exc_info=True)
+            return {
+                'available': False,
+                'message': f'Weather analysis failed: {str(e)}',
+                'suitability': 'unknown',
+                'recommendations': []
+            }
+    
+    def _generate_ride_recommendations(self,
+                                      distance: float,
+                                      duration: float,
+                                      difficulty: Dict[str, Any],
+                                      weather: Dict[str, Any]) -> List[str]:
+        """Generate actionable recommendations for the ride."""
+        recommendations = []
+        
+        # Difficulty-based recommendations
+        difficulty_level = difficulty.get('level', 'moderate')
+        
+        if difficulty_level == 'easy':
+            recommendations.append("Good opportunity for recovery or social ride")
+        elif difficulty_level == 'moderate':
+            recommendations.append("Standard long ride - maintain steady endurance pace")
+        elif difficulty_level == 'hard':
+            recommendations.append("Challenging ride - ensure proper nutrition and hydration")
+        else:  # extreme
+            recommendations.append("Very demanding ride - consider breaking into segments")
+            recommendations.append("Plan multiple rest stops and carry extra supplies")
+        
+        # Duration-based recommendations
+        if duration > 4:
+            recommendations.append("Bring sufficient food and water for extended ride")
+            recommendations.append("Plan rest stops every 60-90 minutes")
+        
+        if duration > 6:
+            recommendations.append("Consider starting early to avoid afternoon heat/traffic")
+        
+        # Distance-based recommendations
+        if distance > 80:
+            recommendations.append("Verify bike is in excellent mechanical condition")
+            recommendations.append("Carry spare tube, pump, and basic tools")
+        
+        # Weather-based recommendations
+        if weather.get('available'):
+            recommendations.extend(weather.get('recommendations', []))
+        
+        return recommendations
+    
+    def _generate_ride_warnings(self,
+                               distance: float,
+                               duration: float,
+                               difficulty: Dict[str, Any],
+                               weather: Dict[str, Any]) -> List[str]:
+        """Generate warnings for potential issues."""
+        warnings = []
+        
+        # Difficulty warnings
+        if difficulty.get('level') == 'extreme':
+            warnings.append("⚠️ Very challenging ride - ensure adequate training")
+        
+        # Duration warnings
+        if duration > 6:
+            warnings.append("⚠️ Long duration - plan for fatigue management")
+        
+        # Weather warnings
+        if weather.get('available'):
+            suitability = weather.get('suitability', 'neutral')
+            if suitability == 'unfavorable':
+                warnings.append("⚠️ Unfavorable weather conditions expected")
+            
+            conditions = weather.get('conditions', {})
+            if conditions.get('precipitation_mm', 0) > 5:
+                warnings.append("⚠️ Heavy rain expected - roads may be slippery")
+            
+            if conditions.get('wind_speed_kph', 0) > 30:
+                warnings.append("⚠️ Strong winds - may significantly impact ride time")
+        
+        return warnings
+    
+    def _score_rides_for_day(self,
                             rides: List[LongRide],
                             target_date: datetime.date,
                             location: Optional[Tuple[float, float]]) -> List[Dict[str, Any]]:
