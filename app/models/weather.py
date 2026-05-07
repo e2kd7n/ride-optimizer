@@ -173,7 +173,9 @@ class WeatherSnapshot(db.Model, TimestampMixin):
         """Convert to dictionary."""
         age_hours = None
         if self.timestamp:
-            age_hours = (datetime.now(timezone.utc) - self.timestamp).total_seconds() / 3600
+            # Ensure timestamp is timezone-aware for comparison
+            ts = self.timestamp if self.timestamp.tzinfo else self.timestamp.replace(tzinfo=timezone.utc)
+            age_hours = (datetime.now(timezone.utc) - ts).total_seconds() / 3600
         
         return {
             'id': self.id,
