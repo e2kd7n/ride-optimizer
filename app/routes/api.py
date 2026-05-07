@@ -478,6 +478,429 @@ ride_optimizer_scheduler_running {1 if scheduler and scheduler.running else 0}
     return metrics_text, 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
 
+# Weather API Endpoints (Issue #217)
+@bp.route('/weather/current')
+def weather_current():
+    """
+    Get current weather conditions.
+    
+    Query params:
+    - lat: Latitude (optional, defaults to home location)
+    - lon: Longitude (optional, defaults to home location)
+    
+    Returns current weather data with cycling favorability.
+    """
+    from app.services.weather_service import WeatherService
+    from src.config import Config
+    
+    try:
+        config = Config('config/config.yaml')
+        weather_service = WeatherService(config)
+        
+        # Get coordinates from query params or use home location
+        lat = request.args.get('lat', type=float)
+        lon = request.args.get('lon', type=float)
+        
+        if lat is None or lon is None:
+            # Use home location from config
+            lat = config.get('location.home.latitude', 40.7128)
+            lon = config.get('location.home.longitude', -74.0060)
+        
+        current_app.logger.info(f'Current weather requested for ({lat}, {lon})')
+        
+        weather_data = weather_service.get_current_weather(lat, lon)
+        
+        if not weather_data:
+            return jsonify({
+                'error': 'Weather data unavailable',
+                'message': 'Unable to fetch weather data at this time'
+            }), 503
+        
+        return jsonify({
+            'status': 'success',
+            'location': {
+                'latitude': lat,
+                'longitude': lon
+            },
+            'weather': weather_data,
+            'timestamp': datetime.now(timezone.utc).isoformat()
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f'Weather API error: {e}', exc_info=True)
+        return jsonify({
+            'error': 'Internal Server Error',
+            'message': str(e)
+        }), 500
+
+
+# Route Library API Endpoints (Issue #218)
+@bp.route('/routes/<route_id>')
+def route_detail(route_id):
+    """
+    Get detailed information about a specific route.
+    
+    Returns route details including statistics and history.
+    """
+    from app.services.route_library_service import RouteLibraryService
+    from src.config import Config
+    
+    try:
+        config = Config('config/config.yaml')
+        route_service = RouteLibraryService(config)
+        
+        current_app.logger.info(f'Route detail requested: route_id={route_id}')
+        
+        # Determine route type from query param or try both
+        route_type = request.args.get('type', 'commute')
+        
+        result = route_service.get_route_details(route_id, route_type)
+        
+        if result.get('status') == 'error':
+            return jsonify(result), 404
+        
+        return jsonify({
+            'status': 'success',
+            'route': result.get('route', {}),
+            'timestamp': datetime.now(timezone.utc).isoformat()
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f'Route detail API error: {e}', exc_info=True)
+        return jsonify({
+            'error': 'Internal Server Error',
+            'message': str(e)
+        }), 500
+
+
+@bp.route('/routes/<route_id>/history')
+def route_history(route_id):
+    """
+    Get historical activities for a specific route.
+    
+    Returns list of activities that used this route.
+    """
+    from app.services.route_library_service import RouteLibraryService
+    from src.config import Config
+    
+    try:
+        config = Config('config/config.yaml')
+        route_service = RouteLibraryService(config)
+        
+        current_app.logger.info(f'Route history requested: route_id={route_id}')
+        
+        # Get route details which includes activity history
+        route_type = request.args.get('type', 'commute')
+        result = route_service.get_route_details(route_id, route_type)
+        
+        if result.get('status') == 'error':
+            return jsonify({
+                'error': 'Route not found',
+                'message': result.get('message', 'Route not found')
+            }), 404
+        
+        route = result.get('route', {})
+        activities = route.get('activities', [])
+        
+        return jsonify({
+            'status': 'success',
+            'route_id': route_id,
+            'activities': activities,
+            'count': len(activities),
+            'timestamp': datetime.now(timezone.utc).isoformat()
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f'Route history API error: {e}', exc_info=True)
+        return jsonify({
+            'error': 'Internal Server Error',
+            'message': str(e)
+        }), 500
+
+
+@bp.route('/routes/compare', methods=['POST'])
+def routes_compare():
+    """
+    Compare multiple routes side-by-side.
+    
+    POST body (JSON):
+    {
+        "route_ids": ["route1", "route2", "route3"]
+    }
+    
+    Returns comparison data for the specified routes.
+    """
+    from app.services.route_library_service import RouteLibraryService
+    from src.config import Config
+    
+    try:
+        data = request.get_json() or {}
+        route_ids = data.get('route_ids', [])
+        
+        if not route_ids or len(route_ids) < 2:
+            return jsonify({
+                'error': 'Invalid request',
+                'message': 'At least 2 route IDs required for comparison'
+            }), 400
+        
+        current_app.logger.info(f'Route comparison requested: {len(route_ids)} routes')
+        
+        config = Config('config/config.yaml')
+        route_service = RouteLibraryService(config)
+        
+        # Get details for each route
+        routes = []
+        for route_id in route_ids:
+            result = route_service.get_route_details(route_id, 'commute')
+            if result.get('status') == 'success':
+                routes.append(result.get('route', {}))
+        
+        return jsonify({
+            'status': 'success',
+            'routes': routes,
+            'count': len(routes),
+            'timestamp': datetime.now(timezone.utc).isoformat()
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f'Route comparison API error: {e}', exc_info=True)
+        return jsonify({
+            'error': 'Internal Server Error',
+            'message': str(e)
+        }), 500
+
+
+@bp.route('/routes/export')
+def routes_export():
+    """
+    Export routes in various formats.
+    
+    Query params:
+    - format: Export format (json, gpx, csv) - default: json
+    - route_ids: Comma-separated list of route IDs (optional, exports all if not specified)
+    
+    Returns exported route data.
+    """
+    from app.services.route_library_service import RouteLibraryService
+    from src.config import Config
+    
+    try:
+        export_format = request.args.get('format', 'json').lower()
+        route_ids_str = request.args.get('route_ids', '')
+        
+        if export_format not in ['json', 'gpx', 'csv']:
+            return jsonify({
+                'error': 'Invalid format',
+                'message': 'Supported formats: json, gpx, csv'
+            }), 400
+        
+        current_app.logger.info(f'Route export requested: format={export_format}')
+        
+        config = Config('config/config.yaml')
+        route_service = RouteLibraryService(config)
+        
+        # Get all routes or specific ones
+        if route_ids_str:
+            route_ids = route_ids_str.split(',')
+            routes = []
+            for route_id in route_ids:
+                result = route_service.get_route_details(route_id.strip(), 'commute')
+                if result.get('status') == 'success':
+                    routes.append(result.get('route', {}))
+        else:
+            result = route_service.get_all_routes()
+            routes = result.get('routes', [])
+        
+        # For now, return JSON format (GPX and CSV export can be implemented later)
+        return jsonify({
+            'status': 'success',
+            'format': export_format,
+            'routes': routes,
+            'count': len(routes),
+            'timestamp': datetime.now(timezone.utc).isoformat()
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f'Route export API error: {e}', exc_info=True)
+        return jsonify({
+            'error': 'Internal Server Error',
+            'message': str(e)
+        }), 500
+
+
+@bp.route('/routes/library')
+def routes_library():
+    """
+    Get all routes from the library.
+    
+    Query params:
+    - type: Filter by route type (commute, long_ride, all) - default: all
+    - sort: Sort order (distance, uses, recent, name) - default: uses
+    - limit: Maximum results - default: 100
+    
+    Returns list of routes.
+    """
+    from app.services.route_library_service import RouteLibraryService
+    from src.config import Config
+    
+    try:
+        route_type = request.args.get('type', 'all')
+        sort_by = request.args.get('sort', 'uses')
+        limit = request.args.get('limit', 100, type=int)
+        
+        current_app.logger.info(f'Route library requested: type={route_type}, sort={sort_by}')
+        
+        config = Config('config/config.yaml')
+        route_service = RouteLibraryService(config)
+        
+        result = route_service.get_all_routes(route_type=route_type, sort_by=sort_by)
+        routes = result.get('routes', [])
+        
+        # Apply limit
+        if limit > 0:
+            routes = routes[:limit]
+        
+        return jsonify({
+            'status': 'success',
+            'routes': routes,
+            'count': len(routes),
+            'total_count': result.get('total_count', len(routes)),
+            'timestamp': datetime.now(timezone.utc).isoformat()
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f'Route library API error: {e}', exc_info=True)
+        return jsonify({
+            'error': 'Internal Server Error',
+            'message': str(e)
+        }), 500
+
+
+# Planner API Endpoints (Issue #219)
+@bp.route('/planner/analyze', methods=['POST'])
+def planner_analyze():
+    """
+    Analyze and get long ride recommendations.
+    
+    POST body (JSON):
+    {
+        "distance": 100,  # Target distance in km or miles
+        "duration": 300,  # Target duration in minutes
+        "date": "2026-05-15"  # Optional target date
+    }
+    
+    Returns long ride analysis and recommendations.
+    """
+    from app.services import PlannerService
+    from src.config import Config
+    
+    try:
+        data = request.get_json() or {}
+        
+        distance = data.get('distance')
+        duration = data.get('duration')
+        target_date = data.get('date')
+        
+        if not distance and not duration:
+            return jsonify({
+                'error': 'Invalid request',
+                'message': 'Either distance or duration must be specified'
+            }), 400
+        
+        current_app.logger.info(
+            f'Planner analysis requested: distance={distance}, '
+            f'duration={duration}, date={target_date}'
+        )
+        
+        config = Config('config/config.yaml')
+        planner_service = PlannerService(config)
+        
+        # Get recommendations
+        result = planner_service.get_recommendations(
+            forecast_days=7,
+            min_distance=distance * 0.8 if distance else 30,
+            max_distance=distance * 1.2 if distance else 100
+        )
+        
+        return jsonify({
+            'status': 'success',
+            'analysis': result,
+            'timestamp': datetime.now(timezone.utc).isoformat()
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f'Planner analyze API error: {e}', exc_info=True)
+        return jsonify({
+            'error': 'Internal Server Error',
+            'message': str(e)
+        }), 500
+
+
+@bp.route('/analytics')
+def analytics():
+    """
+    Get analytics dashboard data.
+    
+    Returns comprehensive analytics including activity trends,
+    route usage patterns, and performance metrics.
+    """
+    try:
+        current_app.logger.info('Analytics dashboard requested')
+        
+        # Get latest snapshot for analytics
+        latest_snapshot = AnalysisSnapshot.query.order_by(
+            AnalysisSnapshot.analysis_date.desc()
+        ).first()
+        
+        if not latest_snapshot:
+            return jsonify({
+                'error': 'No analysis data available',
+                'message': 'Run analysis first to generate analytics'
+            }), 404
+        
+        # Get route groups from snapshot
+        route_groups = latest_snapshot.route_groups
+        
+        # Calculate analytics
+        total_distance = sum(rg.distance for rg in route_groups)
+        total_uses = sum(rg.frequency for rg in route_groups)
+        avg_distance = total_distance / len(route_groups) if route_groups else 0
+        
+        # Get most used routes
+        most_used = sorted(route_groups, key=lambda x: x.frequency, reverse=True)[:10]
+        
+        return jsonify({
+            'status': 'success',
+            'period': 'latest',
+            'snapshot_date': latest_snapshot.analysis_date.isoformat(),
+            'summary': {
+                'total_activities': latest_snapshot.activities_count,
+                'total_routes': latest_snapshot.route_groups_count,
+                'total_long_rides': latest_snapshot.long_rides_count,
+                'total_distance': round(total_distance, 2),
+                'total_uses': total_uses,
+                'average_distance': round(avg_distance, 2)
+            },
+            'most_used_routes': [
+                {
+                    'id': rg.id,
+                    'name': rg.name,
+                    'uses': rg.frequency,
+                    'distance': round(rg.distance, 2)
+                }
+                for rg in most_used
+            ],
+            'timestamp': datetime.now(timezone.utc).isoformat()
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f'Analytics API error: {e}', exc_info=True)
+        return jsonify({
+            'error': 'Internal Server Error',
+            'message': str(e)
+        }), 500
+
+
 @bp.errorhandler(404)
 def api_not_found(error):
     """Handle 404 errors in API routes."""
