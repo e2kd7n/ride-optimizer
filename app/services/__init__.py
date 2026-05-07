@@ -17,6 +17,7 @@ Available Services:
 - PlannerService: Long ride planning and recommendations
 - RouteLibraryService: Route browsing and management
 - WeatherService: Weather data with caching and graceful degradation
+- TrainerRoadService: TrainerRoad ICS feed integration and workout normalization
 """
 
 from .analysis_service import AnalysisService
@@ -24,6 +25,7 @@ from .commute_service import CommuteService
 from .planner_service import PlannerService
 from .route_library_service import RouteLibraryService
 from .weather_service import WeatherService
+from .trainerroad_service import TrainerRoadService
 
 __all__ = [
     'AnalysisService',
@@ -31,6 +33,7 @@ __all__ = [
     'PlannerService',
     'RouteLibraryService',
     'WeatherService',
+    'TrainerRoadService',
 ]
 
 # Made with Bob
