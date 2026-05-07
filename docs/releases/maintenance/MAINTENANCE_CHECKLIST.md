@@ -44,11 +44,13 @@ Use this checklist for regular maintenance activities on the Ride Optimizer appl
   - Update version numbers if needed
   - **Files Updated:** _______________
 
-- [ ] **Issue Priority Verification**
-  - Review open issues in GitHub
-  - Update priority labels as needed
-  - Close resolved issues
-  - **Issues Updated:** _______________
+- [ ] **Issue Closure Verification**
+  - Run `./scripts/verify-issue-closures.sh`
+  - Review each open issue referenced in recent commits
+  - Close issues with detailed completion comments
+  - Verify epic child issues are closed
+  - Update ISSUE_PRIORITIES.md
+  - **Issues Closed:** _______________
 
 - [ ] **Dependency Security Check**
   - Run `pip-audit` or `safety check`

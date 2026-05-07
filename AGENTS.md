@@ -16,6 +16,16 @@ This file provides guidance to agents when working with code in this repository.
 - **Never mark a task complete without testing** to prove that it works
 - **Ask yourself: "Would a staff engineer approve this?"**
 
+### Post-Completion Checklist (MANDATORY)
+After marking any task complete:
+- [ ] All tests passing
+- [ ] Code reviewed (if applicable)
+- [ ] **GitHub issues closed with detailed comments**
+- [ ] **ISSUE_PRIORITIES.md updated**
+- [ ] **Epic child issues verified closed (if applicable)**
+- [ ] Documentation updated
+- [ ] Changes committed with proper message format
+
 ### Continuous Improvement
 - **After ANY correction from the user**: document the pattern and lesson learned
 - **Write rules for yourself** that prevent the same mistake
@@ -83,6 +93,44 @@ This file provides guidance to agents when working with code in this repository.
 - **Reference in commits**: `Fixes #123: Description` (auto-closes on merge)
 - **Update priorities**: Run `./scripts/update-issue-priorities.sh` to regenerate `ISSUE_PRIORITIES.md`
 - **Weekly maintenance**: Review open issues, close completed, update labels
+
+### Issue Closure Protocol (CRITICAL)
+After completing and testing any work:
+1. **Immediately close related issues** - don't wait for weekly maintenance
+2. **Use detailed closure comments** with commit reference and acceptance criteria checklist
+3. **For epics**: Verify ALL child issues are closed before closing parent
+4. **Update ISSUE_PRIORITIES.md** by running `./scripts/update-issue-priorities.sh`
+5. **Verify closure** by checking issue no longer appears in priorities file
+
+**Closure Comment Template:**
+```
+Completed in commit [hash] - [title]
+
+✅ [Acceptance criterion 1]
+✅ [Acceptance criterion 2]
+✅ [Acceptance criterion 3]
+
+Files modified: [list]
+Tests added: [list]
+```
+
+**Example Commands:**
+```bash
+# Close single issue with comment
+gh issue close 123 --comment "Completed in commit abc123 - Fixed authentication bug
+
+✅ Users can now log in successfully
+✅ Session tokens persist correctly
+✅ Added integration tests
+
+Files modified: src/auth.py, tests/test_auth.py"
+
+# Close multiple related issues
+gh issue close 228 229 230 --comment "Completed as part of Epic #235"
+
+# Verify closure
+./scripts/update-issue-priorities.sh
+```
 
 ### Documentation Organization
 - **Technical docs**: `docs/` directory with README index
