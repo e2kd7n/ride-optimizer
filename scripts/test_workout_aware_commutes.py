@@ -23,7 +23,7 @@ from unittest.mock import Mock
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app import create_app
-from app.models.workout import WorkoutMetadata
+from app.models.workouts import WorkoutMetadata
 from app.services.commute_service import CommuteService
 from app.services.trainerroad_service import TrainerRoadService
 from src.config import Config
