@@ -22,7 +22,7 @@ services:
     
     # Port mapping (if using Flask API)
     ports:
-      - "8080:8080"
+      - "8083:8083"
     
     # Resource limits for Raspberry Pi
     deploy:

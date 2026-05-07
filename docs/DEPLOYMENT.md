@@ -114,7 +114,7 @@ podman run -d \
   -v ./cache:/app/cache:Z \
   -v ./logs:/app/logs:Z \
   -v ./config:/app/config:Z \
-  -p 8080:8080 \
+  -p 8083:8083 \
   --memory=1g \
   --cpus=2 \
   ride-optimizer:latest
@@ -234,7 +234,7 @@ You can run the application in a Podman pod for better organization:
 
 ```bash
 # Create a pod
-podman pod create --name ride-optimizer-pod -p 8080:8080
+podman pod create --name ride-optimizer-pod -p 8083:8083
 
 # Run container in the pod
 podman run -d \

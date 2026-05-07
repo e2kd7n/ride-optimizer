@@ -40,16 +40,16 @@ python wsgi.py
 python -m flask run
 ```
 
-The application will be available at `http://localhost:8080`
+The application will be available at `http://localhost:8083`
 
 ### Production Mode
 
 ```bash
 # Using Gunicorn (recommended for production)
-gunicorn -w 4 -b 0.0.0.0:8080 wsgi:app
+gunicorn -w 4 -b 0.0.0.0:8083 wsgi:app
 
 # Or using uWSGI
-uwsgi --http :8080 --wsgi-file wsgi.py --callable app
+uwsgi --http :8083 --wsgi-file wsgi.py --callable app
 ```
 
 ## Configuration
@@ -186,7 +186,7 @@ Key considerations:
 docker build -t ride-optimizer:3.0.0 .
 
 # Run container
-docker run -p 8080:8080 ride-optimizer:3.0.0
+docker run -p 8083:8083 ride-optimizer:3.0.0
 ```
 
 ## Environment Variables
@@ -249,8 +249,8 @@ TRAINERROAD_PASSWORD=your-password
 ### Port Already in Use
 
 ```bash
-# Find process using port 8080
-lsof -i :8080
+# Find process using port 8083
+lsof -i :8083
 
 # Kill the process
 kill -9 <PID>

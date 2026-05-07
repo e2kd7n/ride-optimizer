@@ -288,7 +288,7 @@ Successfully created and validated comprehensive performance testing infrastruct
 
 **Usage:**
 ```bash
-# Basic usage (default: localhost:8080)
+# Basic usage (default: localhost:8083)
 python3 scripts/performance_test.py
 
 # Custom API URL
@@ -299,7 +299,7 @@ python3 scripts/performance_test.py --output my_results.json
 
 # Full options
 python3 scripts/performance_test.py \
-  --api-url http://192.168.1.100:8080 \
+  --api-url http://192.168.1.100:8083 \
   --duration 120 \
   --output pi_results.json
 ```
@@ -418,7 +418,7 @@ watch -n 1 'ps aux | grep api.py'
 
 # Monitor API response times
 while true; do
-  curl -w "@curl-format.txt" -o /dev/null -s http://localhost:8080/api/status
+  curl -w "@curl-format.txt" -o /dev/null -s http://localhost:8083/api/status
   sleep 1
 done
 

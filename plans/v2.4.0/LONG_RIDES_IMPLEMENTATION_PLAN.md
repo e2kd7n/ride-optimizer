@@ -798,7 +798,7 @@ long_rides:
 api:
   enabled: true
   host: "localhost"
-  port: 8080
+  port: 8083
   cors_enabled: true
   rate_limit: 100  # requests per minute
 ```

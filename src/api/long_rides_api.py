@@ -253,7 +253,7 @@ class LongRidesAPI:
                     'error': 'Internal server error'
                 }), 500
     
-    def run(self, host='localhost', port=8080, debug=False):
+    def run(self, host='localhost', port=8083, debug=False):
         """
         Run the API server.
         
