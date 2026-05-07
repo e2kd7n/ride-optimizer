@@ -59,7 +59,7 @@ def mock_services():
     """Create mock service instances."""
     with patch('app.routes.planner.AnalysisService') as mock_analysis, \
          patch('app.routes.planner.PlannerService') as mock_planner, \
-         patch('app.routes.planner.TrainerRoadService') as mock_trainerroad, \
+         patch('app.routes.planner.WeatherService') as mock_weather, \
          patch('app.routes.planner.Config'):
         
         # Configure analysis service
@@ -70,14 +70,14 @@ def mock_services():
         planner_instance = Mock()
         mock_planner.return_value = planner_instance
         
-        # Configure trainerroad service
-        trainerroad_instance = Mock()
-        mock_trainerroad.return_value = trainerroad_instance
+        # Configure weather service
+        weather_instance = Mock()
+        mock_weather.return_value = weather_instance
         
         yield {
             'analysis': analysis_instance,
             'planner': planner_instance,
-            'trainerroad': trainerroad_instance
+            'weather': weather_instance
         }
 
 
@@ -94,7 +94,6 @@ class TestPlannerIndex:
             'total_rides': 10,
             'recommendations': []
         }
-        mock_services['trainerroad'].get_upcoming_workouts.return_value = []
         
         with patch('app.routes.planner.get_services', return_value=mock_services), \
              patch('app.routes.planner.render_template', return_value='<html>Planner</html>') as mock_render:
@@ -113,7 +112,6 @@ class TestPlannerIndex:
             'total_rides': 5,
             'recommendations': []
         }
-        mock_services['trainerroad'].get_upcoming_workouts.return_value = []
         
         with patch('app.routes.planner.get_services', return_value=mock_services), \
              patch('app.routes.planner.render_template', return_value='<html>Planner</html>'):
@@ -164,7 +162,6 @@ class TestPlannerIndex:
                 }
             ]
         }
-        mock_services['trainerroad'].get_upcoming_workouts.return_value = []
         
         with patch('app.routes.planner.get_services', return_value=mock_services), \
              patch('app.routes.planner.render_template', return_value='<html>Recommendations</html>'):
@@ -175,7 +172,6 @@ class TestPlannerIndex:
     def test_index_no_long_rides(self, client, mock_services):
         """Test index when no long rides are available."""
         mock_services['analysis'].get_long_rides.return_value = []
-        mock_services['trainerroad'].get_upcoming_workouts.return_value = []
         
         with patch('app.routes.planner.get_services', return_value=mock_services), \
              patch('app.routes.planner.render_template', return_value='<html>No rides</html>'):
@@ -185,61 +181,16 @@ class TestPlannerIndex:
         # Should not call planner service if no rides
         mock_services['planner'].initialize.assert_not_called()
     
-    def test_index_with_workout_schedule(self, client, mock_services, mock_long_ride):
-        """Test index includes TrainerRoad workout schedule."""
-        mock_services['analysis'].get_long_rides.return_value = [mock_long_ride]
-        mock_services['planner'].get_recommendations.return_value = {
-            'status': 'success',
-            'best_day': 'Sunday',
-            'total_rides': 8,
-            'recommendations': []
-        }
-        
-        # Mock workout data
-        mock_workout = Mock()
-        mock_workout.date = date(2024, 6, 1)
-        mock_workout.name = "Sweet Spot Intervals"
-        mock_workout.duration_minutes = 60
-        mock_workout.tss = 75
-        mock_workout.workout_type = "Intervals"
-        
-        mock_services['trainerroad'].get_upcoming_workouts.return_value = [mock_workout]
-        
-        with patch('app.routes.planner.get_services', return_value=mock_services), \
-             patch('app.routes.planner.render_template', return_value='<html>Workouts</html>'):
-            response = client.get('/planner/')
-        
-        assert response.status_code == 200
-        mock_services['trainerroad'].get_upcoming_workouts.assert_called_once_with(days=7)
     
     def test_index_handles_service_errors(self, client, mock_services):
         """Test index handles service errors gracefully."""
         mock_services['analysis'].get_long_rides.side_effect = Exception("Service error")
-        mock_services['trainerroad'].get_upcoming_workouts.return_value = []
         
         with patch('app.routes.planner.get_services', return_value=mock_services), \
              patch('app.routes.planner.render_template', return_value='<html>Error</html>'):
             response = client.get('/planner/')
         
         # Should still return 200 with empty recommendations
-        assert response.status_code == 200
-    
-    def test_index_handles_trainerroad_errors(self, client, mock_services, mock_long_ride):
-        """Test index handles TrainerRoad service errors gracefully."""
-        mock_services['analysis'].get_long_rides.return_value = [mock_long_ride]
-        mock_services['planner'].get_recommendations.return_value = {
-            'status': 'success',
-            'best_day': 'Monday',
-            'total_rides': 10,
-            'recommendations': []
-        }
-        mock_services['trainerroad'].get_upcoming_workouts.side_effect = Exception("TrainerRoad API error")
-        
-        with patch('app.routes.planner.get_services', return_value=mock_services), \
-             patch('app.routes.planner.render_template', return_value='<html>No workouts</html>'):
-            response = client.get('/planner/')
-        
-        # Should still return 200 without workout schedule
         assert response.status_code == 200
 
 
@@ -337,7 +288,6 @@ class TestCalendar:
         # Ensure mock has last_used attribute
         mock_long_ride.last_used = datetime(2024, 6, 15, 10, 0, 0)
         mock_services['analysis'].get_long_rides.return_value = [mock_long_ride]
-        mock_services['trainerroad'].get_upcoming_workouts.return_value = []
         
         with patch('app.routes.planner.get_services', return_value=mock_services), \
              patch('app.routes.planner.render_template', return_value='<html>Calendar</html>'):
@@ -350,7 +300,6 @@ class TestCalendar:
         # Set last_used to June 2024
         mock_long_ride.last_used = datetime(2024, 6, 15, 10, 0, 0)
         mock_services['analysis'].get_long_rides.return_value = [mock_long_ride]
-        mock_services['trainerroad'].get_upcoming_workouts.return_value = []
         
         with patch('app.routes.planner.get_services', return_value=mock_services), \
              patch('app.routes.planner.render_template', return_value='<html>Calendar June</html>'):
