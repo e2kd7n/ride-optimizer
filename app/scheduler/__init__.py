@@ -31,7 +31,7 @@ Usage:
     )
 """
 
-from .scheduler import scheduler, init_scheduler
+from .scheduler import scheduler, init_scheduler, start_scheduler
 from .jobs import (
     run_daily_analysis,
     run_weather_refresh,
@@ -44,6 +44,7 @@ from .health import HealthChecker, SystemHealth
 __all__ = [
     'scheduler',
     'init_scheduler',
+    'start_scheduler',
     'run_daily_analysis',
     'run_weather_refresh',
     'run_cache_cleanup',
