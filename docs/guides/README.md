@@ -17,6 +17,10 @@ This directory contains user guides and implementation documentation for the Rid
 - [`PARALLELISM_GUIDE.md`](PARALLELISM_GUIDE.md) - Parallel processing and performance optimization
 - [`WEATHER_GUIDE.md`](WEATHER_GUIDE.md) - Weather integration and forecasting features
 
+### Development & Testing
+- [`DEFINITION_OF_DONE.md`](DEFINITION_OF_DONE.md) - Definition of done criteria for features and tasks
+- [`TEST_COVERAGE_GUIDE.md`](TEST_COVERAGE_GUIDE.md) - Test coverage implementation guide
+
 ---
 
 ## 🎯 Guide Categories
