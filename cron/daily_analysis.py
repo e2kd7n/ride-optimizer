@@ -50,10 +50,7 @@ def main():
         
         # Run full analysis
         logger.info("Running full analysis...")
-        result = analysis_service.run_full_analysis(
-            fetch_new_activities=True,
-            force_refresh=False
-        )
+        result = analysis_service.run_full_analysis(force_refresh=False)
         
         # Record job execution
         job_record = {

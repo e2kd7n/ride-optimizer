@@ -1,0 +1,84 @@
+{
+  "jobs": [
+    {
+      "job_type": "cache_cleanup",
+      "status": "completed",
+      "started_at": "2026-05-06T23:05:23.010521",
+      "completed_at": "2026-05-06T23:05:23.011104",
+      "duration_seconds": 0.000584,
+      "result": {
+        "files_removed": 0,
+        "size_freed_mb": 0.0,
+        "files": []
+      }
+    },
+    {
+      "job_type": "system_health",
+      "status": "completed",
+      "started_at": "2026-05-06T23:05:26.570168",
+      "completed_at": "2026-05-06T23:05:26.660933",
+      "duration_seconds": 0.090352,
+      "result": {
+        "overall_status": "degraded",
+        "checks_run": 4
+      }
+    },
+    {
+      "job_type": "daily_analysis",
+      "status": "failed",
+      "started_at": "2026-05-06T23:05:39.110925",
+      "completed_at": "2026-05-06T23:05:39.114301",
+      "duration_seconds": 0.003378,
+      "error": "AnalysisService.run_full_analysis() got an unexpected keyword argument 'fetch_new_activities'"
+    },
+    {
+      "job_type": "daily_analysis",
+      "status": "degraded",
+      "started_at": "2026-05-06T23:06:06.524632",
+      "completed_at": "2026-05-06T23:06:06.533100",
+      "duration_seconds": 0.008469,
+      "result": {
+        "activities_count": 0,
+        "route_groups_count": 0,
+        "long_rides_count": 0,
+        "degraded_reason": null
+      }
+    },
+    {
+      "job_type": "cache_cleanup",
+      "status": "completed",
+      "started_at": "2026-05-06T23:23:16.506895",
+      "completed_at": "2026-05-06T23:23:16.507285",
+      "duration_seconds": 0.000391,
+      "result": {
+        "files_removed": 0,
+        "size_freed_mb": 0.0,
+        "files": []
+      }
+    },
+    {
+      "job_type": "system_health",
+      "status": "completed",
+      "started_at": "2026-05-06T23:23:16.560184",
+      "completed_at": "2026-05-06T23:23:16.624649",
+      "duration_seconds": 0.064079,
+      "result": {
+        "overall_status": "degraded",
+        "checks_run": 4
+      }
+    },
+    {
+      "job_type": "daily_analysis",
+      "status": "degraded",
+      "started_at": "2026-05-06T23:23:19.595410",
+      "completed_at": "2026-05-06T23:23:19.600901",
+      "duration_seconds": 0.005492,
+      "result": {
+        "activities_count": 0,
+        "route_groups_count": 0,
+        "long_rides_count": 0,
+        "degraded_reason": null
+      }
+    }
+  ]
+}
