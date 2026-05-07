@@ -1,12 +1,14 @@
-# Personal Web Platform Proposal: Ride Optimizer v1.0.0
+# Personal Web Platform Proposal: Ride Optimizer
 
 **Date:** 2026-05-06
-**Updated:** 2026-05-07 (Architecture Simplification)
-**Version:** 1.0.0 (First Production Release)
+**Updated:** 2026-05-07 (Architecture Simplification & Version Rebaseline)
+**Current Version:** v0.10.0 (formerly v2.5.0)
+**Next Version:** v0.11.0 (Architecture Simplification)
+**Future Version:** v1.0.0 (Production-Ready, when stable)
 **Project:** Strava Commute Analyzer → Personal Ride Optimizer
 **Deployment:** Raspberry Pi (Single-User, Home Network)
 
-> **Note:** This proposal has been updated to reflect architecture simplification (Issue #152). Version 1.0.0 will use a lightweight "Smart Static" architecture optimized for single-user Raspberry Pi deployment, replacing the original Flask-based web platform proposal. Previous CLI releases (v2.1.0-v2.5.0) remain as pre-production versions. See [`VERSION_REBASELINE_PLAN.md`](../VERSION_REBASELINE_PLAN.md) and [`ARCHITECTURE_SIMPLIFICATION_PROPOSAL.md`](../ARCHITECTURE_SIMPLIFICATION_PROPOSAL.md) for details.
+> **Note:** This proposal has been updated to reflect architecture simplification (Issue #152). Version 0.11.0 will use a lightweight "Smart Static" architecture optimized for single-user Raspberry Pi deployment, replacing the Flask-based approach from v0.6.0-v0.10.0. All releases use 0.x.x versioning until production-ready. See [`VERSIONING_PLAN.md`](VERSIONING_PLAN.md), [`VERSION_REBASELINE_PLAN.md`](../VERSION_REBASELINE_PLAN.md), and [`ARCHITECTURE_SIMPLIFICATION_PROPOSAL.md`](../ARCHITECTURE_SIMPLIFICATION_PROPOSAL.md) for details.
 
 ---
 

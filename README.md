@@ -18,7 +18,7 @@ If you encounter this project hosted elsewhere without proper attribution or wit
 - 🌤️ **Real-Time Weather Analysis**: Considers wind speed and direction for optimal route selection
 - 🎯 **Personalized Recommendations**: Suggests optimal routes based on your preferences and current conditions
 
-### Long Rides Analysis (NEW in v2.4.0)
+### Long Rides Analysis (NEW in v0.9.0)
 - 🚵 **Comprehensive Statistics**: View total rides, average distance, longest ride, elevation gain, and more
 - 🏆 **Top 10 Longest Rides**: Table with Strava links showing your most epic adventures
 - 📅 **Monthly Breakdown**: Chart showing ride count and distance trends over time
@@ -556,7 +556,7 @@ A: Yes, use the `--start` and `--end` flags to analyze specific date ranges.
 
 ## Version History
 
-### v2.4.0 (2026-03-30)
+### v0.9.0 (2026-03-30)
 **Long Rides Feature & Polish**
 
 - 🚵 **NEW: Long Rides Analysis** - Comprehensive analysis of non-commute rides
@@ -586,7 +586,7 @@ A: Yes, use the `--start` and `--end` flags to analyze specific date ranges.
   - Troubleshooting for common installation issues
   - Platform-specific instructions (macOS/Linux/Windows)
 
-### v2.3.0 (2026-03-27)
+### v0.8.0 (2026-03-27)
 **Segment-Based Route Naming & Security Enhancements**
 
 - ✨ **NEW: Intelligent Route Naming** - Routes now show complete journey context
@@ -599,14 +599,14 @@ A: Yes, use the `--start` and `--end` flags to analyze specific date ranges.
 - 📚 **Documentation: Technical Spec Updates** - Comprehensive updates to reflect new implementations
 - ✅ **Testing: 100% Pass Rate** - All 43 tests passing
 
-### v2.2.0 (2026-03-27)
+### v0.7.0 (2026-03-27)
 **Test Infrastructure & Cache Separation**
 
 - ✅ Test suite remediation (43/43 tests passing)
 - 🔧 Separated test and production cache files
 - 📝 Comprehensive test documentation
 
-### v2.1.0 (2026-03-26)
+### v0.6.0 (2026-03-26)
 **Performance & Route Naming Improvements**
 
 - ⚡ Code cleanup and performance optimization

@@ -90,7 +90,7 @@ gh issue view 83 --json title,body
 
 ### 2. Web Platform Sprint Planning
 
-**Epic:** #144 - Personal Web Platform Migration (v3.0.0)
+**Epic:** #144 - Personal Web Platform Migration (v1.0.0 (future production))
 
 #### Sprint 1: Backend Foundation (Weeks 1-3)
 **Focus:** API infrastructure, persistence, job scheduling
@@ -162,19 +162,19 @@ gh issue view 83 --json title,body
 
 ---
 
-### 3. Create v3.0.0 Milestone
+### 3. Create v1.0.0 (future production) Milestone
 
 **Action:**
 ```bash
 # Create milestone
 gh api repos/:owner/:repo/milestones \
-  -f title="v3.0.0 - Web Platform" \
+  -f title="v1.0.0 (future production) - Web Platform" \
   -f description="Transform ride-optimizer into web-based platform with interactive dashboard, planning views, and background job scheduling" \
   -f due_on="2026-07-01T00:00:00Z"
 
 # Link issues to milestone (example)
-gh issue edit 144 --milestone "v3.0.0 - Web Platform"
-gh issue edit 129 --milestone "v3.0.0 - Web Platform"
+gh issue edit 144 --milestone "v1.0.0 (future production) - Web Platform"
+gh issue edit 129 --milestone "v1.0.0 (future production) - Web Platform"
 # ... repeat for all web platform issues
 ```
 
@@ -243,7 +243,7 @@ git push
 ### Short-term (2 weeks)
 - [ ] P1 count reduced to <25 issues (move 8 to P2)
 - [ ] Sprint 1 (Backend Foundation) started
-- [ ] v3.0.0 milestone created
+- [ ] v1.0.0 (future production) milestone created
 - [ ] Weekly maintenance routine established
 
 ### Medium-term (1 month)
@@ -253,7 +253,7 @@ git push
 - [ ] TECHNICAL_SPEC.md updated (#119)
 
 ### Long-term (3 months)
-- [ ] Web platform v3.0.0 MVP released
+- [ ] Web platform v0.11.0 (simplified architecture) released
 - [ ] P1 count maintained at <15 issues
 - [ ] Test coverage >70%
 - [ ] Issue health score maintained at 8.5+/10

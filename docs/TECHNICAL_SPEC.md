@@ -860,7 +860,7 @@ class RouteNamer:
 
 ### Naming Algorithm
 
-**Current Implementation (v2.3.0 - Segment-Based Naming):**
+**Current Implementation (v0.8.0 - Segment-Based Naming):**
 
 1. **Sample Strategic Points** (10 points)
    - First 3 points: Capture start street
@@ -882,7 +882,7 @@ class RouteNamer:
    - Only include segments ≥ 10% of route length (configurable)
    - Ignore segments without street names
 
-**Legacy Implementation (v2.1.0 - Still available as fallback):**
+**Legacy Implementation (v0.6.0 - Still available as fallback):**
 1. Sample 5 strategic points along route (start, 25%, 50%, 75%, end)
 2. Reverse geocode each point to get street/path names
 3. Count frequency of each street name
@@ -901,7 +901,7 @@ class RouteNamer:
 - Key: Rounded coordinates (4 decimal places ≈ 11m precision)
 - Never expires (street names rarely change)
 
-### Configuration Options (v2.3.0)
+### Configuration Options (v0.8.0)
 
 ```yaml
 route_naming:
@@ -1223,7 +1223,7 @@ from src.data_fetcher import StravaDataFetcher
 fetcher = StravaDataFetcher(client, config, use_test_cache=True)
 ```
 
-### Test Coverage (as of v2.2.0)
+### Test Coverage (as of v0.7.0)
 
 - **Overall**: 17% (baseline)
 - **config.py**: 100%
@@ -1257,9 +1257,9 @@ pytest -v tests/test_units.py::TestUnitConverter::test_metric_distance
 
 ## 14. Security & Code Quality
 
-### Security Enhancements (v2.3.0)
+### Security Enhancements (v0.8.0)
 
-**Hash Algorithm (v2.1.0 → v2.3.0):**
+**Hash Algorithm (v0.6.0 → v0.8.0):**
 - ✅ Replaced MD5 with SHA256 for all cache keys
 - Used in `route_analyzer.py` for route similarity cache
 - Used in `weather_fetcher.py` for wind analysis cache
@@ -1271,7 +1271,7 @@ pytest -v tests/test_units.py::TestUnitConverter::test_metric_distance
 - Automated vulnerability scanning
 - Minimum version requirements in `requirements.txt`
 
-**Exception Handling (v2.3.0):**
+**Exception Handling (v0.8.0):**
 - ✅ No bare `except:` statements (all replaced with specific types)
 - Specific exception types for all handlers:
   - `ValueError`: Invalid data formats

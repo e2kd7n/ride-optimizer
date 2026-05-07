@@ -1,34 +1,112 @@
-# Versioning Plan: Architecture Simplification
+# Versioning Plan: Pre-1.0 Development
 
 **Date:** 2026-05-06
-**Updated:** 2026-05-07 (Version Rebaseline)
-**Purpose:** Document version scheme and transition to v1.0.0 production release
+**Updated:** 2026-05-07 (Version Rebaseline - Corrected)
+**Purpose:** All releases are 0.x.x until production-ready 1.0.0
 
 ---
 
 ## Overview
 
-The Ride Optimizer project is transitioning from v2.5.0 (pre-production) to v1.0.0 (first production-ready release). This version reset reflects a significant architectural simplification optimized for single-user Raspberry Pi deployment.
+The Ride Optimizer uses 0.x.x versioning for all pre-production development. Version 1.0.0 is reserved for the first truly production-ready release.
 
 ---
 
-## Current Version Scheme
+## Complete Version History
 
-### Active Releases (GitHub)
+### Original Prototype
 
-| Version | Release Date | Status | Notes |
-|---------|--------------|--------|-------|
-| v2.5.0 | 2026-03-30 | Current | Last pre-production release |
-| v2.4.0 | 2026-03-30 | Released | Long rides feature & polish |
-| v2.3.0 | 2026-03-30 | Released | Segment-based route naming |
-| v2.2.0 | 2026-03-30 | Released | Test infrastructure |
-| v2.1.0 | 2026-03-26 | Released | Code quality & design system |
+| Version | Status | Architecture | Notes |
+|---------|--------|--------------|-------|
+| v0.5.0 | Original | CLI + Static HTML | Simple, lightweight prototype |
 
-### Next Release
+### Flask Experiment (Renumbered from v2.x)
 
-| Version | Target Date | Status | Notes |
-|---------|-------------|--------|-------|
-| v1.0.0 | 2026-06 (5 weeks) | In Planning | First production-ready release with simplified architecture |
+| Old Number | New Number | Release Date | Status | Architecture | Notes |
+|------------|------------|--------------|--------|--------------|-------|
+| v2.1.0 | **v0.6.0** | 2026-03-26 | Released | Flask + SQLAlchemy | Code quality & design system |
+| v2.2.0 | **v0.7.0** | 2026-03-30 | Released | + Test Infrastructure | Test infrastructure added |
+| v2.3.0 | **v0.8.0** | 2026-03-30 | Released | + Route Naming | Segment-based route naming |
+| v2.4.0 | **v0.9.0** | 2026-03-30 | Released | + Long Rides | Long rides feature & polish |
+| v2.5.0 | **v0.10.0** | 2026-03-30 | Current | + APScheduler + Docker | Current release (over-engineered) |
+
+### Planned Releases (Leaving Headroom for 1.0.0)
+
+| Version | Target Date | Status | Architecture | Notes |
+|---------|-------------|--------|--------------|-------|
+| v0.11.0 | 2026-06 (5 weeks) | Planned | Simplified (Static + API) | Architecture simplification (Issue #152) |
+| v0.12.0 | TBD | Future | + Refinements | Bug fixes and polish |
+| v0.13.0 | TBD | Future | + Features | Additional features as needed |
+| ... | TBD | Future | ... | Plenty of headroom |
+| v0.99.0 | TBD | Future | Beta | Final pre-production testing |
+| **v1.0.0** | TBD | **Future** | **Production Ready** | **First stable production release** |
+
+---
+
+## Why 0.x.x Versioning?
+
+**Semantic Versioning Convention:**
+- **0.x.x** = Pre-production, API may change, not production-ready
+- **1.0.0** = First stable, production-ready release
+- **1.x.x** = Stable, backward-compatible improvements
+- **2.0.0** = Major breaking changes
+
+**Current Status:**
+- Still refining architecture (Issue #152)
+- Not yet battle-tested in daily use
+- API and features may still change
+- Honest about maturity level
+
+**When to Release 1.0.0:**
+- Architecture proven stable on Raspberry Pi
+- Used successfully in daily production for 3+ months
+- All core features complete and tested
+- Documentation comprehensive
+- No major known issues
+- Confident in long-term API stability
+
+---
+
+## Version Renumbering Plan
+
+### GitHub Release Tags (Need to Retag)
+
+```bash
+# Delete old v2.x tags
+git tag -d v2.1.0 v2.2.0 v2.3.0 v2.4.0 v2.5.0
+git push origin :refs/tags/v2.1.0 :refs/tags/v2.2.0 :refs/tags/v2.3.0 :refs/tags/v2.4.0 :refs/tags/v2.5.0
+
+# Create new v0.x tags at same commits
+git tag v0.6.0 <commit-hash-of-v2.1.0>
+git tag v0.7.0 <commit-hash-of-v2.2.0>
+git tag v0.8.0 <commit-hash-of-v2.3.0>
+git tag v0.9.0 <commit-hash-of-v2.4.0>
+git tag v0.10.0 <commit-hash-of-v2.5.0>
+
+# Push new tags
+git push origin v0.6.0 v0.7.0 v0.8.0 v0.9.0 v0.10.0
+```
+
+### Documentation Updates
+
+All references to v2.x.0 versions should be updated to v0.x.0:
+- v2.1.0 → v0.6.0
+- v2.2.0 → v0.7.0
+- v2.3.0 → v0.8.0
+- v2.4.0 → v0.9.0
+- v2.5.0 → v0.10.0
+
+---
+
+## Summary
+
+- **v0.5.0** = Original CLI + static HTML prototype
+- **v0.6.0-v0.10.0** = Flask experiment (formerly v2.1.0-v2.5.0)
+- **v0.11.0** = Next release (simplified architecture)
+- **v0.12.0-v0.99.0** = Headroom for future development
+- **v1.0.0** = Production-ready release (when truly ready)
+
+This numbering scheme is honest about the project's maturity and leaves plenty of room for development before declaring production readiness.
 
 ---
 

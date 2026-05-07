@@ -3,7 +3,7 @@
 **Focus**: Flask Route Handler Testing & Bug Fixes
 
 ## Overview
-Continued comprehensive unit testing for the Personal Web Platform v3.0.0 MVP, focusing on Flask route handlers and fixing compatibility issues.
+Continued comprehensive unit testing for the Personal Web Platform v0.11.0 (simplified architecture), focusing on Flask route handlers and fixing compatibility issues.
 
 ## Work Completed
 

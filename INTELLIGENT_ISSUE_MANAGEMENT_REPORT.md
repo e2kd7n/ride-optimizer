@@ -71,7 +71,7 @@ P4: █████████████████████████�
 The P1 load is significantly above target (37 vs. target of <20). Analysis by category:
 
 #### Web Platform Migration (15 issues: #129-143)
-**Epic:** #144 - Personal Web Platform Migration (v3.0.0)
+**Epic:** #144 - Personal Web Platform Migration (v1.0.0 (future production))
 
 **Backend Infrastructure (5 issues):**
 - #129 - Flask app factory and skeleton
@@ -206,7 +206,7 @@ The following issues are referenced in commits but not marked as resolved:
 
 1. **Update TECHNICAL_SPEC.md** (#119) - Document web platform architecture
 2. **Complete Long Rides Documentation** (#101)
-3. **Create v3.0.0 Milestone** - Track web platform progress
+3. **Create v1.0.0 (future production) Milestone** - Track web platform progress
 4. **Weekly Issue Review** - Run `./scripts/update-issue-priorities.sh`
 
 ---
@@ -287,7 +287,7 @@ git commit -m "docs: Weekly issue priority update"
 ### Today
 1. ✅ Review this report
 2. ⏳ Decide on P1 → P2 moves (8 suggested issues)
-3. ⏳ Create v3.0.0 milestone in GitHub
+3. ⏳ Create v1.0.0 (future production) milestone in GitHub
 4. ⏳ Update web platform epic (#144) with phased approach
 
 ### This Week
@@ -310,7 +310,7 @@ git commit -m "docs: Weekly issue priority update"
 - [ ] P1 count reduced to <25 issues
 - [ ] Sprint 1 (Backend Foundation) completed
 - [ ] TECHNICAL_SPEC.md updated
-- [ ] v3.0.0 milestone created
+- [ ] v1.0.0 (future production) milestone created
 
 ### Medium-term (1 month)
 - [ ] P1 count reduced to <20 issues
@@ -319,7 +319,7 @@ git commit -m "docs: Weekly issue priority update"
 - [ ] Weekly issue review routine established
 
 ### Long-term (3 months)
-- [ ] Web platform v3.0.0 released
+- [ ] Web platform v1.0.0 (future production) released
 - [ ] P1 count maintained at <15 issues
 - [ ] All epics have clear progress tracking
 - [ ] Issue health score maintained at 8.5+/10
