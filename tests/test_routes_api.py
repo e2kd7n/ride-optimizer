@@ -677,16 +677,21 @@ class TestErrorHandlers:
         assert data['error'] == 'Not Found'
         assert 'message' in data
     
-    def test_500_error_handler(self, client):
+    def test_500_error_handler(self, client, app):
         """Test 500 error handler returns JSON."""
-        with patch('app.routes.api.AnalysisSnapshot.query') as mock_query:
-            mock_query.order_by.side_effect = Exception("Database error")
-            
-            response = client.get('/api/status')
-            
-            assert response.status_code == 500
-            data = response.get_json()
-            assert data['error'] == 'Internal Server Error'
-            assert 'message' in data
+        # Temporarily disable exception propagation to test error handler
+        app.config['TESTING'] = False
+        try:
+            with patch('app.routes.api.AnalysisSnapshot.query') as mock_query:
+                mock_query.order_by.side_effect = Exception("Database error")
+                
+                response = client.get('/api/status')
+                
+                assert response.status_code == 500
+                data = response.get_json()
+                assert data['error'] == 'Internal Server Error'
+                assert 'message' in data
+        finally:
+            app.config['TESTING'] = True
 
 # Made with Bob
