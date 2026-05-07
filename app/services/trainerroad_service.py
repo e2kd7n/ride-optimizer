@@ -183,6 +183,34 @@ class TrainerRoadService:
             logger.error(f"Error validating feed URL: {e}")
             return False
     
+    def get_feed_url(self) -> Optional[str]:
+        """
+        Get the configured ICS feed URL.
+        
+        Returns:
+            Feed URL or None if not configured
+        """
+        return self.feed_url
+    
+    def remove_credentials(self) -> bool:
+        """
+        Remove stored TrainerRoad credentials.
+        
+        Returns:
+            True if removed successfully
+        """
+        try:
+            if self.credentials_path.exists():
+                self.credentials_path.unlink()
+                logger.info("Removed TrainerRoad credentials")
+            
+            self.feed_url = None
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error removing credentials: {e}")
+            return False
+    
     def fetch_ics_feed(self, timeout: int = 10) -> Optional[str]:
         """
         Fetch ICS feed content from URL.
@@ -316,18 +344,20 @@ class TrainerRoadService:
         """
         text = f"{summary} {description}".lower()
         
-        type_keywords = {
-            'endurance': ['endurance', 'easy', 'recovery', 'base'],
-            'tempo': ['tempo', 'sweet spot'],
-            'threshold': ['threshold', 'ftp'],
-            'vo2max': ['vo2', 'vo2max', 'v02'],
-            'anaerobic': ['anaerobic', 'over-under'],
-            'sprint': ['sprint', 'neuromuscular']
-        }
+        # Order matters: check more specific types first
+        # Note: Use word boundaries to avoid false matches (e.g., "120% FTP" shouldn't match "FTP test")
+        type_keywords = [
+            ('VO2Max', ['vo2', 'vo2max', 'v02']),  # Check VO2Max first (most specific)
+            ('Anaerobic', ['anaerobic', 'over-under']),
+            ('Sprint', ['sprint', 'neuromuscular']),
+            ('Threshold', ['threshold', 'sweet spot', 'ftp test']),  # FTP test, not "% FTP"
+            ('Tempo', ['tempo']),
+            ('Endurance', ['endurance', 'easy', 'recovery', 'base'])
+        ]
         
-        for workout_type, keywords in type_keywords.items():
+        for workout_type, keywords in type_keywords:
             if any(keyword in text for keyword in keywords):
-                return workout_type.capitalize()
+                return workout_type
         
         return None
     
