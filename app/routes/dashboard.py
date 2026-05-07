@@ -90,7 +90,7 @@ def index():
         
         if route_groups and home and work:
             commute_service.initialize(route_groups, home, work)
-            commute_data = commute_service.get_next_commute()
+            commute_data = commute_service.get_workout_aware_commute()
             
             if commute_data.get('status') == 'success':
                 route = commute_data.get('route', {})
@@ -101,7 +101,8 @@ def index():
                     'duration': route.get('duration', 0) / 60,  # Convert to minutes
                     'score': commute_data.get('score', 0),
                     'departure_time': commute_data.get('departure_time'),
-                    'weather': commute_data.get('weather', {})
+                    'weather': commute_data.get('weather', {}),
+                    'workout_fit': commute_data.get('workout_fit')  # TrainerRoad integration
                 }
     except Exception as e:
         current_app.logger.error(f"Error getting commute recommendation: {e}")
