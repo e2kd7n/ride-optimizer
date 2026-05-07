@@ -10,10 +10,23 @@ Manages:
 - Data refresh schedules
 """
 
-from flask import Blueprint, render_template, request, jsonify, current_app, flash, redirect, url_for
+from flask import Blueprint, render_template, request, jsonify, current_app, flash, redirect, url_for, g
 from datetime import datetime
 
+from app.services import TrainerRoadService
+from src.config import Config
+
 bp = Blueprint('settings', __name__, url_prefix='/settings')
+
+
+def get_services():
+    """Get or create service instances for this request."""
+    if 'services' not in g:
+        config = Config('config/config.yaml')
+        g.services = {
+            'trainerroad': TrainerRoadService(config)
+        }
+    return g.services
 
 
 @bp.route('/')
@@ -104,24 +117,119 @@ def trainerroad():
     TrainerRoad integration configuration.
     
     Manages:
-    - API credentials
+    - ICS feed URL configuration
     - Workout calendar sync
     - Workout fit analysis preferences
     """
     current_app.logger.info('TrainerRoad settings accessed')
     
-    # TODO: Replace with actual service layer calls (Issue #130)
+    services = get_services()
+    tr_service = services['trainerroad']
+    
+    # Check if feed URL is configured
+    connected = tr_service.feed_url is not None
+    last_sync = tr_service.last_sync
+    
     context = {
         'page_title': 'TrainerRoad Settings',
-        'connected': False,  # TODO: Check connection status
-        'athlete_info': None,  # TODO: Get athlete info if connected
-        'workout_sync': {
-            'enabled': True,
-            'sync_interval': 3600
-        }
+        'connected': connected,
+        'feed_url_configured': connected,
+        'last_sync': last_sync.isoformat() if last_sync else None,
+        'sync_interval_hours': tr_service.sync_interval_hours
     }
     
     return render_template('settings/trainerroad.html', **context)
+
+
+@bp.route('/trainerroad/configure', methods=['POST'])
+def trainerroad_configure():
+    """
+    Configure TrainerRoad ICS feed URL.
+    
+    POST body (JSON):
+    {
+        "ics_feed_url": "https://www.trainerroad.com/app/calendar/ics/..."
+    }
+    """
+    data = request.get_json() or {}
+    feed_url = data.get('ics_feed_url', '').strip()
+    
+    if not feed_url:
+        return jsonify({
+            'status': 'error',
+            'message': 'ICS feed URL is required'
+        }), 400
+    
+    services = get_services()
+    tr_service = services['trainerroad']
+    
+    # Validate and save feed URL
+    if tr_service.set_feed_url(feed_url):
+        current_app.logger.info('TrainerRoad ICS feed URL configured successfully')
+        flash('TrainerRoad ICS feed configured successfully', 'success')
+        return jsonify({
+            'status': 'success',
+            'message': 'Feed URL saved securely'
+        })
+    else:
+        return jsonify({
+            'status': 'error',
+            'message': 'Invalid ICS feed URL'
+        }), 400
+
+
+@bp.route('/trainerroad/sync', methods=['POST'])
+def trainerroad_sync():
+    """
+    Trigger manual workout sync from TrainerRoad.
+    
+    Returns sync status and results.
+    """
+    services = get_services()
+    tr_service = services['trainerroad']
+    
+    if not tr_service.feed_url:
+        return jsonify({
+            'status': 'error',
+            'message': 'TrainerRoad ICS feed not configured'
+        }), 400
+    
+    current_app.logger.info('Manual TrainerRoad sync triggered')
+    
+    # Sync workouts
+    result = tr_service.sync_workouts(days_ahead=14)
+    
+    if result['status'] == 'success':
+        flash(f"Synced {result['workouts_synced']} workouts from TrainerRoad", 'success')
+    elif result['status'] == 'skipped':
+        flash(result['message'], 'info')
+    else:
+        flash(f"Sync failed: {result['message']}", 'error')
+    
+    return jsonify(result)
+
+
+@bp.route('/trainerroad/disconnect', methods=['POST'])
+def trainerroad_disconnect():
+    """
+    Disconnect TrainerRoad integration.
+    
+    Removes stored ICS feed URL.
+    """
+    current_app.logger.info('TrainerRoad disconnect requested')
+    
+    services = get_services()
+    tr_service = services['trainerroad']
+    
+    # Remove credentials file
+    if tr_service.credentials_path.exists():
+        tr_service.credentials_path.unlink()
+        tr_service.feed_url = None
+        flash('TrainerRoad disconnected successfully', 'success')
+    else:
+        flash('TrainerRoad was not connected', 'info')
+    
+    return redirect(url_for('settings.trainerroad'))
 
 
 @bp.route('/weather')
