@@ -155,8 +155,14 @@ class TestGetServices:
             if hasattr(g, 'route_library_services'):
                 delattr(g, 'route_library_services')
             
-            # Mock the service instances
+            # Properly configure the Config mock
             mock_config = Mock()
+            mock_config.get.side_effect = lambda key, default=None: {
+                'cache_dir': 'cache',
+                'data_dir': 'data',
+                'route_naming.sampling_density': 10,
+                'route_naming.geocoder_timeout': 10
+            }.get(key, default)
             mock_config_cls.return_value = mock_config
             
             mock_analysis = Mock()
@@ -187,8 +193,14 @@ class TestGetServices:
             if hasattr(g, 'route_library_services'):
                 delattr(g, 'route_library_services')
             
-            # Mock services
+            # Properly configure the Config mock
             mock_config = Mock()
+            mock_config.get.side_effect = lambda key, default=None: {
+                'cache_dir': 'cache',
+                'data_dir': 'data',
+                'route_naming.sampling_density': 10,
+                'route_naming.geocoder_timeout': 10
+            }.get(key, default)
             mock_config_cls.return_value = mock_config
             
             mock_analysis = Mock()

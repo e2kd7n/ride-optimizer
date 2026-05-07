@@ -16,6 +16,15 @@ from datetime import datetime, date, timedelta
 from app.services.planner_service import PlannerService
 from src.long_ride_analyzer import LongRide
 from src.config import Config
+from app import create_app
+
+
+@pytest.fixture
+def app():
+    """Create Flask app for testing."""
+    app = create_app('testing')
+    app.config['TESTING'] = True
+    return app
 
 
 @pytest.fixture
@@ -399,17 +408,19 @@ class TestRideScoring:
 class TestWeatherIntegration:
     """Test weather-related functionality."""
     
-    def test_get_weather_for_ride(self, initialized_service, mock_long_ride):
+    def test_get_weather_for_ride(self, app, initialized_service, mock_long_ride):
         """Test getting weather for a ride."""
-        target_date = date.today()
-        weather = initialized_service._get_weather_for_ride(mock_long_ride, target_date)
-        
-        assert weather is not None
-        assert 'temperature' in weather
-        assert 'conditions' in weather
-        assert 'wind_speed' in weather
-        assert 'wind_direction' in weather
-        assert 'precipitation' in weather
+        # Need Flask app context for WeatherSnapshot
+        with app.app_context():
+            target_date = date.today()
+            weather = initialized_service._get_weather_for_ride(mock_long_ride, target_date)
+            
+            assert weather is not None
+            assert 'temperature_c' in weather
+            assert 'conditions' in weather
+            assert 'wind_speed_kph' in weather
+            assert 'wind_direction_deg' in weather
+            assert 'precipitation_mm' in weather
     
     def test_calculate_weather_score(self, initialized_service):
         """Test weather score calculation."""
