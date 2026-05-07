@@ -13,7 +13,7 @@ from flask import Blueprint, render_template, request, jsonify, current_app, g
 from datetime import datetime, timedelta
 import traceback
 
-from app.services import AnalysisService, CommuteService
+from app.services import AnalysisService, CommuteService, WeatherService
 from src.config import Config
 
 bp = Blueprint('commute', __name__, url_prefix='/commute')
@@ -25,7 +25,8 @@ def get_services():
         config = Config('config/config.yaml')
         g.services = {
             'analysis': AnalysisService(config),
-            'commute': CommuteService(config)
+            'commute': CommuteService(config),
+            'weather': WeatherService(config)
         }
     return g.services
 
