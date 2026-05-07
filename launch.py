@@ -369,10 +369,44 @@ def open_browser(port):
         logger.info(f"Please open your browser manually to: {url}")
 
 
+def kill_existing_server(port):
+    """Kill any existing server process running on the specified port."""
+    import subprocess
+    import signal
+    
+    try:
+        # Find process using the port
+        result = subprocess.run(
+            ['lsof', '-ti', f':{port}'],
+            capture_output=True,
+            text=True
+        )
+        
+        if result.stdout.strip():
+            pids = result.stdout.strip().split('\n')
+            for pid in pids:
+                try:
+                    pid_int = int(pid)
+                    logger.info(f"Killing existing server process {pid_int} on port {port}")
+                    import os
+                    os.kill(pid_int, signal.SIGTERM)
+                    time.sleep(0.5)  # Give it time to terminate
+                except (ValueError, ProcessLookupError) as e:
+                    logger.debug(f"Could not kill process {pid}: {e}")
+    except FileNotFoundError:
+        # lsof not available (Windows)
+        logger.debug("lsof command not available, skipping process check")
+    except Exception as e:
+        logger.warning(f"Error checking for existing server: {e}")
+
+
 if __name__ == '__main__':
     # Development server
     import os
     port = int(os.environ.get('PORT', 8083))
+    
+    # Kill any existing server on this port
+    kill_existing_server(port)
     
     logger.info("Starting Ride Optimizer API server...")
     logger.info("API endpoints:")
