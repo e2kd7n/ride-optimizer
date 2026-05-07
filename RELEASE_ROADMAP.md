@@ -71,6 +71,13 @@
    - Remove unnecessary abstractions
    - Focus on pragmatic, minimal solutions
 
+**Critical Missing Feature:**
+- **#235 - Restore Interactive Maps** (EPIC, 28 days)
+  - Web app has NO maps despite 1316 lines of Folium code
+  - Restores all interactive map functionality from v0.5.0 CLI
+  - Includes route comparison, weather overlays, heatmaps, filtering
+  - See [INTERACTIVE_MAPS_RESTORATION_EPIC.md](plans/v0.11.0/INTERACTIVE_MAPS_RESTORATION_EPIC.md)
+
 **Migration Phases:**
 - **Phase 1 (Week 1):** Foundation - Data layer & static generation
 - **Phase 2 (Week 2):** Frontend - Convert templates to static HTML

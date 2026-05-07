@@ -18,10 +18,17 @@ This planned release will simplify the architecture from the over-engineered v0.
 
 ## Planning Documents
 
+### Architecture Simplification
 - **ARCHITECTURE_SIMPLIFICATION_PROPOSAL.md** - Detailed simplification proposal
 - **ARCHITECTURE_SIMPLIFICATION_SUMMARY.md** - Executive summary
 - **BETA_READINESS_REVISED_ASSESSMENT.md** - Readiness assessment
 - **BETA_RELEASE_READINESS_ASSESSMENT.md** - Release criteria
+
+### Interactive Maps Restoration (Epic #235)
+- **INTERACTIVE_MAPS_RESTORATION_EPIC.md** - Complete epic specification for restoring all interactive map functionality from v0.5.0 CLI to web app
+- **EPIC_001_GITHUB_ISSUES.md** - GitHub issues breakdown (#228-#234) with implementation phases and timeline
+
+**Epic Summary:** The web app currently has NO maps despite having 1316 lines of Folium-based map generation code in `src/visualizer.py`. This epic restores all interactive map features including route comparison, weather overlays, heatmaps, and filtering across all pages (route detail, commute, planner, dashboard). Timeline: 28 days across 4 phases.
 
 ## Architecture Changes
 

@@ -48,14 +48,32 @@ def index():
     analysis_service = services['analysis']
     planner_service = services['planner']
     
-    # Get filter parameters
-    forecast_days = int(request.args.get('days', 7))
-    min_distance = float(request.args.get('min_distance', 30))
-    max_distance = float(request.args.get('max_distance', 100))
+    # Get filter parameters with error handling
+    try:
+        forecast_days = int(request.args.get('days', 7))
+        if forecast_days < 1 or forecast_days > 14:
+            forecast_days = 7
+    except (ValueError, TypeError):
+        forecast_days = 7
+    
+    try:
+        min_distance = float(request.args.get('min_distance', 30))
+        if min_distance < 0:
+            min_distance = 30
+    except (ValueError, TypeError):
+        min_distance = 30
+    
+    try:
+        max_distance = float(request.args.get('max_distance', 100))
+        if max_distance < min_distance:
+            max_distance = 100
+    except (ValueError, TypeError):
+        max_distance = 100
     
     recommendations = []
     best_day = None
     total_rides = 0
+    long_rides_map_html = None
     
     try:
         long_rides = analysis_service.get_long_rides()
@@ -87,7 +105,8 @@ def index():
                             'weather_score': ride.get('weather_score', 0),
                             'variety_score': ride.get('variety_score', 0),
                             'is_loop': ride.get('is_loop', False),
-                            'weather': ride.get('weather', {})
+                            'weather': ride.get('weather', {}),
+                            'start_location': ride.get('start_location', [])
                         })
                     
                     best_ride = day_rec.get('best_ride', {})
@@ -105,6 +124,21 @@ def index():
                         } if best_ride else None,
                         'weather_summary': day_rec.get('weather_summary', '')
                     })
+                
+                # Generate long rides map
+                try:
+                    # Get home location from config
+                    home_lat = services['analysis'].config.get('locations.home.lat')
+                    home_lon = services['analysis'].config.get('locations.home.lon')
+                    home_location = (home_lat, home_lon) if home_lat and home_lon else None
+                    
+                    long_rides_map_html = planner_service.generate_long_rides_map(
+                        rec_data.get('recommendations', []),
+                        home_location=home_location
+                    )
+                except Exception as map_error:
+                    current_app.logger.error(f"Failed to generate long rides map: {map_error}")
+                    current_app.logger.debug(traceback.format_exc())
                     
     except Exception as e:
         current_app.logger.error(f"Error getting planner recommendations: {e}")
@@ -119,6 +153,7 @@ def index():
         'recommendations': recommendations,
         'best_day': best_day,
         'total_rides': total_rides,
+        'long_rides_map_html': long_rides_map_html,
         'workout_schedule': None  # TODO: TrainerRoad integration (Issue #139)
     }
     

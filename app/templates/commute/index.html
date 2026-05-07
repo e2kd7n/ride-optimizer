@@ -59,14 +59,14 @@
         
         <!-- Score Breakdown -->
         {% if recommendation.breakdown %}
-        <div class="score-breakdown">
+        <div class="score-breakdown d-none d-md-block">
             <h3>Why This Route?</h3>
             <div class="breakdown-bars">
                 {% for factor, score in recommendation.breakdown.items() %}
                 <div class="breakdown-item">
                     <div class="breakdown-label">{{ factor|replace('_', ' ')|title }}</div>
                     <div class="breakdown-bar-container">
-                        <div class="breakdown-bar" style="width: {{ (score * 100)|int }}%"></div>
+                        <div class="breakdown-bar" data-width="{{ (score * 100)|int }}"></div>
                     </div>
                     <div class="breakdown-value">{{ "%.0f"|format(score * 100) }}%</div>
                 </div>
@@ -76,8 +76,8 @@
         {% endif %}
         
         <!-- Weather Info -->
+        <div class="weather-info" id="weather-impact">
         {% if recommendation.weather %}
-        <div class="weather-info">
             <h3>🌤️ Weather Conditions</h3>
             
             <!-- Cycling Favorability Badge -->
@@ -131,7 +131,7 @@
             
             <!-- Wind Impact Analysis -->
             {% if recommendation.weather.wind_impact %}
-            <div class="wind-impact">
+            <div class="wind-impact d-none d-lg-block">
                 <h4>💨 Wind Impact on Route</h4>
                 <div class="wind-impact-details">
                     {% if recommendation.weather.wind_impact.headwind_pct %}
@@ -169,10 +169,111 @@
                 <span class="warning-text">Weather data is {{ recommendation.weather.age_hours }} hours old. Conditions may have changed.</span>
             </div>
             {% endif %}
-        </div>
+        {% else %}
+            <h3>🌤️ Weather Conditions</h3>
+            <p class="no-data">Weather data will be displayed here when available.</p>
         {% endif %}
+        </div>
     </div>
     
+    <!-- Route Comparison Map + Route Options -->
+    {% if commute_options %}
+    <section class="comparison-section">
+        <div class="comparison-header">
+            <div>
+                <h2>🗺️ Route Comparison</h2>
+                <p class="section-subtitle">Compare all available commute routes visually and toggle layers on/off.</p>
+            </div>
+            <div class="comparison-note">Future enhancement #232: map click will highlight the matching route card.</div>
+        </div>
+
+        <div class="comparison-layout">
+            <div class="comparison-map-panel d-none d-lg-block">
+                {% if comparison_map_html %}
+                <div id="commute-comparison-map" class="commute-comparison-map">
+                    {{ comparison_map_html|safe }}
+                </div>
+                {% else %}
+                <div class="comparison-map-fallback">
+                    <div>
+                        <div class="fallback-icon">🗺️</div>
+                        <p>{{ map_error or 'Map temporarily unavailable' }}</p>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="comparison-list-panel d-block">
+                <div class="route-options-list">
+                    {% for option in commute_options %}
+                    {% set route = option.route %}
+                    {% set score_pct = (option.score * 100)|int %}
+                    {% set score_class = 'score-unfavorable' %}
+                    {% if option.score >= 0.85 %}
+                        {% set score_class = 'score-optimal' %}
+                    {% elif option.score >= 0.7 %}
+                        {% set score_class = 'score-good' %}
+                    {% elif option.score >= 0.5 %}
+                        {% set score_class = 'score-acceptable' %}
+                    {% endif %}
+                    <article class="route-option-card {{ score_class }} {% if loop.first %}is-recommended{% endif %}" data-route-id="{{ route.id }}">
+                        <div class="route-option-top">
+                            <div>
+                                <h3>{{ route.name }}</h3>
+                                <div class="route-option-badges">
+                                    {% if loop.first %}
+                                    <span class="route-pill route-pill-optimal">Recommended</span>
+                                    {% elif option.score >= 0.7 %}
+                                    <span class="route-pill route-pill-good">Good Alternative</span>
+                                    {% elif option.score >= 0.5 %}
+                                    <span class="route-pill route-pill-acceptable">Acceptable</span>
+                                    {% else %}
+                                    <span class="route-pill route-pill-unfavorable">Use Caution</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="route-option-score">{{ score_pct }}%</div>
+                        </div>
+
+                        <div class="route-option-metrics">
+                            <div class="route-option-metric"><span>📏</span><span>{{ "%.1f"|format(route.distance / 1000) }} km</span></div>
+                            <div class="route-option-metric"><span>⏱️</span><span>{{ "%.0f"|format(route.duration / 60) }} min</span></div>
+                            <div class="route-option-metric"><span>⛰️</span><span>{{ "%.0f"|format(route.elevation) }} m</span></div>
+                        </div>
+
+                        {% if option.weather %}
+                        <div class="route-option-weather">
+                            <strong>Weather:</strong>
+                            <span>
+                                {{ option.weather.conditions or 'Unavailable' }}
+                                {% if option.weather.temperature is not none %}
+                                • {{ "%.0f"|format(option.weather.temperature) }}°F
+                                {% endif %}
+                                {% if option.weather.wind_speed is not none %}
+                                • {{ "%.0f"|format(option.weather.wind_speed) }} mph wind
+                                {% endif %}
+                            </span>
+                        </div>
+                        {% endif %}
+
+                        {% if option.breakdown %}
+                        <div class="alt-breakdown">
+                            {% for factor, score in option.breakdown.items() %}
+                            <div class="alt-breakdown-item">
+                                <span class="alt-breakdown-label">{{ factor|replace('_', ' ')|title }}:</span>
+                                <span class="alt-breakdown-value">{{ "%.0f"|format(score * 100) }}%</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </article>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </section>
+    {% endif %}
+
     <!-- Alternative Routes -->
     {% if alternatives %}
     <div class="alternatives-section">
@@ -200,6 +301,17 @@
                         <span>{{ "%.0f"|format(alt.elevation) }} m</span>
                     </div>
                 </div>
+                {% if alt.weather %}
+                <div class="route-option-weather alt-weather">
+                    <strong>Weather:</strong>
+                    <span>
+                        {{ alt.weather.conditions or 'Unavailable' }}
+                        {% if alt.weather.temperature is not none %}
+                        • {{ "%.0f"|format(alt.weather.temperature) }}°F
+                        {% endif %}
+                    </span>
+                </div>
+                {% endif %}
                 {% if alt.breakdown %}
                 <div class="alt-breakdown">
                     {% for factor, score in alt.breakdown.items() %}
@@ -218,7 +330,7 @@
     
     <!-- Departure Windows -->
     {% if departure_windows %}
-    <div class="departure-windows">
+    <div class="departure-windows d-none d-md-block">
         <h2>⏰ Optimal Departure Times</h2>
         <div class="windows-grid">
             {% for window in departure_windows %}
@@ -241,12 +353,12 @@
     
     <!-- Workout Fit (placeholder for TrainerRoad integration) -->
     {% if workout_fit %}
-    <div class="workout-fit">
+    <div class="workout-fit d-none d-md-block">
         <h2>🏋️ Workout Fit Analysis</h2>
         {{ workout_fit }}
     </div>
     {% else %}
-    <div class="workout-fit-placeholder">
+    <div class="workout-fit-placeholder d-none d-md-block">
         <p>💡 <strong>Tip:</strong> Connect TrainerRoad to see how your commute fits with today's workout.</p>
         <a href="{{ url_for('settings.trainerroad') }}" class="btn btn-secondary">Connect TrainerRoad</a>
     </div>
@@ -501,6 +613,178 @@
 .weather-value {
     font-size: 0.95rem;
     font-weight: 500;
+}
+
+/* Route Comparison */
+.comparison-section {
+    margin-bottom: 2rem;
+}
+
+.comparison-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.comparison-header h2 {
+    font-size: 1.8rem;
+    color: #2c3e50;
+    margin-bottom: 0.5rem;
+}
+
+.comparison-note {
+    color: #7f8c8d;
+    font-size: 0.95rem;
+    max-width: 320px;
+}
+
+.comparison-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+    gap: 1.5rem;
+    align-items: start;
+}
+
+.comparison-map-panel,
+.comparison-list-panel {
+    background-color: white;
+    border: 2px solid #e1e8ed;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.commute-comparison-map {
+    height: 600px;
+    width: 100%;
+    position: relative;
+}
+
+.commute-comparison-map .folium-map {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.comparison-map-fallback {
+    height: 600px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #f8f9fa;
+    color: #7f8c8d;
+    text-align: center;
+    padding: 1.5rem;
+}
+
+.fallback-icon {
+    font-size: 3rem;
+    margin-bottom: 0.75rem;
+}
+
+.route-options-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1rem;
+}
+
+.route-option-card {
+    border: 2px solid #e1e8ed;
+    border-left-width: 6px;
+    border-radius: 10px;
+    padding: 1rem;
+    background: #fff;
+}
+
+.route-option-card.is-recommended {
+    box-shadow: 0 8px 18px rgba(40, 167, 69, 0.12);
+}
+
+.score-optimal { border-left-color: #28a745; }
+.score-good { border-left-color: #007bff; }
+.score-acceptable { border-left-color: #ffc107; }
+.score-unfavorable { border-left-color: #dc3545; }
+
+.route-option-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: start;
+    margin-bottom: 0.75rem;
+}
+
+.route-option-top h3 {
+    margin: 0 0 0.5rem 0;
+    color: #2c3e50;
+    font-size: 1.1rem;
+}
+
+.route-option-score {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0.5rem 0.75rem;
+    border-radius: 999px;
+    background-color: #2c3e50;
+    color: white;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+}
+
+.route-option-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.route-pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.route-pill-optimal { background: #d4edda; color: #155724; }
+.route-pill-good { background: #d6eaff; color: #004085; }
+.route-pill-acceptable { background: #fff3cd; color: #856404; }
+.route-pill-unfavorable { background: #f8d7da; color: #721c24; }
+
+.route-option-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.route-option-metric {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 44px;
+    padding: 0.5rem 0.75rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    color: #2c3e50;
+    font-weight: 500;
+}
+
+.route-option-weather {
+    padding: 0.75rem;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    margin-bottom: 0.75rem;
+    color: #2c3e50;
+    font-size: 0.95rem;
+}
+
+.alt-weather {
+    margin-top: 1rem;
 }
 
 /* Alternatives Section */
@@ -796,9 +1080,68 @@
         text-align: left;
     }
     
+    .comparison-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .commute-comparison-map,
+    .comparison-map-fallback {
+        height: 400px;
+    }
+
+    .route-option-top {
+        flex-direction: column;
+    }
+
+    .route-option-metrics {
+        grid-template-columns: 1fr;
+    }
+
     .alternatives-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .leaflet-control-zoom a {
+        width: 44px !important;
+        height: 44px !important;
+        line-height: 44px !important;
+        font-size: 20px !important;
+    }
+
+    .leaflet-control-layers-toggle {
+        width: 44px !important;
+        height: 44px !important;
+    }
+}
+
+@media (max-width: 320px) {
+    .commute-page {
+        padding: 1rem 0;
+    }
+
+    .page-header h1 {
+        font-size: 2rem;
+    }
+
+    .detail-grid {
         grid-template-columns: 1fr;
     }
 }
 </style>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/map-filters.css') }}">
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/map-filters.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.breakdown-bar[data-width]').forEach(function(bar) {
+        const width = parseInt(bar.dataset.width || '0', 10);
+        bar.style.width = `${Math.max(0, Math.min(100, width))}%`;
+    });
+});
+</script>
 {% endblock %}

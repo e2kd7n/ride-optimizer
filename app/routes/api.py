@@ -534,6 +534,85 @@ def weather_current():
         }), 500
 
 
+@bp.route('/weather/forecast')
+def weather_forecast():
+    """
+    Get weather forecast for upcoming days.
+    
+    Query params:
+    - lat: Latitude (optional, defaults to home location)
+    - lon: Longitude (optional, defaults to home location)
+    - days: Number of days to forecast (1-14, default: 7)
+    
+    Returns weather forecast data with cycling favorability.
+    """
+    from app.services.weather_service import WeatherService
+    from src.config import Config
+    from src.weather_fetcher import WeatherFetcher
+    
+    try:
+        config = Config('config/config.yaml')
+        weather_fetcher = WeatherFetcher()
+        
+        # Get coordinates from query params or use home location
+        lat = request.args.get('lat', type=float)
+        lon = request.args.get('lon', type=float)
+        days = request.args.get('days', 7, type=int)
+        
+        # Validate days parameter
+        if days < 1 or days > 14:
+            return jsonify({
+                'error': 'Invalid parameter',
+                'message': 'Days must be between 1 and 14'
+            }), 400
+        
+        if lat is None or lon is None:
+            # Use home location from config
+            lat = config.get('location.home.latitude', 40.7128)
+            lon = config.get('location.home.longitude', -74.0060)
+        
+        current_app.logger.info(f'Weather forecast requested for ({lat}, {lon}), {days} days')
+        
+        forecast_data = weather_fetcher.get_daily_forecast(lat, lon, days=days)
+        
+        if not forecast_data:
+            return jsonify({
+                'error': 'Weather data unavailable',
+                'message': 'Unable to fetch forecast data at this time'
+            }), 503
+        
+        # Enrich forecast with comfort scores
+        from app.models.weather import WeatherSnapshot
+        enriched_forecast = []
+        
+        for day_data in forecast_data:
+            snapshot = WeatherSnapshot.create_from_weather_data(
+                day_data,
+                location_name=f"Location ({lat:.2f}, {lon:.2f})",
+                is_current=False
+            )
+            if snapshot:
+                enriched_forecast.append(snapshot.to_dict())
+        
+        return jsonify({
+            'status': 'success',
+            'location': {
+                'latitude': lat,
+                'longitude': lon
+            },
+            'days': days,
+            'forecast': enriched_forecast,
+            'timestamp': datetime.now(timezone.utc).isoformat()
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f'Weather forecast API error: {e}', exc_info=True)
+        return jsonify({
+            'error': 'Internal Server Error',
+            'message': str(e)
+        }), 500
+
+
 # Route Library API Endpoints (Issue #218)
 @bp.route('/routes/<route_id>')
 def route_detail(route_id):

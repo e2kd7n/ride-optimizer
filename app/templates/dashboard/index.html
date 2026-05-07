@@ -53,10 +53,10 @@
                     <span class="favorability-badge favorability-{{ weather.favorability }}">
                         {{ weather.favorability|title }}
                     </span>
-                    <span class="favorability-text">for cycling</span>
+                    <span class="favorability-text d-none d-sm-inline">for cycling</span>
                 </div>
             </div>
-            <div class="weather-details">
+            <div class="weather-details d-none d-md-flex">
                 <div class="weather-detail">
                     <span class="weather-icon">💨</span>
                     <span class="weather-label">Wind:</span>
@@ -85,8 +85,19 @@
     </div>
     {% endif %}
     
+    <!-- Overview Map -->
+    {% if overview_map_html %}
+    <div class="overview-map-section">
+        <h2 class="map-section-title">🗺️ Activity Overview</h2>
+        <p class="map-section-description">Heatmap showing your most frequently used routes and locations</p>
+        <div class="map-container" id="dashboard-overview-map">
+            {{ overview_map_html|safe }}
+        </div>
+    </div>
+    {% endif %}
+    
     <!-- Quick Stats -->
-    <div class="quick-stats">
+    <div class="quick-stats d-flex flex-wrap">
         <div class="stat-card">
             <div class="stat-icon">📊</div>
             <div class="stat-content">
@@ -113,8 +124,8 @@
     </div>
     
     <!-- Recommendations -->
-    <div class="recommendations">
-        <div class="recommendation-card primary-recommendation">
+    <div class="recommendations d-grid">
+        <div class="recommendation-card primary-recommendation d-block">
             <h2>🚴 Next Commute</h2>
             {% if recommendations.commute %}
                 <div class="recommendation-content">
@@ -161,7 +172,7 @@
             {% endif %}
         </div>
         
-        <div class="recommendation-card">
+        <div class="recommendation-card d-none d-md-block">
             <h2>🏋️ Workout Fit</h2>
             {% if recommendations.workout_fit %}
                 <div class="recommendation-content">
@@ -176,7 +187,7 @@
             {% endif %}
         </div>
         
-        <div class="recommendation-card">
+        <div class="recommendation-card d-block" id="long-ride-suggestion">
             <h2>🗺️ Best Long Ride</h2>
             {% if recommendations.long_ride %}
                 <div class="recommendation-content">
@@ -218,7 +229,7 @@
     </div>
     
     <!-- Quick Actions -->
-    <div class="quick-actions">
+    <div class="quick-actions d-none d-lg-block">
         <h2>Quick Actions</h2>
         <div class="action-buttons">
             <a href="{{ url_for('api.sync') }}" class="action-btn" data-method="POST">
@@ -560,6 +571,42 @@
     color: #2c3e50;
 }
 
+/* Overview Map Styles */
+.overview-map-section {
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background-color: white;
+    border: 1px solid #e1e8ed;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.map-section-title {
+    font-size: 1.5rem;
+    margin: 0 0 0.5rem 0;
+    color: #2c3e50;
+}
+
+.map-section-description {
+    font-size: 0.95rem;
+    color: #7f8c8d;
+    margin-bottom: 1rem;
+}
+
+.map-container {
+    width: 100%;
+    height: 500px;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #e1e8ed;
+}
+
+.map-container iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+}
+
 @media (max-width: 768px) {
     .weather-content {
         flex-direction: column;
@@ -569,6 +616,34 @@
     .weather-temp {
         font-size: 2.5rem;
     }
+    
+    /* Mobile map adjustments */
+    .map-container {
+        height: 400px;
+    }
+    
+    .overview-map-section {
+        padding: 1rem;
+    }
+    
+    .map-section-title {
+        font-size: 1.3rem;
+    }
+}
+
+@media (max-width: 320px) {
+    /* Extra small screens (iPhone SE) */
+    .map-container {
+        height: 350px;
+    }
 }
 </style>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/map-filters.css') }}">
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/map-filters.js') }}"></script>
 {% endblock %}

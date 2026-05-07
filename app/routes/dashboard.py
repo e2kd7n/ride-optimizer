@@ -149,6 +149,18 @@ def index():
         except:
             pass
     
+    # Generate dashboard overview map
+    overview_map_html = None
+    try:
+        overview_map_html = analysis_service.generate_dashboard_overview_map()
+        if overview_map_html:
+            current_app.logger.info("Dashboard overview map generated successfully")
+        else:
+            current_app.logger.warning("Dashboard overview map generation returned None")
+    except Exception as e:
+        current_app.logger.error(f"Error generating dashboard overview map: {e}")
+        current_app.logger.debug(traceback.format_exc())
+    
     context = {
         'page_title': 'Dashboard',
         'current_time': datetime.now(),
@@ -168,7 +180,8 @@ def index():
             'commute': commute_recommendation,
             'workout_fit': None,  # TODO: TrainerRoad integration (Issue #139)
             'long_ride': long_ride_recommendation
-        }
+        },
+        'overview_map_html': overview_map_html
     }
     
     return render_template('dashboard/index.html', **context)

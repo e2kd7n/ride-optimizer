@@ -1,0 +1,196 @@
+{
+  "commute": {
+    "route_name": "Downtown Direct",
+    "route_id": "commute_to_work_1",
+    "direction": "to_work",
+    "direction_display": "To Work",
+    "score": 0.92,
+    "distance": 12.5,
+    "duration": 35,
+    "elevation": 120,
+    "departure_time": "7:30 AM",
+    "breakdown": {
+      "weather": 0.95,
+      "traffic": 0.88,
+      "historical_performance": 0.92,
+      "route_variety": 0.90
+    },
+    "weather": {
+      "temperature": 68,
+      "conditions": "Partly Cloudy",
+      "wind_speed": 8,
+      "wind_direction": "NW",
+      "precipitation": 10,
+      "humidity": 55,
+      "cycling_favorability": "favorable",
+      "comfort_score": 0.85,
+      "is_stale": false,
+      "age_hours": 0,
+      "wind_impact": {
+        "headwind_pct": 25,
+        "tailwind_pct": 30,
+        "crosswind_pct": 45,
+        "avg_speed_impact_kph": 1.2
+      }
+    }
+  },
+  "alternatives": [
+    {
+      "route_name": "Lakefront Scenic",
+      "route_id": "commute_to_work_2",
+      "direction": "to_work",
+      "direction_display": "To Work",
+      "score": 0.85,
+      "distance": 14.2,
+      "duration": 42,
+      "elevation": 85,
+      "breakdown": {
+        "weather": 0.90,
+        "traffic": 0.92,
+        "historical_performance": 0.80,
+        "route_variety": 0.78
+      },
+      "weather": {
+        "temperature": 68,
+        "conditions": "Partly Cloudy",
+        "wind_speed": 8,
+        "wind_direction": "NW",
+        "precipitation": 10,
+        "humidity": 55,
+        "cycling_favorability": "favorable"
+      }
+    },
+    {
+      "route_name": "West Loop Route",
+      "route_id": "commute_to_work_3",
+      "direction": "to_work",
+      "direction_display": "To Work",
+      "score": 0.78,
+      "distance": 13.8,
+      "duration": 40,
+      "elevation": 150,
+      "breakdown": {
+        "weather": 0.85,
+        "traffic": 0.75,
+        "historical_performance": 0.82,
+        "route_variety": 0.70
+      },
+      "weather": {
+        "temperature": 68,
+        "conditions": "Partly Cloudy",
+        "wind_speed": 8,
+        "wind_direction": "NW",
+        "precipitation": 10,
+        "humidity": 55,
+        "cycling_favorability": "favorable"
+      }
+    }
+  ],
+  "long_ride": {
+    "ride_name": "North Shore Loop",
+    "ride_id": "long_ride_1",
+    "day": "Saturday",
+    "date": "2026-05-10",
+    "score": 0.95,
+    "distance": 65.5,
+    "duration": 180,
+    "elevation": 450,
+    "is_loop": true,
+    "weather": {
+      "temperature": 78,
+      "conditions": "Sunny",
+      "wind_speed": 5,
+      "precipitation": 0,
+      "cycling_favorability": "favorable"
+    },
+    "weather_score": 0.95,
+    "variety_score": 0.88
+  },
+  "long_ride_forecast": [
+    {
+      "day_name": "Thursday",
+      "date": "2026-05-08",
+      "weather_summary": "Sunny, 72°F, Light winds",
+      "best_ride": {
+        "name": "West Suburbs Out and Back",
+        "distance": 80.0,
+        "duration": 240,
+        "elevation": 600,
+        "score": 0.90,
+        "weather": {
+          "temperature": 72,
+          "wind_speed": 6,
+          "precipitation": 0
+        },
+        "weather_score": 0.92,
+        "variety_score": 0.85,
+        "is_loop": false
+      },
+      "rides": [
+        {
+          "name": "West Suburbs Out and Back",
+          "distance": 80.0,
+          "duration": 240,
+          "elevation": 600,
+          "score": 0.90,
+          "weather_score": 0.92,
+          "variety_score": 0.85,
+          "is_loop": false
+        },
+        {
+          "name": "North Shore Loop",
+          "distance": 65.5,
+          "duration": 180,
+          "elevation": 450,
+          "score": 0.88,
+          "weather_score": 0.90,
+          "variety_score": 0.82,
+          "is_loop": true
+        }
+      ]
+    },
+    {
+      "day_name": "Saturday",
+      "date": "2026-05-10",
+      "weather_summary": "Sunny, 78°F, Perfect conditions",
+      "best_ride": {
+        "name": "North Shore Loop",
+        "distance": 65.5,
+        "duration": 180,
+        "elevation": 450,
+        "score": 0.95,
+        "weather": {
+          "temperature": 78,
+          "wind_speed": 5,
+          "precipitation": 0
+        },
+        "weather_score": 0.95,
+        "variety_score": 0.88,
+        "is_loop": true
+      },
+      "rides": [
+        {
+          "name": "North Shore Loop",
+          "distance": 65.5,
+          "duration": 180,
+          "elevation": 450,
+          "score": 0.95,
+          "weather_score": 0.95,
+          "variety_score": 0.88,
+          "is_loop": true
+        }
+      ]
+    }
+  ],
+  "workout_fit": null,
+  "metadata": {
+    "generated_at": "2026-05-07T16:00:00Z",
+    "version": "1.0",
+    "user_preferences": {
+      "preferred_distance_min": 10,
+      "preferred_distance_max": 100,
+      "avoid_rain": true,
+      "max_wind_speed": 20
+    }
+  }
+}

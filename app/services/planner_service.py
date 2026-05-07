@@ -9,12 +9,16 @@ This service provides intelligent long ride recommendations based on:
 """
 
 import logging
+from html import escape
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
+
+import folium
 
 from src.long_ride_analyzer import LongRideAnalyzer, LongRide, RideRecommendation
 from src.weather_fetcher import WeatherFetcher
 from src.config import Config
+from src.location_finder import Location
 from app.services.weather_service import WeatherService
 from app.models.weather import WeatherSnapshot
 
@@ -483,5 +487,278 @@ class PlannerService:
         wind = weather.get('wind_speed', 0)
         
         return f"{temp}°F, {conditions}, Wind {wind} mph"
+    
+    def generate_long_rides_map(self,
+                                long_rides: List[Dict[str, Any]],
+                                home_location: Optional[Tuple[float, float]] = None) -> Optional[str]:
+        """
+        Generate an interactive map showing all recommended long rides.
+        
+        Args:
+            long_rides: List of long ride recommendations (from get_recommendations)
+            home_location: Optional (lat, lon) tuple for home marker
+            
+        Returns:
+            Folium HTML string or None if generation fails
+        """
+        if not long_rides:
+            logger.warning("No long rides provided for map generation")
+            return None
+        
+        try:
+            # Collect all rides from all days
+            all_rides = []
+            for day_rec in long_rides:
+                for ride in day_rec.get('rides', []):
+                    # Avoid duplicates
+                    if not any(r['ride_id'] == ride['ride_id'] for r in all_rides):
+                        all_rides.append(ride)
+            
+            if not all_rides:
+                logger.warning("No rides found in recommendations")
+                return None
+            
+            # Calculate map center from all ride locations
+            all_lats = []
+            all_lons = []
+            for ride in all_rides:
+                start_loc = ride.get('start_location', [])
+                if len(start_loc) == 2:
+                    all_lats.append(start_loc[0])
+                    all_lons.append(start_loc[1])
+            
+            if home_location:
+                all_lats.append(home_location[0])
+                all_lons.append(home_location[1])
+            
+            center_lat = sum(all_lats) / len(all_lats) if all_lats else 0
+            center_lon = sum(all_lons) / len(all_lons) if all_lons else 0
+            
+            # Create base map
+            map_obj = folium.Map(
+                location=[center_lat, center_lon],
+                zoom_start=12,
+                tiles=None,
+                control_scale=True
+            )
+            
+            # Add tile layers
+            folium.TileLayer(
+                tiles='OpenStreetMap',
+                name='OpenStreetMap',
+                overlay=False,
+                control=True
+            ).add_to(map_obj)
+            
+            folium.TileLayer(
+                tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                attr='Esri',
+                name='Satellite',
+                overlay=False,
+                control=True
+            ).add_to(map_obj)
+            
+            folium.TileLayer(
+                tiles='CartoDB positron',
+                name='Light',
+                overlay=False,
+                control=True
+            ).add_to(map_obj)
+            
+            # Add home marker if provided
+            if home_location:
+                folium.Marker(
+                    home_location,
+                    popup="<b>Home</b>",
+                    tooltip="Home",
+                    icon=folium.Icon(color='green', icon='home', prefix='fa')
+                ).add_to(map_obj)
+            
+            # Track all coordinates for bounds
+            all_bounds = []
+            if home_location:
+                all_bounds.append(list(home_location))
+            
+            # Add each long ride as a layer
+            weather_overlay = folium.FeatureGroup(name='Weather Overlay', show=False)
+            
+            for idx, ride in enumerate(all_rides):
+                ride_obj = None
+                if self._long_rides:
+                    ride_obj = next((r for r in self._long_rides if r.activity_id == ride['ride_id']), None)
+                
+                if not ride_obj or not ride_obj.coordinates:
+                    logger.warning(f"Skipping ride {ride['ride_id']}: no coordinates")
+                    continue
+                
+                weather = ride.get('weather', {}) or {}
+                weather_score = ride.get('weather_score', 0.5)
+                route_status = self._get_weather_status(weather_score)
+                route_color = self._get_weather_color(weather_score)
+                
+                popup_html = f"""
+                <div style="font-family: Arial, sans-serif; min-width: 250px;">
+                    <h4 style="margin: 0 0 10px 0; color: #2c3e50;">{escape(ride.get('name', 'Unknown Ride'))}</h4>
+                    <div style="margin-bottom: 8px;">
+                        <strong>📏 Distance:</strong> {ride.get('distance', 0):.1f} km<br>
+                        <strong>⏱️ Duration:</strong> {ride.get('duration', 0):.1f} hr<br>
+                        <strong>⛰️ Elevation:</strong> {ride.get('elevation', 0):.0f} m<br>
+                        <strong>⭐ Score:</strong> {ride.get('score', 0) * 100:.0f}%
+                    </div>
+                    <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #ddd;">
+                        <strong>Weather Status:</strong> <span style="color: {route_color}; font-weight: bold;">{route_status}</span><br>
+                        <strong>Weather Score:</strong> {weather_score * 100:.0f}%<br>
+                        <strong>Variety Score:</strong> {ride.get('variety_score', 0) * 100:.0f}%<br>
+                        <strong>Forecast:</strong> {escape(self._get_weather_summary(weather))}
+                    </div>
+                    {'<div style="margin-top: 8px;"><span style="background: #6f42c1; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.85em;">🔄 Loop</span></div>' if ride.get('is_loop') else ''}
+                </div>
+                """
+                
+                feature_group = folium.FeatureGroup(
+                    name=f"{ride.get('name', 'Unknown')} ({route_status})",
+                    show=True
+                )
+                
+                self._add_weather_segmented_route(
+                    feature_group=feature_group,
+                    coordinates=ride_obj.coordinates,
+                    weather_score=weather_score,
+                    popup_html=popup_html,
+                    ride_name=ride.get('name', 'Unknown'),
+                    ride_distance=ride.get('distance', 0)
+                )
+                
+                folium.CircleMarker(
+                    ride_obj.start_location,
+                    radius=6,
+                    color=route_color,
+                    fill=True,
+                    fillColor='white',
+                    fillOpacity=1,
+                    weight=2,
+                    popup=f"<b>Start:</b> {escape(ride.get('name', 'Unknown'))}",
+                    tooltip="Start"
+                ).add_to(feature_group)
+                
+                if not ride.get('is_loop'):
+                    folium.CircleMarker(
+                        ride_obj.end_location,
+                        radius=6,
+                        color=route_color,
+                        fill=True,
+                        fillColor='black',
+                        fillOpacity=1,
+                        weight=2,
+                        popup=f"<b>End:</b> {escape(ride.get('name', 'Unknown'))}",
+                        tooltip="End"
+                    ).add_to(feature_group)
+                
+                self._add_weather_forecast_markers(weather_overlay, ride_obj, ride)
+                feature_group.add_to(map_obj)
+                all_bounds.extend([[lat, lon] for lat, lon in ride_obj.coordinates])
+            
+            # Fit map to show all rides
+            if all_bounds:
+                map_obj.fit_bounds(all_bounds, padding=(30, 30))
+            
+            if weather_overlay._children:
+                weather_overlay.add_to(map_obj)
+            
+            # Add layer control
+            folium.LayerControl(collapsed=False).add_to(map_obj)
+            
+            return map_obj._repr_html_()
+            
+        except Exception as e:
+            logger.error(f"Failed to generate long rides map: {e}", exc_info=True)
+            return None
+
+    def _get_weather_status(self, weather_score: float) -> str:
+        """Return friendly weather status for a route."""
+        if weather_score >= 0.7:
+            return 'Favorable'
+        if weather_score >= 0.5:
+            return 'Acceptable'
+        return 'Unfavorable'
+    
+    def _get_weather_color(self, weather_score: float) -> str:
+        """Semantic weather color for route display."""
+        if weather_score >= 0.7:
+            return '#28a745'
+        if weather_score >= 0.5:
+            return '#ffc107'
+        return '#dc3545'
+    
+    def _add_weather_segmented_route(self,
+                                     feature_group: folium.FeatureGroup,
+                                     coordinates: List[Tuple[float, float]],
+                                     weather_score: float,
+                                     popup_html: str,
+                                     ride_name: str,
+                                     ride_distance: float) -> None:
+        """Draw route segments with semantic weather coloring."""
+        if len(coordinates) < 2:
+            return
+        
+        segment_count = min(6, max(3, len(coordinates) // 20))
+        chunk_size = max(2, len(coordinates) // segment_count)
+        
+        for start_idx in range(0, len(coordinates) - 1, chunk_size):
+            segment = coordinates[start_idx:start_idx + chunk_size + 1]
+            if len(segment) < 2:
+                continue
+            
+            adjusted_score = weather_score
+            if start_idx > len(coordinates) * 0.66:
+                adjusted_score = max(0.0, weather_score - 0.15)
+            elif start_idx > len(coordinates) * 0.33:
+                adjusted_score = max(0.0, weather_score - 0.05)
+            
+            color = self._get_weather_color(adjusted_score)
+            folium.PolyLine(
+                segment,
+                color=color,
+                weight=6,
+                opacity=0.9,
+                popup=folium.Popup(popup_html, max_width=320),
+                tooltip=f"{ride_name} • {ride_distance:.1f} km • {self._get_weather_status(adjusted_score)}"
+            ).add_to(feature_group)
+    
+    def _add_weather_forecast_markers(self,
+                                      weather_overlay: folium.FeatureGroup,
+                                      ride_obj: LongRide,
+                                      ride: Dict[str, Any]) -> None:
+        """Add forecast markers at start, midpoint, and end for long ride routes."""
+        points = [
+            ('Start', ride_obj.coordinates[0]),
+            ('Midpoint', ride_obj.coordinates[len(ride_obj.coordinates) // 2]),
+            ('End', ride_obj.coordinates[-1]),
+        ]
+        weather = ride.get('weather', {}) or {}
+        route_color = self._get_weather_color(ride.get('weather_score', 0.5))
+        
+        for label, point in points:
+            popup_html = f"""
+            <div style="font-family: Arial, sans-serif; min-width: 220px;">
+                <h4 style="margin: 0 0 10px 0;">{escape(ride.get('name', 'Unknown Ride'))} {label}</h4>
+                <table style="width: 100%; font-size: 12px; border-collapse: collapse;">
+                    <tr><td><b>Forecast</b></td><td>{escape(self._get_weather_summary(weather))}</td></tr>
+                    <tr><td><b>Weather Score</b></td><td>{ride.get('weather_score', 0) * 100:.0f}%</td></tr>
+                    <tr><td><b>Status</b></td><td>{self._get_weather_status(ride.get('weather_score', 0.5))}</td></tr>
+                </table>
+            </div>
+            """
+            folium.CircleMarker(
+                point,
+                radius=7,
+                color=route_color,
+                fill=True,
+                fillColor=route_color,
+                fillOpacity=0.65,
+                weight=2,
+                popup=folium.Popup(popup_html, max_width=300),
+                tooltip=f"{label} forecast"
+            ).add_to(weather_overlay)
 
 # Made with Bob
