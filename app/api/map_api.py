@@ -9,7 +9,8 @@ import logging
 from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderTimedOut, GeocoderServiceError
 
-from src.secure_cache import SecureCacheStorage
+import json
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +33,12 @@ def get_route_coordinates(route_id):
     """
     try:
         # Load route groups from cache (existing cache file)
-        cache = SecureCacheStorage('cache')
-        route_groups_data = cache.load('route_groups_cache.json')
+        cache_file = Path('cache/route_groups_cache.json')
+        if not cache_file.exists():
+            return jsonify({'error': 'No route data available'}), 503
+        
+        with open(cache_file, 'r') as f:
+            route_groups_data = json.load(f)
         
         if not route_groups_data or 'groups' not in route_groups_data:
             return jsonify({'error': 'No route data available'}), 503
@@ -88,8 +93,12 @@ def get_route_elevation(route_id):
     REUSES: Route.elevation_gain from src/route_analyzer.py
     """
     try:
-        cache = SecureCacheStorage('cache')
-        route_groups_data = cache.load('route_groups_cache.json')
+        cache_file = Path('cache/route_groups_cache.json')
+        if not cache_file.exists():
+            return jsonify({'error': 'No route data available'}), 503
+        
+        with open(cache_file, 'r') as f:
+            route_groups_data = json.load(f)
         
         if not route_groups_data or 'groups' not in route_groups_data:
             return jsonify({'error': 'No route data available'}), 503
@@ -162,8 +171,12 @@ def get_speed_analytics(route_id):
     REUSES: Route.average_speed from src/route_analyzer.py
     """
     try:
-        cache = SecureCacheStorage('cache')
-        route_groups_data = cache.load('route_groups_cache.json')
+        cache_file = Path('cache/route_groups_cache.json')
+        if not cache_file.exists():
+            return jsonify({'error': 'No route data available'}), 503
+        
+        with open(cache_file, 'r') as f:
+            route_groups_data = json.load(f)
         
         if not route_groups_data or 'groups' not in route_groups_data:
             return jsonify({'error': 'No route data available'}), 503
@@ -236,12 +249,15 @@ def reverse_geocode():
         lng = float(request.args.get('lng'))
         
         # Check cache first
-        cache_key = f"geocode_reverse_{lat:.6f}_{lng:.6f}"
-        cache = SecureCacheStorage('cache')
-        cached = cache.get(cache_key)
-        
-        if cached:
-            return jsonify({'status': 'success', **cached, 'cached': True})
+        cache_file = Path('cache/geocoding_cache.json')
+        if cache_file.exists():
+            with open(cache_file, 'r') as f:
+                geocoding_cache = json.load(f)
+            cache_key = f"{lat:.6f},{lng:.6f}"
+            if cache_key in geocoding_cache:
+                return jsonify({'status': 'success', **geocoding_cache[cache_key], 'cached': True})
+        else:
+            geocoding_cache = {}
         
         # Geocode
         location = geocoder.reverse(f"{lat}, {lng}", timeout=10)
@@ -255,8 +271,11 @@ def reverse_geocode():
             'display_name': location.address
         }
         
-        # Cache result (30 days)
-        cache.set(cache_key, result, ttl=2592000)
+        # Cache result
+        geocoding_cache[cache_key] = result
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(cache_file, 'w') as f:
+            json.dump(geocoding_cache, f, indent=2)
         
         return jsonify({'status': 'success', **result, 'cached': False})
         
