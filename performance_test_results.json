@@ -1,0 +1,114 @@
+{
+  "timestamp": "2026-05-06T23:23:05.390321",
+  "system_info": {
+    "platform": "darwin",
+    "python_version": "3.14.3 (v3.14.3:323c59a5e34, Feb  3 2026, 11:41:37) [Clang 16.0.0 (clang-1600.0.26.6)]",
+    "cpu_count": 12,
+    "total_memory_mb": 24576.0,
+    "available_memory_mb": 7140.39,
+    "disk_usage_percent": 9.9,
+    "device_model": "Unknown",
+    "is_raspberry_pi": false
+  },
+  "memory_tests": {
+    "api_server": {
+      "min_mb": 0.95,
+      "max_mb": 0.95,
+      "avg_mb": 0.95,
+      "median_mb": 0.95,
+      "target_mb": 50,
+      "meets_target": true
+    }
+  },
+  "api_tests": {
+    "response_times": {
+      "/api/status": {
+        "min_ms": 1.22,
+        "max_ms": 14.54,
+        "avg_ms": 2.17,
+        "median_ms": 1.47,
+        "p95_ms": 13.94,
+        "errors": 0,
+        "target_ms": 100,
+        "meets_target": true
+      },
+      "/api/weather?lat=40.7128&lon=-74.0060": {
+        "min_ms": 1.41,
+        "max_ms": 831.96,
+        "avg_ms": 43.63,
+        "median_ms": 2.12,
+        "p95_ms": 790.51,
+        "errors": 0,
+        "target_ms": 100,
+        "meets_target": true
+      },
+      "/api/recommendation": {
+        "min_ms": 1.25,
+        "max_ms": 2.2,
+        "avg_ms": 1.6,
+        "median_ms": 1.6,
+        "p95_ms": 2.2,
+        "errors": 0,
+        "target_ms": 100,
+        "meets_target": true
+      },
+      "/api/routes": {
+        "min_ms": 1.06,
+        "max_ms": 1.78,
+        "avg_ms": 1.44,
+        "median_ms": 1.48,
+        "p95_ms": 1.78,
+        "errors": 0,
+        "target_ms": 100,
+        "meets_target": true
+      }
+    },
+    "concurrent_load": {
+      "total_requests": 50,
+      "successful_requests": 50,
+      "failed_requests": 0,
+      "avg_ms": 4.59,
+      "max_ms": 7.57,
+      "target_ms": 200,
+      "meets_target": true
+    }
+  },
+  "cron_tests": {
+    "cache_cleanup.py": {
+      "duration_seconds": 0.06,
+      "target_seconds": 5,
+      "meets_target": true,
+      "exit_code": 0,
+      "success": true
+    },
+    "system_health.py": {
+      "duration_seconds": 0.12,
+      "target_seconds": 10,
+      "meets_target": true,
+      "exit_code": 1,
+      "success": false
+    },
+    "weather_refresh.py": {
+      "duration_seconds": 1.81,
+      "target_seconds": 30,
+      "meets_target": true,
+      "exit_code": 0,
+      "success": true
+    },
+    "daily_analysis.py": {
+      "duration_seconds": 1.33,
+      "target_seconds": 60,
+      "meets_target": true,
+      "exit_code": 0,
+      "success": true
+    }
+  },
+  "summary": {
+    "total_tests": 6,
+    "passed_tests": 6,
+    "failed_tests": 0,
+    "memory_goal_met": true,
+    "performance_goal_met": true,
+    "overall_status": "PASS"
+  }
+}

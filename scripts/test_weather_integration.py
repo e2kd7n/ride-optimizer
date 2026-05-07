@@ -65,7 +65,10 @@ def test_weather_snapshot_model():
         
         if retrieved:
             print(f"   ✓ Retrieved snapshot ID: {retrieved.id}")
-            print(f"   ✓ Age: {(datetime.now(timezone.utc) - retrieved.timestamp).seconds // 60} minutes")
+            # Ensure both datetimes are timezone-aware for comparison
+            retrieved_ts = retrieved.timestamp if retrieved.timestamp.tzinfo else retrieved.timestamp.replace(tzinfo=timezone.utc)
+            age_minutes = (datetime.now(timezone.utc) - retrieved_ts).seconds // 60
+            print(f"   ✓ Age: {age_minutes} minutes")
         else:
             print("   ✗ Failed to retrieve cached weather")
             return False

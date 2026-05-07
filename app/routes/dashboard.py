@@ -24,7 +24,7 @@ def get_services():
             'analysis': AnalysisService(config),
             'commute': CommuteService(config),
             'planner': PlannerService(config),
-            'weather': WeatherService()
+            'weather': WeatherService(config)
         }
     return g.services
 

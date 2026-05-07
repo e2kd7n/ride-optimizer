@@ -155,7 +155,7 @@
             {% else %}
                 <p class="no-data">No commute recommendation available yet.</p>
                 <p class="no-data-hint">Run analysis to get personalized commute recommendations.</p>
-                <a href="{{ url_for('api.analyze') }}" class="btn btn-primary" data-method="POST">
+                <a href="{{ url_for('commute.analyze') }}" class="btn btn-primary" data-method="POST">
                     Run Analysis
                 </a>
             {% endif %}
