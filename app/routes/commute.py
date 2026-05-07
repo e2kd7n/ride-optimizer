@@ -63,8 +63,8 @@ def index():
         if route_groups and home and work:
             commute_service.initialize(route_groups, home, work)
             
-            # Get primary recommendation
-            rec_data = commute_service.get_next_commute(direction=direction)
+            # Get primary recommendation (workout-aware)
+            rec_data = commute_service.get_workout_aware_commute(direction=direction)
             
             if rec_data.get('status') == 'success':
                 route = rec_data.get('route', {})
@@ -80,7 +80,8 @@ def index():
                     'breakdown': rec_data.get('breakdown', {}),
                     'weather': rec_data.get('weather', {}),
                     'departure_time': rec_data.get('departure_time'),
-                    'confidence': rec_data.get('confidence', 'medium')
+                    'confidence': rec_data.get('confidence', 'medium'),
+                    'workout_fit': rec_data.get('workout_fit')  # TrainerRoad integration
                 }
                 
                 # Get alternatives
@@ -125,7 +126,7 @@ def index():
         'recommendation': recommendation,
         'alternatives': alternatives,
         'departure_windows': departure_windows,
-        'workout_fit': None  # TODO: TrainerRoad integration (Issue #139)
+        'workout_fit': recommendation.get('workout_fit') if recommendation else None
     }
     
     return render_template('commute/index.html', **context)

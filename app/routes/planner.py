@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 import traceback
 
 from app.services import AnalysisService, PlannerService
+from app.services.trainerroad_service import TrainerRoadService
 from src.config import Config
 
 bp = Blueprint('planner', __name__, url_prefix='/planner')
@@ -25,7 +26,8 @@ def get_services():
         config = Config('config/config.yaml')
         g.services = {
             'analysis': AnalysisService(config),
-            'planner': PlannerService(config)
+            'planner': PlannerService(config),
+            'trainerroad': TrainerRoadService(config)
         }
     return g.services
 
@@ -46,6 +48,7 @@ def index():
     services = get_services()
     analysis_service = services['analysis']
     planner_service = services['planner']
+    trainerroad_service = services['trainerroad']
     
     # Get filter parameters
     forecast_days = int(request.args.get('days', 7))
@@ -109,6 +112,25 @@ def index():
         current_app.logger.error(f"Error getting planner recommendations: {e}")
         current_app.logger.debug(traceback.format_exc())
     
+    # Get workout schedule from TrainerRoad
+    workout_schedule = None
+    try:
+        workouts = trainerroad_service.get_upcoming_workouts(days=forecast_days)
+        if workouts:
+            workout_schedule = [
+                {
+                    'date': w.date.isoformat(),
+                    'name': w.name,
+                    'duration': w.duration_minutes,
+                    'tss': w.tss,
+                    'type': w.workout_type
+                }
+                for w in workouts
+            ]
+    except Exception as e:
+        current_app.logger.error(f"Error getting workout schedule: {e}")
+        current_app.logger.debug(traceback.format_exc())
+    
     context = {
         'page_title': 'Long Ride Planner',
         'current_time': datetime.now(),
@@ -118,7 +140,7 @@ def index():
         'recommendations': recommendations,
         'best_day': best_day,
         'total_rides': total_rides,
-        'workout_schedule': None  # TODO: TrainerRoad integration (Issue #139)
+        'workout_schedule': workout_schedule  # TrainerRoad integration
     }
     
     return render_template('planner/index.html', **context)
