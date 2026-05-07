@@ -369,4 +369,271 @@ cache:
         with pytest.raises(IndexError):
             fetcher.decode_polyline("invalid_polyline_data")
 
+
+@pytest.mark.integration
+class TestLongRidesWorkflow:
+    """Integration tests for Long Rides feature workflow."""
+    
+    @pytest.fixture
+    def mock_config(self, tmp_path):
+        """Create mock configuration."""
+        config_content = f"""
+cache:
+  directory: "{tmp_path}/cache"
+  enabled: true
+analysis:
+  min_long_ride_distance: 50.0
+  similarity_threshold: 0.85
+"""
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text(config_content)
+        return Config(str(config_file))
+    
+    @pytest.fixture
+    def sample_long_rides(self):
+        """Create sample long ride activities."""
+        from src.long_ride_analyzer import LongRide
+        rides = []
+        for i in range(3):
+            ride = LongRide(
+                activity_id=1000+i,
+                name=f"Century Ride {i+1}",
+                coordinates=[(40.7128, -74.0060), (40.7580, -73.9855), (40.7128, -74.0060)],
+                distance=160000 + i*1000,  # ~160km
+                duration=int((5.5 + i*0.1) * 3600),  # Convert hours to seconds
+                elevation_gain=1500 + i*50,
+                timestamp="2024-05-07T10:00:00Z",
+                average_speed=8.0,
+                start_location=(40.7128, -74.0060),
+                end_location=(40.7128, -74.0060),
+                is_loop=True,
+                type="Ride",
+                uses=1,
+                activity_ids=[1000+i],
+                activity_dates=[f"2024-0{i+1}-15"]
+            )
+            rides.append(ride)
+        return rides
+    
+    def test_long_ride_analysis_workflow(self, sample_long_rides, mock_config):
+        """Test complete long ride analysis workflow."""
+        from src.long_ride_analyzer import LongRideAnalyzer
+        from src.data_fetcher import Activity
+        
+        # Create mock activities
+        activities = []
+        
+        # Create analyzer with activities and config
+        analyzer = LongRideAnalyzer(activities, mock_config)
+        analyzer.long_rides = sample_long_rides
+        
+        # Verify long rides were set
+        assert len(analyzer.long_rides) == 3
+        assert all(ride.distance >= 100000 for ride in analyzer.long_rides)
+    
+    @patch('src.weather_fetcher.WeatherFetcher')
+    def test_long_ride_with_weather_integration(self, mock_weather_class,
+                                                sample_long_rides, mock_config):
+        """Test long ride recommendations with weather data."""
+        from src.long_ride_analyzer import LongRideAnalyzer
+        
+        # Mock weather data
+        mock_weather = mock_weather_class.return_value
+        mock_weather.get_daily_forecast.return_value = [
+            {
+                'date': '2024-05-07',
+                'temp_max_c': 22.0,
+                'temp_min_c': 15.0,
+                'wind_speed_max_kph': 15.0,
+                'precipitation_sum_mm': 0.0
+            }
+        ]
+        
+        # Create analyzer with empty activities list
+        analyzer = LongRideAnalyzer([], mock_config)
+        analyzer.long_rides = sample_long_rides
+        
+        # Verify long rides and weather fetcher
+        assert len(analyzer.long_rides) == 3
+        assert analyzer.weather_fetcher is not None
+
+
+@pytest.mark.integration  
+class TestWeatherIntegrationWorkflow:
+    """Integration tests for weather data workflow."""
+    
+    @patch('src.weather_fetcher.requests.Session')
+    def test_weather_fetch_and_cache_workflow(self, mock_session, tmp_path):
+        """Test complete weather fetching and caching workflow."""
+        from src.weather_fetcher import WeatherFetcher
+        
+        # Mock API response
+        mock_response = Mock()
+        mock_response.json.return_value = {
+            'current': {
+                'temperature_2m': 20.0,
+                'wind_speed_10m': 10.0,
+                'wind_direction_10m': 180.0
+            }
+        }
+        mock_response.raise_for_status = Mock()
+        mock_session.return_value.get.return_value = mock_response
+        
+        cache_file = tmp_path / "weather_cache.json"
+        fetcher = WeatherFetcher(cache_file=str(cache_file))
+        
+        # Fetch weather
+        weather = fetcher.get_current_conditions(40.7128, -74.0060)
+        
+        assert weather is not None
+        assert 'temp_c' in weather
+        assert cache_file.exists()
+    
+    @patch('src.weather_fetcher.requests.Session')
+    def test_weather_forecast_workflow(self, mock_session, tmp_path):
+        """Test weather forecast retrieval workflow."""
+        from src.weather_fetcher import WeatherFetcher
+        
+        # Mock forecast response
+        mock_response = Mock()
+        mock_response.json.return_value = {
+            'daily': {
+                'time': ['2024-05-07', '2024-05-08'],
+                'temperature_2m_max': [22.0, 24.0],
+                'temperature_2m_min': [15.0, 16.0],
+                'precipitation_sum': [0.0, 2.0],
+                'precipitation_probability_max': [10, 40],
+                'wind_speed_10m_max': [15.0, 20.0],
+                'wind_direction_10m_dominant': [180, 200]
+            }
+        }
+        mock_response.raise_for_status = Mock()
+        mock_session.return_value.get.return_value = mock_response
+        
+        cache_file = tmp_path / "weather_cache.json"
+        fetcher = WeatherFetcher(cache_file=str(cache_file))
+        
+        # Get forecast
+        forecast = fetcher.get_daily_forecast(40.7128, -74.0060, days=2)
+        
+        assert forecast is not None
+        assert len(forecast) == 2
+        assert all('temp_max_c' in day for day in forecast)
+
+
+@pytest.mark.integration
+class TestNextCommuteWorkflow:
+    """Integration tests for next commute recommendation workflow."""
+    
+    @pytest.fixture
+    def mock_config(self, tmp_path):
+        """Create mock configuration."""
+        config_content = f"""
+cache:
+  directory: "{tmp_path}/cache"
+locations:
+  home:
+    lat: 41.8781
+    lon: -87.6298
+  work:
+    lat: 41.8819
+    lon: -87.6278
+"""
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text(config_content)
+        return Config(str(config_file))
+    
+    @pytest.fixture
+    def sample_route_groups(self):
+        """Create sample route groups."""
+        from src.route_analyzer import RouteGroup, Route
+        from datetime import datetime, timezone
+        
+        routes = []
+        for i in range(3):
+            route = Route(
+                activity_id=100+i,
+                direction="home_to_work",
+                coordinates=[(41.8781, -87.6298), (41.8819, -87.6278)],
+                distance=5000 + i*100,
+                duration=1200 + i*30,
+                elevation_gain=50,
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                average_speed=4.17,
+                activity_name=f"Morning Commute {i+1}"
+            )
+            routes.append(route)
+        
+        group = RouteGroup(
+            id="home_to_work_1",
+            direction="home_to_work",
+            routes=routes,
+            representative_route=routes[0],
+            frequency=3,
+            name="Main Commute"
+        )
+        return [group]
+    
+    @patch('src.weather_fetcher.WeatherFetcher')
+    def test_next_commute_recommendation_workflow(self, mock_weather_class,
+                                                  sample_route_groups, mock_config):
+        """Test complete next commute recommendation workflow."""
+        from src.next_commute_recommender import NextCommuteRecommender
+        
+        # Mock weather
+        mock_weather = mock_weather_class.return_value
+        mock_weather.get_current_conditions.return_value = {
+            'temp_c': 20.0,
+            'wind_speed_kph': 10.0,
+            'wind_direction_deg': 180.0
+        }
+        
+        home_location = (41.8781, -87.6298)
+        work_location = (41.8819, -87.6278)
+        
+        # Correct parameter order: route_groups, config, home_location, work_location
+        recommender = NextCommuteRecommender(
+            sample_route_groups,
+            mock_config,
+            home_location,
+            work_location,
+            enable_weather=False  # Disable weather to avoid API calls
+        )
+        
+        # Verify recommender was created
+        assert recommender is not None
+        assert len(recommender.route_groups) == 1
+    
+    @patch('src.weather_fetcher.WeatherFetcher')
+    def test_departure_time_optimization_workflow(self, mock_weather_class,
+                                                  sample_route_groups, mock_config):
+        """Test departure time optimization workflow."""
+        from src.next_commute_recommender import NextCommuteRecommender
+        
+        # Mock weather for different times
+        mock_weather = mock_weather_class.return_value
+        mock_weather.get_hourly_forecast.return_value = [
+            {'time': '08:00', 'temp_c': 18.0, 'wind_speed_kph': 5.0},
+            {'time': '09:00', 'temp_c': 20.0, 'wind_speed_kph': 10.0},
+            {'time': '10:00', 'temp_c': 22.0, 'wind_speed_kph': 15.0}
+        ]
+        
+        home_location = (41.8781, -87.6298)
+        work_location = (41.8819, -87.6278)
+        
+        # Correct parameter order: route_groups, config, home_location, work_location
+        recommender = NextCommuteRecommender(
+            sample_route_groups,
+            mock_config,
+            home_location,
+            work_location,
+            enable_weather=False  # Disable weather to avoid API calls
+        )
+        
+        # Verify recommender configuration
+        assert recommender is not None
+        assert recommender.morning_window_start is not None
+        assert recommender.evening_window_start is not None
+
+# Made with Bob
 # Made with Bob

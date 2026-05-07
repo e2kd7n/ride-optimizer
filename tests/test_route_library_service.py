@@ -83,7 +83,7 @@ def mock_long_ride():
 
 
 @pytest.fixture
-@patch('app.services.route_library_service.FavoriteRoute')
+@patch('app.models.favorites.FavoriteRoute')
 def route_library_service(mock_favorite_route, mock_config):
     """Create a RouteLibraryService instance."""
     # Mock query to return empty list (no favorites in database)
@@ -325,19 +325,10 @@ class TestGetRouteStatistics:
 class TestFavoriteManagement:
     """Test favorite route management."""
     
-    @patch('app.services.route_library_service.db')
-    @patch('app.services.route_library_service.FavoriteRoute')
-    def test_toggle_favorite_add(self, mock_favorite_route, mock_db, initialized_service):
+    def test_toggle_favorite_add(self, initialized_service):
         """Test adding route to favorites."""
-        # Mock database session
-        mock_session = Mock()
-        mock_db.session = mock_session
-        mock_session.add = Mock()
-        mock_session.commit = Mock()
-        mock_session.rollback = Mock()
-        
-        # Mock query to return empty list (no existing favorites)
-        mock_favorite_route.query.filter_by.return_value.first.return_value = None
+        # Mock the storage write method
+        initialized_service.storage.write = Mock(return_value=True)
         
         result = initialized_service.toggle_favorite("route_group_1", True)
         assert result['status'] == 'success'
@@ -345,37 +336,32 @@ class TestFavoriteManagement:
         assert result['is_favorite'] is True
         assert "route_group_1" in initialized_service._favorites
         
-        # Verify database operations were called
-        mock_session.add.assert_called_once()
-        mock_session.commit.assert_called_once()
+        # Verify storage write was called
+        initialized_service.storage.write.assert_called_once()
+        call_args = initialized_service.storage.write.call_args
+        assert call_args[0][0] == 'favorites.json'
+        assert 'route_group_1' in call_args[0][1]['routes']
     
-    @patch('app.services.route_library_service.db')
-    @patch('app.services.route_library_service.FavoriteRoute')
-    def test_toggle_favorite_remove(self, mock_favorite_route, mock_db, initialized_service):
+    def test_toggle_favorite_remove(self, initialized_service):
         """Test removing route from favorites."""
-        # Mock database session
-        mock_session = Mock()
-        mock_db.session = mock_session
-        mock_session.delete = Mock()
-        mock_session.commit = Mock()
-        mock_session.rollback = Mock()
+        # Mock the storage write method
+        initialized_service.storage.write = Mock(return_value=True)
         
-        # Mock query to return a favorite
-        mock_favorite = Mock()
-        mock_favorite_route.query.filter_by.return_value.first.return_value = mock_favorite
-        
-        # First add it (without database)
+        # First add it
         initialized_service._favorites.add("route_group_1")
         
         # Then remove it
         result = initialized_service.toggle_favorite("route_group_1", False)
         assert result['status'] == 'success'
+        assert result['route_id'] == "route_group_1"
         assert result['is_favorite'] is False
         assert "route_group_1" not in initialized_service._favorites
         
-        # Verify database operations were called
-        mock_session.delete.assert_called_once_with(mock_favorite)
-        mock_session.commit.assert_called_once()
+        # Verify storage write was called
+        initialized_service.storage.write.assert_called_once()
+        call_args = initialized_service.storage.write.call_args
+        assert call_args[0][0] == 'favorites.json'
+        assert 'route_group_1' not in call_args[0][1]['routes']
     
     def test_get_favorites_empty(self, initialized_service):
         """Test getting favorites when none exist."""
