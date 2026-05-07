@@ -1,0 +1,120 @@
+{
+  "route_groups": [
+    {
+      "id": "commute_to_work_1",
+      "name": "Downtown Direct",
+      "direction": "to_work",
+      "distance": 12.5,
+      "duration": 35,
+      "elevation": 120,
+      "activities": [
+        {
+          "id": 123456789,
+          "name": "Morning Commute",
+          "distance": 12500,
+          "moving_time": 2100,
+          "total_elevation_gain": 120,
+          "start_date": "2026-05-01T07:30:00Z",
+          "sport_type": "Ride"
+        }
+      ],
+      "representative_route": {
+        "coordinates": [
+          [41.8781, -87.6298],
+          [41.8800, -87.6250],
+          [41.8850, -87.6200]
+        ],
+        "encoded_polyline": "sample_encoded_polyline_1"
+      }
+    },
+    {
+      "id": "commute_to_home_1",
+      "name": "Lakefront Route",
+      "direction": "to_home",
+      "distance": 13.2,
+      "duration": 38,
+      "elevation": 95,
+      "activities": [
+        {
+          "id": 987654321,
+          "name": "Evening Commute",
+          "distance": 13200,
+          "moving_time": 2280,
+          "total_elevation_gain": 95,
+          "start_date": "2026-05-01T17:30:00Z",
+          "sport_type": "Ride"
+        }
+      ],
+      "representative_route": {
+        "coordinates": [
+          [41.8850, -87.6200],
+          [41.8800, -87.6250],
+          [41.8781, -87.6298]
+        ],
+        "encoded_polyline": "sample_encoded_polyline_2"
+      }
+    }
+  ],
+  "long_rides": [
+    {
+      "id": "long_ride_1",
+      "name": "North Shore Loop",
+      "distance": 65.5,
+      "duration": 180,
+      "elevation": 450,
+      "is_loop": true,
+      "activities": [
+        {
+          "id": 555666777,
+          "name": "Saturday Long Ride",
+          "distance": 65500,
+          "moving_time": 10800,
+          "total_elevation_gain": 450,
+          "start_date": "2026-04-27T08:00:00Z",
+          "sport_type": "Ride"
+        }
+      ],
+      "representative_route": {
+        "coordinates": [
+          [41.8781, -87.6298],
+          [42.0500, -87.6800],
+          [42.1000, -87.7000],
+          [41.8781, -87.6298]
+        ],
+        "encoded_polyline": "sample_encoded_polyline_3"
+      }
+    },
+    {
+      "id": "long_ride_2",
+      "name": "West Suburbs Out and Back",
+      "distance": 80.0,
+      "duration": 240,
+      "elevation": 600,
+      "is_loop": false,
+      "activities": [
+        {
+          "id": 888999000,
+          "name": "Sunday Epic",
+          "distance": 80000,
+          "moving_time": 14400,
+          "total_elevation_gain": 600,
+          "start_date": "2026-04-28T07:00:00Z",
+          "sport_type": "Ride"
+        }
+      ],
+      "representative_route": {
+        "coordinates": [
+          [41.8781, -87.6298],
+          [41.8500, -87.9000],
+          [41.8781, -87.6298]
+        ],
+        "encoded_polyline": "sample_encoded_polyline_4"
+      }
+    }
+  ],
+  "metadata": {
+    "total_routes": 4,
+    "last_updated": "2026-05-07T16:00:00Z",
+    "version": "1.0"
+  }
+}

@@ -26,11 +26,18 @@ def get_services():
         analysis_service = AnalysisService(config)
         route_library_service = RouteLibraryService(config)
         
-        # Initialize with data from analysis
+        # Initialize with data from analysis if available
+        # Otherwise, service will load from cache automatically
         try:
             route_groups = analysis_service.get_route_groups()
             long_rides = analysis_service.get_long_rides()
-            route_library_service.initialize(route_groups, long_rides)
+            
+            # Only initialize if we have fresh data, otherwise let cache be used
+            if route_groups or long_rides:
+                route_library_service.initialize(route_groups, long_rides)
+                current_app.logger.info(f"Initialized route library with {len(route_groups)} groups, {len(long_rides)} long rides")
+            else:
+                current_app.logger.info("No fresh analysis data, route library will use cache")
         except Exception as e:
             current_app.logger.error(f"Failed to initialize route library: {e}")
         
@@ -159,10 +166,23 @@ def detail(route_type, route_id):
             }
         else:
             route = result.get('route', {})
+            
+            # Generate map HTML for the route
+            map_html = None
+            try:
+                map_html = library_service.generate_route_map(route_id, route_type)
+                if map_html:
+                    current_app.logger.info(f"Generated map for route {route_id}")
+                else:
+                    current_app.logger.warning(f"Failed to generate map for route {route_id}")
+            except Exception as map_error:
+                current_app.logger.error(f"Map generation error: {map_error}", exc_info=True)
+            
             context = {
                 'page_title': f"Route: {route.get('name', 'Unknown')}",
                 'route': route,
-                'route_type': route_type
+                'route_type': route_type,
+                'map_html': map_html
             }
             
     except Exception as e:
@@ -203,11 +223,23 @@ def api_search():
         else:
             results = result.get('results', [])
         
+        # Ensure proper JSON structure with all required fields
+        formatted_results = []
+        for route in results:
+            formatted_results.append({
+                'id': route.get('id', ''),
+                'name': route.get('name', ''),
+                'type': route.get('type', 'commute'),
+                'distance': route.get('distance', 0),
+                'uses': route.get('uses', 0)
+            })
+        
         return jsonify({
             'status': 'success',
-            'results': results,
+            'routes': formatted_results,  # Changed from 'results' to 'routes' for QA test
+            'results': formatted_results,  # Keep both for backward compatibility
             'query': query,
-            'count': len(results),
+            'count': len(formatted_results),
             'limit': limit
         })
         
