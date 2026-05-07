@@ -614,6 +614,7 @@ class TestMetrics:
         # Create test data
         snapshot = AnalysisSnapshot(
             analysis_date=datetime.now(timezone.utc),
+            status='completed',
             activities_count=100,
             route_groups_count=25,
             long_rides_count=10
@@ -622,7 +623,9 @@ class TestMetrics:
         
         for i in range(5):
             job = JobHistory(
+                job_id=f'test_job_{i}',
                 job_type='test',
+                job_name=f'Test Job {i}',
                 status='failed' if i < 2 else 'completed'
             )
             db_session.add(job)
