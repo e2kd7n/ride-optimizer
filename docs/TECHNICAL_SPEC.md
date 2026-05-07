@@ -1017,50 +1017,143 @@ def _generate_descriptive_name_legacy(self, route_info, route_id, direction):
 ## 10. Long Ride Analyzer Module (`long_ride_analyzer.py`)
 
 ### Purpose
-Analyze and recommend long recreational rides separate from commute analysis.
+Analyze and recommend long recreational rides separate from commute analysis. Uses advanced route similarity algorithms and weather integration for intelligent recommendations.
+
+### Key Classes
+
+```python
+@dataclass
+class LongRide:
+    activity_id: int
+    name: str
+    coordinates: List[Tuple[float, float]]
+    distance: float  # meters
+    duration: int  # seconds
+    elevation_gain: float  # meters
+    timestamp: str  # ISO format
+    average_speed: float  # m/s
+    start_location: Tuple[float, float]
+    end_location: Tuple[float, float]
+    is_loop: bool  # True if start/end within 500m
+    type: str  # Activity type
+    uses: int = 1  # Number of times route ridden
+    activity_ids: List[int] = None
+    activity_dates: List[str] = None
+
+@dataclass
+class RideRecommendation:
+    ride: LongRide
+    distance_to_location: float  # meters
+    weather_score: float  # 0-1
+    precipitation_risk: str  # "none", "low", "medium", "high"
+    recommended_start_time: Optional[str]
+    estimated_duration: Optional[float]  # hours
+    route_description: str
+    wind_analysis: Optional[Dict[str, Any]]
+```
 
 ### Key Functions
 
 ```python
 class LongRideAnalyzer:
     def __init__(self, activities: List[Activity], config)
-    def identify_long_rides(self, min_distance_km: float = 40) -> List[Activity]
-    def analyze_long_rides(self) -> Dict[str, Any]
-    def get_top_rides(self, n: int = 10) -> List[Dict]
-    def calculate_monthly_stats(self) -> Dict[str, Dict]
+    
+    # Classification & Grouping
+    def classify_activities(self, commute_activities: List[Activity]) -> Tuple[List[Activity], List[Activity]]
+    def group_rides_by_name(self, long_ride_activities: List[Activity]) -> Tuple[Dict[str, List[Activity]], List[Activity]]
+    def consolidate_similar_named_groups(self, name_groups: Dict[str, List[Activity]], similarity_threshold: float = 0.20) -> Dict[str, List[Activity]]
+    def consolidate_named_groups(self, name_groups: Dict[str, List[Activity]]) -> List[LongRide]
+    
+    # Route Matching (with Parallel Processing)
+    def match_unnamed_rides_to_groups(self, unnamed_rides: List[Activity], named_groups: Dict[str, List[Activity]], similarity_threshold: float = 0.15, use_parallel: bool = True, max_workers: int = None) -> Tuple[Dict[str, List[Activity]], List[Activity]]
+    def generate_fallback_names(self, unnamed_rides: List[Activity]) -> Dict[str, List[Activity]]
+    
+    # Extraction & Discovery
+    def extract_long_rides(self, long_ride_activities: List[Activity]) -> List[LongRide]
+    def find_rides_near_location(self, long_rides: List[LongRide], clicked_lat: float, clicked_lon: float, search_radius_km: float = 5.0) -> List[LongRide]
+    
+    # Weather Analysis
+    def calculate_wind_score(self, ride: LongRide, current_weather: Dict[str, Any]) -> Tuple[float, Dict[str, Any]]
+    def format_wind_analysis(self, wind_analysis: Dict[str, Any]) -> str
+    
+    # Recommendations
+    def get_ride_recommendations(self, long_rides: List[LongRide], clicked_lat: float, clicked_lon: float, target_duration_hours: Optional[float] = None, target_distance_km: Optional[float] = None) -> List[RideRecommendation]
 ```
 
 ### Long Ride Criteria
 
-- **Minimum Distance**: 40 km (configurable)
-- **Activity Type**: Ride, EBikeRide
-- **Exclude**: Commutes, virtual rides
-- **Sort By**: Distance (longest first)
+- **Minimum Distance**: 15 km (configurable via `long_rides.min_distance_km`)
+- **Activity Type**: Ride, GravelRide, EBikeRide (excludes VirtualRide)
+- **GPS Data**: Must have valid polyline and start/end coordinates
+- **Exclude**: Commutes, virtual rides (by type and name keywords)
+- **Virtual Ride Detection**: Filters by type (VirtualRide) and keywords (Zwift, Trainer, Indoor, Rouvy, Sufferfest, Peloton)
 
-### Analysis Metrics
+### Route Similarity Algorithm
 
-```python
-{
-    'total_rides': int,
-    'total_distance': float,  # km
-    'total_time': int,  # hours
-    'avg_distance': float,  # km
-    'avg_speed': float,  # km/h
-    'avg_elevation': float,  # meters
-    'longest_ride': Activity,
-    'fastest_ride': Activity,
-    'monthly_breakdown': Dict[str, Dict]
-}
+Uses dual-metric approach for accurate route matching:
+
+1. **Fréchet Distance**: Measures route shape similarity
+   - Threshold: 0.15-0.20 km (configurable)
+   - Primary metric for route matching
+
+2. **Hausdorff Distance**: Measures maximum deviation
+   - Combined with Fréchet for robust matching
+   - Handles GPS drift and minor variations
+
+3. **Loop Detection**: Start/end within 500m
+
+### Parallel Processing
+
+Intelligent worker allocation based on dataset size:
+- **< 20 rides**: 2 workers (minimum parallelism)
+- **20-100 rides**: 4 workers (balanced)
+- **> 100 rides**: 6 workers (maximum efficiency)
+- **< 10 rides**: Sequential processing (no overhead)
+
+### Weather Integration
+
+Wind analysis with strong preference for tailwinds on return:
+
+**Wind Score Calculation:**
+- Divides route into 8 segments
+- Calculates bearing for each segment
+- Determines wind type (headwind, tailwind, quartering)
+- **70% weight on second half** (favors tailwinds coming back)
+- 10% bonus for consistent tailwinds in second half
+
+**Wind Types & Scores:**
+- Headwind (< 45°): 0.3
+- Quartering headwind (45-90°): 0.5
+- Quartering tailwind (90-135°): 0.8
+- Tailwind (> 135°): 1.0
+
+### Configuration
+
+```yaml
+long_rides:
+  min_distance_km: 15  # Minimum distance for long rides
+  similarity_threshold: 0.15  # Route matching threshold (km)
+  consolidation_threshold: 0.20  # Group consolidation threshold (km)
+  search_radius_km: 5.0  # Location search radius
+  use_parallel: true  # Enable parallel processing
+  max_workers: null  # Auto-detect (2-6 workers)
+
+route_naming:
+  sample_points: 10  # Points along route for naming
+  max_name_length: 50  # Maximum name length
 ```
 
-### Monthly Statistics
+### Performance Characteristics
 
-For each month:
-- Ride count
-- Total distance
-- Average distance
-- Total elevation gain
-- Average speed
+- **Memory**: ~1-5 KB per LongRide object
+- **Processing**: O(n²) for route comparison, optimized with parallel processing
+- **Caching**: Route similarity results cached for repeated queries
+- **Scalability**: Handles 1000+ rides efficiently with parallel processing
+
+### Documentation
+
+- **User Guide**: [docs/guides/LONG_RIDES_USER_GUIDE.md](guides/LONG_RIDES_USER_GUIDE.md)
+- **API Reference**: [docs/api/LONG_RIDES_API.md](api/LONG_RIDES_API.md)
 
 ---
 
@@ -1494,5 +1587,5 @@ python main.py --fetch --analyze
 
 ---
 
-*Last Updated: 2026-03-27*
-*Version: 2.2.0*
+*Last Updated: 2026-05-07*
+*Version: 2.5.0+*

@@ -25,6 +25,14 @@ If you encounter this project hosted elsewhere without proper attribution or wit
 - 🗺️ **Interactive Map**: Visualize all your long rides (>15km) with color-coded routes by distance
 - 🔄 **Route Filtering**: Filter between loops and point-to-point rides
 - 📈 **Detailed Metrics**: Speed, elevation, duration, and route type for each ride
+- 🤖 **Smart Route Grouping**: Automatically groups similar routes using advanced similarity algorithms
+- 🌤️ **Weather-Based Recommendations**: Suggests optimal routes based on wind direction and conditions
+- 🎯 **Location-Based Discovery**: Find rides near any location with customizable search radius
+- ⚡ **Parallel Processing**: Fast analysis of large ride datasets with intelligent worker allocation
+
+**Documentation:**
+- [Long Rides User Guide](docs/guides/LONG_RIDES_USER_GUIDE.md) - Complete feature guide with tips and troubleshooting
+- [Long Rides API Documentation](docs/api/LONG_RIDES_API.md) - Developer API reference
 
 ### General Features
 - 🗺️ **Interactive Maps**: Generates beautiful HTML reports with interactive route visualizations
