@@ -214,4 +214,12 @@ def mock_services(monkeypatch, mock_config, mock_analysis_service, mock_weather_
         'planner': mock_planner_service
     }
 
+@pytest.fixture
+def client():
+    """Flask test client fixture for UAT tests."""
+    from launch import app
+    app.config['TESTING'] = True
+    with app.test_client() as client:
+        yield client
+
 # Made with Bob
