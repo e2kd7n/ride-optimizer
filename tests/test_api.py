@@ -205,8 +205,19 @@ class TestAPIEndpoints:
 class TestAPIIntegration:
     """Integration tests for API with real services."""
     
-    def test_service_initialization(self):
+    @patch('src.auth.get_authenticated_client')
+    @patch('src.config.Config')
+    def test_service_initialization(self, mock_config_class, mock_get_client):
         """Test service initialization on first request."""
+        # Mock config
+        mock_config = Mock()
+        mock_config.get.return_value = 'test_value'
+        mock_config_class.return_value = mock_config
+        
+        # Mock Strava client
+        mock_client = Mock()
+        mock_get_client.return_value = mock_client
+        
         # Reset initialization flag
         api._services_initialized = False
         
