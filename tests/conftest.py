@@ -6,7 +6,7 @@ Provides mocked services and test data for API integration testing.
 
 import pytest
 from unittest.mock import Mock, patch, MagicMock
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 @pytest.fixture
@@ -221,5 +221,187 @@ def client():
     app.config['TESTING'] = True
     with app.test_client() as client:
         yield client
+
+
+@pytest.fixture
+def mock_weather_data():
+    """Mock current weather data for testing."""
+    return {
+        "location": "Test City",
+        "temperature": 22.0,
+        "temperature_f": 72.0,
+        "temperature_c": 22.0,
+        "conditions": "Sunny",
+        "wind_speed": 10.0,
+        "wind_speed_kph": 16.0,
+        "wind_speed_mph": 10.0,
+        "wind_direction": "NW",
+        "wind_direction_degrees": 315,
+        "precipitation_chance": 0.0,
+        "precipitation_mm": 0.0,
+        "humidity": 60,
+        "feels_like": 70.0,
+        "feels_like_f": 70.0,
+        "ride_score": 9.2,
+        "comfort_score": 0.92,
+        "cycling_favorability": "favorable",
+        "timestamp": datetime.now().isoformat()
+    }
+
+
+@pytest.fixture
+def mock_route_data():
+    """Mock route information for testing."""
+    return {
+        "id": "test-route-123",
+        "name": "Test Route",
+        "distance": 50.0,
+        "distance_miles": 31.0,
+        "distance_km": 50.0,
+        "elevation_gain": 500.0,
+        "elevation_gain_meters": 500.0,
+        "elevation_gain_feet": 1640.0,
+        "coordinates": [(40.7128, -74.0060), (40.7580, -73.9855)],
+        "sport_type": "Ride",
+        "type": "Ride",
+        "uses": 15,
+        "is_favorite": False,
+        "is_loop": False,
+        "created_at": datetime.now().isoformat()
+    }
+
+
+@pytest.fixture
+def mock_long_routes():
+    """Mock long ride route data for testing."""
+    return [
+        {
+            "id": "route-1",
+            "name": "Long Route 1",
+            "distance": 100.0,
+            "distance_miles": 62.0,
+            "distance_km": 100.0,
+            "elevation_gain": 800.0,
+            "elevation_gain_meters": 800.0,
+            "sport_type": "Ride",
+            "uses": 8,
+            "is_loop": True
+        },
+        {
+            "id": "route-2",
+            "name": "Long Route 2",
+            "distance": 98.0,
+            "distance_miles": 61.0,
+            "distance_km": 98.0,
+            "elevation_gain": 600.0,
+            "elevation_gain_meters": 600.0,
+            "sport_type": "Ride",
+            "uses": 6,
+            "is_loop": True
+        },
+        {
+            "id": "route-3",
+            "name": "Long Route 3",
+            "distance": 105.0,
+            "distance_miles": 65.0,
+            "distance_km": 105.0,
+            "elevation_gain": 1000.0,
+            "elevation_gain_meters": 1000.0,
+            "sport_type": "Ride",
+            "uses": 10,
+            "is_loop": False
+        }
+    ]
+
+
+@pytest.fixture
+def mock_7day_forecast():
+    """Mock 7-day weather forecast for testing."""
+    base_date = datetime.now()
+    return {
+        "location": "Test City",
+        "forecast": [
+            {
+                "date": (base_date + timedelta(days=i)).strftime("%Y-%m-%d"),
+                "day_name": (base_date + timedelta(days=i)).strftime("%A"),
+                "temp_high": 24.0 + i,
+                "temp_high_f": 75.0 + i * 1.8,
+                "temp_high_c": 24.0 + i,
+                "temp_low": 15.0 + i,
+                "temp_low_f": 59.0 + i * 1.8,
+                "temp_low_c": 15.0 + i,
+                "conditions": "Sunny" if i % 2 == 0 else "Partly Cloudy",
+                "precipitation_chance": 0.0 if i % 3 != 0 else 20.0,
+                "precipitation_mm": 0.0,
+                "wind_speed": 12.0 + i,
+                "wind_speed_kph": 19.0 + i * 1.6,
+                "wind_speed_mph": 12.0 + i,
+                "wind_direction": "NW",
+                "wind_direction_degrees": 315,
+                "ride_score": 9.5 - (i * 0.2),
+                "comfort_score": 0.95 - (i * 0.02),
+                "cycling_favorability": "favorable" if i < 3 else "neutral"
+            }
+            for i in range(7)
+        ]
+    }
+
+
+@pytest.fixture
+def mock_long_ride_analysis():
+    """Mock long ride analysis results for testing."""
+    return {
+        "distance": 100.0,
+        "distance_miles": 62.0,
+        "distance_km": 100.0,
+        "duration": 300,
+        "duration_minutes": 300,
+        "duration_hours": 5.0,
+        "date": (datetime.now() + timedelta(days=3)).strftime("%Y-%m-%d"),
+        "recommendations": [
+            {
+                "route_id": "route-1",
+                "route_name": "Long Route 1",
+                "score": 92.5,
+                "weather_score": 95.0,
+                "variety_score": 88.0,
+                "workout_fit_score": 90.0,
+                "distance": 100.0,
+                "elevation_gain": 800.0,
+                "estimated_duration": 300
+            },
+            {
+                "route_id": "route-2",
+                "route_name": "Long Route 2",
+                "score": 88.0,
+                "weather_score": 90.0,
+                "variety_score": 85.0,
+                "workout_fit_score": 88.0,
+                "distance": 98.0,
+                "elevation_gain": 600.0,
+                "estimated_duration": 290
+            }
+        ],
+        "weather_forecast": {
+            "temperature": 22.0,
+            "conditions": "Sunny",
+            "wind_speed": 10.0,
+            "precipitation_chance": 0.0,
+            "ride_score": 9.5
+        },
+        "workout_fit": {
+            "training_load": "moderate",
+            "recovery_status": "good",
+            "recommended_intensity": "endurance",
+            "fit_score": 90.0
+        },
+        "route_variety": {
+            "new_routes": 2,
+            "repeated_routes": 1,
+            "variety_score": 88.0,
+            "exploration_opportunities": ["New scenic loop", "Alternative descent"]
+        }
+    }
+
 
 # Made with Bob
