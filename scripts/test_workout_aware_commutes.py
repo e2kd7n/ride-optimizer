@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app import create_app
 from app.models.workouts import WorkoutMetadata
+from app.models.base import db
 from app.services.commute_service import CommuteService
 from app.services.trainerroad_service import TrainerRoadService
 from src.config import Config
@@ -57,42 +58,50 @@ def setup_test_workouts():
     with app.app_context():
         # Clear existing test workouts
         WorkoutMetadata.query.delete()
+        db.session.commit()
         
         today = date.today()
         
         # Endurance workout (should trigger route extension)
-        WorkoutMetadata.create_or_update(
+        workout1 = WorkoutMetadata(
+            workout_id=f'test_endurance_{today.isoformat()}',
             workout_date=today,
             workout_name='Endurance - Base Miles',
             workout_type='Endurance',
             duration_minutes=90,
             tss=60,
             intensity_factor=0.65,
-            description='90 min endurance ride'
+            status='scheduled'
         )
+        db.session.add(workout1)
         
         # Threshold workout (should recommend indoor)
-        WorkoutMetadata.create_or_update(
+        workout2 = WorkoutMetadata(
+            workout_id=f'test_threshold_{(today + timedelta(days=1)).isoformat()}',
             workout_date=today + timedelta(days=1),
             workout_name='Threshold - Sweet Spot',
             workout_type='Threshold',
             duration_minutes=60,
             tss=75,
             intensity_factor=0.85,
-            description='60 min threshold intervals'
+            status='scheduled'
         )
+        db.session.add(workout2)
         
         # VO2Max workout (should recommend indoor)
-        WorkoutMetadata.create_or_update(
+        workout3 = WorkoutMetadata(
+            workout_id=f'test_vo2max_{(today + timedelta(days=2)).isoformat()}',
             workout_date=today + timedelta(days=2),
             workout_name='VO2Max - Short Power',
             workout_type='VO2Max',
             duration_minutes=45,
             tss=65,
             intensity_factor=0.95,
-            description='45 min VO2Max intervals'
+            status='scheduled'
         )
+        db.session.add(workout3)
         
+        db.session.commit()
         print("✓ Created test workouts in database")
 
 

@@ -45,17 +45,51 @@ class RouteLibraryService:
         self._route_groups: Optional[List[RouteGroup]] = None
         self._long_rides: Optional[List[LongRide]] = None
         self._favorites: set = set()
+        self._cache_loaded = False
         self._load_favorites()
     
     def _load_favorites(self):
         """Load favorites from JSON file into memory cache."""
         try:
-            data = self.storage.read('favorites.json', default={'routes': [], 'updated_at': None})
+            data = self.storage.read('favorite_routes.json', default={'routes': [], 'updated_at': None})
             self._favorites = set(data.get('routes', []))
             logger.info(f"Loaded {len(self._favorites)} favorites from JSON storage")
         except Exception as e:
             logger.error(f"Error loading favorites: {e}")
             self._favorites = set()
+    
+    def _load_from_cache(self):
+        """
+        Load route data from JSON cache.
+        
+        This allows the service to serve cached data without requiring
+        fresh analysis. Called automatically on first data access.
+        """
+        if self._cache_loaded:
+            return
+        
+        logger.info("Loading route data from cache...")
+        
+        try:
+            # Load route groups
+            routes_data = self.storage.read('route_groups.json', default={})
+            if routes_data.get('route_groups'):
+                # Store as dict until we implement proper deserialization
+                self._route_groups = routes_data['route_groups']
+                logger.info(f"Loaded {len(self._route_groups)} route groups from cache")
+            
+            # Load long rides
+            long_rides_data = self.storage.read('long_rides.json', default={})
+            if long_rides_data.get('long_rides'):
+                self._long_rides = long_rides_data['long_rides']
+                logger.info(f"Loaded {len(self._long_rides)} long rides from cache")
+            
+            self._cache_loaded = True
+            logger.info("Route cache loaded successfully")
+            
+        except Exception as e:
+            logger.error(f"Error loading route cache: {e}")
+            self._cache_loaded = True  # Mark as loaded to avoid retry loops
     
     def initialize(self, route_groups: List[RouteGroup], long_rides: List[LongRide]):
         """
@@ -95,6 +129,9 @@ class RouteLibraryService:
                 }
             }
         """
+        # Load cached data if not already loaded
+        self._load_from_cache()
+        
         if not self._route_groups and not self._long_rides:
             return {
                 'status': 'error',
@@ -369,35 +406,77 @@ class RouteLibraryService:
             'count': len(favorite_routes)
         }
     
-    def _format_commute_route(self, group: RouteGroup) -> Dict[str, Any]:
-        """Format a commute route group for API response."""
-        rep_route = group.representative_route
-        return {
-            'id': group.id,
-            'type': 'commute',
-            'name': group.name or f"Route {group.id}",
-            'direction': group.direction,
-            'distance': rep_route.distance / 1000,  # km
-            'duration': rep_route.duration / 60,  # minutes
-            'elevation': rep_route.elevation_gain,
-            'uses': group.frequency,
-            'is_plus_route': group.is_plus_route,
-            'is_favorite': group.id in self._favorites
-        }
+    def _format_commute_route(self, group) -> Dict[str, Any]:
+        """
+        Format a commute route group for API response.
+        
+        Args:
+            group: RouteGroup object or dict from cache
+        """
+        # Handle both RouteGroup objects and dict from cache
+        if isinstance(group, dict):
+            rep_route = group['representative_route']
+            return {
+                'id': group['id'],
+                'type': 'commute',
+                'name': group.get('name') or f"Route {group['id']}",
+                'direction': group['direction'],
+                'distance': rep_route['distance'] / 1000,  # km
+                'duration': rep_route['duration'] / 60,  # minutes
+                'elevation': rep_route.get('elevation_gain', 0),
+                'uses': group['frequency'],
+                'is_plus_route': group.get('is_plus_route', False),
+                'is_favorite': group['id'] in self._favorites
+            }
+        else:
+            # RouteGroup object
+            rep_route = group.representative_route
+            return {
+                'id': group.id,
+                'type': 'commute',
+                'name': group.name or f"Route {group.id}",
+                'direction': group.direction,
+                'distance': rep_route.distance / 1000,  # km
+                'duration': rep_route.duration / 60,  # minutes
+                'elevation': rep_route.elevation_gain,
+                'uses': group.frequency,
+                'is_plus_route': group.is_plus_route,
+                'is_favorite': group.id in self._favorites
+            }
     
-    def _format_long_ride(self, ride: LongRide) -> Dict[str, Any]:
-        """Format a long ride for API response."""
-        return {
-            'id': str(ride.activity_id),
-            'type': 'long_ride',
-            'name': ride.name,
-            'distance': ride.distance_km,
-            'duration': ride.duration_hours * 60,  # minutes
-            'elevation': ride.elevation_gain,
-            'uses': ride.uses,
-            'is_loop': ride.is_loop,
-            'is_favorite': str(ride.activity_id) in self._favorites
-        }
+    def _format_long_ride(self, ride) -> Dict[str, Any]:
+        """
+        Format a long ride for API response.
+        
+        Args:
+            ride: LongRide object or dict from cache
+        """
+        # Handle both LongRide objects and dict from cache
+        if isinstance(ride, dict):
+            return {
+                'id': str(ride['activity_id']),
+                'type': 'long_ride',
+                'name': ride['name'],
+                'distance': ride['distance_km'],
+                'duration': ride['duration_hours'] * 60,  # minutes
+                'elevation': ride.get('elevation_gain', 0),
+                'uses': ride.get('uses', 1),
+                'is_loop': ride.get('is_loop', False),
+                'is_favorite': str(ride['activity_id']) in self._favorites
+            }
+        else:
+            # LongRide object
+            return {
+                'id': str(ride.activity_id),
+                'type': 'long_ride',
+                'name': ride.name,
+                'distance': ride.distance_km,
+                'duration': ride.duration_hours * 60,  # minutes
+                'elevation': ride.elevation_gain,
+                'uses': ride.uses,
+                'is_loop': ride.is_loop,
+                'is_favorite': str(ride.activity_id) in self._favorites
+            }
     
     def _format_commute_route_detailed(self, group: RouteGroup) -> Dict[str, Any]:
         """Format detailed commute route information."""
