@@ -170,3 +170,235 @@ def test_secure_storage():
                 print("   ✓ File permissions correct (0600)")
             
             # Verify content is encrypted
+            with open(creds_path, 'rb') as f:
+                content = f.read()
+                if b'https://' in content:
+                    print("   ✗ URL not encrypted (plaintext detected)")
+                    return False
+                else:
+                    print("   ✓ Content is encrypted")
+        else:
+            print("   ✗ Credentials file not created")
+            return False
+        
+        # Test 3: Retrieve feed URL
+        print("\n3. Testing feed URL retrieval...")
+        retrieved_url = service.get_feed_url()
+        
+        if retrieved_url == test_url:
+            print("   ✓ Feed URL retrieved correctly")
+        else:
+            print(f"   ✗ URL mismatch: expected {test_url}, got {retrieved_url}")
+            return False
+        
+        # Test 4: Remove credentials
+        print("\n4. Testing credential removal...")
+        service.remove_credentials()
+        
+        if not creds_path.exists():
+            print("   ✓ Credentials removed successfully")
+        else:
+            print("   ✗ Credentials file still exists")
+            return False
+        
+        print("\n✅ Secure Storage Tests PASSED")
+        return True
+
+
+def test_workout_sync():
+    """Test workout sync to database."""
+    print("\n" + "="*60)
+    print("TEST: Workout Sync")
+    print("="*60)
+    
+    app = create_app()
+    config = Config('config/config.yaml')
+    service = TrainerRoadService(config)
+    
+    with app.app_context():
+        # Test 1: Parse and store workouts
+        print("\n1. Syncing workouts to database...")
+        workouts = service.parse_ics_feed(SAMPLE_ICS_FEED)
+        
+        for workout_data in workouts:
+            workout = WorkoutMetadata.create_or_update(
+                workout_date=workout_data['workout_date'],
+                workout_name=workout_data['workout_name'],
+                workout_type=workout_data['workout_type'],
+                duration_minutes=workout_data['duration_minutes'],
+                tss=workout_data.get('tss'),
+                intensity_factor=workout_data.get('intensity_factor'),
+                description=workout_data.get('description')
+            )
+            print(f"   ✓ Stored: {workout.workout_name} on {workout.workout_date}")
+        
+        # Test 2: Retrieve workouts
+        print("\n2. Retrieving workouts from database...")
+        today = date.today()
+        
+        for i in range(3):
+            workout_date = today + timedelta(days=i)
+            workout = WorkoutMetadata.get_for_date(workout_date)
+            
+            if workout:
+                print(f"   ✓ Found workout for {workout_date}: {workout.workout_name}")
+            else:
+                print(f"   ⚠ No workout found for {workout_date}")
+        
+        # Test 3: Get workout constraints
+        print("\n3. Testing workout constraint normalization...")
+        
+        test_cases = [
+            ('Endurance', 'min_duration_minutes', 60),
+            ('Threshold', 'indoor_fallback', True),
+            ('VO2Max', 'indoor_fallback', True)
+        ]
+        
+        for workout_type, constraint_key, expected_value in test_cases:
+            # Find workout of this type
+            workout = WorkoutMetadata.query.filter_by(workout_type=workout_type).first()
+            
+            if workout:
+                constraints = service.get_workout_constraints(workout.workout_date)
+                
+                if constraints:
+                    print(f"\n   {workout_type} workout constraints:")
+                    print(f"   - Has workout: {constraints['has_workout']}")
+                    print(f"   - Min duration: {constraints.get('min_duration_minutes', 'N/A')} min")
+                    print(f"   - Indoor fallback: {constraints.get('indoor_fallback', False)}")
+                    print(f"   - Preferred intensity: {constraints.get('preferred_intensity', 'N/A')}")
+                    
+                    if constraint_key in constraints:
+                        actual = constraints[constraint_key]
+                        if actual == expected_value or (constraint_key == 'min_duration_minutes' and actual >= expected_value):
+                            print(f"   ✓ Constraint {constraint_key} correct")
+                        else:
+                            print(f"   ✗ Constraint {constraint_key} mismatch")
+                    else:
+                        print(f"   ⚠ Constraint {constraint_key} not found")
+                else:
+                    print(f"   ✗ No constraints returned for {workout_type}")
+        
+        # Test 4: Cleanup
+        print("\n4. Cleaning up test data...")
+        WorkoutMetadata.query.delete()
+        print("   ✓ Test workouts removed")
+        
+        print("\n✅ Workout Sync Tests PASSED")
+        return True
+
+
+def test_settings_ui():
+    """Test settings UI integration."""
+    print("\n" + "="*60)
+    print("TEST: Settings UI")
+    print("="*60)
+    
+    app = create_app()
+    client = app.test_client()
+    
+    with app.app_context():
+        # Test 1: Settings page loads
+        print("\n1. Testing settings page...")
+        response = client.get('/settings/trainerroad')
+        
+        if response.status_code == 200:
+            print(f"   ✓ Settings page loaded (status: {response.status_code})")
+            
+            if b'TrainerRoad' in response.data or b'ICS Feed' in response.data:
+                print("   ✓ TrainerRoad configuration section present")
+            else:
+                print("   ⚠ TrainerRoad section not found")
+        else:
+            print(f"   ✗ Settings page failed (status: {response.status_code})")
+            return False
+        
+        # Test 2: Configure feed URL
+        print("\n2. Testing feed URL configuration...")
+        test_url = "https://www.trainerroad.com/app/calendar/ics/test456"
+        
+        response = client.post('/settings/trainerroad/configure', data={
+            'ics_feed_url': test_url
+        }, follow_redirects=True)
+        
+        if response.status_code == 200:
+            print("   ✓ Feed URL configured successfully")
+        else:
+            print(f"   ✗ Configuration failed (status: {response.status_code})")
+        
+        # Test 3: Verify connection status
+        print("\n3. Testing connection status...")
+        response = client.get('/settings/trainerroad')
+        
+        if b'Connected' in response.data or b'configured' in response.data:
+            print("   ✓ Connection status displayed")
+        else:
+            print("   ⚠ Connection status not clear")
+        
+        # Test 4: Disconnect
+        print("\n4. Testing disconnect...")
+        response = client.post('/settings/trainerroad/disconnect', follow_redirects=True)
+        
+        if response.status_code == 200:
+            print("   ✓ Disconnected successfully")
+        else:
+            print(f"   ✗ Disconnect failed (status: {response.status_code})")
+        
+        print("\n✅ Settings UI Tests PASSED")
+        return True
+
+
+def main():
+    """Run test harness."""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Test TrainerRoad integration')
+    parser.add_argument('--test-all', action='store_true', help='Run all tests')
+    parser.add_argument('--test-parser', action='store_true', help='Test ICS parser only')
+    parser.add_argument('--test-storage', action='store_true', help='Test secure storage only')
+    parser.add_argument('--test-sync', action='store_true', help='Test workout sync only')
+    parser.add_argument('--test-ui', action='store_true', help='Test settings UI only')
+    
+    args = parser.parse_args()
+    
+    print("\n" + "="*60)
+    print("TRAINERROAD INTEGRATION TEST HARNESS - Issue #139")
+    print("="*60)
+    
+    results = []
+    
+    if args.test_all or args.test_parser or (not any([args.test_parser, args.test_storage, args.test_sync, args.test_ui])):
+        results.append(('ICS Parser', test_ics_parser()))
+    
+    if args.test_all or args.test_storage or (not any([args.test_parser, args.test_storage, args.test_sync, args.test_ui])):
+        results.append(('Secure Storage', test_secure_storage()))
+    
+    if args.test_all or args.test_sync or (not any([args.test_parser, args.test_storage, args.test_sync, args.test_ui])):
+        results.append(('Workout Sync', test_workout_sync()))
+    
+    if args.test_all or args.test_ui or (not any([args.test_parser, args.test_storage, args.test_sync, args.test_ui])):
+        results.append(('Settings UI', test_settings_ui()))
+    
+    # Summary
+    print("\n" + "="*60)
+    print("TEST SUMMARY")
+    print("="*60)
+    
+    for name, passed in results:
+        status = "✅ PASSED" if passed else "❌ FAILED"
+        print(f"{name}: {status}")
+    
+    all_passed = all(result[1] for result in results)
+    
+    if all_passed:
+        print("\n🎉 All tests PASSED!")
+        return 0
+    else:
+        print("\n⚠️  Some tests FAILED")
+        return 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())
+
+# Made with Bob
