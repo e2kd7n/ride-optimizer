@@ -26,7 +26,8 @@ def create_app(config_name='default'):
                 static_folder='../static')
     
     # Load configuration
-    app.config.from_object(f'app.config.{config_name.capitalize()}Config')
+    from app.config import config as config_dict
+    app.config.from_object(config_dict[config_name])
     
     # Initialize database
     from app.models import db
