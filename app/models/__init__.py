@@ -11,6 +11,7 @@ Models:
 - UserPreference: User settings and preferences
 - JobHistory: Background job execution history
 - WorkoutMetadata: TrainerRoad workout information
+- WeatherSnapshot: Weather data with comfort scoring
 """
 
 from .base import Base, db
@@ -19,6 +20,7 @@ from .routes import RouteGroup, LongRide
 from .preferences import UserPreference
 from .jobs import JobHistory
 from .workouts import WorkoutMetadata
+from .weather import WeatherSnapshot
 
 __all__ = [
     'Base',
@@ -29,6 +31,7 @@ __all__ = [
     'UserPreference',
     'JobHistory',
     'WorkoutMetadata',
+    'WeatherSnapshot',
 ]
 
 # Made with Bob
