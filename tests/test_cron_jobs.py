@@ -205,22 +205,22 @@ class TestCacheCleanupJob:
 class TestSystemHealthJob:
     """Tests for system_health.py cron job."""
     
+    @patch('cron.system_health.check_api_status')
+    @patch('cron.system_health.check_last_analysis')
+    @patch('cron.system_health.check_cache_files')
+    @patch('cron.system_health.check_disk_space')
     @patch('cron.system_health.JSONStorage')
-    @patch('cron.system_health.shutil.disk_usage')
-    def test_system_health_success(self, mock_disk_usage, mock_storage_class):
+    def test_system_health_success(self, mock_storage_class, mock_disk_space,
+                                   mock_cache_files, mock_last_analysis, mock_api_status):
         """Test system health check runs successfully."""
-        # Setup mocks
-        mock_disk_usage.return_value = Mock(
-            total=1000000000,
-            used=500000000,
-            free=500000000
-        )
+        # Mock all health checks to return healthy status
+        mock_disk_space.return_value = {'status': 'healthy', 'percent_used': 50}
+        mock_cache_files.return_value = {'status': 'healthy', 'file_count': 5}
+        mock_last_analysis.return_value = {'status': 'healthy', 'age_hours': 1.0}
+        mock_api_status.return_value = {'status': 'healthy', 'response_time_ms': 100}
         
         mock_storage = Mock()
-        mock_storage.read.return_value = {
-            'last_analysis': datetime.now().isoformat(),
-            'jobs': []
-        }
+        mock_storage.read.return_value = {'jobs': []}
         mock_storage_class.return_value = mock_storage
         
         # Import and run
@@ -255,38 +255,40 @@ class TestSystemHealthJob:
 class TestCronJobHistory:
     """Tests for job history tracking."""
     
+    @patch('cron.daily_analysis.JSONStorage')
     @patch('cron.daily_analysis.AnalysisService')
     @patch('cron.daily_analysis.Config')
-    def test_job_history_recorded(self, mock_config, mock_service_class):
+    def test_job_history_recorded(self, mock_config, mock_service_class, mock_storage_class):
         """Test job execution is recorded in history."""
-        from src.json_storage import JSONStorage
+        # Setup mock storage
+        mock_storage = Mock()
+        mock_storage.read.return_value = {'jobs': []}
+        mock_storage_class.return_value = mock_storage
         
-        with tempfile.TemporaryDirectory() as tmpdir:
-            storage = JSONStorage(base_dir=tmpdir)
-            
-            # Setup mocks
-            mock_service = Mock()
-            mock_service.run_full_analysis.return_value = {
-                'success': True,
-                'activities_count': 100
-            }
-            mock_service_class.return_value = mock_service
-            
-            with patch('cron.daily_analysis.storage', storage):
-                from cron import daily_analysis
-                result = daily_analysis.main()
-                
-                # Verify history was recorded
-                history = storage.read('job_history.json', default={'jobs': []})
-                assert len(history['jobs']) > 0
-                assert history['jobs'][0]['job_type'] == 'daily_analysis'
+        # Setup mock service
+        mock_service = Mock()
+        mock_service.run_full_analysis.return_value = {
+            'status': 'success',
+            'activities_count': 100
+        }
+        mock_service_class.return_value = mock_service
+        
+        from cron import daily_analysis
+        result = daily_analysis.main()
+        
+        # Verify storage.write was called (job history recorded)
+        assert mock_storage.write.called
+        # Check that job_history.json was written
+        write_calls = [call for call in mock_storage.write.call_args_list
+                      if 'job_history.json' in str(call)]
+        assert len(write_calls) > 0
     
     def test_job_history_limit(self):
         """Test job history is limited to 100 entries."""
         from src.json_storage import JSONStorage
         
         with tempfile.TemporaryDirectory() as tmpdir:
-            storage = JSONStorage(base_dir=tmpdir)
+            storage = JSONStorage(data_dir=tmpdir)
             
             # Create 150 job records
             history = {

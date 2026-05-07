@@ -88,6 +88,8 @@ def analysis_service(mock_config):
         mock_client = Mock()
         mock_auth.return_value = mock_client
         service = AnalysisService(mock_config)
+        # Mock the _load_from_cache to prevent it from loading cache during tests
+        service._cache_loaded = True
         return service
 
 
@@ -128,8 +130,10 @@ class TestRunFullAnalysis:
         """Test successful full analysis."""
         home, work = mock_location
         
-        # Mock data fetcher
-        analysis_service.data_fetcher.fetch_activities = Mock(return_value=[mock_activity])
+        # Mock data fetcher directly to avoid authentication
+        mock_data_fetcher = Mock()
+        mock_data_fetcher.fetch_activities = Mock(return_value=[mock_activity])
+        analysis_service._data_fetcher = mock_data_fetcher
         
         # Mock location finder
         mock_location_finder = Mock()
@@ -160,7 +164,10 @@ class TestRunFullAnalysis:
     
     def test_run_full_analysis_no_activities(self, analysis_service):
         """Test analysis with no activities."""
-        analysis_service.data_fetcher.fetch_activities = Mock(return_value=[])
+        # Mock data fetcher directly to avoid authentication
+        mock_data_fetcher = Mock()
+        mock_data_fetcher.fetch_activities = Mock(return_value=[])
+        analysis_service._data_fetcher = mock_data_fetcher
         
         result = analysis_service.run_full_analysis()
         
@@ -175,7 +182,10 @@ class TestRunFullAnalysis:
     def test_run_full_analysis_with_force_refresh(self, mock_location_finder_class,
                                                   analysis_service, mock_activity):
         """Test analysis with force refresh."""
-        analysis_service.data_fetcher.fetch_activities = Mock(return_value=[mock_activity])
+        # Mock data fetcher directly to avoid authentication
+        mock_data_fetcher = Mock()
+        mock_data_fetcher.fetch_activities = Mock(return_value=[mock_activity])
+        analysis_service._data_fetcher = mock_data_fetcher
         
         # Mock location finder
         mock_location_finder = Mock()
@@ -188,15 +198,16 @@ class TestRunFullAnalysis:
             result = analysis_service.run_full_analysis(force_refresh=True)
             
             # Verify force_refresh was passed through
-            analysis_service.data_fetcher.fetch_activities.assert_called_once_with(
+            mock_data_fetcher.fetch_activities.assert_called_once_with(
                 force_refresh=True
             )
     
     def test_run_full_analysis_exception_handling(self, analysis_service):
         """Test exception handling during analysis."""
-        analysis_service.data_fetcher.fetch_activities = Mock(
-            side_effect=Exception("API Error")
-        )
+        # Mock data fetcher directly to avoid authentication
+        mock_data_fetcher = Mock()
+        mock_data_fetcher.fetch_activities = Mock(side_effect=Exception("API Error"))
+        analysis_service._data_fetcher = mock_data_fetcher
         
         result = analysis_service.run_full_analysis()
         
@@ -242,16 +253,16 @@ class TestGetAnalysisStatus:
         assert status['data_age_hours'] < 1  # Less than 1 hour old
         assert status['is_stale'] is False
     
-    def test_get_status_with_stale_data(self, analysis_service, mock_activity):
+    def test_get_status_with_stale_data(self, analysis_service, mock_activity, mock_route_group):
         """Test status with stale data (>24 hours old)."""
         analysis_service._activities = [mock_activity]
-        analysis_service._route_groups = []
+        analysis_service._route_groups = [mock_route_group]  # Need non-empty for has_data=True
         analysis_service._long_rides = []
         analysis_service._last_analysis_time = datetime.now() - timedelta(hours=25)
         
         status = analysis_service.get_analysis_status()
         
-        assert status['has_data'] is True  # Has data (empty lists are not None)
+        assert status['has_data'] is True  # Has route groups
         assert status['data_age_hours'] > 24
         assert status['is_stale'] is True
     
@@ -382,8 +393,10 @@ class TestAnalysisServiceIntegration:
         """Test complete workflow: analyze -> check status -> get data."""
         home, work = mock_location
         
-        # Setup mocks
-        analysis_service.data_fetcher.fetch_activities = Mock(return_value=[mock_activity])
+        # Setup mocks - mock data fetcher directly to avoid authentication
+        mock_data_fetcher = Mock()
+        mock_data_fetcher.fetch_activities = Mock(return_value=[mock_activity])
+        analysis_service._data_fetcher = mock_data_fetcher
         
         # Mock location finder
         mock_location_finder = Mock()
@@ -433,16 +446,22 @@ class TestAnalysisServiceIntegration:
         """Test workflow with cache clearing."""
         home, work = mock_location
         
-        # Setup mocks
-        analysis_service.data_fetcher.fetch_activities = Mock(return_value=[mock_activity])
+        # Setup mocks - mock data fetcher directly to avoid authentication
+        mock_data_fetcher = Mock()
+        mock_data_fetcher.fetch_activities = Mock(return_value=[mock_activity])
+        analysis_service._data_fetcher = mock_data_fetcher
         
         # Mock location finder
         mock_location_finder = Mock()
         mock_location_finder.find_locations = Mock(return_value=(home, work))
         mock_location_finder_class.return_value = mock_location_finder
         
+        # Create mock route group for non-empty result
+        mock_route_group = Mock()
+        mock_route_group.routes = []
+        
         mock_route_analyzer = Mock()
-        mock_route_analyzer.analyze_routes = Mock(return_value=[])
+        mock_route_analyzer.analyze_routes = Mock(return_value=[mock_route_group])
         mock_route_analyzer_class.return_value = mock_route_analyzer
         
         mock_long_ride_analyzer = Mock()
@@ -454,7 +473,7 @@ class TestAnalysisServiceIntegration:
         result = analysis_service.run_full_analysis()
         assert result['status'] == 'success'
         
-        # Verify data exists
+        # Verify data exists (has_data checks for non-empty route_groups)
         status = analysis_service.get_analysis_status()
         assert status['has_data'] is True
         

@@ -21,7 +21,7 @@ if __name__ == '__main__':
     # For production, use a proper WSGI server instead
     
     debug = config_name == 'development'
-    port = int(os.getenv('PORT', 5000))
+    port = int(os.getenv('PORT', 8080))
     host = os.getenv('HOST', '0.0.0.0')
     
     app.run(

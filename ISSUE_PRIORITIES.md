@@ -1,77 +1,45 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-05-07 (Version Rebaseline Complete - 0.x.x Scheme)
+**Last Updated:** 2026-05-07 12:50:32 UTC / 2026-05-07 07:50:32 CDT
 
 This file reflects the current state of GitHub issues by priority. Issues are managed via GitHub labels (P0-critical, P1-high, P2-medium, P3-low, P4-future).
-
----
-
-## 📌 VERSION SCHEME CLARIFICATION
-
-**IMPORTANT:** All version numbers now use 0.x.x scheme until production-ready:
-
-- **v0.5.0** = Original CLI + static HTML prototype
-- **v0.6.0-v0.10.0** = Flask experiment (formerly mislabeled as v2.1.0-v2.5.0)
-  - v0.6.0 (was v2.1.0) - Code quality & design
-  - v0.7.0 (was v2.2.0) - Test infrastructure
-  - v0.8.0 (was v2.3.0) - Route naming
-  - v0.9.0 (was v2.4.0) - Long rides
-  - v0.10.0 (was v2.5.0) - **CURRENT RELEASE**
-- **v0.11.0** = Next release (architecture simplification - Issue #152)
-- **v0.12.0-v0.99.0** = Future development (plenty of headroom)
-- **v1.0.0** = Production-ready (when truly stable, battle-tested, confident)
-
-**Why 0.x.x?** Honest about pre-production status. Version 1.0.0 reserved for first truly production-ready release after 3+ months of stable daily use.
-
----
 
 ## 🔴 P0 - CRITICAL (Drop Everything)
 Issues that make the application unusable or cause data loss.
 
-- #152 - 🏗️ EPIC: Architecture Simplification for Raspberry Pi (v0.11.0)
+- #157 - Phases 4-5: QA Testing & Beta Preparation
+- #156 - Phase 3: Integration Work - Convert APScheduler to Cron + Testing
+- #155 - Phase 2: Frontend Conversion - Templates to Static HTML + JavaScript
+- #153 - Phase 1: Foundation Migration - Extract Services & Create Minimal API
+- #152 - Architecture Simplification: Migrate to Smart Static for Pi Optimization
 - #76 - Background Geocoding with Progressive Report Updates
 
 ## 🔴 P1 - HIGH (Current Sprint)
 Issues that significantly impact core functionality or user experience.
 
-- #153 - Phase 1: Foundation Migration (Week 1) - v0.11.0
-- #155 - Phase 2: Frontend Conversion (Week 2) - v0.11.0
-- #156 - Phase 3: Integration Work (Week 3) - v0.11.0
-- #157 - Phases 4-5: QA & Beta Prep (Weeks 4-5) - v0.11.0
-- ~~#146 - 🧪 EPIC: Beta Release & User Feedback Program~~ (CLOSED - bloat for single-user)
-- ~~#144 - 🌐 EPIC: Personal Web Platform Migration~~ (SUPERSEDED by #152)
-- #143 - Create integration test suite for dashboard, commute, planner, route library, TrainerRoad fallback, and degraded-mode workflows
-- #142 - Implement responsive layout, shared navigation shell, and small-screen-friendly decision views
-- #140 - Implement workout-aware commute recommendations that can extend route length to satisfy prescribed sessions
-- #139 - Implement optional TrainerRoad ICS ingestion and normalize workouts into planning constraints
-- #138 - Integrate weather snapshots into dashboard, commute recommendations, and planner ranking
-- #137 - Add scheduled jobs, stage-level status visibility, freshness windows, and last-known-good fallback behavior
-- #135 - Build route library browsing, filtering, and route detail pages
-- #134 - Build long ride planner with ride-intent presets and ranked route suggestions
-- #133 - Implement commute recommendation views with alternatives, weather impact, and confidence framing
-- #132 - Build recommendation-first dashboard with freshness, status, and workout-fit summary
-- #131 - Add SQLite-backed persistence for snapshots, preferences, route summaries, and job state
-- #130 - Extract shared service layer for analysis, recommendations, planner logic, and route-library access
-- #129 - Create Flask app factory, route blueprints, and web-platform skeleton
+- #144 - 🌐 EPIC: Personal Web Platform Migration (v1.0.0)
 - #119 - Update TECHNICAL_SPEC.md with comprehensive implementation details
 - #118 - Re-enable geocoding after rate limit expires
 - #117 - Fix map zoom to show start and finish when route is selected
 - #102 - Refactor report template to extract JavaScript into separate files
 - #101 - Update Documentation for Long Rides Feature
-- #100 - Create Comprehensive Integration Tests for All Workflows
-- #99 - Create Comprehensive Unit Tests for All Core Modules
 - #91 - Add Rate Limiting to API Endpoints
 - #90 - Implement Input Validation with Marshmallow
 - #89 - Add Data Persistence Layer for API
-- #88 - Integrate Map with Recommendation System
-- #87 - Create Recommendation Results Display Component
-- #86 - Implement Frontend API Integration
-- #85 - Create Interactive Recommendation Input Form
 - #84 - Implement Weather API Endpoint
+- #83 - Implement Geocoding API Endpoint
+- #82 - Implement Recommendations API Endpoint
+- #81 - Create Flask API Server for Long Rides
+- #80 - Integrate Weather Forecast into Commute Tab
+- #79 - Add "How It Works" Modal
+- #54 - Weather Dashboard Implementation (Epic)
+- #47 - Add Side-by-Side Route Comparison Feature
 
 ## 🟡 P2 - MEDIUM (Next Sprint)
 Important improvements that enhance functionality but don't block core workflows.
 
+- #160 - Fix authentication mocking in API integration tests
+- #158 - 📋 Version Rebaseline Complete - Documentation Record
 - #141 - Add repeat-a-past-ride flow and saved plan support
 - #136 - Implement settings and preferences page for home/work locations, units, time windows, and planner defaults
 - #128 - Fix "Unnamed Activity" display in Route Comparison uses modal

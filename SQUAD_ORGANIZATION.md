@@ -352,7 +352,7 @@ After completing v1.0.0 MVP (Week 8), squads will reorganize for incremental rel
 - **v1.0.3 (Release +3):** External integrations, API alternatives
 - **v1.1.0 (Release +4):** Enhanced features and social capabilities
 
-See [`RELEASE_ROADMAP.md`](RELEASE_ROADMAP.md) for complete post-v3.0.0 planning with squad assignments and effort estimates.
+See [`RELEASE_ROADMAP.md`](RELEASE_ROADMAP.md) for complete post-v1.0.0 planning with squad assignments and effort estimates.
 
 ---
 
