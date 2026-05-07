@@ -298,16 +298,16 @@ class RouteLibraryService:
             stats['total_routes'] += len(self._route_groups)
             
             for group in self._route_groups:
-                stats['total_activities'] += group.frequency
-                stats['total_distance'] += group.representative_route.distance * group.frequency
+                stats['total_activities'] += group.get('frequency', 0)
+                stats['total_distance'] += group.get('representative_route', {}).get('distance', 0) * group.get('frequency', 0)
             
             # Find most used commute route
             if self._route_groups:
-                most_used = max(self._route_groups, key=lambda g: g.frequency)
+                most_used = max(self._route_groups, key=lambda g: g.get('frequency', 0))
                 stats['most_used_route'] = {
-                    'id': most_used.id,
-                    'name': most_used.name,
-                    'uses': most_used.frequency,
+                    'id': most_used.get('id'),
+                    'name': most_used.get('name'),
+                    'uses': most_used.get('frequency', 0),
                     'type': 'commute'
                 }
         
