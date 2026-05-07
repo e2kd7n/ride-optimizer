@@ -1,19 +1,36 @@
-https://github.com/e2kd7n/ride-optimizer/issues/193
-https://github.com/e2kd7n/ride-optimizer/issues/183
+https://github.com/e2kd7n/ride-optimizer/issues/226
 # Issue Prioritization
 
-**Last Updated:** 2026-05-07 15:01:25 UTC / 2026-05-07 10:01:25 CDT
+**Last Updated:** 2026-05-07 15:27:55 UTC / 2026-05-07 10:27:55 CDT
 
 This file reflects the current state of GitHub issues by priority. Issues are managed via GitHub labels (P0-critical, P1-high, P2-medium, P3-low, P4-future).
 
 ## 🔴 P0 - CRITICAL (Drop Everything)
 Issues that make the application unusable or cause data loss.
 
-**No P0 issues currently open** ✅
+- #225 - Create Missing Test Fixtures
+- #219 - Fix API Routing - Planner/Analytics Endpoints
+- #218 - Fix API Routing - Route Endpoints
+- #217 - Fix API Routing - Weather Endpoints
+- #216 - Create Analytics Service Module
+- #215 - Implement Missing PlannerService Methods
+- #214 - Implement Missing WeatherService Methods
+- #213 - Implement Missing RouteLibraryService Methods
+- #212 - Implement Missing CommuteService Methods
+- #211 - UAT/QA Test Findings - Production Readiness Gaps
 
 ## 🔴 P1 - HIGH (Current Sprint)
 Issues that significantly impact core functionality or user experience.
 
+- #226 - Fix Planner Error Handling Test
+- #224 - Fix Route Library Search API Response Format
+- #223 - Fix Mobile Navigation Elements
+- #222 - Complete Planner Template Content
+- #221 - Add Missing Commute View Content
+- #220 - Add Missing Dashboard Content
+- #208 - Create test data fixtures for integration testing
+- #206 - Implement lazy service initialization to fix performance issues
+- #205 - Create missing QA test harnesses for dashboard, commute, and planner
 - #204 - UI/UX: Update polyline colors
 - #177 - UI/UX: Add clickable 'Uses' column with modal
 - #176 - UI/UX: Add table sorting functionality
@@ -22,7 +39,6 @@ Issues that significantly impact core functionality or user experience.
 - #173 - UI/UX: Fix page counter display
 - #172 - Add Marshmallow validation schemas for planner endpoints
 - #171 - Build planner frontend UI (currently placeholder only)
-- #167 - Migrate interactive map visualization from CLI to web platform
 - #164 - Test Coverage: report_generator.py (47% → 80%)
 - #163 - Test Coverage: data_fetcher.py (49% → 80%)
 - #162 - Test Coverage: long_ride_analyzer.py (13% → 50%)
@@ -35,18 +51,14 @@ Issues that significantly impact core functionality or user experience.
 - #91 - Add Rate Limiting to API Endpoints
 - #90 - Implement Input Validation with Marshmallow
 - #89 - Add Data Persistence Layer for API
-- #84 - Implement Weather API Endpoint
 - #83 - Implement Geocoding API Endpoint
-- #82 - Implement Recommendations API Endpoint
-- #81 - Create Flask API Server for Long Rides
-- #80 - Integrate Weather Forecast into Commute Tab
-- #79 - Add "How It Works" Modal
-- #54 - Weather Dashboard Implementation (Epic)
-- #47 - Add Side-by-Side Route Comparison Feature
 
 ## 🟡 P2 - MEDIUM (Next Sprint)
 Important improvements that enhance functionality but don't block core workflows.
 
+- #227 - Improve Test Coverage for New Features
+- #209 - Implement graceful degradation for unavailable services
+- #207 - Implement dependency injection pattern for better testability
 - #194 - Long Rides: Add accessibility features (WCAG 2.1 AA)
 - #193 - Long Rides: Implement skeleton loaders and error states
 - #192 - Establish PR review requirements
@@ -60,7 +72,6 @@ Important improvements that enhance functionality but don't block core workflows
 - #184 - Testing: Increase Long Ride Analyzer coverage 13% → 50%
 - #183 - Code Quality: Add debug logging for exception handlers
 - #182 - Code Quality: Replace 4 bare except statements with specific exceptions
-- #181 - Create PRIVACY.md policy for compliance
 - #180 - Add planner-specific API client methods
 - #179 - Add PII sanitization to logging
 - #178 - Implement log rotation with RotatingFileHandler
@@ -75,8 +86,6 @@ Important improvements that enhance functionality but don't block core workflows
 - #121 - [LOW PRIORITY] Color code route names to match map line colors
 - #116 - Add visual weather icons and color coding
 - #115 - Display optimal departure time suggestions
-- #114 - Add transit recommendations when conditions are poor
-- #113 - Show optimal route recommendations based on wind
 
 ## 🟢 P3 - LOW (Backlog)
 Nice-to-have improvements and minor UX enhancements.
@@ -85,8 +94,6 @@ Nice-to-have improvements and minor UX enhancements.
 - #201 - Reduce P1 issue count to <25
 - #200 - Route naming improvements (Start → Main → End format)
 - #199 - Design: Test on real iOS/Android devices
-- #198 - Design: Test keyboard navigation and screen reader support
-- #197 - Design: Verify WCAG AA contrast ratios (4.5:1)
 - #196 - Design: Ensure touch targets ≥44x44px with 8px spacing
 - #195 - Design: Verify mobile-first responsive design (320px viewport)
 - #170 - Design: Test keyboard navigation and screen reader support

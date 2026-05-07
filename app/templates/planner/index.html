@@ -188,7 +188,7 @@
         <div class="no-rec-icon">🗺️</div>
         <h2>No Long Ride Recommendations Available</h2>
         <p>Run analysis to get weather-optimized long ride recommendations for the next {{ forecast_days }} days.</p>
-        <a href="{{ url_for('api.analyze') }}" class="btn btn-primary btn-large" data-method="POST">
+        <a href="{{ url_for('planner.analyze') }}" class="btn btn-primary btn-large" data-method="POST">
             Run Analysis Now
         </a>
     </div>
