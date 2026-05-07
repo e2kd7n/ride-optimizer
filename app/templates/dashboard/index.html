@@ -35,6 +35,56 @@
         </div>
     </div>
     
+    <!-- Weather Card -->
+    {% if weather and weather.available %}
+    <div class="weather-card weather-{{ weather.favorability }}">
+        <div class="weather-header">
+            <h2>🌤️ Current Weather</h2>
+            {% if weather.is_stale %}
+            <span class="weather-stale-badge" title="{{ weather.staleness_reason }}">
+                ⚠️ Stale Data
+            </span>
+            {% endif %}
+        </div>
+        <div class="weather-content">
+            <div class="weather-main">
+                <div class="weather-temp">{{ weather.temperature }}</div>
+                <div class="weather-favorability">
+                    <span class="favorability-badge favorability-{{ weather.favorability }}">
+                        {{ weather.favorability|title }}
+                    </span>
+                    <span class="favorability-text">for cycling</span>
+                </div>
+            </div>
+            <div class="weather-details">
+                <div class="weather-detail">
+                    <span class="weather-icon">💨</span>
+                    <span class="weather-label">Wind:</span>
+                    <span class="weather-value">{{ weather.wind }}</span>
+                </div>
+                <div class="weather-detail">
+                    <span class="weather-icon">💧</span>
+                    <span class="weather-label">Humidity:</span>
+                    <span class="weather-value">{{ weather.humidity }}</span>
+                </div>
+                <div class="weather-detail">
+                    <span class="weather-icon">🌧️</span>
+                    <span class="weather-label">Precipitation:</span>
+                    <span class="weather-value">{{ weather.precipitation }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% elif weather and not weather.available %}
+    <div class="weather-card weather-unavailable">
+        <div class="weather-header">
+            <h2>🌤️ Weather</h2>
+        </div>
+        <p class="no-data">{{ weather.message }}</p>
+        <p class="no-data-hint">Weather data will be available after the next sync.</p>
+    </div>
+    {% endif %}
+    
     <!-- Quick Stats -->
     <div class="quick-stats">
         <div class="stat-card">
@@ -379,6 +429,146 @@
     font-size: 0.9rem;
     font-weight: 500;
     color: #2c3e50;
+}
+
+/* Weather Card Styles */
+.weather-card {
+    padding: 1.5rem;
+    background-color: white;
+    border: 1px solid #e1e8ed;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    margin-bottom: 2rem;
+}
+
+.weather-card.weather-favorable {
+    border-left: 4px solid #27ae60;
+}
+
+.weather-card.weather-neutral {
+    border-left: 4px solid #f39c12;
+}
+
+.weather-card.weather-unfavorable {
+    border-left: 4px solid #e74c3c;
+}
+
+.weather-card.weather-unavailable {
+    border-left: 4px solid #95a5a6;
+}
+
+.weather-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.weather-header h2 {
+    font-size: 1.3rem;
+    margin: 0;
+    color: #2c3e50;
+}
+
+.weather-stale-badge {
+    font-size: 0.85rem;
+    padding: 0.25rem 0.5rem;
+    background-color: #f39c12;
+    color: white;
+    border-radius: 4px;
+    cursor: help;
+}
+
+.weather-content {
+    display: flex;
+    gap: 2rem;
+    align-items: center;
+}
+
+.weather-main {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.weather-temp {
+    font-size: 3rem;
+    font-weight: bold;
+    color: #2c3e50;
+}
+
+.weather-favorability {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.favorability-badge {
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    font-weight: 600;
+    text-align: center;
+}
+
+.favorability-badge.favorability-favorable {
+    background-color: #27ae60;
+    color: white;
+}
+
+.favorability-badge.favorability-neutral {
+    background-color: #f39c12;
+    color: white;
+}
+
+.favorability-badge.favorability-unfavorable {
+    background-color: #e74c3c;
+    color: white;
+}
+
+.favorability-text {
+    font-size: 0.85rem;
+    color: #7f8c8d;
+    text-align: center;
+}
+
+.weather-details {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    flex: 1;
+}
+
+.weather-detail {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.weather-icon {
+    font-size: 1.2rem;
+}
+
+.weather-label {
+    font-size: 0.9rem;
+    color: #7f8c8d;
+    min-width: 100px;
+}
+
+.weather-value {
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: #2c3e50;
+}
+
+@media (max-width: 768px) {
+    .weather-content {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .weather-temp {
+        font-size: 2.5rem;
+    }
 }
 </style>
 {% endblock %}
