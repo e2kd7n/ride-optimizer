@@ -47,6 +47,7 @@ def index():
     services = get_services()
     analysis_service = services['analysis']
     commute_service = services['commute']
+    weather_service = services['weather']
     
     # Get direction from query param or auto-detect
     direction = request.args.get('direction')
@@ -55,6 +56,7 @@ def index():
     recommendation = None
     alternatives = []
     departure_windows = []
+    route_weather = None
     
     try:
         route_groups = analysis_service.get_route_groups()
@@ -68,6 +70,19 @@ def index():
             
             if rec_data.get('status') == 'success':
                 route = rec_data.get('route', {})
+                
+                # Get detailed weather for the route
+                route_coords = route.get('coordinates', [])
+                if route_coords:
+                    try:
+                        route_weather = weather_service.get_route_weather(
+                            route_coords,
+                            route_name=route.get('name', 'Route')
+                        )
+                        current_app.logger.info(f"Route weather: {route_weather.get('cycling_favorability') if route_weather else 'unavailable'}")
+                    except Exception as e:
+                        current_app.logger.error(f"Error getting route weather: {e}")
+                
                 recommendation = {
                     'direction': rec_data.get('direction'),
                     'direction_display': rec_data.get('direction', '').replace('_', ' ').title(),
@@ -78,7 +93,7 @@ def index():
                     'elevation': route.get('elevation', 0),  # meters
                     'score': rec_data.get('score', 0),
                     'breakdown': rec_data.get('breakdown', {}),
-                    'weather': rec_data.get('weather', {}),
+                    'weather': route_weather,  # Enhanced weather with wind impact
                     'departure_time': rec_data.get('departure_time'),
                     'confidence': rec_data.get('confidence', 'medium')
                 }
@@ -125,6 +140,7 @@ def index():
         'recommendation': recommendation,
         'alternatives': alternatives,
         'departure_windows': departure_windows,
+        'route_weather': route_weather,
         'workout_fit': None  # TODO: TrainerRoad integration (Issue #139)
     }
     
