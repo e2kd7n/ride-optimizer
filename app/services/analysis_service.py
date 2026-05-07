@@ -42,11 +42,9 @@ class AnalysisService:
         """
         self.config = config
         
-        # Create authenticated Strava client
-        from src.auth import get_authenticated_client
-        client = get_authenticated_client(config)
-        
-        self.data_fetcher = StravaDataFetcher(client, config)
+        # Lazy initialization - don't authenticate until needed
+        self._strava_client = None
+        self._data_fetcher = None
         
         # Cached analysis results
         self._activities: Optional[List[Activity]] = None
@@ -55,6 +53,138 @@ class AnalysisService:
         self._home_location: Optional[Location] = None
         self._work_location: Optional[Location] = None
         self._last_analysis_time: Optional[datetime] = None
+    
+    def _ensure_authenticated(self):
+        """
+        Ensure Strava client is authenticated (lazy initialization).
+        
+        This method is called only when we need to fetch fresh data from Strava.
+        For read-only operations on cached data, authentication is not required.
+        
+        Returns:
+            Authenticated Strava client
+            
+        Raises:
+            ValueError: If authentication fails
+        """
+        if self._strava_client is None:
+            from src.auth import get_authenticated_client
+            logger.info("Authenticating with Strava (lazy initialization)...")
+            self._strava_client = get_authenticated_client(self.config)
+            self._data_fetcher = StravaDataFetcher(self._strava_client, self.config)
+            logger.info("Authentication successful")
+        
+        return self._strava_client
+    
+    @property
+    def data_fetcher(self):
+        """Get data fetcher, ensuring authentication first."""
+        if self._data_fetcher is None:
+            self._ensure_authenticated()
+        return self._data_fetcher
+    
+    def _load_from_cache(self):
+        """
+        Load analysis results from JSON cache.
+        
+        This allows the service to serve cached data without requiring
+        Strava authentication. Called automatically on first data access.
+        """
+        if self._cache_loaded:
+            return
+        
+        logger.info("Loading analysis data from cache...")
+        
+        try:
+            # Load analysis status
+            status_data = self.storage.read('analysis_status.json', default={})
+            
+            if status_data.get('last_analysis'):
+                self._last_analysis_time = datetime.fromisoformat(status_data['last_analysis'])
+            
+            # Load route groups
+            routes_data = self.storage.read('route_groups.json', default={})
+            if routes_data.get('route_groups'):
+                # TODO: Deserialize RouteGroup objects from JSON
+                # For now, store as dict until we implement proper serialization
+                self._route_groups = routes_data['route_groups']
+                logger.info(f"Loaded {len(self._route_groups)} route groups from cache")
+            
+            # Load long rides
+            long_rides_data = self.storage.read('long_rides.json', default={})
+            if long_rides_data.get('long_rides'):
+                # TODO: Deserialize LongRide objects from JSON
+                self._long_rides = long_rides_data['long_rides']
+                logger.info(f"Loaded {len(self._long_rides)} long rides from cache")
+            
+            # Load activities count (we don't cache full activity objects)
+            if status_data.get('activities_count'):
+                logger.info(f"Cache contains {status_data['activities_count']} activities")
+            
+            self._cache_loaded = True
+            logger.info("Cache loaded successfully")
+            
+        except Exception as e:
+            logger.warning(f"Failed to load cache: {e}")
+            self._cache_loaded = True  # Mark as loaded to avoid retry loops
+    
+    def _save_to_cache(self):
+        """
+        Save analysis results to JSON cache.
+        
+        Called after successful analysis to persist results for offline access.
+        """
+        logger.info("Saving analysis results to cache...")
+        
+        try:
+            # Save analysis status
+            status_data = {
+                'last_analysis': self._last_analysis_time.isoformat() if self._last_analysis_time else None,
+                'activities_count': len(self._activities) if self._activities else 0,
+                'route_groups_count': len(self._route_groups) if self._route_groups else 0,
+                'long_rides_count': len(self._long_rides) if self._long_rides else 0,
+                'has_data': bool(self._activities and self._route_groups)
+            }
+            self.storage.write('analysis_status.json', status_data)
+            
+            # Save route groups
+            if self._route_groups:
+                routes_data = {
+                    'route_groups': [self._serialize_route_group(rg) for rg in self._route_groups],
+                    'updated_at': datetime.now().isoformat()
+                }
+                self.storage.write('route_groups.json', routes_data)
+            
+            # Save long rides
+            if self._long_rides:
+                long_rides_data = {
+                    'long_rides': [self._serialize_long_ride(lr) for lr in self._long_rides],
+                    'updated_at': datetime.now().isoformat()
+                }
+                self.storage.write('long_rides.json', long_rides_data)
+            
+            logger.info("Cache saved successfully")
+            
+        except Exception as e:
+            logger.error(f"Failed to save cache: {e}", exc_info=True)
+    
+    def _serialize_route_group(self, route_group: RouteGroup) -> Dict[str, Any]:
+        """Serialize RouteGroup to JSON-compatible dict."""
+        # TODO: Implement proper serialization based on RouteGroup structure
+        return {
+            'name': getattr(route_group, 'name', 'Unknown'),
+            'routes_count': len(getattr(route_group, 'routes', [])),
+            # Add more fields as needed
+        }
+    
+    def _serialize_long_ride(self, long_ride: LongRide) -> Dict[str, Any]:
+        """Serialize LongRide to JSON-compatible dict."""
+        # TODO: Implement proper serialization based on LongRide structure
+        return {
+            'name': getattr(long_ride, 'name', 'Unknown'),
+            'distance': getattr(long_ride, 'distance', 0),
+            # Add more fields as needed
+        }
     
     def run_full_analysis(self, force_refresh: bool = False) -> Dict[str, Any]:
         """
