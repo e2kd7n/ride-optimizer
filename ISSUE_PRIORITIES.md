@@ -1,0 +1,178 @@
+https://github.com/e2kd7n/ride-optimizer/issues/193
+https://github.com/e2kd7n/ride-optimizer/issues/183
+# Issue Prioritization
+
+**Last Updated:** 2026-05-07 15:01:25 UTC / 2026-05-07 10:01:25 CDT
+
+This file reflects the current state of GitHub issues by priority. Issues are managed via GitHub labels (P0-critical, P1-high, P2-medium, P3-low, P4-future).
+
+## 🔴 P0 - CRITICAL (Drop Everything)
+Issues that make the application unusable or cause data loss.
+
+**No P0 issues currently open** ✅
+
+## 🔴 P1 - HIGH (Current Sprint)
+Issues that significantly impact core functionality or user experience.
+
+- #204 - UI/UX: Update polyline colors
+- #177 - UI/UX: Add clickable 'Uses' column with modal
+- #176 - UI/UX: Add table sorting functionality
+- #175 - UI/UX: Simplify route counter
+- #174 - UI/UX: Fix route name display
+- #173 - UI/UX: Fix page counter display
+- #172 - Add Marshmallow validation schemas for planner endpoints
+- #171 - Build planner frontend UI (currently placeholder only)
+- #167 - Migrate interactive map visualization from CLI to web platform
+- #164 - Test Coverage: report_generator.py (47% → 80%)
+- #163 - Test Coverage: data_fetcher.py (49% → 80%)
+- #162 - Test Coverage: long_ride_analyzer.py (13% → 50%)
+- #161 - Test Coverage: route_analyzer.py (20% → 50%)
+- #144 - 🌐 EPIC: Personal Web Platform Migration (v3.0.0)
+- #119 - Update TECHNICAL_SPEC.md with comprehensive implementation details
+- #118 - Re-enable geocoding after rate limit expires
+- #117 - Fix map zoom to show start and finish when route is selected
+- #102 - Refactor report template to extract JavaScript into separate files
+- #91 - Add Rate Limiting to API Endpoints
+- #90 - Implement Input Validation with Marshmallow
+- #89 - Add Data Persistence Layer for API
+- #84 - Implement Weather API Endpoint
+- #83 - Implement Geocoding API Endpoint
+- #82 - Implement Recommendations API Endpoint
+- #81 - Create Flask API Server for Long Rides
+- #80 - Integrate Weather Forecast into Commute Tab
+- #79 - Add "How It Works" Modal
+- #54 - Weather Dashboard Implementation (Epic)
+- #47 - Add Side-by-Side Route Comparison Feature
+
+## 🟡 P2 - MEDIUM (Next Sprint)
+Important improvements that enhance functionality but don't block core workflows.
+
+- #194 - Long Rides: Add accessibility features (WCAG 2.1 AA)
+- #193 - Long Rides: Implement skeleton loaders and error states
+- #192 - Establish PR review requirements
+- #191 - Implement workout-aware logic if #140 is incomplete
+- #190 - Implement actual TrainerRoad integration if #139 is incomplete
+- #189 - Implement actual weather integration if #138 is incomplete
+- #188 - Verify GitHub issues #138, #139, #140 status
+- #187 - Testing: Increase Route Namer coverage 15% → 50%
+- #186 - Testing: Increase Route Analyzer coverage 20% → 50%
+- #185 - Testing: Increase Data Fetcher coverage 49% → 80%
+- #184 - Testing: Increase Long Ride Analyzer coverage 13% → 50%
+- #183 - Code Quality: Add debug logging for exception handlers
+- #182 - Code Quality: Replace 4 bare except statements with specific exceptions
+- #181 - Create PRIVACY.md policy for compliance
+- #180 - Add planner-specific API client methods
+- #179 - Add PII sanitization to logging
+- #178 - Implement log rotation with RotatingFileHandler
+- #168 - Create PRIVACY.md policy for compliance
+- #165 - Test Coverage: route_namer.py (15% → 50%)
+- #158 - 📋 Version Rebaseline Complete - Documentation Record
+- #141 - Add repeat-a-past-ride flow and saved plan support
+- #136 - Implement settings and preferences page for home/work locations, units, time windows, and planner defaults
+- #128 - Fix "Unnamed Activity" display in Route Comparison uses modal
+- #127 - Reduce excessive whitespace between report sections
+- #122 - [LOW PRIORITY] Grey out unselected routes on map when route is clicked
+- #121 - [LOW PRIORITY] Color code route names to match map line colors
+- #116 - Add visual weather icons and color coding
+- #115 - Display optimal departure time suggestions
+- #114 - Add transit recommendations when conditions are poor
+- #113 - Show optimal route recommendations based on wind
+
+## 🟢 P3 - LOW (Backlog)
+Nice-to-have improvements and minor UX enhancements.
+
+- #202 - Setup weekly maintenance routine
+- #201 - Reduce P1 issue count to <25
+- #200 - Route naming improvements (Start → Main → End format)
+- #199 - Design: Test on real iOS/Android devices
+- #198 - Design: Test keyboard navigation and screen reader support
+- #197 - Design: Verify WCAG AA contrast ratios (4.5:1)
+- #196 - Design: Ensure touch targets ≥44x44px with 8px spacing
+- #195 - Design: Verify mobile-first responsive design (320px viewport)
+- #170 - Design: Test keyboard navigation and screen reader support
+- #169 - Design: Verify WCAG AA contrast ratios (4.5:1)
+- #145 - 🌤️ EPIC: Weather Dashboard & Forecast Integration
+- #120 - [LOW PRIORITY] Debug and fix Bootstrap tab switching functionality
+- #54 - Weather Dashboard Implementation (Epic)
+- #49 - Implement Metric/Imperial Unit Toggle with Complete Consistency
+- #48 - Implement Data Export in JSON, GPX, and CSV Formats
+- #46 - Add PDF Export Option
+- #45 - Add QR Code Generation for Mobile Transfer
+- #44 - Extract HTML Template to External File
+
+## 📋 P4 - FUTURE ENHANCEMENTS
+Feature requests and enhancements for future releases.
+
+- #203 - Implement GDPR-compliant data deletion endpoint
+- #80 - Integrate Weather Forecast into Commute Tab
+- #79 - Add "How It Works" Modal
+- #68 - ✨ Visual Hierarchy & Polish
+- #67 - 📱 Mobile Navigation Patterns
+- #66 - 🎓 Feature Discovery & Onboarding
+- #65 - 👆 Touch-Optimized Interactions
+- #64 - 📊 Progressive Disclosure for Metrics
+- #63 - 📱 Mobile-First Responsive Layout
+- #62 - 🎨 EPIC: Mobile-First UI/UX Redesign & Accessibility
+- #47 - Add Side-by-Side Route Comparison Feature
+- #39 - Evaluate Photon API as Nominatim alternative
+- #38 - Add social features (compare with other commuters)
+- #37 - Add real-time route suggestions
+- #36 - Create mobile app version
+- #35 - Add integration with other fitness platforms
+
+## ⚠️ Unprioritized Issues
+Issues without priority labels that need to be triaged.
+
+- #166 - Complete and review full analysis with Fréchet algorithm
+
+## 📝 Workspace TODOs & Tasks
+Code comments and inline tasks found in the workspace that may need attention.
+
+**No TODO/FIXME comments found in code** ✅
+
+## Priority Guidelines
+
+### P0 - CRITICAL
+- Application is down or unusable
+- Data loss or corruption
+- Security vulnerabilities
+- **Action:** Drop everything and fix immediately
+
+### P1 - HIGH
+- Core features broken or severely degraded
+- Significant user pain points
+- Blocks important workflows
+- **Action:** Fix in current sprint (1-2 weeks)
+
+### P2 - MEDIUM
+- Feature improvements
+- Moderate user pain points
+- Quality of life enhancements
+- **Action:** Plan for next sprint (2-4 weeks)
+
+### P3 - LOW
+- Minor UX improvements
+- Edge cases
+- Nice-to-have features
+- **Action:** Backlog, address when time permits
+
+### P4 - FUTURE
+- New features
+- Major enhancements
+- Long-term improvements
+- **Action:** Plan for future releases
+
+## How to Update Priorities
+
+1. Use GitHub labels to set priority (P0-critical, P1-high, P2-medium, P3-low, P4-future)
+2. Run `./scripts/update-issue-priorities.sh` to regenerate this file
+3. Commit changes with descriptive message
+4. Communicate priority changes to team
+
+## Managing Workspace TODOs
+
+- Review code comments regularly and convert important ones to GitHub issues
+- Use `TODO:` for tasks that should become issues
+- Use `FIXME:` for bugs that need attention
+- Use `HACK:` for temporary solutions that need proper fixes
+- Use `NOTE:` for important information or context
