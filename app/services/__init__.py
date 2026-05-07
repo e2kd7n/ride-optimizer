@@ -16,18 +16,21 @@ Available Services:
 - CommuteService: Next commute recommendations
 - PlannerService: Long ride planning and recommendations
 - RouteLibraryService: Route browsing and management
+- WeatherService: Weather data with caching and graceful degradation
 """
 
 from .analysis_service import AnalysisService
 from .commute_service import CommuteService
 from .planner_service import PlannerService
 from .route_library_service import RouteLibraryService
+from .weather_service import WeatherService
 
 __all__ = [
     'AnalysisService',
     'CommuteService',
     'PlannerService',
     'RouteLibraryService',
+    'WeatherService',
 ]
 
 # Made with Bob
