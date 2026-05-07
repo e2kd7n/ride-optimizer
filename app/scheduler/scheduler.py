@@ -33,8 +33,9 @@ def init_scheduler(app: Flask) -> BackgroundScheduler:
         
     Example:
         >>> app = create_app()
-        >>> scheduler = init_scheduler(app)
-        >>> scheduler.start()
+        >>> with app.app_context():
+        >>>     scheduler = init_scheduler(app)
+        >>>     scheduler.start()
     """
     global scheduler
     
@@ -42,13 +43,15 @@ def init_scheduler(app: Flask) -> BackgroundScheduler:
         logger.warning("Scheduler already initialized")
         return scheduler
     
-    # Configure job stores
-    jobstores = {
-        'default': SQLAlchemyJobStore(
-            engine=db.engine,
-            tablename='apscheduler_jobs'
-        )
-    }
+    # Must be called within app context to access db.engine
+    with app.app_context():
+        # Configure job stores
+        jobstores = {
+            'default': SQLAlchemyJobStore(
+                engine=db.engine,
+                tablename='apscheduler_jobs'
+            )
+        }
     
     # Configure executors
     executors = {

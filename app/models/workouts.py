@@ -155,46 +155,138 @@ class WorkoutMetadata(db.Model, TimestampMixin):
         """
         Calculate workout fit for available routes.
         
+        Scoring algorithm considers:
+        - Duration match (workout duration vs route duration)
+        - TSS/intensity match (workout intensity vs route elevation)
+        - Workout type characteristics
+        - Route variety and freshness
+        
         Args:
             route_groups: List of RouteGroup objects
             
         Returns:
-            Best fit route and score
+            Best fit route and score (0.0-1.0)
         """
-        # TODO: Implement workout fit algorithm
-        # For now, return placeholder
         if not route_groups:
             return None, 0.0
         
-        # Simple heuristic: match workout type to route characteristics
         best_route = None
         best_score = 0.0
+        best_reason = ""
+        
+        # Target duration in hours (convert from minutes)
+        target_duration_hours = self.duration_minutes / 60.0
         
         for group in route_groups:
-            score = 0.5  # Base score
+            score = 0.0
+            reasons = []
             
-            # Adjust based on workout type
+            # 1. Duration match (40% weight)
+            # Assume average speed of 15 mph for commute routes
+            route_duration_hours = (group.avg_distance / 1000) / 24.14  # km to hours at 15mph
+            duration_diff = abs(route_duration_hours - target_duration_hours)
+            
+            if duration_diff < 0.25:  # Within 15 minutes
+                duration_score = 0.4
+                reasons.append("perfect duration match")
+            elif duration_diff < 0.5:  # Within 30 minutes
+                duration_score = 0.3
+                reasons.append("good duration match")
+            elif duration_diff < 1.0:  # Within 1 hour
+                duration_score = 0.2
+                reasons.append("acceptable duration")
+            else:
+                duration_score = 0.1
+                reasons.append("duration mismatch")
+            
+            score += duration_score
+            
+            # 2. Intensity/TSS match (30% weight)
+            # Higher TSS workouts benefit from hillier routes
+            if self.tss:
+                if self.tss > 100:  # High intensity
+                    if group.avg_elevation > 300:
+                        score += 0.3
+                        reasons.append("challenging elevation for high TSS")
+                    elif group.avg_elevation > 150:
+                        score += 0.2
+                        reasons.append("moderate elevation")
+                    else:
+                        score += 0.1
+                elif self.tss > 50:  # Moderate intensity
+                    if 100 < group.avg_elevation < 300:
+                        score += 0.3
+                        reasons.append("ideal elevation for moderate TSS")
+                    else:
+                        score += 0.2
+                else:  # Low intensity/recovery
+                    if group.avg_elevation < 150:
+                        score += 0.3
+                        reasons.append("flat route for recovery")
+                    else:
+                        score += 0.15
+            else:
+                score += 0.15  # No TSS data, neutral score
+            
+            # 3. Workout type characteristics (20% weight)
             if self.workout_type == 'Endurance':
-                # Prefer longer, flatter routes
+                # Prefer longer, steadier routes
                 if group.avg_distance > 15000:  # > 15km
+                    score += 0.15
+                    reasons.append("good endurance distance")
+                if group.avg_elevation < 250:
+                    score += 0.05
+                    reasons.append("steady terrain")
+            elif self.workout_type in ['Threshold', 'Sweet Spot']:
+                # Prefer routes with sustained climbs
+                if 200 < group.avg_elevation < 400:
                     score += 0.2
-                if group.avg_elevation < 200:  # < 200m
+                    reasons.append("ideal for threshold work")
+            elif self.workout_type == 'VO2Max':
+                # Prefer routes with punchy climbs
+                if group.avg_elevation > 250:
                     score += 0.2
-            elif self.workout_type in ['Threshold', 'VO2Max']:
-                # Prefer routes with some elevation
-                if group.avg_elevation > 200:
-                    score += 0.3
+                    reasons.append("good for VO2Max intervals")
+            elif self.workout_type == 'Recovery':
+                # Prefer flat, easy routes
+                if group.avg_elevation < 100:
+                    score += 0.15
+                    reasons.append("easy recovery terrain")
+                if group.avg_distance < 12000:  # < 12km
+                    score += 0.05
+                    reasons.append("short recovery distance")
+            else:
+                score += 0.1  # Unknown type, neutral score
             
+            # 4. Route variety bonus (10% weight)
+            # Prefer routes that haven't been used recently
+            if hasattr(group, 'last_used_days') and group.last_used_days:
+                if group.last_used_days > 30:
+                    score += 0.1
+                    reasons.append("fresh route")
+                elif group.last_used_days > 14:
+                    score += 0.07
+                    reasons.append("not recently used")
+                elif group.last_used_days > 7:
+                    score += 0.05
+                else:
+                    score += 0.02
+            else:
+                score += 0.05  # No usage data, neutral score
+            
+            # Track best route
             if score > best_score:
                 best_score = score
                 best_route = group
+                best_reason = ", ".join(reasons)
         
+        # Save fit results
         if best_route:
-            self.fit_score = best_score
+            self.fit_score = min(best_score, 1.0)  # Cap at 1.0
             self.recommended_route_id = best_route.group_id
-            self.fit_reason = f"Good match for {self.workout_type} workout"
+            self.fit_reason = f"{self.workout_type} workout: {best_reason}"
             db.session.commit()
         
-        return best_route, best_score
+        return best_route, min(best_score, 1.0)
 
 # Made with Bob

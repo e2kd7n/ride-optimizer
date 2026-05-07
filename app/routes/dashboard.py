@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 import traceback
 
 from app.services import AnalysisService, CommuteService, PlannerService
+from app.services.weather_service import WeatherService
 from src.config import Config
 
 bp = Blueprint('dashboard', __name__)
@@ -22,7 +23,8 @@ def get_services():
         g.services = {
             'analysis': AnalysisService(config),
             'commute': CommuteService(config),
-            'planner': PlannerService(config)
+            'planner': PlannerService(config),
+            'weather': WeatherService()
         }
     return g.services
 
@@ -47,6 +49,7 @@ def index():
     analysis_service = services['analysis']
     commute_service = services['commute']
     planner_service = services['planner']
+    weather_service = services['weather']
     
     # Get analysis status
     try:
@@ -63,6 +66,21 @@ def index():
             'long_rides_count': 0
         }
     
+    # Get current weather for home location
+    current_weather = None
+    try:
+        home, work = analysis_service.get_locations()
+        if home:
+            current_weather = weather_service.get_weather_summary(
+                home['lat'],
+                home['lon'],
+                location_name='Home'
+            )
+            current_app.logger.info(f"Weather: {current_weather.get('favorability', 'unknown')}")
+    except Exception as e:
+        current_app.logger.error(f"Error getting weather: {e}")
+        current_app.logger.debug(traceback.format_exc())
+    
     # Get commute recommendation
     commute_recommendation = None
     try:
@@ -72,7 +90,7 @@ def index():
         
         if route_groups and home and work:
             commute_service.initialize(route_groups, home, work)
-            commute_data = commute_service.get_next_commute()
+            commute_data = commute_service.get_workout_aware_commute()
             
             if commute_data.get('status') == 'success':
                 route = commute_data.get('route', {})
@@ -83,7 +101,8 @@ def index():
                     'duration': route.get('duration', 0) / 60,  # Convert to minutes
                     'score': commute_data.get('score', 0),
                     'departure_time': commute_data.get('departure_time'),
-                    'weather': commute_data.get('weather', {})
+                    'weather': commute_data.get('weather', {}),
+                    'workout_fit': commute_data.get('workout_fit')  # TrainerRoad integration
                 }
     except Exception as e:
         current_app.logger.error(f"Error getting commute recommendation: {e}")
@@ -144,6 +163,7 @@ def index():
             'total_activities': status_data.get('activities_count', 0),
             'total_long_rides': status_data.get('long_rides_count', 0)
         },
+        'weather': current_weather,
         'recommendations': {
             'commute': commute_recommendation,
             'workout_fit': None,  # TODO: TrainerRoad integration (Issue #139)
