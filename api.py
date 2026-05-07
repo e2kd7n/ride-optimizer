@@ -269,7 +269,7 @@ def internal_error(error):
 if __name__ == '__main__':
     # Development server
     import os
-    port = int(os.environ.get('PORT', 8080))
+    port = int(os.environ.get('PORT', 8083))
     
     logger.info("Starting Ride Optimizer API server...")
     logger.info("API endpoints:")

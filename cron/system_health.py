@@ -97,7 +97,7 @@ def check_api_status():
     """Check if API is accessible."""
     try:
         import requests
-        response = requests.get('http://localhost:8080/api/status', timeout=5)
+        response = requests.get('http://localhost:8083/api/status', timeout=5)
         
         if response.status_code == 200:
             return {'status': 'healthy', 'response_time_ms': response.elapsed.total_seconds() * 1000}

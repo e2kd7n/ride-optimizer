@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Interactive Script Menu System for Ride Optimizer
-Provides easy access to all utility scripts organized by category.
+Single-screen menu with all options visible at once.
 """
 
 import os
@@ -32,6 +32,7 @@ class ScriptMenu:
         self.scripts_dir = self.project_root / "scripts"
         
         # Define script categories and their scripts
+        # Format: (script_name, description, script_type)
         self.categories: Dict[str, List[Tuple[str, str, str]]] = {
             "Testing & Validation": [
                 ("run_tests.sh all", "Run all tests", "shell"),
@@ -41,96 +42,69 @@ class ScriptMenu:
                 ("run_tests.sh quick", "Run quick tests (exclude slow)", "shell"),
                 ("test_imports.py", "Verify all imports work", "python"),
                 ("verify_dependencies.py", "Check dependencies installed", "python"),
-            ],
-            "Feature Testing": [
-                ("test_geocoding.py", "Test geocoding functionality", "python"),
-                ("test_long_ride_recommendations.py", "Test long ride analysis", "python"),
-                ("test_long_rides_feature.py", "Test long rides feature", "python"),
-                ("test_next_commute.py", "Test next commute feature", "python"),
-                ("test_route_naming.py", "Test route naming", "python"),
-                ("test_sport_type_fix.py", "Test sport type fix", "python"),
-                ("test_uses_count.py", "Test uses count feature", "python"),
-                ("test_analyze_no_hang.py", "Test analysis doesn't hang", "python"),
-            ],
-            "Debugging & Diagnostics": [
-                ("debug_route_matching.py", "Debug route matching issues", "python"),
-                ("debug_sport_type.py", "Debug sport type issues", "python"),
-                ("diagnose_long_rides.py", "Diagnose long rides issues", "python"),
-                ("check_old_school_routes.py", "Check Old School route grouping", "python"),
-                ("profile_analysis.py", "Profile application performance", "python"),
-            ],
-            "Data & Analysis": [
-                ("fetch_test_activities.py", "Fetch test activities from Strava", "python"),
-                ("find_matched_routes.py", "Find and analyze matched routes", "python"),
-                ("set_rate_limit_block.py", "Set rate limit block", "python"),
+                ("test_trainerroad_integration.py", "Test TrainerRoad integration", "python"),
             ],
             "GitHub Integration": [
-                ("create_issues.sh", "Create GitHub issues", "shell"),
-                ("create_p2_issues.sh", "Create P2 issues", "shell"),
                 ("sync_todos_to_issues.sh", "Sync TODOs to GitHub issues", "shell"),
+                ("update-issue-priorities.sh", "Update issue priorities", "shell"),
+            ],
+            "Data Management": [
+                ("set_rate_limit_block.py", "Set rate limit block", "python"),
+                ("migrate_cache_to_json_storage.py", "Migrate cache to JSON storage", "python"),
+                ("migrate_to_json.py", "Migrate data to JSON", "python"),
             ],
             "Application": [
                 ("run_with_weasyprint.sh", "Run app with WeasyPrint PDF", "shell"),
-                ("main.py", "Run main application", "python"),
             ],
         }
+        
+        # Build flat list of all scripts with their categories
+        self.script_list = []
+        for category, scripts in self.categories.items():
+            for script, description, script_type in scripts:
+                self.script_list.append((category, script, description, script_type))
     
     def clear_screen(self):
         """Clear the terminal screen."""
         os.system('clear' if os.name != 'nt' else 'cls')
     
-    def print_header(self):
-        """Print the menu header."""
-        print(f"\n{Color.BOLD}{Color.CYAN}{'=' * 70}{Color.END}")
-        print(f"{Color.BOLD}{Color.CYAN}🚴 Ride Optimizer - Script Menu System{Color.END}")
-        print(f"{Color.BOLD}{Color.CYAN}{'=' * 70}{Color.END}\n")
-    
-    def print_category_menu(self):
-        """Print the main category menu."""
-        self.print_header()
-        print(f"{Color.BOLD}Select a category:{Color.END}\n")
-        
-        categories = list(self.categories.keys())
-        for idx, category in enumerate(categories, 1):
-            icon = self._get_category_icon(category)
-            print(f"  {Color.GREEN}{idx}.{Color.END} {icon} {category}")
-        
-        print(f"\n  {Color.YELLOW}0.{Color.END} 🚪 Exit")
-        print()
-    
-    def print_script_menu(self, category: str):
-        """Print scripts in a category."""
+    def print_menu(self):
+        """Print the complete menu with all options."""
         self.clear_screen()
-        self.print_header()
         
-        icon = self._get_category_icon(category)
-        print(f"{Color.BOLD}{icon} {category}{Color.END}\n")
+        # Header
+        print(f"\n{Color.BOLD}{Color.CYAN}{'=' * 70}{Color.END}")
+        print(f"{Color.BOLD}{Color.CYAN}🚴 RIDE OPTIMIZER - SCRIPT MENU{Color.END}")
+        print(f"{Color.BOLD}{Color.CYAN}{'=' * 70}{Color.END}\n")
         
-        scripts = self.categories[category]
-        for idx, (script, description, script_type) in enumerate(scripts, 1):
+        # Print all categories and scripts
+        choice_num = 1
+        current_category = None
+        
+        for category, script, description, script_type in self.script_list:
+            # Print category header when it changes
+            if category != current_category:
+                if current_category is not None:
+                    print()  # Blank line between categories
+                print(f"{Color.BOLD}{Color.YELLOW}=== {category} ==={Color.END}")
+                current_category = category
+            
+            # Print script option
             type_icon = "🐍" if script_type == "python" else "🐚"
-            print(f"  {Color.GREEN}{idx}.{Color.END} {type_icon} {description}")
-            print(f"      {Color.CYAN}→ {script}{Color.END}")
+            print(f"  {Color.GREEN}{choice_num:2d}.{Color.END} {type_icon} {description}")
+            choice_num += 1
         
-        print(f"\n  {Color.YELLOW}0.{Color.END} ⬅️  Back to categories")
-        print()
+        # Footer with quit option
+        print(f"\n{Color.BOLD}{Color.YELLOW}{'=' * 70}{Color.END}")
+        print(f"  {Color.RED} 0.{Color.END} 🚪 Exit")
+        print(f"  {Color.RED} q.{Color.END} 🚪 Quit")
+        print(f"{Color.BOLD}{Color.YELLOW}{'=' * 70}{Color.END}\n")
     
-    def _get_category_icon(self, category: str) -> str:
-        """Get icon for category."""
-        icons = {
-            "Testing & Validation": "🧪",
-            "Feature Testing": "✨",
-            "Debugging & Diagnostics": "🔍",
-            "Data & Analysis": "📊",
-            "GitHub Integration": "🐙",
-            "Application": "🚀",
-        }
-        return icons.get(category, "📁")
-    
-    def run_script(self, script: str, script_type: str) -> bool:
+    def run_script(self, script: str, script_type: str, description: str) -> bool:
         """Run a script and return success status."""
         print(f"\n{Color.BOLD}{Color.BLUE}{'=' * 70}{Color.END}")
-        print(f"{Color.BOLD}Running: {script}{Color.END}")
+        print(f"{Color.BOLD}Running: {description}{Color.END}")
+        print(f"{Color.CYAN}Command: {script}{Color.END}")
         print(f"{Color.BOLD}{Color.BLUE}{'=' * 70}{Color.END}\n")
         
         try:
@@ -170,70 +144,57 @@ class ScriptMenu:
             print(f"\n{Color.RED}❌ Error running script: {e}{Color.END}")
             return False
     
-    def get_user_choice(self, max_choice: int) -> Optional[int]:
+    def get_user_choice(self) -> Optional[int]:
         """Get and validate user input."""
         try:
-            choice = input(f"{Color.BOLD}Enter your choice (0-{max_choice}): {Color.END}").strip()
+            choice = input(f"{Color.BOLD}Enter choice (0 to quit): {Color.END}").strip().lower()
+            
+            # Handle quit commands
+            if choice in ('0', 'q', 'quit', 'exit'):
+                return 0
             
             if not choice.isdigit():
-                print(f"{Color.RED}❌ Please enter a number{Color.END}")
+                print(f"{Color.RED}❌ Please enter a number or 'q' to quit{Color.END}")
                 return None
             
             choice_num = int(choice)
-            if choice_num < 0 or choice_num > max_choice:
-                print(f"{Color.RED}❌ Invalid choice. Please enter 0-{max_choice}{Color.END}")
+            if choice_num < 0 or choice_num > len(self.script_list):
+                print(f"{Color.RED}❌ Invalid choice. Please enter 1-{len(self.script_list)} or 0 to quit{Color.END}")
                 return None
             
             return choice_num
             
         except KeyboardInterrupt:
             print(f"\n{Color.YELLOW}Exiting...{Color.END}")
-            sys.exit(0)
+            return 0
     
     def wait_for_continue(self):
         """Wait for user to press enter."""
         try:
             input(f"\n{Color.BOLD}Press Enter to continue...{Color.END}")
         except KeyboardInterrupt:
-            print(f"\n{Color.YELLOW}Exiting...{Color.END}")
-            sys.exit(0)
+            print(f"\n{Color.YELLOW}Returning to menu...{Color.END}")
     
     def run(self):
         """Run the interactive menu system."""
         while True:
-            self.clear_screen()
-            self.print_category_menu()
+            self.print_menu()
             
-            categories = list(self.categories.keys())
-            choice = self.get_user_choice(len(categories))
+            choice = self.get_user_choice()
             
             if choice is None:
+                self.wait_for_continue()
                 continue
             
             if choice == 0:
                 print(f"\n{Color.GREEN}👋 Goodbye!{Color.END}\n")
                 break
             
-            # Show scripts in selected category
-            category = categories[choice - 1]
-            
-            while True:
-                self.print_script_menu(category)
-                scripts = self.categories[category]
-                
-                script_choice = self.get_user_choice(len(scripts))
-                
-                if script_choice is None:
-                    continue
-                
-                if script_choice == 0:
-                    break
-                
-                # Run selected script
-                script, description, script_type = scripts[script_choice - 1]
-                self.clear_screen()
-                self.run_script(script, script_type)
-                self.wait_for_continue()
+            # Run selected script
+            category, script, description, script_type = self.script_list[choice - 1]
+            self.clear_screen()
+            self.run_script(script, script_type, description)
+            self.wait_for_continue()
 
 
 def main():

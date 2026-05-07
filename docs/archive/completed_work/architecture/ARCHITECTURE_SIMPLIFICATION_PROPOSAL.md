@@ -485,7 +485,7 @@ def get_status():
     return jsonify(data)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080)
+    app.run(host='0.0.0.0', port=8083)
 ```
 
 ### Static HTML with Dynamic Updates
