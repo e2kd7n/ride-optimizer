@@ -237,7 +237,9 @@ class TestSync:
             job = JobHistory.query.first()
             assert job is not None
             assert job.job_type == 'sync_all'
-            assert job.status == 'pending'
+            assert job.status == 'queued'
+            assert job.job_name == 'Manual Sync: all'
+            assert job.triggered_by == 'user'
     
     def test_sync_specific_source(self, client, db_session):
         """Test triggering sync for specific source."""
@@ -254,14 +256,20 @@ class TestSync:
             assert data['source'] == 'strava'
             
             job = JobHistory.query.first()
-            assert 'force=True' in job.description
+            assert job.job_type == 'sync_strava'
+            assert job.status == 'queued'
+            # Verify parameters stored correctly
+            import json
+            params = json.loads(job.parameters)
+            assert params['force'] is True
+            assert params['source'] == 'strava'
     
     def test_sync_no_body(self, client, db_session):
         """Test sync with no request body uses defaults."""
         with patch('app.routes.api.scheduler') as mock_scheduler:
             mock_scheduler.running = False
             
-            response = client.post('/api/sync')
+            response = client.post('/api/sync', json={})
             
             assert response.status_code == 202
             data = response.get_json()

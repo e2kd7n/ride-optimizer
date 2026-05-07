@@ -161,10 +161,12 @@ def sync():
     current_app.logger.info(f'Data sync requested: source={source}, force={force}')
     
     # Create job record
-    job = JobHistory(
+    # Use JobHistory.create_job() class method for proper initialization
+    job = JobHistory.create_job(
         job_type=f'sync_{source}',
-        status='pending',
-        description=f'Manual sync: {source} (force={force})'
+        job_name=f'Manual Sync: {source}',
+        parameters={'source': source, 'force': force},
+        triggered_by='user'
     )
     db.session.add(job)
     db.session.commit()
@@ -218,9 +220,10 @@ def jobs():
         'jobs': [
             {
                 'id': job.id,
+                'job_id': job.job_id,
                 'job_type': job.job_type,
+                'job_name': job.job_name,
                 'status': job.status,
-                'description': job.description,
                 'created_at': job.created_at.isoformat(),
                 'started_at': job.started_at.isoformat() if job.started_at else None,
                 'completed_at': job.completed_at.isoformat() if job.completed_at else None,
@@ -248,15 +251,17 @@ def job_status(job_id):
     
     return jsonify({
         'id': job.id,
+        'job_id': job.job_id,
         'job_type': job.job_type,
+        'job_name': job.job_name,
         'status': job.status,
-        'description': job.description,
+        'progress': job.progress,
         'created_at': job.created_at.isoformat(),
         'started_at': job.started_at.isoformat() if job.started_at else None,
         'completed_at': job.completed_at.isoformat() if job.completed_at else None,
         'duration_seconds': job.duration_seconds,
         'error_message': job.error_message,
-        'result': job.result
+        'result_summary': job.result_summary
     })
 
 
