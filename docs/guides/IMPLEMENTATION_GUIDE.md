@@ -1,6 +1,47 @@
 # Implementation Guide - Step-by-Step
 
-This guide provides a detailed walkthrough for implementing the Strava Commute Route Analyzer.
+This guide provides a detailed walkthrough for setting up and using the Strava Commute Route Analyzer web platform.
+
+## Quick Start
+
+### For Users (Running the Application)
+
+1. **Clone and Setup**
+```bash
+git clone https://github.com/yourusername/ride-optimizer.git
+cd ride-optimizer
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+2. **Configure Strava API**
+Create `.env` file:
+```bash
+STRAVA_CLIENT_ID=your_client_id
+STRAVA_CLIENT_SECRET=your_client_secret
+```
+
+3. **Start Web Application**
+```bash
+python launch.py
+```
+Browser opens automatically to http://localhost:8083
+
+4. **First-Time Setup**
+- Click "Authenticate with Strava" in the dashboard
+- Grant access to your Strava data
+- App automatically fetches and analyzes your activities
+
+### For Developers (Understanding the Architecture)
+
+## Architecture Overview
+
+The application uses a **Smart Static architecture**:
+- Static HTML pages with client-side JavaScript
+- Minimal Flask API for JSON endpoints
+- Service layer for business logic
+- No server-side templates or sessions
 
 ## Implementation Order
 
@@ -8,7 +49,7 @@ Follow these phases in sequence for optimal development flow:
 
 ---
 
-## Phase 1: Foundation & Setup
+## Phase 1: Foundation & Setup (COMPLETED)
 
 ### Step 1.1: Project Structure Setup
 
@@ -67,37 +108,57 @@ __pycache__/
 
 ---
 
-## Phase 2: Authentication Module
+## Phase 2: Web Platform (COMPLETED)
 
-### Step 2.1: Create `src/auth.py`
+The web platform is fully implemented with:
 
-**Key Components:**
-1. `StravaAuthenticator` class
-2. OAuth flow implementation
-3. Token storage and refresh
-4. Client initialization
+### Frontend (`static/`)
+- `dashboard.html` - Main overview page
+- `commute.html` - Commute recommendations
+- `planner.html` - Long ride planning
+- `routes.html` - Route library
+- `js/api-client.js` - API communication layer
+- `js/map-renderer.js` - Leaflet map integration
 
-**Testing:**
-```python
-# Test authentication
-python -c "from src.auth import StravaAuthenticator; auth = StravaAuthenticator(); auth.authenticate()"
+### API Server (`launch.py`)
+- Flask application on port 8083
+- JSON endpoints for data retrieval
+- Lazy service initialization
+- Auto-opens browser on startup
+
+### Services (`app/services/`)
+- `analysis_service.py` - Route groups and long rides
+- `commute_service.py` - Commute recommendations
+- `weather_service.py` - Weather data and scoring
+- `planner_service.py` - Long ride planning
+- `route_library_service.py` - Route browsing
+
+### Testing the Web Platform
+
+```bash
+# Start the server
+python launch.py
+
+# Test API endpoints
+curl http://localhost:8083/api/status
+curl http://localhost:8083/api/weather
+curl http://localhost:8083/api/recommendation
+curl http://localhost:8083/api/routes
 ```
-
-**Success Criteria:**
-- Browser opens for OAuth
-- Tokens saved to `config/credentials.json`
-- Can create authenticated client
 
 ---
 
-## Phase 3: Data Fetching
+## Phase 3: Core Analysis (COMPLETED)
 
-### Step 3.1: Create `src/data_fetcher.py`
+### Authentication (`src/auth.py`)
+- Strava OAuth 2.0 flow
+- Token storage and refresh
+- Secure credential management
 
-**Key Components:**
-1. `StravaDataFetcher` class
-2. Activity fetching with pagination
-3. Caching mechanism
+### Data Fetching (`src/data_fetcher.py`)
+- Activity retrieval with pagination
+- Smart caching with merge support
+- Activity filtering
 4. Activity filtering
 
 **Implementation Priority:**

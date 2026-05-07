@@ -1,8 +1,18 @@
 # Strava Commute Route Analyzer
 
-A Python application that analyzes your Strava cycling activities to determine the optimal commute route between home and work, considering time, distance, and safety factors.
+A web-based Python application that analyzes your Strava cycling activities to determine the optimal commute route between home and work, considering time, distance, and safety factors.
 
-**Quick Start:** `python launch.py` to start the web application
+**Quick Start:** `python launch.py` to start the web application (opens automatically at http://localhost:8083)
+
+## Architecture
+
+This application uses a **Smart Static architecture**:
+- **Static HTML pages** (`static/*.html`) with client-side JavaScript
+- **Minimal Flask API** (`launch.py`) providing JSON endpoints
+- **Service layer** (`app/services/`) for business logic
+- **No server-side templates** - all rendering happens in the browser
+
+This design is optimized for single-user deployment on Raspberry Pi with minimal resource usage.
 
 ## 🔒 Security Notice
 
@@ -177,29 +187,92 @@ STRAVA_CLIENT_SECRET=your_actual_client_secret
 
 ## Quick Start
 
-### First Time Setup
+### Web Application (Recommended)
+
+1. **Start the web server**:
+```bash
+python launch.py
+```
+
+This will:
+- Start the Flask API server on port 8083
+- Automatically open your browser to http://localhost:8083
+- Display the interactive dashboard
+
+2. **First-time setup**:
+- The dashboard will prompt you to authenticate with Strava
+- Click "Authenticate" and grant access
+- The app will fetch and analyze your activities automatically
+
+3. **Use the web interface**:
+- **Dashboard**: Overview of your routes and recommendations
+- **Commute**: Next commute recommendations with weather
+- **Planner**: Long ride planning with 7-day forecast
+- **Routes**: Browse and search all your routes
+
+### CLI Analysis (Alternative)
+
+For command-line analysis and report generation:
 
 1. **Authenticate with Strava**:
 ```bash
 python main.py --auth
 ```
-This will open your browser for OAuth authorization. After granting access, the tokens will be saved locally.
 
 2. **Run Analysis**:
 ```bash
 python main.py --analyze
 ```
 
-This will:
-- Fetch your activities from Strava
-- Identify your home and work locations
-- Analyze all commute routes
-- Generate an interactive HTML report
-
 3. **View Results**:
 Open `output/reports/commute_analysis.html` in your browser.
 
 ## Usage
+
+### Web Application
+
+The web application provides four main pages:
+
+1. **Dashboard** (`/` or `/dashboard.html`)
+   - Overview of all routes and statistics
+   - Current weather conditions
+   - Next commute recommendation
+   - Interactive map with route visualization
+
+2. **Commute** (`/commute.html`)
+   - Next commute recommendations (to work / to home)
+   - Weather-aware route selection
+   - Workout-fit integration (TrainerRoad)
+   - Alternative route comparisons
+   - Interactive map with route overlays
+
+3. **Planner** (`/planner.html`)
+   - Long ride planning with 7-day forecast
+   - Route suggestions based on weather
+   - Calendar view of planned rides
+   - Distance and elevation profiles
+
+4. **Routes** (`/routes.html`)
+   - Browse all routes (commute and long rides)
+   - Search and filter functionality
+   - Route details and statistics
+   - Favorite routes management
+
+### API Endpoints
+
+The web application exposes JSON API endpoints for client-side rendering:
+
+```
+GET /api/weather          - Current weather data
+GET /api/recommendation   - Next commute recommendation
+GET /api/routes           - All routes for library
+GET /api/status           - System health and data freshness
+GET /api/maps/<page_type> - Map data for client-side rendering
+```
+
+See `launch.py` for complete API documentation.
+
+### CLI Usage
 
 ### Performance Options
 
