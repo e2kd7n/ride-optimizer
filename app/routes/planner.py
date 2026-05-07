@@ -178,17 +178,55 @@ def analyze():
         f'distance={min_distance}-{max_distance}mi, force_refresh={force_refresh}'
     )
     
-    # TODO: Implement with service layer (Issue #130)
-    # - Call long_ride_analyzer.get_recommendations()
-    # - Include weather, workout fit, route variety analysis
-    # - Cache results with appropriate TTL
+    try:
+        services = get_services()
+        analysis_service = services['analysis']
+        planner_service = services['planner']
+        
+        # Get long rides
+        long_rides = analysis_service.get_long_rides()
+        
+        if not long_rides:
+            return jsonify({
+                'status': 'error',
+                'message': 'No long ride data available. Please run analysis first.',
+                'analysis_timestamp': datetime.now().isoformat()
+            }), 400
+        
+        # Initialize planner
+        planner_service.initialize(long_rides)
+        
+        # Get recommendations
+        rec_data = planner_service.get_recommendations(
+            forecast_days=forecast_days,
+            min_distance=min_distance,
+            max_distance=max_distance
+        )
+        
+        if rec_data.get('status') == 'success':
+            return jsonify({
+                'status': 'success',
+                'message': 'Analysis complete',
+                'recommendations': rec_data.get('recommendations', []),
+                'best_day': rec_data.get('best_day'),
+                'total_rides': rec_data.get('total_rides', 0),
+                'analysis_timestamp': datetime.now().isoformat()
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': rec_data.get('message', 'Analysis failed'),
+                'analysis_timestamp': datetime.now().isoformat()
+            }), 500
     
-    return jsonify({
-        'status': 'success',
-        'message': 'Analysis complete',
-        'recommendations': [],  # TODO: Return actual recommendations
-        'analysis_timestamp': datetime.now().isoformat()
-    })
+    except Exception as e:
+        current_app.logger.error(f"Error analyzing long rides: {e}")
+        current_app.logger.debug(traceback.format_exc())
+        return jsonify({
+            'status': 'error',
+            'message': str(e),
+            'analysis_timestamp': datetime.now().isoformat()
+        }), 500
 
 
 @bp.route('/route/<int:route_id>')
@@ -205,16 +243,96 @@ def route_detail(route_id):
     """
     current_app.logger.info(f'Route detail accessed: route_id={route_id}')
     
-    # TODO: Replace with actual service layer calls (Issue #130)
-    context = {
-        'page_title': f'Route #{route_id}',
-        'route': None,  # TODO: Get from database
-        'weather_forecast': None,  # TODO: Get localized weather
-        'historical_performance': [],  # TODO: Get past activities on this route
-        'similar_routes': []  # TODO: Find similar alternatives
-    }
+    try:
+        services = get_services()
+        analysis_service = services['analysis']
+        planner_service = services['planner']
+        
+        # Get long rides
+        long_rides = analysis_service.get_long_rides()
+        
+        # Find the specific route
+        route = None
+        for ride in long_rides:
+            if ride.activity_id == route_id:
+                route = {
+                    'id': ride.activity_id,
+                    'name': ride.name,
+                    'distance': ride.distance_km,
+                    'duration': ride.duration_hours,
+                    'elevation': ride.elevation_gain,
+                    'start_location': ride.start_location,
+                    'is_loop': ride.is_loop,
+                    'uses': ride.uses,
+                    'type': ride.type,
+                    'last_used': ride.last_used.isoformat() if ride.last_used else None
+                }
+                break
+        
+        if not route:
+            context = {
+                'page_title': f'Route #{route_id}',
+                'route': None,
+                'error': f'Route {route_id} not found'
+            }
+            return render_template('planner/route_detail.html', **context), 404
+        
+        # Get weather forecast for route location
+        weather_forecast = None
+        try:
+            from app.services.weather_service import WeatherService
+            weather_service = WeatherService(services['analysis'].config)
+            snapshot = weather_service.get_weather_snapshot(
+                lat=route['start_location'][0],
+                lon=route['start_location'][1],
+                target_date=datetime.now().date()
+            )
+            if snapshot:
+                weather_forecast = {
+                    'temperature': snapshot.temperature_f,
+                    'conditions': snapshot.conditions,
+                    'wind_speed': snapshot.wind_speed_mph,
+                    'precipitation': snapshot.precipitation_in
+                }
+        except Exception as e:
+            current_app.logger.error(f"Error fetching weather: {e}")
+        
+        # Find similar routes (same type, similar distance)
+        similar_routes = []
+        target_distance = route['distance']
+        for ride in long_rides[:20]:  # Limit to 20
+            if ride.activity_id != route_id:
+                distance_diff = abs(ride.distance_km - target_distance)
+                if distance_diff < 10:  # Within 10km
+                    similar_routes.append({
+                        'id': ride.activity_id,
+                        'name': ride.name,
+                        'distance': ride.distance_km,
+                        'elevation': ride.elevation_gain,
+                        'similarity_score': 1.0 - (distance_diff / 10)
+                    })
+        
+        similar_routes.sort(key=lambda r: r['similarity_score'], reverse=True)
+        
+        context = {
+            'page_title': route['name'] or f'Route #{route_id}',
+            'route': route,
+            'weather_forecast': weather_forecast,
+            'historical_performance': [],  # Would need activity history from database
+            'similar_routes': similar_routes[:5]  # Top 5 similar
+        }
+        
+        return render_template('planner/route_detail.html', **context)
     
-    return render_template('planner/route_detail.html', **context)
+    except Exception as e:
+        current_app.logger.error(f"Error loading route detail: {e}")
+        current_app.logger.debug(traceback.format_exc())
+        context = {
+            'page_title': f'Route #{route_id}',
+            'route': None,
+            'error': str(e)
+        }
+        return render_template('planner/route_detail.html', **context)
 
 
 @bp.route('/api/recommendations')
@@ -262,16 +380,82 @@ def calendar():
     year = request.args.get('year', datetime.now().year, type=int)
     month = request.args.get('month', datetime.now().month, type=int)
     
-    # TODO: Replace with actual service layer calls (Issue #130)
-    context = {
-        'page_title': 'Ride Calendar',
-        'year': year,
-        'month': month,
-        'rides': [],  # TODO: Get rides for month
-        'workouts': [],  # TODO: Get TrainerRoad workouts
-        'weather_patterns': {}  # TODO: Get historical weather
-    }
+    try:
+        services = get_services()
+        analysis_service = services['analysis']
+        trainerroad_service = services['trainerroad']
+        
+        # Get rides for the month
+        from datetime import date
+        import calendar as cal
+        
+        month_start = date(year, month, 1)
+        _, last_day = cal.monthrange(year, month)
+        month_end = date(year, month, last_day)
+        
+        # Get all long rides
+        long_rides = analysis_service.get_long_rides()
+        
+        # Filter rides by last_used date in the month
+        rides_in_month = []
+        if long_rides:
+            for ride in long_rides:
+                if ride.last_used and month_start <= ride.last_used.date() <= month_end:
+                    rides_in_month.append({
+                        'id': ride.activity_id,
+                        'name': ride.name,
+                        'date': ride.last_used.date().isoformat(),
+                        'distance': ride.distance_km,
+                        'duration': ride.duration_hours,
+                        'elevation': ride.elevation_gain
+                    })
+        
+        # Get TrainerRoad workouts for the month
+        workouts_in_month = []
+        try:
+            # Get workouts for next 30 days from month start
+            days_to_fetch = (month_end - month_start).days + 1
+            workouts = trainerroad_service.get_upcoming_workouts(days=days_to_fetch)
+            
+            if workouts:
+                for workout in workouts:
+                    if month_start <= workout.date <= month_end:
+                        workouts_in_month.append({
+                            'date': workout.date.isoformat(),
+                            'name': workout.name,
+                            'duration': workout.duration_minutes,
+                            'tss': workout.tss,
+                            'type': workout.workout_type
+                        })
+        except Exception as e:
+            current_app.logger.error(f"Error fetching workouts: {e}")
+        
+        context = {
+            'page_title': 'Ride Calendar',
+            'year': year,
+            'month': month,
+            'month_name': cal.month_name[month],
+            'rides': rides_in_month,
+            'workouts': workouts_in_month,
+            'weather_patterns': {
+                'note': 'Historical weather patterns require weather database'
+            }
+        }
+        
+        return render_template('planner/calendar.html', **context)
     
-    return render_template('planner/calendar.html', **context)
+    except Exception as e:
+        current_app.logger.error(f"Error loading calendar: {e}")
+        current_app.logger.debug(traceback.format_exc())
+        context = {
+            'page_title': 'Ride Calendar',
+            'year': year,
+            'month': month,
+            'rides': [],
+            'workouts': [],
+            'weather_patterns': {},
+            'error': str(e)
+        }
+        return render_template('planner/calendar.html', **context)
 
 # Made with Bob
