@@ -48,6 +48,12 @@ def create_app(config_name='default'):
     # Register error handlers
     register_error_handlers(app)
     
+    # Initialize and start scheduler (unless in testing mode)
+    if not app.testing:
+        from app.scheduler import start_scheduler
+        start_scheduler(app)
+        app.logger.info("Background scheduler started")
+    
     # Log startup
     app.logger.info(f"Ride Optimizer web platform initialized (config: {config_name})")
     
