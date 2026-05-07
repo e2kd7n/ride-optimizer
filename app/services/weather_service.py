@@ -270,6 +270,77 @@ class WeatherService:
         
         return weather
     
+    def get_daily_forecast(self,
+                          lat: float,
+                          lon: float,
+                          days: int = 7,
+                          location_name: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Get multi-day weather forecast with comfort scoring.
+        
+        Fetches daily forecast data for the specified number of days and enriches
+        each day with cycling comfort metrics (comfort_score and cycling_favorability).
+        
+        Args:
+            lat: Latitude
+            lon: Longitude
+            days: Number of forecast days (1-14, default 7)
+            location_name: Optional location name for logging
+            
+        Returns:
+            List of daily forecast dictionaries, each containing:
+            {
+                'date': str (YYYY-MM-DD),
+                'temperature': float,
+                'temperature_c': float,
+                'conditions': str,
+                'wind_speed': float,
+                'wind_speed_kph': float,
+                'wind_direction': str,
+                'precipitation': float,
+                'precipitation_mm': float,
+                'comfort_score': float (0-1),
+                'cycling_favorability': str ('favorable'|'neutral'|'unfavorable')
+            }
+            Returns empty list if forecast unavailable.
+        """
+        try:
+            # Validate days parameter
+            days = max(1, min(14, days))
+            
+            logger.info(f"Fetching {days}-day forecast for ({lat}, {lon})")
+            
+            # Get forecast from WeatherFetcher
+            forecast_data = self.fetcher.get_daily_forecast(lat, lon, days=days)
+            
+            if not forecast_data:
+                logger.warning(f"No forecast data available for ({lat}, {lon})")
+                return []
+            
+            # Enrich each day with comfort metrics
+            enriched_forecast = []
+            for day_data in forecast_data:
+                if not day_data:
+                    continue
+                
+                # Add comfort score and favorability
+                enriched_day = self._enrich_weather_data(day_data.copy())
+                enriched_forecast.append(enriched_day)
+            
+            logger.info(
+                f"Retrieved {len(enriched_forecast)}-day forecast for "
+                f"{location_name or 'location'}"
+            )
+            
+            return enriched_forecast
+            
+        except Exception as e:
+            logger.error(
+                f"Error getting daily forecast for ({lat}, {lon}): {e}",
+                exc_info=True
+            )
+            return []
+    
     def _get_degraded_weather(self,
                              lat: float,
                              lon: float,
