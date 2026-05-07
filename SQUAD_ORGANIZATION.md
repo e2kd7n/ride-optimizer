@@ -207,78 +207,86 @@ Weeks 4-5: QA Squad (#157) → Beta Launch
 
 The critical path for v3.0.0 release:
 
-1. **Foundation Phase (Weeks 1-3)**
-   - **#76 (P0)** → #129 → #130 → #131 → #137
-   - **Blocker:** Nothing can proceed without these
+1. **Week 1: Foundation Migration**
+   - **#153** - Extract services, create minimal API, migrate data
+   - **Blocker:** None - can start immediately
 
-2. **Parallel Development (Weeks 3-6)**
-   - Frontend: #132 → #133 → #134 → #135
-   - Integration: #138 → #139 → #140
+2. **Week 2: Frontend Conversion**
+   - **#155** - Convert templates to static HTML + JavaScript
+   - **Blocker:** Depends on #153
 
-3. **Quality Assurance (Weeks 5-8)**
-   - #99 → #100 → #142 → #143 → #101
+3. **Week 3: Integration Work**
+   - **#156** - Convert APScheduler to cron, integration testing
+   - **Blocker:** Depends on #153 and #155
+
+4. **Weeks 4-5: QA & Beta Prep**
+   - **#157** - Testing, documentation, beta infrastructure
+   - **Blocker:** Depends on #153, #155, #156
+
+**Total Timeline:** 5 weeks (vs 8 weeks with Flask platform)
 
 ---
 
-## 📅 Milestone Schedule
+## 📅 Milestone Schedule (REVISED)
 
-### Milestone 1: Foundation Complete (Week 3)
-- [ ] Flask API operational
-- [ ] SQLite persistence working
-- [ ] Background jobs functional
-- [ ] Service layer extracted
+### Milestone 1: Foundation Migration Complete (End of Week 1)
+- [ ] Services extracted from Flask dependencies
+- [ ] Minimal API operational (`api.py`)
+- [ ] JSON file storage working
+- [ ] Migration tooling tested
 
-### Milestone 2: Core Views Complete (Week 6)
-- [ ] Dashboard implemented
-- [ ] Commute recommendations working
-- [ ] Long ride planner functional
-- [ ] Route library browsable
+### Milestone 2: Frontend Conversion Complete (End of Week 2)
+- [ ] Static HTML pages generated
+- [ ] JavaScript API integration working
+- [ ] Client-side features functional
+- [ ] Responsive design verified
 
-### Milestone 3: Feature Integration Complete (Week 6)
-- [ ] Weather integration complete 🔴 STUB ONLY - REOPENED
-- [ ] TrainerRoad import functional 🔴 STUB ONLY - REOPENED
-- [ ] Workout-aware recommendations 🔴 NOT IMPLEMENTED - REOPENED
-- [ ] API endpoints implemented ⏳ IN PROGRESS
-- [ ] Database persistence for favorites ⏳ IN PROGRESS
+### Milestone 3: Integration Complete (End of Week 3)
+- [ ] Cron jobs configured and tested
+- [ ] Background automation working
+- [ ] Integration tests passing
+- [ ] Pi deployment tested
 
-### Milestone 4: Production Ready (Week 8)
-- [ ] 80%+ test coverage
+### Milestone 4: Beta Ready (End of Week 5)
+- [ ] 70% test coverage achieved
 - [ ] All integration tests passing
-- [ ] Responsive design complete
-- [ ] Documentation finished
-- [ ] Accessibility compliant
+- [ ] Complete documentation
+- [ ] Beta infrastructure ready
+- [ ] Ready for launch
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Getting Started (REVISED)
 
 ### For Foundation Squad
 ```bash
-# Start with issue #129
-gh issue view 129
-git checkout -b feature/flask-app-factory
-# Begin implementation
+# Start with Phase 1
+gh issue view 153
+git checkout -b feature/architecture-simplification-phase1
+# Begin service extraction
 ```
 
 ### For Frontend Squad (Wait for Foundation)
 ```bash
 # Monitor Foundation progress
-gh issue list --label "P1-high" --search "is:open milestone:foundation"
-# When #129-131 complete, start with #132
+gh issue view 153
+# When #153 complete, start with #155
+git checkout -b feature/architecture-simplification-phase2
 ```
 
-### For Integration Squad (Wait for Foundation)
+### For Integration Squad (Wait for Frontend)
 ```bash
-# Monitor Foundation progress
-gh issue list --label "P1-high" --search "is:open milestone:foundation"
-# When #129-131 complete, start with #136
+# Monitor progress
+gh issue view 155
+# When #153 and #155 complete, start with #156
+git checkout -b feature/architecture-simplification-phase3
 ```
 
-### For QA Squad (Wait for Core Features)
+### For QA Squad (Wait for All Phases)
 ```bash
 # Monitor overall progress
-gh issue list --label "P1-high" --search "is:open"
-# When core features ready, start with #99
+gh issue list --label "P0-critical"
+# When #153, #155, #156 complete, start with #157
 ```
 
 ---
