@@ -450,8 +450,9 @@ class RouteVisualizer:
         # Add JavaScript for long rides click handler if long rides are available
         self._add_long_rides_javascript()
         
-        # Return HTML
-        return self.map._repr_html_()
+        # Return HTML - use get_root().render() for proper HTML output
+        # _repr_html_() returns iframe-based output for Jupyter, which doesn't work in web apps
+        return self.map.get_root().render()
     
     def generate_preview_map(self, optimal_route: RouteGroup) -> str:
         """
@@ -535,7 +536,9 @@ class RouteVisualizer:
         """
         preview_map.get_root().html.add_child(Element(js_code))
         
-        return preview_map._repr_html_()
+        # Return HTML - use get_root().render() for proper HTML output
+        # _repr_html_() returns iframe-based output for Jupyter, which doesn't work in web apps
+        return preview_map.get_root().render()
     
     def get_route_colors(self) -> Dict[str, str]:
         """

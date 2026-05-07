@@ -543,8 +543,9 @@ class AnalysisService:
             
             folium.LayerControl().add_to(visualizer.map)
             
-            # Get map HTML
-            map_html = visualizer.map._repr_html_()
+            # Get map HTML - use get_root().render() for proper HTML output
+            # _repr_html_() returns iframe-based output for Jupyter, which doesn't work in web apps
+            map_html = visualizer.map.get_root().render()
             
             logger.info(f"Dashboard map generated with {len(top_routes)} routes")
             return map_html
