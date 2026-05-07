@@ -240,7 +240,12 @@ class TestGetServices:
             mock_weather.assert_called_once()
     
     @patch('app.routes.dashboard.Config')
-    def test_get_services_caches_in_g(self, mock_config_cls, app):
+    @patch('app.routes.dashboard.AnalysisService')
+    @patch('app.routes.dashboard.CommuteService')
+    @patch('app.routes.dashboard.PlannerService')
+    @patch('app.routes.dashboard.WeatherService')
+    def test_get_services_caches_in_g(self, mock_weather, mock_planner,
+                                     mock_commute, mock_analysis, mock_config_cls, app):
         """Test that services are cached in Flask g object."""
         from app.routes.dashboard import get_services
         from flask import g
