@@ -325,14 +325,16 @@ class TestGetRouteStatistics:
 class TestFavoriteManagement:
     """Test favorite route management."""
     
+    @patch('app.services.route_library_service.db')
     @patch('app.services.route_library_service.FavoriteRoute')
-    @patch('app.services.route_library_service.db.session')
-    def test_toggle_favorite_add(self, mock_db_session, mock_favorite_route, initialized_service):
+    def test_toggle_favorite_add(self, mock_favorite_route, mock_db, initialized_service):
         """Test adding route to favorites."""
-        # Mock database operations
-        mock_db_session.add = Mock()
-        mock_db_session.commit = Mock()
-        mock_db_session.rollback = Mock()
+        # Mock database session
+        mock_session = Mock()
+        mock_db.session = mock_session
+        mock_session.add = Mock()
+        mock_session.commit = Mock()
+        mock_session.rollback = Mock()
         
         # Mock query to return empty list (no existing favorites)
         mock_favorite_route.query.filter_by.return_value.first.return_value = None
@@ -344,17 +346,19 @@ class TestFavoriteManagement:
         assert "route_group_1" in initialized_service._favorites
         
         # Verify database operations were called
-        mock_db_session.add.assert_called_once()
-        mock_db_session.commit.assert_called_once()
+        mock_session.add.assert_called_once()
+        mock_session.commit.assert_called_once()
     
-    @patch('app.services.route_library_service.db.session')
+    @patch('app.services.route_library_service.db')
     @patch('app.services.route_library_service.FavoriteRoute')
-    def test_toggle_favorite_remove(self, mock_favorite_route, mock_db_session, initialized_service):
+    def test_toggle_favorite_remove(self, mock_favorite_route, mock_db, initialized_service):
         """Test removing route from favorites."""
-        # Mock database operations
-        mock_db_session.delete = Mock()
-        mock_db_session.commit = Mock()
-        mock_db_session.rollback = Mock()
+        # Mock database session
+        mock_session = Mock()
+        mock_db.session = mock_session
+        mock_session.delete = Mock()
+        mock_session.commit = Mock()
+        mock_session.rollback = Mock()
         
         # Mock query to return a favorite
         mock_favorite = Mock()
@@ -370,8 +374,8 @@ class TestFavoriteManagement:
         assert "route_group_1" not in initialized_service._favorites
         
         # Verify database operations were called
-        mock_db_session.delete.assert_called_once_with(mock_favorite)
-        mock_db_session.commit.assert_called_once()
+        mock_session.delete.assert_called_once_with(mock_favorite)
+        mock_session.commit.assert_called_once()
     
     def test_get_favorites_empty(self, initialized_service):
         """Test getting favorites when none exist."""
@@ -380,14 +384,8 @@ class TestFavoriteManagement:
         assert result['count'] == 0
         assert result['favorites'] == []
     
-    @patch('app.services.route_library_service.db.session')
-    def test_get_favorites_with_routes(self, mock_db_session, initialized_service):
+    def test_get_favorites_with_routes(self, initialized_service):
         """Test getting favorite routes."""
-        # Mock database operations
-        mock_db_session.add = Mock()
-        mock_db_session.commit = Mock()
-        mock_db_session.rollback = Mock()
-        
         # Add favorites (just to in-memory set, skip database)
         initialized_service._favorites.add("route_group_1")
         initialized_service._favorites.add("67890")
@@ -397,14 +395,8 @@ class TestFavoriteManagement:
         assert result['count'] == 2
         assert len(result['favorites']) == 2
     
-    @patch('app.services.route_library_service.db.session')
-    def test_favorite_status_in_route_list(self, mock_db_session, initialized_service):
+    def test_favorite_status_in_route_list(self, initialized_service):
         """Test that favorite status appears in route listings."""
-        # Mock database operations
-        mock_db_session.add = Mock()
-        mock_db_session.commit = Mock()
-        mock_db_session.rollback = Mock()
-        
         # Add a favorite (just to in-memory set, skip database)
         initialized_service._favorites.add("route_group_1")
         
