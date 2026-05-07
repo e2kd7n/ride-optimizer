@@ -18,7 +18,7 @@ from pathlib import Path
 import json
 from flask import Flask
 
-from app.models import db, JobHistory, AnalysisSnapshot
+from app.models import db, JobHistory, AnalysisSnapshot, RouteGroup
 from app.routes import api as api_module
 from app.routes.api import _get_cache_statistics
 
@@ -535,13 +535,42 @@ class TestAnalyticsSummary:
         db_session.add(snapshot)
         db_session.commit()
         
-        # Mock route groups
-        mock_route_groups = [
-            Mock(id=1, name='Route 1', uses_count=50),
-            Mock(id=2, name='Route 2', uses_count=30),
-            Mock(id=3, name='Route 3', uses_count=20)
-        ]
-        snapshot.route_groups = mock_route_groups
+        # Create actual route groups
+        route_group_1 = RouteGroup(
+            snapshot_id=snapshot.id,
+            group_id='route_1',
+            name='Route 1',
+            direction='home_to_work',
+            frequency=50,
+            avg_distance=15000,
+            avg_duration=2700,
+            avg_elevation=150,
+            avg_speed=5.5
+        )
+        route_group_2 = RouteGroup(
+            snapshot_id=snapshot.id,
+            group_id='route_2',
+            name='Route 2',
+            direction='home_to_work',
+            frequency=30,
+            avg_distance=16000,
+            avg_duration=2800,
+            avg_elevation=120,
+            avg_speed=5.7
+        )
+        route_group_3 = RouteGroup(
+            snapshot_id=snapshot.id,
+            group_id='route_3',
+            name='Route 3',
+            direction='work_to_home',
+            frequency=20,
+            avg_distance=15500,
+            avg_duration=2750,
+            avg_elevation=140,
+            avg_speed=5.6
+        )
+        db_session.add_all([route_group_1, route_group_2, route_group_3])
+        db_session.commit()
         
         response = client.get('/api/analytics/summary')
         
