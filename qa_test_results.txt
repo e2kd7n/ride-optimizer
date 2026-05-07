@@ -1,0 +1,455 @@
+[0;34m============================================================[0m
+[0;34mFrontend Squad QA Test Suite - Master Runner[0m
+[0;34m============================================================[0m
+
+Project Root: /Users/erik/dev/ride-optimizer
+Test Directory: /Users/erik/dev/ride-optimizer/tests/qa
+
+[1;33mStarting QA test suite...[0m
+
+[0;34m------------------------------------------------------------[0m
+[0;34mRunning: Dashboard (Issue #132)[0m
+[0;34m------------------------------------------------------------[0m
+[2026-05-07 11:27:44,777] INFO in __init__: Registered all blueprints
+[2026-05-07 11:27:44,777] INFO in scheduler: Scheduler initialized successfully
+[2026-05-07 11:27:44,799] INFO in scheduler: Scheduler started with 5 jobs
+[2026-05-07 11:27:44,800] INFO in scheduler: Scheduled job: System Health Check (next run: 2026-05-07 16:30:00+00:00)
+[2026-05-07 11:27:44,800] INFO in scheduler: Scheduled job: Weather Data Refresh (next run: 2026-05-07 18:00:00+00:00)
+[2026-05-07 11:27:44,800] INFO in scheduler: Scheduled job: Daily Analysis Refresh (next run: 2026-05-08 02:00:00+00:00)
+[2026-05-07 11:27:44,800] INFO in scheduler: Scheduled job: Cache Cleanup (next run: 2026-05-08 03:00:00+00:00)
+[2026-05-07 11:27:44,800] INFO in scheduler: Scheduled job: Log Rotation (next run: 2026-05-10 04:00:00+00:00)
+[2026-05-07 11:27:44,800] INFO in __init__: Background scheduler started
+[2026-05-07 11:27:44,800] INFO in __init__: Ride Optimizer web platform initialized (config: default)
+[2026-05-07 11:27:44,801] INFO in dashboard: Dashboard accessed
+[2026-05-07 11:27:44,806] INFO in analysis_service: Loading analysis data from cache...
+[2026-05-07 11:27:44,833] INFO in analysis_service: Loaded 203 route groups from cache
+[2026-05-07 11:27:44,833] INFO in analysis_service: Cache contains 222 activities
+[2026-05-07 11:27:44,833] INFO in analysis_service: Cache loaded successfully
+[2026-05-07 11:27:44,833] INFO in dashboard: Analysis status: None
+[2026-05-07 11:27:44,833] INFO in analysis_service: Locations not in cache, extracting from route groups...
+[2026-05-07 11:27:44,834] INFO in analysis_service: Extracted home location: (41.9871, -87.6554)
+[2026-05-07 11:27:44,834] INFO in analysis_service: Extracted work location: (41.8825, -87.6348)
+[2026-05-07 11:27:44,834] INFO in analysis_service: Generating dashboard overview map...
+[2026-05-07 11:27:44,992] INFO in analysis_service: Dashboard map generated with 10 routes
+[2026-05-07 11:27:44,993] INFO in dashboard: Dashboard overview map generated successfully
+[2026-05-07 11:27:45,007] INFO in dashboard: Dashboard accessed
+[2026-05-07 11:27:45,009] INFO in analysis_service: Loading analysis data from cache...
+[2026-05-07 11:27:45,034] INFO in analysis_service: Loaded 203 route groups from cache
+[2026-05-07 11:27:45,034] INFO in analysis_service: Cache contains 222 activities
+[2026-05-07 11:27:45,034] INFO in analysis_service: Cache loaded successfully
+[2026-05-07 11:27:45,034] INFO in dashboard: Analysis status: None
+[2026-05-07 11:27:45,034] INFO in analysis_service: Locations not in cache, extracting from route groups...
+[2026-05-07 11:27:45,035] INFO in analysis_service: Extracted home location: (41.9871, -87.6554)
+[2026-05-07 11:27:45,035] INFO in analysis_service: Extracted work location: (41.8825, -87.6348)
+[2026-05-07 11:27:45,035] INFO in analysis_service: Generating dashboard overview map...
+[2026-05-07 11:27:45,207] INFO in analysis_service: Dashboard map generated with 10 routes
+[2026-05-07 11:27:45,207] INFO in dashboard: Dashboard overview map generated successfully
+[2026-05-07 11:27:45,215] INFO in dashboard: Dashboard accessed
+[2026-05-07 11:27:45,218] INFO in analysis_service: Loading analysis data from cache...
+[2026-05-07 11:27:45,242] INFO in analysis_service: Loaded 203 route groups from cache
+[2026-05-07 11:27:45,242] INFO in analysis_service: Cache contains 222 activities
+[2026-05-07 11:27:45,242] INFO in analysis_service: Cache loaded successfully
+[2026-05-07 11:27:45,242] INFO in dashboard: Analysis status: None
+[2026-05-07 11:27:45,242] INFO in analysis_service: Locations not in cache, extracting from route groups...
+[2026-05-07 11:27:45,242] INFO in analysis_service: Extracted home location: (41.9871, -87.6554)
+[2026-05-07 11:27:45,242] INFO in analysis_service: Extracted work location: (41.8825, -87.6348)
+[2026-05-07 11:27:45,242] INFO in analysis_service: Generating dashboard overview map...
+[2026-05-07 11:27:45,400] INFO in analysis_service: Dashboard map generated with 10 routes
+[2026-05-07 11:27:45,401] INFO in dashboard: Dashboard overview map generated successfully
+[2026-05-07 11:27:45,406] INFO in dashboard: Dashboard accessed
+[2026-05-07 11:27:45,409] INFO in analysis_service: Loading analysis data from cache...
+[2026-05-07 11:27:45,444] INFO in analysis_service: Loaded 203 route groups from cache
+[2026-05-07 11:27:45,444] INFO in analysis_service: Cache contains 222 activities
+[2026-05-07 11:27:45,444] INFO in analysis_service: Cache loaded successfully
+[2026-05-07 11:27:45,444] INFO in dashboard: Analysis status: None
+[2026-05-07 11:27:45,444] INFO in analysis_service: Locations not in cache, extracting from route groups...
+[2026-05-07 11:27:45,444] INFO in analysis_service: Extracted home location: (41.9871, -87.6554)
+[2026-05-07 11:27:45,444] INFO in analysis_service: Extracted work location: (41.8825, -87.6348)
+[2026-05-07 11:27:45,444] INFO in analysis_service: Generating dashboard overview map...
+[2026-05-07 11:27:45,602] INFO in analysis_service: Dashboard map generated with 10 routes
+[2026-05-07 11:27:45,602] INFO in dashboard: Dashboard overview map generated successfully
+
+============================================================
+Dashboard QA Test Suite (Issue #132)
+============================================================
+
+
+
+
+
+
+============================================================
+Test Summary
+============================================================
+✓ Dashboard Accessibility        PASS   Route accessible
+✓ Dashboard Content              PASS   All sections present
+✓ Health Endpoint                PASS   Endpoint healthy
+✓ Response Time                  PASS   0.191s
+✓ Error Handling                 PASS   Graceful degradation
+
+------------------------------------------------------------
+Total: 5 | Passed: 5 | Failed: 0 | Errors: 0 | Warnings: 0
+------------------------------------------------------------
+
+[0;32m✓ Dashboard PASSED[0m
+
+[0;34m------------------------------------------------------------[0m
+[0;34mRunning: Commute Views (Issue #133)[0m
+[0;34m------------------------------------------------------------[0m
+[2026-05-07 11:27:47,371] INFO in __init__: Registered all blueprints
+[2026-05-07 11:27:47,372] INFO in scheduler: Scheduler initialized successfully
+[2026-05-07 11:27:47,380] INFO in scheduler: Scheduler started with 5 jobs
+[2026-05-07 11:27:47,380] INFO in scheduler: Scheduled job: System Health Check (next run: 2026-05-07 16:30:00+00:00)
+[2026-05-07 11:27:47,380] INFO in scheduler: Scheduled job: Weather Data Refresh (next run: 2026-05-07 18:00:00+00:00)
+[2026-05-07 11:27:47,380] INFO in scheduler: Scheduled job: Daily Analysis Refresh (next run: 2026-05-08 02:00:00+00:00)
+[2026-05-07 11:27:47,380] INFO in scheduler: Scheduled job: Cache Cleanup (next run: 2026-05-08 03:00:00+00:00)
+[2026-05-07 11:27:47,380] INFO in scheduler: Scheduled job: Log Rotation (next run: 2026-05-10 04:00:00+00:00)
+[2026-05-07 11:27:47,380] INFO in __init__: Background scheduler started
+[2026-05-07 11:27:47,380] INFO in __init__: Ride Optimizer web platform initialized (config: default)
+[2026-05-07 11:27:47,381] INFO in commute: Commute recommendations accessed
+[2026-05-07 11:27:47,399] INFO in commute: Commute recommendations accessed
+[2026-05-07 11:27:47,402] INFO in commute: Commute recommendations accessed
+[2026-05-07 11:27:47,404] INFO in commute: Commute recommendations accessed
+[2026-05-07 11:27:47,408] INFO in commute: Commute recommendations accessed
+
+============================================================
+Commute Views QA Test Suite (Issue #133)
+============================================================
+
+
+[ERROR]   ✗ Weather Impact missing
+
+
+
+
+============================================================
+Test Summary
+============================================================
+✓ Commute Index                  PASS   Route accessible
+✗ Commute Content                FAIL   Some sections missing
+✓ Departure Time Param           PASS   Parameter accepted
+✓ Response Time                  PASS   0.003s
+✓ Error Handling                 PASS   Graceful degradation
+
+------------------------------------------------------------
+Total: 5 | Passed: 4 | Failed: 1 | Errors: 0 | Warnings: 0
+------------------------------------------------------------
+
+[0;31m✗ Commute Views FAILED[0m
+
+[0;34m------------------------------------------------------------[0m
+[0;34mRunning: Long Ride Planner (Issue #134)[0m
+[0;34m------------------------------------------------------------[0m
+[2026-05-07 11:27:49,060] INFO in __init__: Registered all blueprints
+[2026-05-07 11:27:49,061] INFO in scheduler: Scheduler initialized successfully
+[2026-05-07 11:27:49,082] INFO in scheduler: Scheduler started with 5 jobs
+[2026-05-07 11:27:49,082] INFO in scheduler: Scheduled job: System Health Check (next run: 2026-05-07 16:30:00+00:00)
+[2026-05-07 11:27:49,082] INFO in scheduler: Scheduled job: Weather Data Refresh (next run: 2026-05-07 18:00:00+00:00)
+[2026-05-07 11:27:49,082] INFO in scheduler: Scheduled job: Daily Analysis Refresh (next run: 2026-05-08 02:00:00+00:00)
+[2026-05-07 11:27:49,082] INFO in scheduler: Scheduled job: Cache Cleanup (next run: 2026-05-08 03:00:00+00:00)
+[2026-05-07 11:27:49,082] INFO in scheduler: Scheduled job: Log Rotation (next run: 2026-05-10 04:00:00+00:00)
+[2026-05-07 11:27:49,082] INFO in __init__: Background scheduler started
+[2026-05-07 11:27:49,082] INFO in __init__: Ride Optimizer web platform initialized (config: default)
+[2026-05-07 11:27:49,084] INFO in planner: Long ride planner accessed
+[2026-05-07 11:27:49,097] INFO in planner: Long ride planner accessed
+[2026-05-07 11:27:49,100] INFO in planner: Long ride planner accessed
+[2026-05-07 11:27:49,102] INFO in planner: Long ride planner accessed
+[2026-05-07 11:27:49,105] INFO in planner: Long ride planner accessed
+
+============================================================
+Long Ride Planner QA Test Suite (Issue #134)
+============================================================
+
+
+[ERROR]   ✗ Ride Recommendations missing
+
+
+
+
+============================================================
+Test Summary
+============================================================
+✓ Planner Accessibility          PASS   Route accessible
+✗ Planner Content                FAIL   Some sections missing
+✓ Date Range Param               PASS   Parameter accepted
+✓ Response Time                  PASS   0.003s
+✓ Error Handling                 PASS   Graceful degradation
+
+------------------------------------------------------------
+Total: 5 | Passed: 4 | Failed: 1 | Errors: 0 | Warnings: 0
+------------------------------------------------------------
+
+[0;31m✗ Long Ride Planner FAILED[0m
+
+[0;34m------------------------------------------------------------[0m
+[0;34mRunning: Route Library (Issue #135)[0m
+[0;34m------------------------------------------------------------[0m
+[2026-05-07 11:27:50,604] INFO in __init__: Registered all blueprints
+[2026-05-07 11:27:50,604] INFO in scheduler: Scheduler initialized successfully
+[2026-05-07 11:27:50,626] INFO in scheduler: Scheduler started with 5 jobs
+[2026-05-07 11:27:50,626] INFO in scheduler: Scheduled job: System Health Check (next run: 2026-05-07 16:30:00+00:00)
+[2026-05-07 11:27:50,627] INFO in scheduler: Scheduled job: Weather Data Refresh (next run: 2026-05-07 18:00:00+00:00)
+[2026-05-07 11:27:50,627] INFO in scheduler: Scheduled job: Daily Analysis Refresh (next run: 2026-05-08 02:00:00+00:00)
+[2026-05-07 11:27:50,627] INFO in scheduler: Scheduled job: Cache Cleanup (next run: 2026-05-08 03:00:00+00:00)
+[2026-05-07 11:27:50,627] INFO in scheduler: Scheduled job: Log Rotation (next run: 2026-05-10 04:00:00+00:00)
+[2026-05-07 11:27:50,627] INFO in __init__: Background scheduler started
+[2026-05-07 11:27:50,627] INFO in __init__: Ride Optimizer web platform initialized (config: default)
+[2026-05-07 11:27:50,628] INFO in route_library: Route library accessed: sort=uses, filter=all, search=, page=1
+[2026-05-07 11:27:50,630] INFO in route_library_service: Loaded 0 favorites from JSON storage
+[2026-05-07 11:27:50,630] INFO in route_library: No fresh analysis data, route library will use cache
+[2026-05-07 11:27:50,630] INFO in route_library_service: Loading route data from cache...
+[2026-05-07 11:27:50,653] INFO in route_library_service: Loaded 203 route groups from cache
+[2026-05-07 11:27:50,653] INFO in route_library_service: Route cache loaded successfully
+[2026-05-07 11:27:50,667] INFO in route_library: Route library accessed: sort=uses, filter=all, search=, page=1
+[2026-05-07 11:27:50,669] INFO in route_library_service: Loaded 0 favorites from JSON storage
+[2026-05-07 11:27:50,669] INFO in route_library: No fresh analysis data, route library will use cache
+[2026-05-07 11:27:50,669] INFO in route_library_service: Loading route data from cache...
+[2026-05-07 11:27:50,689] INFO in route_library_service: Loaded 203 route groups from cache
+[2026-05-07 11:27:50,689] INFO in route_library_service: Route cache loaded successfully
+[2026-05-07 11:27:50,696] INFO in route_library_service: Loaded 0 favorites from JSON storage
+[2026-05-07 11:27:50,696] INFO in route_library: No fresh analysis data, route library will use cache
+[2026-05-07 11:27:50,696] INFO in route_library: Route library accessed: sort=uses, filter=all, search=, page=1
+[2026-05-07 11:27:50,698] INFO in route_library_service: Loaded 0 favorites from JSON storage
+[2026-05-07 11:27:50,698] INFO in route_library: No fresh analysis data, route library will use cache
+[2026-05-07 11:27:50,698] INFO in route_library_service: Loading route data from cache...
+[2026-05-07 11:27:50,718] INFO in route_library_service: Loaded 203 route groups from cache
+[2026-05-07 11:27:50,718] INFO in route_library_service: Route cache loaded successfully
+[2026-05-07 11:27:50,722] INFO in route_library: Route library accessed: sort=uses, filter=all, search=, page=2
+[2026-05-07 11:27:50,724] INFO in route_library_service: Loaded 0 favorites from JSON storage
+[2026-05-07 11:27:50,724] INFO in route_library: No fresh analysis data, route library will use cache
+[2026-05-07 11:27:50,724] INFO in route_library_service: Loading route data from cache...
+[2026-05-07 11:27:50,747] INFO in route_library_service: Loaded 203 route groups from cache
+[2026-05-07 11:27:50,747] INFO in route_library_service: Route cache loaded successfully
+[2026-05-07 11:27:50,751] INFO in route_library: Route library accessed: sort=uses, filter=all, search=, page=1
+[2026-05-07 11:27:50,753] INFO in route_library_service: Loaded 0 favorites from JSON storage
+[2026-05-07 11:27:50,753] INFO in route_library: No fresh analysis data, route library will use cache
+[2026-05-07 11:27:50,753] INFO in route_library_service: Loading route data from cache...
+[2026-05-07 11:27:50,776] INFO in route_library_service: Loaded 203 route groups from cache
+[2026-05-07 11:27:50,776] INFO in route_library_service: Route cache loaded successfully
+[2026-05-07 11:27:50,780] INFO in route_library: Route library accessed: sort=uses, filter=all, search=, page=1
+[2026-05-07 11:27:50,783] INFO in route_library_service: Loaded 0 favorites from JSON storage
+[2026-05-07 11:27:50,783] INFO in route_library: No fresh analysis data, route library will use cache
+[2026-05-07 11:27:50,783] INFO in route_library_service: Loading route data from cache...
+[2026-05-07 11:27:50,805] INFO in route_library_service: Loaded 203 route groups from cache
+[2026-05-07 11:27:50,805] INFO in route_library_service: Route cache loaded successfully
+[2026-05-07 11:27:50,808] INFO in route_library: Route library accessed: sort=uses, filter=all, search=, page=1
+[2026-05-07 11:27:50,811] INFO in route_library_service: Loaded 0 favorites from JSON storage
+[2026-05-07 11:27:50,811] INFO in route_library: No fresh analysis data, route library will use cache
+[2026-05-07 11:27:50,811] INFO in route_library_service: Loading route data from cache...
+[2026-05-07 11:27:50,833] INFO in route_library_service: Loaded 203 route groups from cache
+[2026-05-07 11:27:50,833] INFO in route_library_service: Route cache loaded successfully
+[2026-05-07 11:27:50,837] INFO in route_library: Route library accessed: sort=uses, filter=all, search=, page=1
+[2026-05-07 11:27:50,839] INFO in route_library_service: Loaded 0 favorites from JSON storage
+[2026-05-07 11:27:50,839] INFO in route_library: No fresh analysis data, route library will use cache
+[2026-05-07 11:27:50,839] INFO in route_library_service: Loading route data from cache...
+[2026-05-07 11:27:50,861] INFO in route_library_service: Loaded 203 route groups from cache
+[2026-05-07 11:27:50,861] INFO in route_library_service: Route cache loaded successfully
+[2026-05-07 11:27:50,865] INFO in route_library: Route library accessed: sort=distance, filter=all, search=, page=1
+[2026-05-07 11:27:50,867] INFO in route_library_service: Loaded 0 favorites from JSON storage
+[2026-05-07 11:27:50,867] INFO in route_library: No fresh analysis data, route library will use cache
+[2026-05-07 11:27:50,867] INFO in route_library_service: Loading route data from cache...
+[2026-05-07 11:27:50,890] INFO in route_library_service: Loaded 203 route groups from cache
+[2026-05-07 11:27:50,890] INFO in route_library_service: Route cache loaded successfully
+[2026-05-07 11:27:50,893] INFO in route_library: Route library accessed: sort=uses, filter=all, search=, page=1
+[2026-05-07 11:27:50,896] INFO in route_library_service: Loaded 0 favorites from JSON storage
+[2026-05-07 11:27:50,896] INFO in route_library: No fresh analysis data, route library will use cache
+[2026-05-07 11:27:50,896] INFO in route_library_service: Loading route data from cache...
+[2026-05-07 11:27:50,918] INFO in route_library_service: Loaded 203 route groups from cache
+[2026-05-07 11:27:50,918] INFO in route_library_service: Route cache loaded successfully
+[2026-05-07 11:27:50,922] INFO in route_library: Route library accessed: sort=uses, filter=all, search=, page=1
+[2026-05-07 11:27:50,924] INFO in route_library_service: Loaded 0 favorites from JSON storage
+[2026-05-07 11:27:50,924] INFO in route_library: No fresh analysis data, route library will use cache
+[2026-05-07 11:27:50,924] INFO in route_library_service: Loading route data from cache...
+[2026-05-07 11:27:50,947] INFO in route_library_service: Loaded 203 route groups from cache
+[2026-05-07 11:27:50,947] INFO in route_library_service: Route cache loaded successfully
+[2026-05-07 11:27:50,951] INFO in route_library: Route library accessed: sort=uses, filter=all, search=, page=1
+[2026-05-07 11:27:50,953] INFO in route_library_service: Loaded 0 favorites from JSON storage
+[2026-05-07 11:27:50,953] INFO in route_library: No fresh analysis data, route library will use cache
+[2026-05-07 11:27:50,953] INFO in route_library_service: Loading route data from cache...
+[2026-05-07 11:27:50,975] INFO in route_library_service: Loaded 203 route groups from cache
+[2026-05-07 11:27:50,975] INFO in route_library_service: Route cache loaded successfully
+[2026-05-07 11:27:50,979] INFO in route_library: Route library accessed: sort=uses, filter=all, search=, page=1
+[2026-05-07 11:27:50,981] INFO in route_library_service: Loaded 0 favorites from JSON storage
+[2026-05-07 11:27:50,981] INFO in route_library: No fresh analysis data, route library will use cache
+[2026-05-07 11:27:50,981] INFO in route_library_service: Loading route data from cache...
+[2026-05-07 11:27:51,004] INFO in route_library_service: Loaded 203 route groups from cache
+[2026-05-07 11:27:51,004] INFO in route_library_service: Route cache loaded successfully
+[2026-05-07 11:27:51,007] INFO in route_library: Route library accessed: sort=invalid_field, filter=all, search=, page=1
+[2026-05-07 11:27:51,010] INFO in route_library_service: Loaded 0 favorites from JSON storage
+[2026-05-07 11:27:51,010] INFO in route_library: No fresh analysis data, route library will use cache
+[2026-05-07 11:27:51,010] INFO in route_library_service: Loading route data from cache...
+[2026-05-07 11:27:51,032] INFO in route_library_service: Loaded 203 route groups from cache
+[2026-05-07 11:27:51,032] INFO in route_library_service: Route cache loaded successfully
+
+============================================================
+Route Library QA Test Suite (Issue #135)
+============================================================
+
+
+
+
+
+
+
+
+============================================================
+Test Summary
+============================================================
+✓ Route Library Index            PASS   Route accessible
+✓ Route Library Content          PASS   All sections present
+✓ Search API                     PASS   Returns JSON
+✓ Pagination                     PASS   All pagination works
+✓ Filter Parameters              PASS   All filters work
+✓ Response Time                  PASS   0.029s
+✓ Error Handling                 PASS   Graceful degradation
+
+------------------------------------------------------------
+Total: 7 | Passed: 7 | Failed: 0 | Errors: 0 | Warnings: 0
+------------------------------------------------------------
+
+[0;32m✓ Route Library PASSED[0m
+
+[0;34m------------------------------------------------------------[0m
+[0;34mRunning: Responsive Layout (Issue #142)[0m
+[0;34m------------------------------------------------------------[0m
+[2026-05-07 11:27:52,484] INFO in __init__: Registered all blueprints
+[2026-05-07 11:27:52,484] INFO in scheduler: Scheduler initialized successfully
+[2026-05-07 11:27:52,507] INFO in scheduler: Scheduler started with 5 jobs
+[2026-05-07 11:27:52,507] INFO in scheduler: Scheduled job: System Health Check (next run: 2026-05-07 16:30:00+00:00)
+[2026-05-07 11:27:52,507] INFO in scheduler: Scheduled job: Weather Data Refresh (next run: 2026-05-07 18:00:00+00:00)
+[2026-05-07 11:27:52,507] INFO in scheduler: Scheduled job: Daily Analysis Refresh (next run: 2026-05-08 02:00:00+00:00)
+[2026-05-07 11:27:52,507] INFO in scheduler: Scheduled job: Cache Cleanup (next run: 2026-05-08 03:00:00+00:00)
+[2026-05-07 11:27:52,507] INFO in scheduler: Scheduled job: Log Rotation (next run: 2026-05-10 04:00:00+00:00)
+[2026-05-07 11:27:52,507] INFO in __init__: Background scheduler started
+[2026-05-07 11:27:52,507] INFO in __init__: Ride Optimizer web platform initialized (config: default)
+[2026-05-07 11:27:52,508] INFO in dashboard: Dashboard accessed
+[2026-05-07 11:27:52,511] INFO in analysis_service: Loading analysis data from cache...
+[2026-05-07 11:27:52,534] INFO in analysis_service: Loaded 203 route groups from cache
+[2026-05-07 11:27:52,534] INFO in analysis_service: Cache contains 222 activities
+[2026-05-07 11:27:52,534] INFO in analysis_service: Cache loaded successfully
+[2026-05-07 11:27:52,534] INFO in dashboard: Analysis status: None
+[2026-05-07 11:27:52,534] INFO in analysis_service: Locations not in cache, extracting from route groups...
+[2026-05-07 11:27:52,534] INFO in analysis_service: Extracted home location: (41.9871, -87.6554)
+[2026-05-07 11:27:52,534] INFO in analysis_service: Extracted work location: (41.8825, -87.6348)
+[2026-05-07 11:27:52,534] INFO in analysis_service: Generating dashboard overview map...
+[2026-05-07 11:27:52,687] INFO in analysis_service: Dashboard map generated with 10 routes
+[2026-05-07 11:27:52,687] INFO in dashboard: Dashboard overview map generated successfully
+[2026-05-07 11:27:52,699] INFO in dashboard: Dashboard accessed
+[2026-05-07 11:27:52,702] INFO in analysis_service: Loading analysis data from cache...
+[2026-05-07 11:27:52,724] INFO in analysis_service: Loaded 203 route groups from cache
+[2026-05-07 11:27:52,724] INFO in analysis_service: Cache contains 222 activities
+[2026-05-07 11:27:52,724] INFO in analysis_service: Cache loaded successfully
+[2026-05-07 11:27:52,724] INFO in dashboard: Analysis status: None
+[2026-05-07 11:27:52,724] INFO in analysis_service: Locations not in cache, extracting from route groups...
+[2026-05-07 11:27:52,724] INFO in analysis_service: Extracted home location: (41.9871, -87.6554)
+[2026-05-07 11:27:52,724] INFO in analysis_service: Extracted work location: (41.8825, -87.6348)
+[2026-05-07 11:27:52,724] INFO in analysis_service: Generating dashboard overview map...
+[2026-05-07 11:27:52,891] INFO in analysis_service: Dashboard map generated with 10 routes
+[2026-05-07 11:27:52,891] INFO in dashboard: Dashboard overview map generated successfully
+[2026-05-07 11:27:52,896] INFO in dashboard: Dashboard accessed
+[2026-05-07 11:27:52,899] INFO in analysis_service: Loading analysis data from cache...
+[2026-05-07 11:27:52,918] INFO in analysis_service: Loaded 203 route groups from cache
+[2026-05-07 11:27:52,918] INFO in analysis_service: Cache contains 222 activities
+[2026-05-07 11:27:52,918] INFO in analysis_service: Cache loaded successfully
+[2026-05-07 11:27:52,918] INFO in dashboard: Analysis status: None
+[2026-05-07 11:27:52,918] INFO in analysis_service: Locations not in cache, extracting from route groups...
+[2026-05-07 11:27:52,919] INFO in analysis_service: Extracted home location: (41.9871, -87.6554)
+[2026-05-07 11:27:52,919] INFO in analysis_service: Extracted work location: (41.8825, -87.6348)
+[2026-05-07 11:27:52,919] INFO in analysis_service: Generating dashboard overview map...
+[2026-05-07 11:27:53,064] INFO in analysis_service: Dashboard map generated with 10 routes
+[2026-05-07 11:27:53,064] INFO in dashboard: Dashboard overview map generated successfully
+[2026-05-07 11:27:53,074] INFO in dashboard: Dashboard accessed
+[2026-05-07 11:27:53,077] INFO in analysis_service: Loading analysis data from cache...
+[2026-05-07 11:27:53,108] INFO in analysis_service: Loaded 203 route groups from cache
+[2026-05-07 11:27:53,108] INFO in analysis_service: Cache contains 222 activities
+[2026-05-07 11:27:53,108] INFO in analysis_service: Cache loaded successfully
+[2026-05-07 11:27:53,108] INFO in dashboard: Analysis status: None
+[2026-05-07 11:27:53,108] INFO in analysis_service: Locations not in cache, extracting from route groups...
+[2026-05-07 11:27:53,108] INFO in analysis_service: Extracted home location: (41.9871, -87.6554)
+[2026-05-07 11:27:53,108] INFO in analysis_service: Extracted work location: (41.8825, -87.6348)
+[2026-05-07 11:27:53,109] INFO in analysis_service: Generating dashboard overview map...
+[2026-05-07 11:27:53,336] INFO in analysis_service: Dashboard map generated with 10 routes
+[2026-05-07 11:27:53,337] INFO in dashboard: Dashboard overview map generated successfully
+[2026-05-07 11:27:53,353] INFO in dashboard: Dashboard accessed
+[2026-05-07 11:27:53,355] INFO in analysis_service: Loading analysis data from cache...
+[2026-05-07 11:27:53,380] INFO in analysis_service: Loaded 203 route groups from cache
+[2026-05-07 11:27:53,380] INFO in analysis_service: Cache contains 222 activities
+[2026-05-07 11:27:53,380] INFO in analysis_service: Cache loaded successfully
+[2026-05-07 11:27:53,380] INFO in dashboard: Analysis status: None
+[2026-05-07 11:27:53,380] INFO in analysis_service: Locations not in cache, extracting from route groups...
+[2026-05-07 11:27:53,380] INFO in analysis_service: Extracted home location: (41.9871, -87.6554)
+[2026-05-07 11:27:53,380] INFO in analysis_service: Extracted work location: (41.8825, -87.6348)
+[2026-05-07 11:27:53,380] INFO in analysis_service: Generating dashboard overview map...
+[2026-05-07 11:27:53,551] INFO in analysis_service: Dashboard map generated with 10 routes
+[2026-05-07 11:27:53,551] INFO in dashboard: Dashboard overview map generated successfully
+[2026-05-07 11:27:53,557] INFO in dashboard: Dashboard accessed
+[2026-05-07 11:27:53,560] INFO in analysis_service: Loading analysis data from cache...
+[2026-05-07 11:27:53,581] INFO in analysis_service: Loaded 203 route groups from cache
+[2026-05-07 11:27:53,581] INFO in analysis_service: Cache contains 222 activities
+[2026-05-07 11:27:53,581] INFO in analysis_service: Cache loaded successfully
+[2026-05-07 11:27:53,581] INFO in dashboard: Analysis status: None
+[2026-05-07 11:27:53,581] INFO in analysis_service: Locations not in cache, extracting from route groups...
+[2026-05-07 11:27:53,581] INFO in analysis_service: Extracted home location: (41.9871, -87.6554)
+[2026-05-07 11:27:53,581] INFO in analysis_service: Extracted work location: (41.8825, -87.6348)
+[2026-05-07 11:27:53,581] INFO in analysis_service: Generating dashboard overview map...
+[2026-05-07 11:27:53,739] INFO in analysis_service: Dashboard map generated with 10 routes
+[2026-05-07 11:27:53,740] INFO in dashboard: Dashboard overview map generated successfully
+[2026-05-07 11:27:53,746] INFO in dashboard: Dashboard accessed
+[2026-05-07 11:27:53,748] INFO in analysis_service: Loading analysis data from cache...
+[2026-05-07 11:27:53,774] INFO in analysis_service: Loaded 203 route groups from cache
+[2026-05-07 11:27:53,774] INFO in analysis_service: Cache contains 222 activities
+[2026-05-07 11:27:53,774] INFO in analysis_service: Cache loaded successfully
+[2026-05-07 11:27:53,774] INFO in dashboard: Analysis status: None
+[2026-05-07 11:27:53,774] INFO in analysis_service: Locations not in cache, extracting from route groups...
+[2026-05-07 11:27:53,774] INFO in analysis_service: Extracted home location: (41.9871, -87.6554)
+[2026-05-07 11:27:53,774] INFO in analysis_service: Extracted work location: (41.8825, -87.6348)
+[2026-05-07 11:27:53,774] INFO in analysis_service: Generating dashboard overview map...
+[2026-05-07 11:27:53,931] INFO in analysis_service: Dashboard map generated with 10 routes
+[2026-05-07 11:27:53,931] INFO in dashboard: Dashboard overview map generated successfully
+[2026-05-07 11:27:53,939] INFO in commute: Commute recommendations accessed
+[2026-05-07 11:27:53,952] INFO in planner: Long ride planner accessed
+[2026-05-07 11:27:53,961] INFO in route_library: Route library accessed: sort=uses, filter=all, search=, page=1
+[2026-05-07 11:27:53,963] INFO in route_library_service: Loaded 0 favorites from JSON storage
+[2026-05-07 11:27:53,963] INFO in route_library: No fresh analysis data, route library will use cache
+[2026-05-07 11:27:53,963] INFO in route_library_service: Loading route data from cache...
+[2026-05-07 11:27:53,987] INFO in route_library_service: Loaded 203 route groups from cache
+[2026-05-07 11:27:53,987] INFO in route_library_service: Route cache loaded successfully
+
+============================================================
+Responsive Layout QA Test Suite (Issue #142)
+============================================================
+
+
+
+
+
+
+
+
+============================================================
+Test Summary
+============================================================
+✓ Bootstrap Integration          PASS   All resources loaded
+✓ Mobile Navigation              PASS   All elements present
+✓ Responsive Classes             PASS   All classes present
+⚠ Accessibility                  WARN   Only 2/4 features
+✓ Custom CSS                     PASS   Custom styles loaded
+✓ Viewport Meta                  PASS   Mobile viewport configured
+✓ All Pages Responsive           PASS   All pages have responsive layout
+
+------------------------------------------------------------
+Total: 7 | Passed: 6 | Failed: 0 | Errors: 0 | Warnings: 1
+------------------------------------------------------------
+
+[0;32m✓ Responsive Layout PASSED[0m
+
+[0;34m============================================================[0m
+[0;34mFinal Test Summary[0m
+[0;34m============================================================[0m
+
+Total Test Suites: 5
+[0;32mPassed: 3[0m
+[0;31mFailed: 2[0m
+
+[0;31m✗ Some QA test suites failed.[0m
+[1;33mPlease review the failures above and fix issues before merge.[0m
