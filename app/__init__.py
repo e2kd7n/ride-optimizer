@@ -26,7 +26,8 @@ def create_app(config_name='default'):
                 static_folder='../static')
     
     # Load configuration
-    app.config.from_object(f'app.config.{config_name.capitalize()}Config')
+    from app.config import config as config_dict
+    app.config.from_object(config_dict[config_name])
     
     # Initialize database
     from app.models import db
@@ -47,6 +48,17 @@ def create_app(config_name='default'):
     
     # Register error handlers
     register_error_handlers(app)
+    
+    # Initialize and start scheduler (unless in testing mode)
+    if not app.testing:
+        try:
+            from app.scheduler import start_scheduler
+            start_scheduler(app)
+            app.logger.info("Background scheduler started")
+        except Exception as e:
+            app.logger.error(f"Failed to start scheduler: {e}", exc_info=True)
+            app.logger.warning("Application will continue without background scheduler")
+            # App continues without scheduler - degraded mode
     
     # Log startup
     app.logger.info(f"Ride Optimizer web platform initialized (config: {config_name})")
