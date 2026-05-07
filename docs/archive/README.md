@@ -12,7 +12,7 @@ Organized archive of completed project work, including:
 - **[`qa_sessions/`](completed_work/qa_sessions/)** - QA testing sessions and bug reports (14 files)
 - **[`squad_coordination/`](completed_work/squad_coordination/)** - Squad organization and coordination docs (4 files)
 - **[`issue_templates/`](completed_work/issue_templates/)** - GitHub issue templates and bug reports (6 files)
-- **[`architecture/`](completed_work/architecture/)** - Architecture proposals and assessments (4 files)
+- **[`architecture/`](completed_work/architecture/)** - ~~Architecture proposals and assessments~~ (moved to [`plans/v0.11.0/`](../../plans/v0.11.0/))
 - **[`misc/`](completed_work/misc/)** - Other completed work (issue reports, PR reviews, task summaries) (8 files)
 
 ---
