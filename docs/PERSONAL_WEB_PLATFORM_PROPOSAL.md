@@ -1,11 +1,12 @@
 # Personal Web Platform Proposal: Ride Optimizer v1.0.0
 
 **Date:** 2026-05-06
-**Version:** 1.0.0 (Web Platform Launch)
-**Project:** Strava Commute Analyzer → Personal Ride Optimizer Web Platform
-**Deployment:** Raspberry Pi (Home Network)
+**Updated:** 2026-05-07 (Architecture Simplification)
+**Version:** 1.0.0 (First Production Release)
+**Project:** Strava Commute Analyzer → Personal Ride Optimizer
+**Deployment:** Raspberry Pi (Single-User, Home Network)
 
-> **Note:** This proposal represents version 1.0.0 of the Ride Optimizer project. Previous CLI-based releases (v2.0.0-v2.4.0) have been restated as v0.1.0-v0.5.0 to reflect their prototype nature. See [`VERSIONING_PLAN.md`](docs/VERSIONING_PLAN.md) for details.
+> **Note:** This proposal has been updated to reflect architecture simplification (Issue #152). Version 1.0.0 will use a lightweight "Smart Static" architecture optimized for single-user Raspberry Pi deployment, replacing the original Flask-based web platform proposal. Previous CLI releases (v2.1.0-v2.5.0) remain as pre-production versions. See [`VERSION_REBASELINE_PLAN.md`](../VERSION_REBASELINE_PLAN.md) and [`ARCHITECTURE_SIMPLIFICATION_PROPOSAL.md`](../ARCHITECTURE_SIMPLIFICATION_PROPOSAL.md) for details.
 
 ---
 

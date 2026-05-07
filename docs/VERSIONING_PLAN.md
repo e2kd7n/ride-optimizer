@@ -1,63 +1,78 @@
-# Versioning Plan: CLI to Web Platform Migration
+# Versioning Plan: Architecture Simplification
 
-**Date:** 2026-05-06  
-**Purpose:** Restate project versioning to reflect architectural shift from CLI tool to web platform
+**Date:** 2026-05-06
+**Updated:** 2026-05-07 (Version Rebaseline)
+**Purpose:** Document version scheme and transition to v1.0.0 production release
 
 ---
 
 ## Overview
 
-The Ride Optimizer project is transitioning from a command-line desktop application to a web-based platform. To reflect this significant architectural change, we are restating all previous releases as pre-1.0 versions (0.x.x) and designating the web platform launch as **version 1.0.0**.
+The Ride Optimizer project is transitioning from v2.5.0 (pre-production) to v1.0.0 (first production-ready release). This version reset reflects a significant architectural simplification optimized for single-user Raspberry Pi deployment.
 
 ---
 
-## Rationale
+## Current Version Scheme
 
-### Why Reversion to 0.x.x?
+### Active Releases (GitHub)
 
-The current CLI-based system, while feature-complete and production-ready for its intended use case, represents a **prototype/beta phase** of the broader vision:
+| Version | Release Date | Status | Notes |
+|---------|--------------|--------|-------|
+| v2.5.0 | 2026-03-30 | Current | Last pre-production release |
+| v2.4.0 | 2026-03-30 | Released | Long rides feature & polish |
+| v2.3.0 | 2026-03-30 | Released | Segment-based route naming |
+| v2.2.0 | 2026-03-30 | Released | Test infrastructure |
+| v2.1.0 | 2026-03-26 | Released | Code quality & design system |
 
-1. **Limited Accessibility** - Requires command-line knowledge and manual execution
-2. **Single-Use Pattern** - Generate report, view in browser, repeat
-3. **No Persistence** - Each analysis is independent, no historical tracking
-4. **Manual Scheduling** - User must remember to run analysis
-5. **Desktop-Only** - Not accessible from mobile or other devices
+### Next Release
 
-### Why 1.0.0 for Web Platform?
-
-Version 1.0.0 represents the **first production-ready, user-facing platform** with:
-
-1. **Web Interface** - Accessible from any device with a browser
-2. **Automated Operation** - Scheduled analysis runs without user intervention
-3. **Persistent State** - Database-backed historical tracking
-4. **Always Available** - Server running 24/7 on Raspberry Pi
-5. **Mobile-Friendly** - Responsive design for laptop and mobile access
-
-This is the **first version suitable for daily, non-technical use** - a true 1.0 milestone.
+| Version | Target Date | Status | Notes |
+|---------|-------------|--------|-------|
+| v1.0.0 | 2026-06 (5 weeks) | In Planning | First production-ready release with simplified architecture |
 
 ---
 
-## Version Mapping
+## Why Reset to v1.0.0?
 
-### Current Versions → Restated Versions
+### Problems with v2.5.0 Architecture
 
-| Original Version | Restated Version | Release Date | Notes |
-|-----------------|------------------|--------------|-------|
-| v2.4.0 | **v0.5.0** | 2026-03-30 | Long Rides Feature & Polish |
-| v2.3.0 | **v0.4.0** | 2026-03-27 | Segment-Based Route Naming |
-| v2.2.0 | **v0.3.0** | 2026-03-27 | Test Infrastructure |
-| v2.1.0 | **v0.2.0** | 2026-03-26 | Performance Improvements |
-| v2.0.0 | **v0.1.0** | Earlier | Initial Release |
+The current v2.5.0 release, while functional, is **over-engineered for single-user deployment**:
 
-### Rationale for 0.x Numbering
+1. **Resource Bloat** - 250-300MB memory usage (Flask + SQLAlchemy + APScheduler)
+2. **Complexity** - 27 dependencies, Docker containerization, ORM abstraction
+3. **Multi-User Infrastructure** - Unnecessary for personal tool
+4. **Slow Startup** - 5-8 seconds to initialize Flask app
+5. **Maintenance Burden** - Complex stack for simple use case
 
-- **0.1.0** - Initial working prototype
-- **0.2.0** - Performance and naming improvements
-- **0.3.0** - Testing infrastructure (quality milestone)
-- **0.4.0** - Security and naming enhancements
-- **0.5.0** - Feature completeness for CLI (long rides, mobile optimization)
+### Why v1.0.0 Represents Production Ready
 
-Each 0.x version represents incremental improvements to the CLI prototype, building toward the 1.0 web platform vision.
+Version 1.0.0 will be the **first truly production-ready release** because:
+
+1. **Optimized for Target Use Case** - Single-user Raspberry Pi deployment
+2. **Minimal Resource Usage** - 50MB memory (80% reduction)
+3. **Simplified Architecture** - 12 dependencies, no Docker, no ORM
+4. **Fast Startup** - <1 second (static files)
+5. **Easy Maintenance** - Pragmatic, minimal solutions
+6. **100% Feature Preservation** - All v2.5.0 features retained
+
+**Semantic Versioning Justification:**
+v1.0.0 signals "production ready" better than v2.6.0 or v3.0.0. The architecture change is significant enough to warrant a major version reset, and v1.0.0 clearly communicates "first stable release."
+
+---
+
+## Deprecated Version References
+
+The following version numbers appeared in documentation but **never existed as GitHub releases**:
+
+| Version | Status | Reason |
+|---------|--------|--------|
+| v0.9.0 | Never Released | Documentation artifact, superseded by v2.5.0 |
+| v0.9.1 | Never Released | Planned but deprecated, merged into v1.0.0 |
+| v0.9.2 | Never Released | Planned but deprecated, merged into v1.0.0 |
+| v0.9.3 | Never Released | Planned but deprecated, merged into v1.0.0 |
+| v3.0.0 | Never Released | Version number confusion, replaced by v1.0.0 |
+
+**Note:** These versions were planning artifacts that don't align with actual release history.
 
 ---
 

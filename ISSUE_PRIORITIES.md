@@ -1,19 +1,24 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-05-06 21:34:18 UTC / 2026-05-06 16:34:18 CDT
+**Last Updated:** 2026-05-07 (Version Rebaseline)
 
 This file reflects the current state of GitHub issues by priority. Issues are managed via GitHub labels (P0-critical, P1-high, P2-medium, P3-low, P4-future).
 
 ## 🔴 P0 - CRITICAL (Drop Everything)
 Issues that make the application unusable or cause data loss.
 
+- #152 - 🏗️ EPIC: Architecture Simplification for Raspberry Pi
 - #76 - Background Geocoding with Progressive Report Updates
 
 ## 🔴 P1 - HIGH (Current Sprint)
 Issues that significantly impact core functionality or user experience.
 
-- #146 - 🧪 EPIC: Beta Release & User Feedback Program
-- #144 - 🌐 EPIC: Personal Web Platform Migration (v3.0.0)
+- #153 - Phase 1: Foundation Migration (Week 1)
+- #155 - Phase 2: Frontend Conversion (Week 2)
+- #156 - Phase 3: Integration Work (Week 3)
+- #157 - Phases 4-5: QA & Beta Prep (Weeks 4-5)
+- ~~#146 - 🧪 EPIC: Beta Release & User Feedback Program~~ (CLOSED - bloat for single-user)
+- ~~#144 - 🌐 EPIC: Personal Web Platform Migration (v3.0.0)~~ (SUPERSEDED by #152 - v1.0.0)
 - #143 - Create integration test suite for dashboard, commute, planner, route library, TrainerRoad fallback, and degraded-mode workflows
 - #142 - Implement responsive layout, shared navigation shell, and small-screen-friendly decision views
 - #140 - Implement workout-aware commute recommendations that can extend route length to satisfy prescribed sessions

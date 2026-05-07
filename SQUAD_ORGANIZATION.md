@@ -20,25 +20,25 @@ Work has been reorganized around the **Architecture Simplification** initiative 
 ## 📋 Epic Tracking
 
 ### Epic #152: 🏗️ Architecture Simplification (P0-CRITICAL) **NEW**
-**Release:** v3.0.0 (MVP)
+**Release:** v1.0.0 (MVP)
 **Timeline:** 5 weeks (3 weeks migration + 2 weeks QA)
 **Total Issues:** 4 phase issues (#153, #155, #156, #157)
 **Status:** ✅ APPROVED - Starting immediately
 **Impact:** 80% memory reduction, 55% fewer dependencies, faster to beta
 
 ### Epic #144: 🌐 Personal Web Platform Migration (P1)
-**Release:** v3.0.0 (MVP)
+**Release:** v1.0.0 (MVP)
 **Timeline:** ~~8 weeks~~ **SUPERSEDED by #152**
 **Status:** ⚠️ SUPERSEDED - Replaced by Smart Static architecture
 
 ### Epic #145: 🌤️ Weather Dashboard & Forecast Integration (P3)
-**Release:** Post-v3.0.0
+**Release:** Post-v1.0.0
 **Timeline:** 4 weeks
 **Total Issues:** 10
 **Status:** Blocked until architecture simplification complete
 
 ### Epic #146: 🧪 Beta Release & User Feedback Program (P1)
-**Release:** v3.0.0 (concurrent with launch)
+**Release:** v1.0.0 (concurrent with launch)
 **Timeline:** Week 5 (after architecture simplification)
 **Total Issues:** TBD (will generate child issues)
 **Status:** Ready to start Week 5
@@ -205,7 +205,7 @@ Weeks 4-5: QA Squad (#157) → Beta Launch
 
 ## 🎯 Critical Path
 
-The critical path for v3.0.0 release:
+The critical path for v1.0.0 release:
 
 1. **Week 1: Foundation Migration**
    - **#153** - Extract services, create minimal API, migrate data
@@ -312,7 +312,7 @@ gh issue list --label "P0-critical"
 
 - **Epic Issues:** [#144](https://github.com/e2kd7n/ride-optimizer/issues/144), [#145](https://github.com/e2kd7n/ride-optimizer/issues/145), [#146](https://github.com/e2kd7n/ride-optimizer/issues/146)
 - **Issue Priorities:** [`ISSUE_PRIORITIES.md`](ISSUE_PRIORITIES.md) - Updated 2026-05-06 16:34 CDT
-- **Release Roadmap:** [`RELEASE_ROADMAP.md`](RELEASE_ROADMAP.md) - Post-v3.0.0 planning towards v1.0
+- **Release Roadmap:** [`RELEASE_ROADMAP.md`](RELEASE_ROADMAP.md) - Post-v1.0.0 planning
 - **Management Report:** [`INTELLIGENT_ISSUE_MANAGEMENT_REPORT.md`](INTELLIGENT_ISSUE_MANAGEMENT_REPORT.md) - Health Score: 8.5/10
 - **Management Summary:** [`ISSUE_MANAGEMENT_SUMMARY.md`](ISSUE_MANAGEMENT_SUMMARY.md) - Quick reference
 - **Outstanding Actions:** [`OUTSTANDING_ACTIONS.md`](OUTSTANDING_ACTIONS.md)
@@ -330,12 +330,12 @@ gh issue list --label "P0-critical"
 
 ## 🧪 Beta Testing Program (Week 7-11)
 
-**Epic #146** runs parallel to v0.9.0 development and continues post-launch:
+**Epic #146** runs parallel to v1.0.0 development and continues post-launch:
 
 **Week 7:** Beta infrastructure setup (QA Squad)
-**Week 8:** Beta launch with v0.9.0 release (All squads support)
+**Week 8:** Beta launch with v1.0.0 release (All squads support)
 **Weeks 8-10:** Feedback collection and triage (QA Squad + Product)
-**Week 11:** Analysis and v0.9.1 planning (All squads)
+**Week 11:** Analysis and v1.0.1 planning (All squads)
 
 See [Epic #146](https://github.com/e2kd7n/ride-optimizer/issues/146) for complete beta program details including:
 - Scalable feedback collection system
@@ -343,14 +343,14 @@ See [Epic #146](https://github.com/e2kd7n/ride-optimizer/issues/146) for complet
 - User segmentation strategy
 - Success metrics and KPIs
 
-## 🚀 Post-v3.0.0 Planning (Path to v1.0)
+## 🚀 Post-v1.0.0 Planning
 
-After completing v3.0.0 MVP (Week 8), squads will reorganize for incremental releases towards v1.0:
+After completing v1.0.0 MVP (Week 8), squads will reorganize for incremental releases:
 
-- **v3.0.1 (Release +1):** Settings page (#136), repeat-ride flow (#141), UX polish
-- **v3.0.2 (Release +2):** Mobile optimization, weather dashboard integration (#145)
-- **v3.0.3 (Release +3):** External integrations, API alternatives
-- **v1.0.0 (Release +4):** Production-ready with social features
+- **v1.0.1 (Release +1):** Settings page (#136), repeat-ride flow (#141), UX polish
+- **v1.0.2 (Release +2):** Mobile optimization, weather dashboard integration (#145)
+- **v1.0.3 (Release +3):** External integrations, API alternatives
+- **v1.1.0 (Release +4):** Enhanced features and social capabilities
 
 See [`RELEASE_ROADMAP.md`](RELEASE_ROADMAP.md) for complete post-v3.0.0 planning with squad assignments and effort estimates.
 
