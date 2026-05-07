@@ -169,11 +169,22 @@ class TestCommuteAnalyze:
         """Test analyze endpoint with default parameters."""
         mock_get_services.return_value = mock_services
         
-        # Mock the service to return a proper dictionary (not a Mock object)
+        # Mock the service to return a proper dictionary with all required fields
         mock_services['commute'].get_workout_aware_commute.return_value = {
             'status': 'success',
-            'route': {'name': 'Test Route', 'distance': 10000},
-            'score': 0.85
+            'route': {
+                'name': 'Test Route',
+                'id': 123,
+                'distance': 10000,
+                'duration': 1800,
+                'elevation': 100
+            },
+            'score': 0.85,
+            'direction': 'to_work',
+            'breakdown': {'weather': 0.9, 'traffic': 0.8},
+            'weather': {'temp': 18, 'conditions': 'Clear'},
+            'departure_time': '07:30',
+            'confidence': 'high'
         }
         
         response = client.post('/commute/analyze', json={})
@@ -189,12 +200,22 @@ class TestCommuteAnalyze:
         """Test analyze endpoint with custom parameters."""
         mock_get_services.return_value = mock_services
         
-        # Mock the service to return a proper dictionary (not a Mock object)
+        # Mock the service to return a proper dictionary with all required fields
         mock_services['commute'].get_workout_aware_commute.return_value = {
             'status': 'success',
-            'route': {'name': 'Test Route', 'distance': 10000},
+            'route': {
+                'name': 'Test Route',
+                'id': 124,
+                'distance': 10000,
+                'duration': 1800,
+                'elevation': 100
+            },
             'score': 0.85,
-            'direction': 'from_work'
+            'direction': 'from_work',
+            'breakdown': {'weather': 0.9, 'traffic': 0.8},
+            'weather': {'temp': 18, 'conditions': 'Clear'},
+            'departure_time': '17:30',
+            'confidence': 'high'
         }
         
         request_data = {
