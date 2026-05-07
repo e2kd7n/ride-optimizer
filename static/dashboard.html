@@ -39,25 +39,6 @@
 
     <!-- Main Content -->
     <div class="container mt-4">
-        <!-- System Status -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-body">
-                        <h5 class="card-title">
-                            <i class="bi bi-info-circle"></i> System Status
-                        </h5>
-                        <div id="system-status">
-                            <div class="spinner-border spinner-border-sm" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
-                            Loading system status...
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
         <!-- Weather Card -->
         <div class="row mb-4">
             <div class="col-md-6">
@@ -114,7 +95,7 @@
         </div>
 
         <!-- Recent Routes -->
-        <div class="row">
+        <div class="row mb-4">
             <div class="col-12">
                 <div class="card">
                     <div class="card-body">
@@ -126,6 +107,30 @@
                                 <span class="visually-hidden">Loading...</span>
                             </div>
                             Loading routes...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Status (Collapsible) -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <a class="text-decoration-none text-muted" data-bs-toggle="collapse" href="#systemStatusCollapse" role="button" aria-expanded="false" aria-controls="systemStatusCollapse">
+                                <i class="bi bi-info-circle"></i> System Status
+                                <i class="bi bi-chevron-down float-end"></i>
+                            </a>
+                        </h5>
+                        <div class="collapse" id="systemStatusCollapse">
+                            <div id="system-status" class="mt-3">
+                                <div class="spinner-border spinner-border-sm" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                Loading system status...
+                            </div>
                         </div>
                     </div>
                 </div>
