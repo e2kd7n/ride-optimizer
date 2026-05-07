@@ -391,17 +391,16 @@ class PlannerService:
             # Get forecast for ride start location
             lat, lon = ride.start_location
             
-            # Get forecast from WeatherService
-            forecast_data = self.weather_fetcher.get_forecast(lat, lon, days=min(days_ahead + 1, 7))
+            # Get forecast from WeatherFetcher (uses get_daily_forecast, not get_forecast)
+            forecast_data = self.weather_fetcher.get_daily_forecast(lat, lon, days=min(days_ahead + 1, 7))
             
-            if not forecast_data or 'daily' not in forecast_data:
+            if not forecast_data:
                 logger.warning(f"No forecast data available for {target_date}")
                 return {}
             
-            # Find the forecast for target date
-            daily_forecasts = forecast_data['daily']
-            if days_ahead < len(daily_forecasts):
-                day_forecast = daily_forecasts[days_ahead]
+            # Find the forecast for target date (forecast_data is a list of daily forecasts)
+            if days_ahead < len(forecast_data):
+                day_forecast = forecast_data[days_ahead]
                 
                 # Create WeatherSnapshot to calculate comfort metrics
                 snapshot = WeatherSnapshot.create_from_weather_data(

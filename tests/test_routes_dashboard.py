@@ -210,10 +210,20 @@ class TestGetServices:
     @patch('app.routes.dashboard.CommuteService')
     @patch('app.routes.dashboard.PlannerService')
     @patch('app.routes.dashboard.WeatherService')
-    def test_get_services_creates_services(self, mock_weather, mock_planner, 
-                                          mock_commute, mock_analysis, mock_config, app):
+    def test_get_services_creates_services(self, mock_weather, mock_planner,
+                                          mock_commute, mock_analysis, mock_config_cls, app):
         """Test that get_services creates service instances."""
         from app.routes.dashboard import get_services
+        
+        # Properly configure the Config mock
+        mock_config = Mock()
+        mock_config.get.side_effect = lambda key, default=None: {
+            'cache_dir': 'cache',
+            'data_dir': 'data',
+            'route_naming.sampling_density': 10,
+            'route_naming.geocoder_timeout': 10
+        }.get(key, default)
+        mock_config_cls.return_value = mock_config
         
         with app.app_context():
             services = get_services()
@@ -223,17 +233,32 @@ class TestGetServices:
             assert 'planner' in services
             assert 'weather' in services
             
-            mock_config.assert_called_once_with('config/config.yaml')
+            mock_config_cls.assert_called_once_with('config/config.yaml')
             mock_analysis.assert_called_once()
             mock_commute.assert_called_once()
             mock_planner.assert_called_once()
             mock_weather.assert_called_once()
     
     @patch('app.routes.dashboard.Config')
-    def test_get_services_caches_in_g(self, mock_config, app):
+    @patch('app.routes.dashboard.AnalysisService')
+    @patch('app.routes.dashboard.CommuteService')
+    @patch('app.routes.dashboard.PlannerService')
+    @patch('app.routes.dashboard.WeatherService')
+    def test_get_services_caches_in_g(self, mock_weather, mock_planner,
+                                     mock_commute, mock_analysis, mock_config_cls, app):
         """Test that services are cached in Flask g object."""
         from app.routes.dashboard import get_services
         from flask import g
+        
+        # Properly configure the Config mock
+        mock_config = Mock()
+        mock_config.get.side_effect = lambda key, default=None: {
+            'cache_dir': 'cache',
+            'data_dir': 'data',
+            'route_naming.sampling_density': 10,
+            'route_naming.geocoder_timeout': 10
+        }.get(key, default)
+        mock_config_cls.return_value = mock_config
         
         with app.app_context():
             # First call creates services

@@ -2,7 +2,7 @@
 Weather Service - Wrapper around WeatherFetcher with caching and degradation.
 
 Provides:
-- Smart caching with SQLite persistence
+- Smart caching with JSON file persistence
 - Graceful degradation (stale data fallback)
 - Wind impact analysis for routes
 - Weather summary formatting for UI
@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 
 from src.weather_fetcher import WeatherFetcher, WindImpactCalculator
 from src.config import Config
-from app.models.weather import WeatherSnapshot
+from src.json_storage import JSONStorage
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ class WeatherService:
     Features:
     - 2-hour fresh data window
     - 24-hour stale data fallback
-    - SQLite persistence via WeatherSnapshot
+    - JSON file persistence
     - Wind impact analysis for routes
     """
     
@@ -40,6 +40,85 @@ class WeatherService:
         self.config = config
         self.fetcher = WeatherFetcher()
         self.wind_calculator = WindImpactCalculator()
+        self.storage = JSONStorage()
+    
+    def _get_cache_key(self, lat: float, lon: float) -> str:
+        """Generate cache key for location."""
+        return f"{lat:.4f}_{lon:.4f}"
+    
+    def _calculate_comfort_score(self, weather_data: Dict[str, Any]) -> float:
+        """
+        Calculate cycling comfort score (0-1) based on weather conditions.
+        
+        Args:
+            weather_data: Weather data dictionary
+            
+        Returns:
+            Comfort score from 0.0 (terrible) to 1.0 (perfect)
+        """
+        score = 1.0
+        
+        # Temperature scoring (optimal: 15-25°C / 59-77°F)
+        temp_c = weather_data.get('temperature_c', weather_data.get('temperature', 20))
+        if isinstance(temp_c, (int, float)):
+            if temp_c < 0:
+                score -= 0.4
+            elif temp_c < 10:
+                score -= 0.2
+            elif temp_c > 30:
+                score -= 0.3
+            elif temp_c > 35:
+                score -= 0.5
+        
+        # Wind scoring (unfavorable above 20 kph / 12 mph)
+        wind_kph = weather_data.get('wind_speed_kph', weather_data.get('wind_speed', 0))
+        if isinstance(wind_kph, (int, float)):
+            if wind_kph > 30:
+                score -= 0.3
+            elif wind_kph > 20:
+                score -= 0.15
+        
+        # Precipitation scoring
+        precip_mm = weather_data.get('precipitation_mm', weather_data.get('precipitation', 0))
+        if isinstance(precip_mm, (int, float)) and precip_mm > 0:
+            if precip_mm > 5:
+                score -= 0.4
+            else:
+                score -= 0.2
+        
+        return max(0.0, min(1.0, score))
+    
+    def _get_cycling_favorability(self, comfort_score: float) -> str:
+        """
+        Convert comfort score to favorability category.
+        
+        Args:
+            comfort_score: Comfort score (0-1)
+            
+        Returns:
+            'favorable', 'neutral', or 'unfavorable'
+        """
+        if comfort_score >= 0.7:
+            return 'favorable'
+        elif comfort_score >= 0.4:
+            return 'neutral'
+        else:
+            return 'unfavorable'
+    
+    def _enrich_weather_data(self, weather_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Add comfort score and favorability to weather data.
+        
+        Args:
+            weather_data: Raw weather data
+            
+        Returns:
+            Enriched weather data with comfort metrics
+        """
+        comfort_score = self._calculate_comfort_score(weather_data)
+        weather_data['comfort_score'] = comfort_score
+        weather_data['cycling_favorability'] = self._get_cycling_favorability(comfort_score)
+        return weather_data
     
     def get_current_weather(self, 
                            lat: float, 
@@ -49,10 +128,10 @@ class WeatherService:
         Get current weather with smart caching.
         
         Strategy:
-        1. Check SQLite for fresh data (< 2 hours old)
+        1. Check JSON cache for fresh data (< 2 hours old)
         2. If cache miss, fetch from API
         3. If API fails, use stale data (up to 24 hours old)
-        4. Store successful fetches in SQLite
+        4. Store successful fetches in JSON cache
         
         Args:
             lat: Latitude
@@ -63,12 +142,19 @@ class WeatherService:
             Dictionary with weather data including comfort_score and cycling_favorability
         """
         try:
-            # Check cache first (2-hour fresh window)
-            snapshot = WeatherSnapshot.get_current_for_location(lat, lon, max_age_hours=2)
+            cache_key = self._get_cache_key(lat, lon)
             
-            if snapshot:
-                logger.info(f"Using cached weather for ({lat}, {lon}), age: {snapshot.age_hours:.1f}h")
-                return snapshot.to_dict()
+            # Check cache first (2-hour fresh window)
+            cache = self.storage.read('weather_cache.json', default={'locations': {}})
+            
+            if cache_key in cache['locations']:
+                cached = cache['locations'][cache_key]
+                timestamp = datetime.fromisoformat(cached['timestamp'])
+                age_hours = (datetime.now() - timestamp).total_seconds() / 3600
+                
+                if age_hours < 2:
+                    logger.info(f"Using cached weather for ({lat}, {lon}), age: {age_hours:.1f}h")
+                    return cached['weather_data']
             
             # Cache miss - fetch fresh data
             logger.info(f"Fetching fresh weather for ({lat}, {lon})")
@@ -78,19 +164,20 @@ class WeatherService:
                 logger.warning(f"API returned no data for ({lat}, {lon}), trying degraded fallback")
                 return self._get_degraded_weather(lat, lon, location_name)
             
-            # Store in SQLite
-            snapshot = WeatherSnapshot.create_from_weather_data(
-                weather_data,
-                location_name=location_name or f"Location ({lat:.2f}, {lon:.2f})",
-                is_current=True
-            )
+            # Enrich with comfort metrics
+            weather_data = self._enrich_weather_data(weather_data)
             
-            if snapshot:
-                logger.info(f"Stored fresh weather snapshot for {location_name or 'location'}")
-                return snapshot.to_dict()
-            else:
-                logger.warning("Failed to create weather snapshot, returning raw data")
-                return weather_data
+            # Store in JSON cache
+            cache['locations'][cache_key] = {
+                'weather_data': weather_data,
+                'timestamp': datetime.now().isoformat(),
+                'location_name': location_name or f"Location ({lat:.2f}, {lon:.2f})"
+            }
+            
+            self.storage.write('weather_cache.json', cache)
+            logger.info(f"Stored fresh weather snapshot for {location_name or 'location'}")
+            
+            return weather_data
                 
         except Exception as e:
             logger.error(f"Error getting current weather: {e}", exc_info=True)
@@ -199,18 +286,24 @@ class WeatherService:
             Dictionary with stale weather data or empty dict if none available
         """
         try:
-            # Try to get stale data (up to 24 hours old)
-            snapshot = WeatherSnapshot.get_current_for_location(lat, lon, max_age_hours=24)
+            cache_key = self._get_cache_key(lat, lon)
+            cache = self.storage.read('weather_cache.json', default={'locations': {}})
             
-            if snapshot:
-                logger.warning(
-                    f"Using stale weather data for ({lat}, {lon}), "
-                    f"age: {snapshot.age_hours:.1f}h"
-                )
-                data = snapshot.to_dict()
-                data['is_stale'] = True
-                data['age_hours'] = snapshot.age_hours
-                return data
+            if cache_key in cache['locations']:
+                cached = cache['locations'][cache_key]
+                timestamp = datetime.fromisoformat(cached['timestamp'])
+                age_hours = (datetime.now() - timestamp).total_seconds() / 3600
+                
+                # Accept stale data up to 24 hours old
+                if age_hours < 24:
+                    logger.warning(
+                        f"Using stale weather data for ({lat}, {lon}), "
+                        f"age: {age_hours:.1f}h"
+                    )
+                    data = cached['weather_data'].copy()
+                    data['is_stale'] = True
+                    data['age_hours'] = age_hours
+                    return data
             
             logger.error(f"No weather data available for ({lat}, {lon}), even stale")
             return {}
