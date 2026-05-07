@@ -75,9 +75,30 @@ def mock_short_ride():
 
 @pytest.fixture
 def planner_service(mock_config):
-    """Create a PlannerService instance."""
-    with patch('app.services.planner_service.WeatherFetcher'):
-        return PlannerService(mock_config)
+    """Create a PlannerService instance with mocked weather service."""
+    with patch('app.services.planner_service.WeatherService') as mock_weather_class:
+        # Create a mock weather service instance
+        mock_weather_instance = Mock()
+        
+        # Mock weather snapshot with proper numeric values
+        mock_snapshot = Mock()
+        mock_snapshot.temperature_f = 68.0
+        mock_snapshot.conditions = 'Clear'
+        mock_snapshot.wind_speed_mph = 5.0
+        mock_snapshot.wind_direction = 'N'
+        mock_snapshot.precipitation_in = 0.0
+        mock_snapshot.humidity_percent = 50.0
+        mock_snapshot.feels_like_f = 68.0
+        mock_snapshot.timestamp = datetime.now()
+        
+        # Configure get_weather_snapshot to return mock snapshot
+        mock_weather_instance.get_weather_snapshot.return_value = mock_snapshot
+        
+        # Make the WeatherService class return our configured instance
+        mock_weather_class.return_value = mock_weather_instance
+        
+        service = PlannerService(mock_config)
+        return service
 
 
 @pytest.fixture
