@@ -18,6 +18,7 @@ from src.route_analyzer import RouteAnalyzer, RouteGroup
 from src.long_ride_analyzer import LongRideAnalyzer, LongRide
 from src.location_finder import LocationFinder, Location
 from src.config import Config
+from src.auth import get_authenticated_client
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +42,21 @@ class AnalysisService:
             config: Configuration object
         """
         self.config = config
-        self.data_fetcher = StravaDataFetcher(config)
-        self.location_finder = LocationFinder(config)
+        self._auth_available = False
+        self.data_fetcher = None
+        
+        # Try to create authenticated Strava client
+        try:
+            client = get_authenticated_client(config)
+            self.data_fetcher = StravaDataFetcher(client, config, use_test_cache=False)
+            self._auth_available = True
+            logger.info("AnalysisService initialized with Strava authentication")
+        except (ValueError, Exception) as e:
+            logger.warning(f"AnalysisService initialized without Strava auth: {e}")
+            logger.warning("Service will operate in degraded mode with cached data only")
+        
+        # LocationFinder will be created on-demand during analysis
+        self._location_finder: Optional[LocationFinder] = None
         
         # Cached analysis results
         self._activities: Optional[List[Activity]] = None
@@ -102,7 +116,9 @@ class AnalysisService:
             
             # Step 2: Find locations
             logger.info("Finding home and work locations...")
-            self._home_location, self._work_location = self.location_finder.find_locations(
+            if self._location_finder is None:
+                self._location_finder = LocationFinder(self._activities, self.config)
+            self._home_location, self._work_location = self._location_finder.find_locations(
                 self._activities
             )
             logger.info(f"Home: {self._home_location.name}, Work: {self._work_location.name}")
