@@ -34,6 +34,7 @@ def mock_services():
     """Create mock services."""
     analysis_service = Mock()
     commute_service = Mock()
+    weather_service = Mock()
     
     # Set up default return values
     analysis_service.get_route_groups.return_value = [{'id': 1, 'name': 'Group 1'}]
@@ -41,7 +42,8 @@ def mock_services():
     
     return {
         'analysis': analysis_service,
-        'commute': commute_service
+        'commute': commute_service,
+        'weather': weather_service
     }
 
 
