@@ -41,8 +41,12 @@ class AnalysisService:
             config: Configuration object
         """
         self.config = config
-        self.data_fetcher = StravaDataFetcher(config)
-        self.location_finder = LocationFinder(config)
+        
+        # Create authenticated Strava client
+        from src.auth import get_authenticated_client
+        client = get_authenticated_client(config)
+        
+        self.data_fetcher = StravaDataFetcher(client, config)
         
         # Cached analysis results
         self._activities: Optional[List[Activity]] = None
@@ -102,9 +106,8 @@ class AnalysisService:
             
             # Step 2: Find locations
             logger.info("Finding home and work locations...")
-            self._home_location, self._work_location = self.location_finder.find_locations(
-                self._activities
-            )
+            location_finder = LocationFinder(self._activities, self.config)
+            self._home_location, self._work_location = location_finder.find_locations()
             logger.info(f"Home: {self._home_location.name}, Work: {self._work_location.name}")
             
             # Step 3: Analyze routes
