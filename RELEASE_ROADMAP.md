@@ -1,333 +1,190 @@
-# Release Roadmap & Future Enhancements
+# Release Roadmap
 
-**Created:** 2026-05-06 16:23 CDT
-**Based on:** P4 issue sprint priorities from ISSUE_PRIORITIES.md
+**Created:** 2026-05-06 16:23 CDT  
+**Updated:** 2026-05-07 (Version Rebaseline)  
+**Based on:** Architecture Simplification (Issue #152)
 
-## 🎯 Release Strategy
+---
 
-This roadmap organizes P4 future enhancements by release priority, enabling squads to plan towards v1.0 release.
+## 🎯 Current Status
+
+**Current Release:** v2.5.0 (Pre-Production)  
+**Next Release:** v1.0.0 (First Production-Ready Release)  
+**Target:** Single-user Raspberry Pi deployment
 
 ---
 
 ## 📅 Release Schedule
 
-### v0.9.0 - Web Platform MVP (Current - Week 8)
-**Focus:** Core web platform with dashboard, commute, planner, and route library
-**Epics:**
-- #144 (Personal Web Platform Migration)
-- #146 (Beta Release & User Feedback Program)
-**Status:** In progress - organized across 4 squads
+### v2.5.0 - Current Release (Pre-Production)
+**Status:** Released  
+**Focus:** CLI-based ride analysis with web dashboard prototype  
+**Architecture:** Flask + SQLAlchemy + APScheduler + Docker
+
+**Key Features:**
+- Strava integration for activity fetching
+- Route analysis and grouping
+- Weather integration
+- Long ride recommendations
+- Web dashboard (prototype)
+
+**Known Issues:**
+- Over-engineered for single-user deployment
+- High memory usage (250-300MB)
+- Complex dependency stack (27 packages)
+- Unnecessary multi-user infrastructure
 
 ---
 
-### v0.9.1 - Release +1 (Weeks 12-15)
-**Focus:** User experience enhancements and feature discovery (informed by beta feedback)
-**Note:** Priorities will be adjusted based on beta testing results from Epic #146
+### v1.0.0 - First Production Release (Target: 5 weeks)
+**Status:** In Planning (Issue #152)  
+**Focus:** Simplified architecture optimized for Raspberry Pi  
+**Architecture:** Static HTML + Minimal API + JSON files + Cron
 
-#### High Priority (Release +1)
-- **#79** - Add "How It Works" Modal
-  - **Squad:** Frontend Squad
-  - **Effort:** 1 week
-  - **Value:** Improves onboarding and feature discovery
-  - **Dependencies:** v3.0.0 dashboard complete
+**Goals:**
+1. **Reduce Resource Usage**
+   - Memory: 250MB → 50MB (80% reduction)
+   - Dependencies: 27 → 12 packages (55% reduction)
+   - Startup time: 5-8s → <1s
 
-- **#68** - ✨ Visual Hierarchy & Polish
-  - **Squad:** Frontend Squad + QA Squad
-  - **Effort:** 2 weeks
-  - **Value:** Professional appearance, better UX
-  - **Dependencies:** All core views implemented
+2. **Simplify Architecture**
+   - Remove: Flask, SQLAlchemy, APScheduler, Docker
+   - Add: Static HTML generation, minimal API endpoints
+   - Keep: All existing features (100% preservation)
 
-- **#64** - 📊 Progressive Disclosure for Metrics
-  - **Squad:** Frontend Squad
-  - **Effort:** 1 week
-  - **Value:** Reduces cognitive load, cleaner interface
-  - **Dependencies:** Dashboard and route views complete
+3. **Optimize for Single User**
+   - Remove multi-user infrastructure
+   - Remove unnecessary abstractions
+   - Focus on pragmatic, minimal solutions
 
-- **#47** - Add Side-by-Side Route Comparison Feature
-  - **Squad:** Frontend Squad
-  - **Effort:** 2 weeks
-  - **Value:** Helps users make informed route decisions
-  - **Dependencies:** Route library complete (#135)
+**Migration Phases:**
+- **Phase 1 (Week 1):** Foundation - Data layer & static generation
+- **Phase 2 (Week 2):** Frontend - Convert templates to static HTML
+- **Phase 3 (Week 3):** Integration - API endpoints & cron jobs
+- **Phase 4 (Week 4):** QA - Testing & validation
+- **Phase 5 (Week 5):** Beta - User testing & release prep
 
-- **#37** - Add real-time route suggestions
-  - **Squad:** Integration Squad
-  - **Effort:** 2 weeks
-  - **Value:** Dynamic recommendations based on current conditions
-  - **Dependencies:** Weather integration (#138), API endpoints
-
-- **#36** - Create mobile app version
-  - **Squad:** New Mobile Squad
-  - **Effort:** 4 weeks
-  - **Value:** Native mobile experience
-  - **Dependencies:** API complete, responsive design tested
-  - **Note:** Consider React Native or Flutter
-
-**Timeline:** 4 weeks
-**Total Issues:** 6
+**Related Issues:**
+- #152 - Architecture Simplification (Epic)
+- #153 - Phase 1: Foundation Migration
+- #155 - Phase 2: Frontend Conversion
+- #156 - Phase 3: Integration Work
+- #157 - Phases 4-5: QA & Beta Prep
 
 ---
 
-### v0.9.2 - Release +2 (Weeks 16-21)
-**Focus:** Mobile optimization and advanced features
+## 🚫 Deprecated Releases
 
-#### Medium Priority (Release +2)
-- **#80** - Integrate Weather Forecast into Commute Tab
-  - **Squad:** Integration Squad
-  - **Effort:** 2 weeks
-  - **Value:** Enhanced commute planning with weather
-  - **Dependencies:** Weather Dashboard Epic (#145) complete
+The following planned releases have been **deprecated** and merged into v1.0.0 scope:
 
-- **#67** - 📱 Mobile Navigation Patterns
-  - **Squad:** Frontend Squad
-  - **Effort:** 2 weeks
-  - **Value:** Better mobile UX
-  - **Dependencies:** Responsive layout (#142)
+### ~~v0.9.0 - Web Platform MVP~~
+**Status:** Deprecated  
+**Reason:** Over-engineered for single-user Pi deployment  
+**Merged Into:** v1.0.0 (simplified architecture)
 
-- **#66** - 🎓 Feature Discovery & Onboarding
-  - **Squad:** Frontend Squad
-  - **Effort:** 2 weeks
-  - **Value:** Reduces learning curve for new users
-  - **Dependencies:** "How It Works" modal (#79)
+### ~~v0.9.1 - UX Enhancements~~
+**Status:** Deprecated  
+**Reason:** Unnecessary complexity for personal tool  
+**Merged Into:** v1.0.0 (core features only)
 
-- **#65** - 👆 Touch-Optimized Interactions
-  - **Squad:** Frontend Squad
-  - **Effort:** 1 week
-  - **Value:** Better mobile/tablet experience
-  - **Dependencies:** Mobile navigation (#67)
+### ~~v0.9.2 - Mobile Optimization~~
+**Status:** Deprecated  
+**Reason:** Responsive design sufficient for single user  
+**Merged Into:** v1.0.0 (mobile-first CSS)
 
-- **#63** - 📱 Mobile-First Responsive Layout
-  - **Squad:** Frontend Squad + QA Squad
-  - **Effort:** 3 weeks
-  - **Value:** Comprehensive mobile optimization
-  - **Dependencies:** Responsive layout (#142) as foundation
+### ~~v0.9.3 - External Integrations~~
+**Status:** Deprecated  
+**Reason:** Strava integration sufficient for personal use  
+**Merged Into:** Future consideration (post-v1.0.0)
 
-- **#62** - 🎨 EPIC: Mobile-First UI/UX Redesign & Accessibility
-  - **Squad:** All squads
-  - **Effort:** 6 weeks (epic)
-  - **Value:** Complete mobile experience overhaul
-  - **Dependencies:** All mobile issues (#63, #65, #67)
-  - **Note:** This is an epic that encompasses #63-68
-
-**Timeline:** 6 weeks
-**Total Issues:** 6 (including 1 epic)
+### ~~v3.0.0 - Web Platform~~
+**Status:** Deprecated (version number confusion)  
+**Replaced By:** v1.0.0 (correct semantic versioning)
 
 ---
 
-### v0.9.3 - Release +3 (Weeks 22-25)
-**Focus:** External integrations and API alternatives
+## 🎯 Feature Preservation Matrix
 
-#### Lower Priority (Release +3)
-- **#39** - Evaluate Photon API as Nominatim alternative
-  - **Squad:** Integration Squad
-  - **Effort:** 2 weeks
-  - **Value:** Potentially better geocoding performance
-  - **Dependencies:** Current geocoding stable
-  - **Note:** Research + implementation if beneficial
+All existing features will be preserved in v1.0.0:
 
-- **#35** - Add integration with other fitness platforms
-  - **Squad:** Integration Squad
-  - **Effort:** 3 weeks per platform
-  - **Value:** Broader ecosystem integration
-  - **Dependencies:** API architecture stable
-  - **Platforms:** Garmin Connect, Wahoo, TrainingPeaks, etc.
+| Feature | v2.5.0 | v1.0.0 | Implementation |
+|---------|--------|--------|----------------|
+| Strava Integration | ✅ | ✅ | Keep existing |
+| Route Analysis | ✅ | ✅ | Keep existing |
+| Weather Integration | ✅ | ✅ | Keep existing |
+| Long Ride Planner | ✅ | ✅ | Keep existing |
+| Dashboard | ✅ | ✅ | Static HTML |
+| Commute View | ✅ | ✅ | Static HTML |
+| Route Library | ✅ | ✅ | Static HTML |
+| Background Jobs | ✅ | ✅ | Cron jobs |
+| Data Caching | ✅ | ✅ | JSON files |
 
-**Timeline:** 4 weeks
-**Total Issues:** 2
-
----
-
-### v1.0.0 - Release +4 (Weeks 26+)
-**Focus:** Social features and community
-
-#### Future Considerations (Release +4)
-- **#38** - Add social features (compare with other commuters)
-  - **Squad:** New Social Squad
-  - **Effort:** 6+ weeks
-  - **Value:** Community engagement, competitive motivation
-  - **Dependencies:** User accounts, privacy controls, moderation
-  - **Considerations:**
-    - Privacy implications
-    - Moderation requirements
-    - Infrastructure costs
-    - Legal/GDPR compliance
-
-**Timeline:** TBD
-**Total Issues:** 1
+**Removed Features:**
+- Multi-user support (unnecessary)
+- Complex ORM (SQLAlchemy → JSON)
+- Job scheduler (APScheduler → cron)
+- Docker containerization (direct Python)
+- Beta testing infrastructure (Issue #146 - closed as bloat)
 
 ---
 
-## 📊 Squad Guidance by Release
+## 📊 Resource Impact
 
-### Post-v3.0.0 Squad Reorganization
+### Memory Usage
+- **v2.5.0:** 250-300MB (Flask + SQLAlchemy + APScheduler)
+- **v1.0.0:** 50MB (Static files + minimal API)
+- **Reduction:** 80%
 
-After v3.0.0 MVP is complete, squads should reorganize based on release priorities:
+### Dependencies
+- **v2.5.0:** 27 packages (Flask, SQLAlchemy, APScheduler, etc.)
+- **v1.0.0:** 12 packages (core libraries only)
+- **Reduction:** 55%
 
-#### v0.9.1 Squad Assignments
-
-**Frontend Squad (4 people):**
-- Lead: #79 (How It Works Modal) - 1 week
-- Lead: #68 (Visual Hierarchy) - 2 weeks
-- Support: #64 (Progressive Disclosure) - 1 week
-- Support: #47 (Route Comparison) - 2 weeks
-
-**Integration Squad (2 people):**
-- Lead: #37 (Real-time suggestions) - 2 weeks
-- Support: API enhancements for mobile
-
-**Mobile Squad (2-3 people - NEW):**
-- Lead: #36 (Mobile app) - 4 weeks
-- Research: React Native vs Flutter
-- Setup: Development environment
-
-**QA Squad (2 people):**
-- Support: #68 (Visual polish testing)
-- Prepare: Mobile testing infrastructure
-
-#### v0.9.2 Squad Assignments
-
-**Frontend Squad (4 people):**
-- Lead: #67 (Mobile Navigation) - 2 weeks
-- Lead: #66 (Feature Discovery) - 2 weeks
-- Lead: #65 (Touch Interactions) - 1 week
-- Lead: #63 (Mobile-First Layout) - 3 weeks
-
-**Integration Squad (2 people):**
-- Lead: #80 (Weather in Commute) - 2 weeks
-- Support: Mobile API optimization
-
-**Mobile Squad (2-3 people):**
-- Continue: #36 (Mobile app development)
-- Support: #62 (Mobile UX Epic)
-
-**QA Squad (2 people):**
-- Lead: Mobile testing across devices
-- Support: #62 (Accessibility testing)
+### Startup Time
+- **v2.5.0:** 5-8 seconds (Flask app initialization)
+- **v1.0.0:** <1 second (static files served immediately)
+- **Improvement:** 8x faster
 
 ---
 
-## 🎯 Implementation Priorities
+## 🚀 Post-v1.0.0 Considerations
 
-### Release +1 (v0.9.1) - Must Have
-These issues provide immediate value and improve user experience:
-1. **#79** - Onboarding modal (quick win)
-2. **#68** - Visual polish (professional appearance)
-3. **#47** - Route comparison (high user value)
-4. **#37** - Real-time suggestions (competitive advantage)
+After v1.0.0 is stable, consider these enhancements **only if needed**:
 
-### Release +2 (v0.9.2) - Should Have
-These issues complete the mobile experience:
-1. **#62-67** - Mobile UX epic and components
-2. **#80** - Weather integration enhancement
+### Low Priority (Evaluate After 3+ Months)
+- **Alternative Geocoding:** Photon API vs Nominatim (if performance issues)
+- **Additional Platforms:** Garmin, Wahoo (if Strava insufficient)
+- **Mobile App:** Native app (if web interface insufficient)
 
-### Release +3 (v0.9.3) - Nice to Have
-These issues expand capabilities:
-1. **#39** - Alternative geocoding (performance)
-2. **#35** - Platform integrations (ecosystem)
-
-### Release +4 (v1.0.0) - Production Ready
-These issues require significant planning:
-1. **#38** - Social features (community building)
-
----
-
-## 📈 Effort Estimates
-
-| Release | Issues | Total Weeks | Squad Weeks | Priority |
-|---------|--------|-------------|-------------|----------|
-| v0.9.0 | 33 | 8 | 32 | Current |
-| v0.9.1 | 6 | 4 | 12 | High |
-| v0.9.2 | 6 | 6 | 18 | Medium |
-| v0.9.3 | 2 | 4 | 8 | Low |
-| v1.0.0 | 1 | TBD | TBD | Production |
-
----
-
-## 🚀 Getting Started (Post-v0.9.0)
-
-### Week 9 - Release +1 Kickoff
-
-```bash
-# Frontend Squad starts with quick wins
-gh issue view 79  # How It Works Modal
-gh issue view 68  # Visual Hierarchy
-
-# Integration Squad begins real-time features
-gh issue view 37  # Real-time suggestions
-
-# Mobile Squad research phase
-gh issue view 36  # Mobile app planning
-```
-
-### Week 13 - Release +2 Kickoff
-
-```bash
-# Frontend Squad focuses on mobile
-gh issue view 67  # Mobile Navigation
-gh issue view 66  # Feature Discovery
-
-# Integration Squad enhances weather
-gh issue view 80  # Weather in Commute Tab
-```
-
----
-
-## 📝 Notes
-
-### Mobile App Considerations (#36)
-- **Technology:** React Native (cross-platform) vs Flutter
-- **Features:** Subset of web platform initially
-- **Offline:** Consider offline mode for routes
-- **Push:** Notifications for weather alerts
-
-### Social Features Considerations (#38)
-- **Privacy:** GDPR compliance required
-- **Moderation:** Community guidelines needed
-- **Infrastructure:** Scalability planning
-- **Legal:** Terms of service, data handling
-
-### Platform Integrations (#35)
-- **Priority Order:** Garmin > Wahoo > TrainingPeaks > Others
-- **API Costs:** Evaluate per-platform costs
-- **Maintenance:** Each integration adds maintenance burden
+### Not Planned (Bloat for Single User)
+- ~~Social features~~ (unnecessary for personal tool)
+- ~~Beta testing infrastructure~~ (you are the tester)
+- ~~Multi-user support~~ (single-user deployment)
+- ~~Admin dashboards~~ (you are the admin)
+- ~~Feedback forms~~ (you provide your own feedback)
 
 ---
 
 ## 🔗 Related Documents
 
-- **Current Sprint:** [`SQUAD_ORGANIZATION.md`](SQUAD_ORGANIZATION.md)
-- **Issue Priorities:** [`ISSUE_PRIORITIES.md`](ISSUE_PRIORITIES.md)
-- **Epic #144:** [Web Platform Migration](https://github.com/e2kd7n/ride-optimizer/issues/144)
-- **Epic #145:** [Weather Dashboard](https://github.com/e2kd7n/ride-optimizer/issues/145)
-- **Epic #146:** [Beta Release & User Feedback Program](https://github.com/e2kd7n/ride-optimizer/issues/146)
-
-## 🎯 Path to v1.0
-
-The roadmap represents incremental releases building towards v1.0:
-- **v0.9.0:** Core web platform (MVP) + Beta program launch
-- **v0.9.1:** UX enhancements and mobile app (informed by beta feedback)
-- **v0.9.2:** Mobile optimization complete
-- **v0.9.3:** External integrations
-- **v1.0.0:** Production-ready with social features
-
-## 🧪 Beta Testing Integration
-
-**Epic #146** runs parallel to development and informs future releases:
-
-**Week 7:** QA Squad sets up beta infrastructure
-**Week 8:** Beta launches with v0.9.0 release
-**Weeks 8-10:** Continuous feedback collection
-**Week 11:** Feedback analysis informs v0.9.1 priorities
-
-**Key Benefits:**
-- Real user validation of features
-- Data-driven prioritization for v0.9.1
-- Early bug detection and fixes
-- User satisfaction metrics (NPS)
-- Feature adoption insights
-
-See [Epic #146](https://github.com/e2kd7n/ride-optimizer/issues/146) for complete beta program details.
+- **Architecture Simplification:** [ARCHITECTURE_SIMPLIFICATION_PROPOSAL.md](ARCHITECTURE_SIMPLIFICATION_PROPOSAL.md)
+- **Implementation Summary:** [ARCHITECTURE_SIMPLIFICATION_SUMMARY.md](ARCHITECTURE_SIMPLIFICATION_SUMMARY.md)
+- **Version Rebaseline:** [VERSION_REBASELINE_PLAN.md](VERSION_REBASELINE_PLAN.md)
+- **Squad Organization:** [SQUAD_ORGANIZATION.md](SQUAD_ORGANIZATION.md)
+- **Issue Priorities:** [ISSUE_PRIORITIES.md](ISSUE_PRIORITIES.md)
 
 ---
 
-*Release roadmap based on P4 sprint priorities*
-*Last updated: 2026-05-06 16:23 CDT*
+## 📝 Version History
+
+- **v2.5.0** (2026-03-30): Last pre-production release with complex architecture
+- **v2.4.0** (2026-03-30): Long rides feature & polish
+- **v2.3.0** (2026-03-30): Segment-based route naming
+- **v2.2.0** (2026-03-30): Test infrastructure
+- **v2.1.0** (2026-03-26): Code quality & design system
+- **v1.0.0** (Target: 2026-06): First production-ready release with simplified architecture
+
+---
+
+*Last updated: 2026-05-07 (Version Rebaseline)*  
+*See [VERSION_REBASELINE_PLAN.md](VERSION_REBASELINE_PLAN.md) for details on version scheme changes*
