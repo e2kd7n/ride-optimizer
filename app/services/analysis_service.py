@@ -13,13 +13,11 @@ from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 from pathlib import Path
 
-from stravalib.client import Client
 from src.data_fetcher import StravaDataFetcher, Activity
 from src.route_analyzer import RouteAnalyzer, RouteGroup
 from src.long_ride_analyzer import LongRideAnalyzer, LongRide
 from src.location_finder import LocationFinder, Location
 from src.config import Config
-from src.auth_secure import SecureTokenStorage
 
 logger = logging.getLogger(__name__)
 
@@ -43,19 +41,8 @@ class AnalysisService:
             config: Configuration object
         """
         self.config = config
-        
-        # Create authenticated Strava client
-        client = Client()
-        credentials_path = config.get('auth.credentials_path', 'config/credentials.json')
-        token_storage = SecureTokenStorage(credentials_path)
-        token_data = token_storage.load_tokens()
-        if token_data and 'access_token' in token_data:
-            client.access_token = token_data['access_token']
-        
-        self.data_fetcher = StravaDataFetcher(client, config)
-        
-        # Location finder will be initialized when activities are available
-        self._location_finder: Optional[LocationFinder] = None
+        self.data_fetcher = StravaDataFetcher(config)
+        self.location_finder = LocationFinder(config)
         
         # Cached analysis results
         self._activities: Optional[List[Activity]] = None
@@ -64,17 +51,6 @@ class AnalysisService:
         self._home_location: Optional[Location] = None
         self._work_location: Optional[Location] = None
         self._last_analysis_time: Optional[datetime] = None
-    
-    def _ensure_location_finder(self):
-        """Initialize location finder if not already initialized."""
-        if self._location_finder is None and self._activities:
-            self._location_finder = LocationFinder(self._activities, self.config)
-    
-    @property
-    def location_finder(self) -> Optional[LocationFinder]:
-        """Get location finder, initializing if needed."""
-        self._ensure_location_finder()
-        return self._location_finder
     
     def run_full_analysis(self, force_refresh: bool = False) -> Dict[str, Any]:
         """

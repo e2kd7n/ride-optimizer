@@ -9,10 +9,25 @@ Provides intelligent long ride recommendations based on:
 - Historical performance
 """
 
-from flask import Blueprint, render_template, request, jsonify, current_app
+from flask import Blueprint, render_template, request, jsonify, current_app, g
 from datetime import datetime, timedelta
+import traceback
+
+from app.services import AnalysisService, PlannerService
+from src.config import Config
 
 bp = Blueprint('planner', __name__, url_prefix='/planner')
+
+
+def get_services():
+    """Get or create service instances for this request."""
+    if 'services' not in g:
+        config = Config('config/config.yaml')
+        g.services = {
+            'analysis': AnalysisService(config),
+            'planner': PlannerService(config)
+        }
+    return g.services
 
 
 @bp.route('/')
@@ -28,15 +43,82 @@ def index():
     """
     current_app.logger.info('Long ride planner accessed')
     
-    # TODO: Replace with actual service layer calls (Issue #130)
+    services = get_services()
+    analysis_service = services['analysis']
+    planner_service = services['planner']
+    
+    # Get filter parameters
+    forecast_days = int(request.args.get('days', 7))
+    min_distance = float(request.args.get('min_distance', 30))
+    max_distance = float(request.args.get('max_distance', 100))
+    
+    recommendations = []
+    best_day = None
+    total_rides = 0
+    
+    try:
+        long_rides = analysis_service.get_long_rides()
+        
+        if long_rides:
+            planner_service.initialize(long_rides)
+            
+            # Get recommendations
+            rec_data = planner_service.get_recommendations(
+                forecast_days=forecast_days,
+                min_distance=min_distance,
+                max_distance=max_distance
+            )
+            
+            if rec_data.get('status') == 'success':
+                best_day = rec_data.get('best_day')
+                total_rides = rec_data.get('total_rides', 0)
+                
+                for day_rec in rec_data.get('recommendations', []):
+                    rides = []
+                    for ride in day_rec.get('rides', [])[:5]:  # Top 5 per day
+                        rides.append({
+                            'ride_id': ride.get('ride_id'),
+                            'name': ride.get('name', 'Unknown Ride'),
+                            'distance': ride.get('distance', 0) / 1000,  # km
+                            'duration': ride.get('duration', 0) / 60,  # minutes
+                            'elevation': ride.get('elevation', 0),  # meters
+                            'score': ride.get('score', 0),
+                            'weather_score': ride.get('weather_score', 0),
+                            'variety_score': ride.get('variety_score', 0),
+                            'is_loop': ride.get('is_loop', False),
+                            'weather': ride.get('weather', {})
+                        })
+                    
+                    best_ride = day_rec.get('best_ride', {})
+                    recommendations.append({
+                        'date': day_rec.get('date'),
+                        'day_name': day_rec.get('day_name'),
+                        'rides': rides,
+                        'best_ride': {
+                            'name': best_ride.get('name', 'Unknown'),
+                            'distance': best_ride.get('distance', 0) / 1000,
+                            'duration': best_ride.get('duration', 0) / 60,
+                            'elevation': best_ride.get('elevation', 0),
+                            'score': best_ride.get('score', 0),
+                            'weather': best_ride.get('weather', {})
+                        } if best_ride else None,
+                        'weather_summary': day_rec.get('weather_summary', '')
+                    })
+                    
+    except Exception as e:
+        current_app.logger.error(f"Error getting planner recommendations: {e}")
+        current_app.logger.debug(traceback.format_exc())
+    
     context = {
         'page_title': 'Long Ride Planner',
         'current_time': datetime.now(),
-        'forecast_days': 7,
-        'recommendations': [],  # TODO: Get from long_ride_analyzer service
-        'weather_forecast': None,  # TODO: Get 7-day weather forecast
-        'workout_schedule': None,  # TODO: Get TrainerRoad workout schedule
-        'route_variety': {}  # TODO: Calculate route variety scores
+        'forecast_days': forecast_days,
+        'min_distance': min_distance,
+        'max_distance': max_distance,
+        'recommendations': recommendations,
+        'best_day': best_day,
+        'total_rides': total_rides,
+        'workout_schedule': None  # TODO: TrainerRoad integration (Issue #139)
     }
     
     return render_template('planner/index.html', **context)
