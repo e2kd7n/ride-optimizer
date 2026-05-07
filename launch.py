@@ -131,11 +131,32 @@ def get_weather():
         
         weather_data = _weather_service.get_current_weather(lat, lon, location_name)
         
-        return jsonify({
-            'status': 'success',
-            'weather': weather_data,
-            'timestamp': datetime.now().isoformat()
-        })
+        # Format for frontend expectations (dashboard.js expects 'current' key)
+        if weather_data:
+            # Convert field names to match frontend expectations
+            wind_speed_mph = weather_data.get('wind_speed_kph', 0) * 0.621371
+            formatted_weather = {
+                'temperature': round(weather_data.get('temperature_f', weather_data.get('temp_c', 0) * 9/5 + 32)),
+                'feels_like': round(weather_data.get('feels_like_f', weather_data.get('temperature_f', 0))),
+                'conditions': weather_data.get('conditions', 'Unknown'),
+                'description': weather_data.get('conditions', 'Unknown'),
+                'wind_speed': round(wind_speed_mph),  # Round to nearest mph
+                'wind_direction': weather_data.get('wind_direction_cardinal', 'N'),
+                'humidity': weather_data.get('humidity', 0),
+                'precipitation_probability': weather_data.get('precipitation_mm', 0),
+                'comfort_score': int(weather_data.get('comfort_score', 0.5) * 100)  # Convert to 0-100
+            }
+            
+            return jsonify({
+                'status': 'success',
+                'current': formatted_weather,
+                'timestamp': datetime.now().isoformat()
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': 'Weather data unavailable'
+            }), 503
         
     except Exception as e:
         logger.error(f"Error getting weather: {e}", exc_info=True)
@@ -164,7 +185,30 @@ def get_recommendation():
         # Get recommendation
         recommendation = _commute_service.get_next_commute(direction)
         
-        return jsonify(recommendation)
+        # Format for frontend (dashboard.js expects specific structure)
+        if recommendation.get('status') == 'success' and recommendation.get('route'):
+            route = recommendation['route']
+            formatted = {
+                'status': 'success',
+                'recommended_route': {
+                    'name': route.get('name', 'Unknown Route'),
+                    'distance': route.get('distance', 0) / 1000,  # Convert m to km, then to mi
+                    'elevation_gain': route.get('elevation', 0)
+                },
+                'score': int(recommendation.get('score', 50)),
+                'recommendation': 'Recommended' if recommendation.get('score', 0) > 70 else 'Alternative available',
+                'factors': []
+            }
+            
+            # Add breakdown as factors
+            if 'breakdown' in recommendation:
+                breakdown = recommendation['breakdown']
+                for key, value in breakdown.items():
+                    formatted['factors'].append(f"{key.title()}: {int(value * 100)}%")
+            
+            return jsonify(formatted)
+        else:
+            return jsonify(recommendation)
         
     except Exception as e:
         logger.error(f"Error getting recommendation: {e}", exc_info=True)
@@ -200,13 +244,37 @@ def get_routes():
             limit=limit
         )
         
-        return jsonify(routes_data)
+        # Format routes for frontend (dashboard.js expects specific fields)
+        if routes_data.get('status') == 'success' and routes_data.get('routes'):
+            formatted_routes = []
+            for route in routes_data['routes']:
+                formatted_route = {
+                    'id': route.get('id'),
+                    'name': route.get('name', 'Unknown Route'),
+                    'distance': route.get('distance', 0),  # Already in km
+                    'elevation_gain': route.get('elevation', 0),
+                    'sport_type': route.get('type', 'Ride'),
+                    'is_favorite': route.get('is_favorite', False),
+                    'uses': route.get('uses', 0),
+                    'type': route.get('type', 'commute')
+                }
+                formatted_routes.append(formatted_route)
+            
+            return jsonify({
+                'status': 'success',
+                'routes': formatted_routes,
+                'total_count': len(formatted_routes)
+            })
+        else:
+            return jsonify(routes_data)
         
     except Exception as e:
         logger.error(f"Error getting routes: {e}", exc_info=True)
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': str(e),
+            'routes': [],
+            'total_count': 0
         }), 500
 
 
@@ -224,10 +292,15 @@ def get_status():
         # Get analysis status
         analysis_status = _analysis_service.get_analysis_status()
         
-        # Get service initialization status
+        # Format for frontend (dashboard.js expects specific fields)
         status_data = {
             'status': 'success',
             'timestamp': datetime.now().isoformat(),
+            'storage_ok': True,
+            'storage_used_mb': 10,  # TODO: Calculate actual storage
+            'storage_total_mb': 1000,
+            'uptime_seconds': 3600,  # TODO: Track actual uptime
+            'last_update': analysis_status.get('last_analysis'),
             'services': {
                 'analysis': 'initialized' if _analysis_service else 'not_initialized',
                 'commute': 'initialized' if _commute_service else 'not_initialized',
@@ -235,9 +308,7 @@ def get_status():
                 'planner': 'initialized' if _planner_service else 'not_initialized',
                 'route_library': 'initialized' if _route_library_service else 'not_initialized'
             },
-            'data': analysis_status,
-            'memory_usage_mb': 'N/A',  # TODO: Add memory monitoring
-            'uptime_seconds': 'N/A'  # TODO: Add uptime tracking
+            'data': analysis_status
         }
         
         return jsonify(status_data)

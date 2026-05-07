@@ -1,29 +1,444 @@
 🌐 Route Geocoding Progress
 ============================================================
-Total routes: 1
-Progress: 0/1
+Total routes: 203
+Progress: 0/203
 ============================================================
 
 Starting geocoding...
-[20:07:17] [██████████████████████████████] 100.0% (1/1)
-  ✓ South Federal Street → West Marble Place → South State Street
+otal routes to geocode: 203
+
+⚠️  RATE LIMITING INFO:
+• Nominatim enforces 1 request/second maximum
+• Retries with exponential backoff on timeouts
+• If rate limited, system will self-impose 4-hour pause
+• This prevents IP blocks and allows Nominatim to reset
+======================================================================
+
+[09:37:41] Phase 1/2: Geocoding route names
+----------------------------------------------------------------------
+[09:37:41] [░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   0.5% (1/203)
+  ✓ Lakefront Trail → North Lake Shore Drive → North Wells Street
+[09:37:41] [░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   1.0% (2/203)
+  ✓ Via Lakefront Trail
+[09:37:41] [░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   1.5% (3/203)
+  ✓ Lakefront Trail → North Jean Baptiste Point DuSable Lake Shore Drive → North Wells Street
+[09:37:41] [░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   2.0% (4/203)
+  ✓ Via Lakefront Trail
+[09:37:41] [░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   2.5% (5/203)
+  ✓ North Sheridan Road → Lakefront Trail
+[09:37:41] [░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   3.0% (6/203)
+  ✓ Lakefront Trail → East Oak Street → North Wells Street
+[09:37:41] [█░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   3.4% (7/203)
+  ✓ Lakefront Trail → North Jean Baptiste Point DuSable Lake Shore Drive → West Washington Street
+[09:37:41] [█░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   3.9% (8/203)
+  ✓ Via Lakefront Trail
+[09:37:41] [█░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   4.4% (9/203)
+  ✓ Lakefront Trail → North Clark Street → West Washington Street
+[09:37:41] [█░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   4.9% (10/203)
+  ✓ Lakefront Trail → Lincoln Park Fitness Course → North Jean Baptiste Point DuSable Lake Shore Drive
+[09:37:41] [█░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   5.4% (11/203)
+  ✓ North Sheridan Road → Lakefront Trail → South Franklin Street
+[09:37:41] [█░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   5.9% (12/203)
+  ✓ Via Lakefront Trail
+[09:37:41] [█░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   6.4% (13/203)
+  ✓ North Sheridan Road → Lincoln Park Fitness Course → West Monroe Street
+[09:37:41] [██░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   6.9% (14/203)
+  ✓ Lakefront Trail → Lincoln Park Fitness Course → East North Boulevard
+[09:37:41] [██░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   7.4% (15/203)
+  ✓ Lakefront Trail → West Randolph Street → West Monroe Street
+[09:37:41] [██░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   7.9% (16/203)
+  ✓ Via Lakefront Trail
+[09:37:41] [██░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   8.4% (17/203)
+  ✓ Lakefront Trail → North Jean Baptiste Point DuSable Lake Shore Drive → Lincoln Park Fitness Course
+[09:37:41] [██░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   8.9% (18/203)
+  ✓ Lakefront Trail → West Washington Street
+[09:37:41] [██░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   9.4% (19/203)
+  ✓ Via Lakefront Trail
+[09:37:41] [██░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   9.9% (20/203)
+  ✓ Via Lakefront Trail
+[09:37:41] [███░░░░░░░░░░░░░░░░░░░░░░░░░░░]  10.3% (21/203)
+  ✓ Via Lakefront Trail
+[09:37:41] [███░░░░░░░░░░░░░░░░░░░░░░░░░░░]  10.8% (22/203)
+  ✓ Lakefront Trail → North Jean Baptiste Point DuSable Lake Shore Drive → North Lake Shore Drive
+[09:37:41] [███░░░░░░░░░░░░░░░░░░░░░░░░░░░]  11.3% (23/203)
+  ✓ Lakefront Trail → Dock A → Lincoln Park Fitness Course
+[09:37:41] [███░░░░░░░░░░░░░░░░░░░░░░░░░░░]  11.8% (24/203)
+  ✓ Via Lakefront Trail
+[09:37:41] [███░░░░░░░░░░░░░░░░░░░░░░░░░░░]  12.3% (25/203)
+  ✓ Lakefront Trail → Lincoln Park Fitness Course
+[09:37:41] [███░░░░░░░░░░░░░░░░░░░░░░░░░░░]  12.8% (26/203)
+  ✓ Lakefront Trail → North Jean Baptiste Point DuSable Lake Shore Drive → West Fullerton Avenue
+[09:37:41] [███░░░░░░░░░░░░░░░░░░░░░░░░░░░]  13.3% (27/203)
+  ✓ Lakefront Trail → Lincoln Park Fitness Course
+[09:37:41] [████░░░░░░░░░░░░░░░░░░░░░░░░░░]  13.8% (28/203)
+  ✓ North Sheridan Road → Lakefront Trail → South Franklin Street
+[09:37:41] [████░░░░░░░░░░░░░░░░░░░░░░░░░░]  14.3% (29/203)
+  ✓ Lakefront Trail → Lincoln Park Fitness Course
+[09:37:41] [████░░░░░░░░░░░░░░░░░░░░░░░░░░]  14.8% (30/203)
+  ✓ Via Lakefront Trail
+[09:37:41] [████░░░░░░░░░░░░░░░░░░░░░░░░░░]  15.3% (31/203)
+  ✓ Lakefront Trail via North Broadway
+[09:37:41] [████░░░░░░░░░░░░░░░░░░░░░░░░░░]  15.8% (32/203)
+  ✓ Lakefront Trail → Dock A
+[09:37:41] [████░░░░░░░░░░░░░░░░░░░░░░░░░░]  16.3% (33/203)
+  ✓ Lakefront Trail → North State Street → West Madison Street
+[09:37:41] [█████░░░░░░░░░░░░░░░░░░░░░░░░░]  16.7% (34/203)
+  ✓ Lakefront Trail → Lincoln Park Fitness Course
+[09:37:41] [█████░░░░░░░░░░░░░░░░░░░░░░░░░]  17.2% (35/203)
+  ✓ Lakefront Trail → Lincoln Park Fitness Course
+[09:37:41] [█████░░░░░░░░░░░░░░░░░░░░░░░░░]  17.7% (36/203)
+  ✓ Lakefront Trail → Dearborn Street Bikeway
+[09:37:41] [█████░░░░░░░░░░░░░░░░░░░░░░░░░]  18.2% (37/203)
+  ✓ North Sheridan Road → Lakefront Trail → Randolph Street Bikeway
+[09:37:41] [█████░░░░░░░░░░░░░░░░░░░░░░░░░]  18.7% (38/203)
+  ✓ Lakefront Trail → East Walton Place → West Randolph Street
+[09:37:41] [█████░░░░░░░░░░░░░░░░░░░░░░░░░]  19.2% (39/203)
+  ✓ Lakefront Trail → North Michigan Avenue → West Randolph Street
+[09:37:41] [█████░░░░░░░░░░░░░░░░░░░░░░░░░]  19.7% (40/203)
+  ✓ Lakefront Trail → East Lake Shore Drive → North Wells Street
+[09:37:41] [██████░░░░░░░░░░░░░░░░░░░░░░░░]  20.2% (41/203)
+  ✓ North Sheridan Road → Lakefront Trail → North Clark Street
+[09:37:41] [██████░░░░░░░░░░░░░░░░░░░░░░░░]  20.7% (42/203)
+  ✓ Lakefront Trail → West Washington Street
+[09:37:41] [██████░░░░░░░░░░░░░░░░░░░░░░░░]  21.2% (43/203)
+  ✓ West Bryn Mawr Avenue → Lakefront Trail → Washington Street Bikeway
+[09:37:41] [██████░░░░░░░░░░░░░░░░░░░░░░░░]  21.7% (44/203)
+  ✓ Lakefront Trail → East Walton Street → North Wells Street
+[09:37:41] [██████░░░░░░░░░░░░░░░░░░░░░░░░]  22.2% (45/203)
+  ✓ Via Lakefront Trail
+[09:37:41] [██████░░░░░░░░░░░░░░░░░░░░░░░░]  22.7% (46/203)
+  ✓ Lakefront Trail → Randolph Street Bikeway → North Wells Street
+[09:37:41] [██████░░░░░░░░░░░░░░░░░░░░░░░░]  23.2% (47/203)
+  ✓ Lakefront Trail → Lincoln Park Fitness Course
+[09:37:41] [███████░░░░░░░░░░░░░░░░░░░░░░░]  23.6% (48/203)
+  ✓ Lakefront Trail → Lincoln Park Fitness Course
+[09:37:41] [███████░░░░░░░░░░░░░░░░░░░░░░░]  24.1% (49/203)
+  ✓ West Bryn Mawr Avenue → North Clark Street → North Wells Street
+[09:37:41] [███████░░░░░░░░░░░░░░░░░░░░░░░]  24.6% (50/203)
+  ✓ Lakefront Trail via North Jean Baptiste Point DuSable Lake Shore Drive
+[09:37:41] [███████░░░░░░░░░░░░░░░░░░░░░░░]  25.1% (51/203)
+  ✓ Via Lakefront Trail
+[09:37:41] [███████░░░░░░░░░░░░░░░░░░░░░░░]  25.6% (52/203)
+  ✓ Lakefront Trail → Lincoln Park Fitness Course → West Schiller Street
+[09:37:41] [███████░░░░░░░░░░░░░░░░░░░░░░░]  26.1% (53/203)
+  ✓ Lakefront Trail → Service Road Shedd Acquarium
+[09:37:41] [███████░░░░░░░░░░░░░░░░░░░░░░░]  26.6% (54/203)
+  ✓ Lakefront Trail → West Oak Street → North Wells Street
+[09:37:41] [████████░░░░░░░░░░░░░░░░░░░░░░]  27.1% (55/203)
+  ✓ Lakefront Trail → Lincoln Park Fitness Course → West Washington Street
+[09:37:41] [████████░░░░░░░░░░░░░░░░░░░░░░]  27.6% (56/203)
+  ✓ Via Lakefront Trail
+[09:37:41] [████████░░░░░░░░░░░░░░░░░░░░░░]  28.1% (57/203)
+  ✓ Lakefront Trail → Lincoln Park Fitness Course
+[09:37:41] [████████░░░░░░░░░░░░░░░░░░░░░░]  28.6% (58/203)
+  ✓ Lakefront Trail → North Michigan Avenue → West Madison Street
+[09:37:41] [████████░░░░░░░░░░░░░░░░░░░░░░]  29.1% (59/203)
+  ✓ Via Lakefront Trail
+[09:37:41] [████████░░░░░░░░░░░░░░░░░░░░░░]  29.6% (60/203)
+  ✓ North Sheridan Road → Lakefront Trail → West Madison Street
+[09:37:41] [█████████░░░░░░░░░░░░░░░░░░░░░]  30.0% (61/203)
+  ✓ Via Lakefront Trail
+[09:37:41] [█████████░░░░░░░░░░░░░░░░░░░░░]  30.5% (62/203)
+  ✓ Lakefront Trail → Lincoln Park Fitness Course
+[09:37:41] [█████████░░░░░░░░░░░░░░░░░░░░░]  31.0% (63/203)
+  ✓ Lakefront Trail → Lincoln Park Fitness Course
+[09:37:41] [█████████░░░░░░░░░░░░░░░░░░░░░]  31.5% (64/203)
+  ✓ Via Lakefront Trail
+[09:37:41] [█████████░░░░░░░░░░░░░░░░░░░░░]  32.0% (65/203)
+  ✓ Via Lakefront Trail
+[09:37:41] [█████████░░░░░░░░░░░░░░░░░░░░░]  32.5% (66/203)
+  ✓ Lakefront Trail → North Jean Baptiste Point DuSable Lake Shore Drive → Lincoln Park Fitness Course
+[09:37:41] [█████████░░░░░░░░░░░░░░░░░░░░░]  33.0% (67/203)
+  ✓ Via Lakefront Trail
+[09:37:41] [██████████░░░░░░░░░░░░░░░░░░░░]  33.5% (68/203)
+  ✓ Lakefront Trail → South DuSable Lake Shore Drive
+[09:37:41] [██████████░░░░░░░░░░░░░░░░░░░░]  34.0% (69/203)
+  ✓ Lakefront Trail → Lincoln Park Fitness Course
+[09:37:41] [██████████░░░░░░░░░░░░░░░░░░░░]  34.5% (70/203)
+  ✓ Via Lakefront Trail
+[09:37:41] [██████████░░░░░░░░░░░░░░░░░░░░]  35.0% (71/203)
+  ✓ Via Lakefront Trail
+[09:37:41] [██████████░░░░░░░░░░░░░░░░░░░░]  35.5% (72/203)
+  ✓ Via Lakefront Trail
+[09:37:41] [██████████░░░░░░░░░░░░░░░░░░░░]  36.0% (73/203)
+  ✓ Lakefront Trail → North Wells Street
+[09:37:41] [██████████░░░░░░░░░░░░░░░░░░░░]  36.5% (74/203)
+  ✓ Via Lakefront Trail
+[09:37:41] [███████████░░░░░░░░░░░░░░░░░░░]  36.9% (75/203)
+  ✓ North Sheridan Road → Lakefront Trail → West Diversey Parkway
+[09:37:41] [███████████░░░░░░░░░░░░░░░░░░░]  37.4% (76/203)
+  ✓ Lakefront Trail → North Clark Street → North Wells Street
+[09:37:41] [███████████░░░░░░░░░░░░░░░░░░░]  37.9% (77/203)
+  ✓ Lakefront Trail → Lincoln Park Fitness Course
+[09:37:41] [███████████░░░░░░░░░░░░░░░░░░░]  38.4% (78/203)
+  ✓ Via Lakefront Trail
+[09:37:41] [███████████░░░░░░░░░░░░░░░░░░░]  38.9% (79/203)
+  ✓ Via Lakefront Trail
+[09:37:41] [███████████░░░░░░░░░░░░░░░░░░░]  39.4% (80/203)
+  ✓ Via Lakefront Trail
+[09:37:41] [███████████░░░░░░░░░░░░░░░░░░░]  39.9% (81/203)
+  ✓ Lakefront Trail → Lincoln Park Fitness Course
+[09:37:41] [████████████░░░░░░░░░░░░░░░░░░]  40.4% (82/203)
+  ✓ Lakefront Trail via North Sheridan Road
+[09:37:41] [████████████░░░░░░░░░░░░░░░░░░]  40.9% (83/203)
+  ✓ North Sheridan Road → Lincoln Park Fitness Course → North LaSalle Street
+[09:37:41] [████████████░░░░░░░░░░░░░░░░░░]  41.4% (84/203)
+  ✓ North Sheridan Road → Lincoln Park Fitness Course → West Germania Place
+[09:37:41] [████████████░░░░░░░░░░░░░░░░░░]  41.9% (85/203)
+  ✓ North Sheridan Road → Lakefront Trail → West Madison Street
+[09:37:41] [████████████░░░░░░░░░░░░░░░░░░]  42.4% (86/203)
+  ✓ Lakefront Trail → North Jean Baptiste Point DuSable Lake Shore Drive
+[09:37:41] [████████████░░░░░░░░░░░░░░░░░░]  42.9% (87/203)
+  ✓ Lakefront Trail → Pedway → South Wabash Avenue
+[09:37:41] [█████████████░░░░░░░░░░░░░░░░░]  43.3% (88/203)
+  ✓ North Sheridan Road → Lakefront Trail
+[09:37:41] [█████████████░░░░░░░░░░░░░░░░░]  43.8% (89/203)
+  ✓ Lakefront Trail → Lincoln Park Fitness Course
+[09:37:41] [█████████████░░░░░░░░░░░░░░░░░]  44.3% (90/203)
+  ✓ Via Lakefront Trail
+[09:37:41] [█████████████░░░░░░░░░░░░░░░░░]  44.8% (91/203)
+  ✓ North Sheridan Road → Lakefront Trail
+[09:37:41] [█████████████░░░░░░░░░░░░░░░░░]  45.3% (92/203)
+  ✓ North Sheridan Road → Lakefront Trail → Lincoln Park Fitness Course
+[09:37:41] [█████████████░░░░░░░░░░░░░░░░░]  45.8% (93/203)
+  ✓ North Sheridan Road → Lakefront Trail → Randolph Street Bikeway
+[09:37:41] [█████████████░░░░░░░░░░░░░░░░░]  46.3% (94/203)
+  ✓ West Bryn Mawr Avenue → Lakefront Trail → Randolph Street Bikeway
+[09:37:41] [██████████████░░░░░░░░░░░░░░░░]  46.8% (95/203)
+  ✓ Lakefront Trail → South Wabash Avenue
+[09:37:41] [██████████████░░░░░░░░░░░░░░░░]  47.3% (96/203)
+  ✓ North Sheridan Road → Lakefront Trail
+[09:37:41] [██████████████░░░░░░░░░░░░░░░░]  47.8% (97/203)
+  ✓ Lakefront Trail → Lincoln Park Fitness Course → West Randolph Street
+[09:37:41] [██████████████░░░░░░░░░░░░░░░░]  48.3% (98/203)
+  ✓ North Sheridan Road → Lakefront Trail → Chicago Riverwalk
+[09:37:41] [██████████████░░░░░░░░░░░░░░░░]  48.8% (99/203)
+  ✓ West Monroe Street → Lakefront Trail
+[09:37:41] [██████████████░░░░░░░░░░░░░░░░]  49.3% (100/203)
+  ✓ West Monroe Street → South Jean Baptiste Point DuSable Lake Shore Drive → Lakefront Trail
+[09:37:41] [██████████████░░░░░░░░░░░░░░░░]  49.8% (101/203)
+  ✓ West Monroe Street → South Jean Baptiste Point DuSable Lake Shore Drive → Lakefront Trail
+[09:37:41] [███████████████░░░░░░░░░░░░░░░]  50.2% (102/203)
+  ✓ North Franklin Street → Lincoln Park Fitness Course → Lakefront Trail
+[09:37:41] [███████████████░░░░░░░░░░░░░░░]  50.7% (103/203)
+  ✓ North Franklin Street → West Hubbard Street → Lakefront Trail
+[09:37:41] [███████████████░░░░░░░░░░░░░░░]  51.2% (104/203)
+  ✓ West Washington Street → West Kinzie Street → Lakefront Trail
+[09:37:41] [███████████████░░░░░░░░░░░░░░░]  51.7% (105/203)
+  ✓ North Franklin Street → North Orleans Street → Lakefront Trail
+[09:37:41] [███████████████░░░░░░░░░░░░░░░]  52.2% (106/203)
+  ✓ West Monroe Street → South Jean Baptiste Point DuSable Lake Shore Drive → Lakefront Trail
+[09:37:41] [███████████████░░░░░░░░░░░░░░░]  52.7% (107/203)
+  ✓ North Orleans Street → West Oak Street → Lakefront Trail
+[09:37:41] [███████████████░░░░░░░░░░░░░░░]  53.2% (108/203)
+  ✓ West Madison Street → Lincoln Park Fitness Course → Lakefront Trail
+[09:37:41] [████████████████░░░░░░░░░░░░░░]  53.7% (109/203)
+  ✓ North Franklin Street → North Orleans Street → East Goethe Street
+[09:37:41] [████████████████░░░░░░░░░░░░░░]  54.2% (110/203)
+  ✓ West Randolph Street → West Hubbard Street → Lakefront Trail
+[09:37:41] [████████████████░░░░░░░░░░░░░░]  54.7% (111/203)
+  ✓ West Randolph Street → Lincoln Park Fitness Course → North Jean Baptiste Point DuSable Lake Shore Drive
+[09:37:41] [████████████████░░░░░░░░░░░░░░]  55.2% (112/203)
+  ✓ North Franklin Street → North Post Place → Lakefront Trail
+[09:37:41] [████████████████░░░░░░░░░░░░░░]  55.7% (113/203)
+  ✓ North LaSalle Street → Daley Plaza → Lakefront Trail
+[09:37:41] [████████████████░░░░░░░░░░░░░░]  56.2% (114/203)
+  ✓ South Wells Street → West Monroe Street → Lincoln Park Fitness Course
+[09:37:41] [████████████████░░░░░░░░░░░░░░]  56.7% (115/203)
+  ✓ West Court Place → North Orleans Street → Lakefront Trail
+[09:37:41] [█████████████████░░░░░░░░░░░░░]  57.1% (116/203)
+  ✓ West Washington Street → North Wells Street → Lakefront Trail
+[09:37:41] [█████████████████░░░░░░░░░░░░░]  57.6% (117/203)
+  ✓ West Washington Street → Lincoln Park Fitness Course → Lakefront Trail
+[09:37:41] [█████████████████░░░░░░░░░░░░░]  58.1% (118/203)
+  ✓ Randolph Street Bikeway → West Hubbard Street → Lakefront Trail
+[09:37:41] [█████████████████░░░░░░░░░░░░░]  58.6% (119/203)
+  ✓ Randolph Street Bikeway → West Fulton Street → Lincoln Park Fitness Course
+[09:37:41] [█████████████████░░░░░░░░░░░░░]  59.1% (120/203)
+  ✓ North LaSalle Street → Lincoln Park Fitness Course → Lakefront Trail
+[09:37:41] [█████████████████░░░░░░░░░░░░░]  59.6% (121/203)
+  ✓ West Washington Street → South Michigan Avenue → Lakefront Trail
+[09:37:41] [██████████████████░░░░░░░░░░░░]  60.1% (122/203)
+  ✓ North Desplaines Street → West Kinzie Street → Lakefront Trail
+[09:37:41] [██████████████████░░░░░░░░░░░░]  60.6% (123/203)
+  ✓ Riverwalk → West Eastman Street → Lincoln Park Fitness Course
+[09:37:41] [██████████████████░░░░░░░░░░░░]  61.1% (124/203)
+  ✓ West Monroe Street → Lincoln Park Fitness Course → Lakefront Trail
+[09:37:41] [██████████████████░░░░░░░░░░░░]  61.6% (125/203)
+  ✓ North Canal Street → North Racine Avenue → North Glenwood Avenue
+[09:37:41] [██████████████████░░░░░░░░░░░░]  62.1% (126/203)
+  ✓ North Franklin Street → West Dickens Avenue → Lakefront Trail
+[09:37:41] [██████████████████░░░░░░░░░░░░]  62.6% (127/203)
+  ✓ West Monroe Street → North Lake Shore Drive → Lakefront Trail
+[09:37:41] [██████████████████░░░░░░░░░░░░]  63.1% (128/203)
+  ✓ West Monroe Street → Lakefront Trail
+[09:37:41] [███████████████████░░░░░░░░░░░]  63.5% (129/203)
+  ✓ West Monroe Street → Lakefront Trail → North Sheridan Road
+[09:37:41] [███████████████████░░░░░░░░░░░]  64.0% (130/203)
+  ✓ West Randolph Street → West Fulton Street → Lakefront Trail
+[09:37:41] [███████████████████░░░░░░░░░░░]  64.5% (131/203)
+  ✓ West Couch Place → North Wells Street → Lakefront Trail
+[09:37:41] [███████████████████░░░░░░░░░░░]  65.0% (132/203)
+  ✓ North Franklin Street → Lincoln Park Fitness Course → Lakefront Trail
+[09:37:41] [███████████████████░░░░░░░░░░░]  65.5% (133/203)
+  ✓ West Monroe Street → Lakefront Trail
+[09:37:41] [███████████████████░░░░░░░░░░░]  66.0% (134/203)
+  ✓ West Monroe Street → South Jean Baptiste Point DuSable Lake Shore Drive → Lakefront Trail
+[09:37:41] [███████████████████░░░░░░░░░░░]  66.5% (135/203)
+  ✓ West Court Place → Lincoln Park Fitness Course → Lakefront Trail
+[09:37:41] [████████████████████░░░░░░░░░░]  67.0% (136/203)
+  ✓ Riverside Plaza → North California Avenue → North Manor Avenue
+[09:37:41] [████████████████████░░░░░░░░░░]  67.5% (137/203)
+  ✓ North Franklin Street → West Oak Street → Lakefront Trail
+[09:37:41] [████████████████████░░░░░░░░░░]  68.0% (138/203)
+  ✓ West Randolph Street → North Damen Avenue → North Ravenswood Avenue
+[09:37:41] [████████████████████░░░░░░░░░░]  68.5% (139/203)
+  ✓ North Orleans Street → North Halsted Street → North Broadway
+[09:37:41] [████████████████████░░░░░░░░░░]  69.0% (140/203)
+  ✓ West Monroe Street → Pedway → Lakefront Trail
+[09:37:41] [████████████████████░░░░░░░░░░]  69.5% (141/203)
+  ✓ West Randolph Street → West Lake Street → Lakefront Trail
+[09:37:41] [████████████████████░░░░░░░░░░]  70.0% (142/203)
+  ✓ Pedway → West Dickens Avenue → West Aldine Avenue
+[09:37:41] [█████████████████████░░░░░░░░░]  70.4% (143/203)
+  ✓ West Randolph Street → North Avenue Beach Breakwater → Lakefront Trail
+[09:37:41] [█████████████████████░░░░░░░░░]  70.9% (144/203)
+  ✓ West Monroe Street → South Dearborn Street → Lakefront Trail
+[09:37:41] [█████████████████████░░░░░░░░░]  71.4% (145/203)
+  ✓ West Washington Street → Lakefront Trail → North Sheridan Road
+[09:37:41] [█████████████████████░░░░░░░░░]  71.9% (146/203)
+  ✓ West Court Place → North Franklin Street → North Jean Baptiste Point DuSable Lake Shore Drive
+[09:37:41] [█████████████████████░░░░░░░░░]  72.4% (147/203)
+  ✓ Randolph Street Bikeway → Lincoln Park Fitness Course → Lakefront Trail
+[09:37:41] [█████████████████████░░░░░░░░░]  72.9% (148/203)
+  ✓ Lakefront Trail via West Madison Street
+[09:37:41] [██████████████████████░░░░░░░░]  73.4% (149/203)
+  ✓ Lakefront Trail via West Monroe Street
+[09:37:41] [██████████████████████░░░░░░░░]  73.9% (150/203)
+  ✓ Lakefront Trail via West Washington Street
+[09:37:41] [██████████████████████░░░░░░░░]  74.4% (151/203)
+  ✓ West Calhoun Place → West Madison Street → Lakefront Trail
+[09:37:41] [██████████████████████░░░░░░░░]  74.9% (152/203)
+  ✓ West Marble Place → Lincoln Park Fitness Course → Lakefront Trail
+[09:37:41] [██████████████████████░░░░░░░░]  75.4% (153/203)
+  ✓ West Calhoun Place → North Clark Street → Lakefront Trail
+[09:37:41] [██████████████████████░░░░░░░░]  75.9% (154/203)
+  ✓ Lakefront Trail via West Monroe Street
+[09:37:41] [██████████████████████░░░░░░░░]  76.4% (155/203)
+  ✓ West Monroe Street → North Lake Shore Drive → Lakefront Trail
+[09:37:41] [███████████████████████░░░░░░░]  76.8% (156/203)
+  ✓ West Monroe Street → South Jean Baptiste Point DuSable Lake Shore Drive → Lakefront Trail
+[09:37:41] [███████████████████████░░░░░░░]  77.3% (157/203)
+  ✓ South Wells Street → Lakefront Trail
+[09:37:41] [███████████████████████░░░░░░░]  77.8% (158/203)
+  ✓ North Franklin Street → North Clybourn Avenue → Lakefront Trail
+[09:37:41] [███████████████████████░░░░░░░]  78.3% (159/203)
+  ✓ West Monroe Street → South Jean Baptiste Point DuSable Lake Shore Drive → Lakefront Trail
+[09:37:41] [███████████████████████░░░░░░░]  78.8% (160/203)
+  ✓ North Franklin Street → North Clark Street → North Glenwood Avenue
+[09:37:41] [███████████████████████░░░░░░░]  79.3% (161/203)
+  ✓ South Franklin Street → Lincoln Park Fitness Course → West Bryn Mawr Avenue
+[09:37:41] [███████████████████████░░░░░░░]  79.8% (162/203)
+  ✓ West Monroe Street → Lakefront Trail
+[09:37:41] [████████████████████████░░░░░░]  80.3% (163/203)
+  ✓ West Randolph Street → North Halsted Street → North Glenwood Avenue
+[09:37:41] [████████████████████████░░░░░░]  80.8% (164/203)
+  ✓ Randolph Street Bikeway → West Division Street → Lakefront Trail
+[09:37:41] [████████████████████████░░░░░░]  81.3% (165/203)
+  ✓ North Franklin Street → Lincoln Park Fitness Course → Lakefront Trail
+[09:37:41] [████████████████████████░░░░░░]  81.8% (166/203)
+  ✓ West Randolph Street → Pedway → North Jean Baptiste Point DuSable Lake Shore Drive
+[09:37:41] [████████████████████████░░░░░░]  82.3% (167/203)
+  ✓ West Marble Place → West Monroe Street → Lakefront Trail
+[09:37:41] [████████████████████████░░░░░░]  82.8% (168/203)
+  ✓ Riverwalk → West Fulton Street → Lakefront Trail
+[09:37:41] [████████████████████████░░░░░░]  83.3% (169/203)
+  ✓ West Madison Street → North Canal Street → Lakefront Trail
+[09:37:41] [█████████████████████████░░░░░]  83.7% (170/203)
+  ✓ North Canal Street → North Clinton Street → Lakefront Trail
+[09:37:41] [█████████████████████████░░░░░]  84.2% (171/203)
+  ✓ West Court Place → North Franklin Street → Lakefront Trail
+[09:37:41] [█████████████████████████░░░░░]  84.7% (172/203)
+  ✓ West Monroe Street → North Franklin Street → East North Boulevard
+[09:37:41] [█████████████████████████░░░░░]  85.2% (173/203)
+  ✓ West Calhoun Place → Lincoln Park Fitness Course → Lakefront Trail
+[09:37:41] [█████████████████████████░░░░░]  85.7% (174/203)
+  ✓ South LaSalle Street → Lakefront Trail
+[09:37:41] [█████████████████████████░░░░░]  86.2% (175/203)
+  ✓ West Madison Street → North Dearborn Street → North Sheridan Road
+[09:37:41] [██████████████████████████░░░░]  86.7% (176/203)
+  ✓ South LaSalle Street → Lincoln Park Fitness Course → Lakefront Trail
+[09:37:41] [██████████████████████████░░░░]  87.2% (177/203)
+  ✓ West Washington Street → Lincoln Park Fitness Course → Lakefront Trail
+[09:37:41] [██████████████████████████░░░░]  87.7% (178/203)
+  ✓ Monroe Street → North Lake Shore Drive → Lakefront Trail
+[09:37:41] [██████████████████████████░░░░]  88.2% (179/203)
+  ✓ Clinton Street Bikeway → North Desplaines Street → West Ardmore Avenue
+[09:37:41] [██████████████████████████░░░░]  88.7% (180/203)
+  ✓ North Franklin Street → West Illinois Street → Lakefront Trail
+[09:37:41] [██████████████████████████░░░░]  89.2% (181/203)
+  ✓ West Adams Street → Lakefront Trail
+[09:37:41] [██████████████████████████░░░░]  89.7% (182/203)
+  ✓ North Orleans Street → Lincoln Park Fitness Course → Lakefront Trail
+[09:37:41] [███████████████████████████░░░]  90.1% (183/203)
+  ✓ Lakefront Trail via West Monroe Street
+[09:37:41] [███████████████████████████░░░]  90.6% (184/203)
+  ✓ West Monroe Street → Lakefront Trail
+[09:37:41] [███████████████████████████░░░]  91.1% (185/203)
+  ✓ West Madison Street → North Damen Avenue → West Ardmore Avenue
+[09:37:41] [███████████████████████████░░░]  91.6% (186/203)
+  ✓ Lakefront Trail via West Adams Street
+[09:37:41] [███████████████████████████░░░]  92.1% (187/203)
+  ✓ South LaSalle Street → Lakefront Trail
+[09:37:41] [███████████████████████████░░░]  92.6% (188/203)
+  ✓ South Canal Street → North Elston Avenue → North Glenwood Avenue
+[09:37:41] [███████████████████████████░░░]  93.1% (189/203)
+  ✓ West Court Place → West Hill Street → Lakefront Trail
+[09:37:41] [████████████████████████████░░]  93.6% (190/203)
+  ✓ West Adams Street → West Monroe Street → Lakefront Trail
+[09:37:41] [████████████████████████████░░]  94.1% (191/203)
+  ✓ Washington Street Bikeway → Lincoln Park Fitness Course → Lakefront Trail
+[09:37:41] [████████████████████████████░░]  94.6% (192/203)
+  ✓ West Randolph Street → North Jean Baptiste Point DuSable Lake Shore Drive → Lakefront Trail
+[09:37:41] [████████████████████████████░░]  95.1% (193/203)
+  ✓ South Canal Street → North Desplaines Street → North Honore Street
+[09:37:41] [████████████████████████████░░]  95.6% (194/203)
+  ✓ Riverwalk → North Orleans Street → Lakefront Trail
+[09:37:41] [████████████████████████████░░]  96.1% (195/203)
+  ✓ West Monroe Street → North Lake Shore Drive → Lakefront Trail
+[09:37:41] [████████████████████████████░░]  96.6% (196/203)
+  ✓ West Monroe Street → Lakefront Trail → Lincoln Park Fitness Course
+[09:37:41] [█████████████████████████████░]  97.0% (197/203)
+  ✓ West Monroe Street → North Lake Shore Drive → Lakefront Trail
+[09:37:41] [█████████████████████████████░]  97.5% (198/203)
+  ✓ North Franklin Street → North Orleans Street → Lakefront Trail
+[09:37:41] [█████████████████████████████░]  98.0% (199/203)
+  ✓ West Arcade Place → Lakefront Trail → North Sheridan Road
+[09:37:41] [█████████████████████████████░]  98.5% (200/203)
+  ✓ North Franklin Street → North Wells Street → Lakefront Trail
+[09:37:41] [█████████████████████████████░]  99.0% (201/203)
+  ✓ Lakefront Trail via Riverwalk
+[09:37:41] [█████████████████████████████░]  99.5% (202/203)
+  ✓ West Monroe Street → South State Street → Lakefront Trail
+[09:37:41] [██████████████████████████████] 100.0% (203/203)
+  ✓ South Wells Street → South State Street → Lakefront Trail
 
 ----------------------------------------------------------------------
-[20:07:17] Phase 2/3: Saving geocoding cache
+[09:37:41] Phase 2/3: Saving geocoding cache
 ----------------------------------------------------------------------
-[20:07:17] ✓ Geocoding cache saved
+[09:37:41] ✓ Geocoding cache saved
 
 ----------------------------------------------------------------------
-[20:07:17] Phase 3/3: Saving route groups cache with updated names
+[09:37:41] Phase 3/3: Saving route groups cache with updated names
 ----------------------------------------------------------------------
-[20:07:17] ✓ Route groups cache saved with 1 updated names
+[09:37:41] ✓ Route groups cache saved with 203 updated names
 
 ======================================================================
 ✅ GEOCODING COMPLETE!
 ======================================================================
-Completed: 2026-05-06 20:07:17 CDT
-Duration: 0.0 seconds
-Successfully named: 1/1 routes
+Completed: 2026-05-07 09:37:41 CDT
+Duration: 0.4 seconds
+Successfully named: 203/203 routes
 
 ✅ Route names have been saved to cache.
 

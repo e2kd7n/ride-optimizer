@@ -4,6 +4,14 @@ strava:
   oauth_callback_host: "localhost"  # Host for OAuth callback server
   oauth_callback_port: 8000  # Port for OAuth callback server
 
+location:
+  home:
+    latitude: 41.98736  # Update with your actual home coordinates
+    longitude: -87.65454
+  work:
+    latitude: 41.88374  # Update with your actual work coordinates
+    longitude: -87.6339
+
 data_fetching:
   cache_enabled: true
   cache_duration_days: 365  # Extended to 1 year - historical data doesn't change
@@ -72,7 +80,7 @@ traffic:
   enabled: true
   morning_rush_start: 7  # Morning rush hour start (24-hour format)
   morning_rush_end: 9    # Morning rush hour end
-  evening_rush_start: 16 # Evening rush hour start
+  evening_rush_start: 15:30 # Evening rush hour start
   evening_rush_end: 18   # Evening rush hour end
   min_samples: 5         # Minimum rides needed for reliable traffic analysis
 
