@@ -16,7 +16,7 @@ from unittest.mock import Mock, patch, MagicMock, mock_open
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import json
-from flask import Flask
+from flask import Flask, jsonify
 
 from app.models import db, JobHistory, AnalysisSnapshot, RouteGroup
 from app.routes import api as api_module
@@ -38,6 +38,21 @@ def app():
     
     # Register blueprint
     app.register_blueprint(api_bp)
+    
+    # Register error handlers at app level for testing
+    @app.errorhandler(404)
+    def handle_404(error):
+        return jsonify({
+            'error': 'Not Found',
+            'message': 'The requested API endpoint does not exist'
+        }), 404
+    
+    @app.errorhandler(500)
+    def handle_500(error):
+        return jsonify({
+            'error': 'Internal Server Error',
+            'message': 'An unexpected error occurred'
+        }), 500
     
     with app.app_context():
         db.create_all()
