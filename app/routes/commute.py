@@ -159,17 +159,52 @@ def analyze():
     
     current_app.logger.info(f'Commute analysis requested: direction={direction}, force_refresh={force_refresh}')
     
-    # TODO: Implement with service layer (Issue #130)
-    # - Call next_commute_recommender.get_recommendation()
-    # - Include weather, traffic, workout fit analysis
-    # - Cache results with appropriate TTL
+    try:
+        services = get_services()
+        analysis_service = services['analysis']
+        commute_service = services['commute']
+        
+        # Initialize services
+        route_groups = analysis_service.get_route_groups()
+        home, work = analysis_service.get_locations()
+        
+        if not route_groups or not home or not work:
+            return jsonify({
+                'status': 'error',
+                'message': 'Route data not available. Please run analysis first.',
+                'analysis_timestamp': datetime.now().isoformat()
+            }), 400
+        
+        commute_service.initialize(route_groups, home, work)
+        
+        # Get workout-aware recommendation
+        rec_data = commute_service.get_workout_aware_commute(
+            direction=direction,
+            departure_time=departure_time
+        )
+        
+        if rec_data.get('status') == 'success':
+            return jsonify({
+                'status': 'success',
+                'message': 'Analysis complete',
+                'recommendation': rec_data,
+                'analysis_timestamp': datetime.now().isoformat()
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': rec_data.get('message', 'No recommendation available'),
+                'analysis_timestamp': datetime.now().isoformat()
+            }), 404
     
-    return jsonify({
-        'status': 'success',
-        'message': 'Analysis complete',
-        'recommendation': None,  # TODO: Return actual recommendation
-        'analysis_timestamp': datetime.now().isoformat()
-    })
+    except Exception as e:
+        current_app.logger.error(f"Error analyzing commute: {e}")
+        current_app.logger.debug(traceback.format_exc())
+        return jsonify({
+            'status': 'error',
+            'message': str(e),
+            'analysis_timestamp': datetime.now().isoformat()
+        }), 500
 
 
 @bp.route('/history')
@@ -185,15 +220,63 @@ def history():
     """
     current_app.logger.info('Commute history accessed')
     
-    # TODO: Replace with actual service layer calls (Issue #130)
-    context = {
-        'page_title': 'Commute History',
-        'recent_commutes': [],  # TODO: Get from database
-        'performance_trends': {},  # TODO: Calculate trends
-        'weather_correlations': {}  # TODO: Analyze weather impact
-    }
+    try:
+        services = get_services()
+        analysis_service = services['analysis']
+        
+        # Get route groups for commute routes
+        route_groups = analysis_service.get_route_groups()
+        
+        # Filter for commute routes (typically shorter distances)
+        commute_routes = []
+        if route_groups:
+            for group in route_groups:
+                # Commute routes are typically 5-25 miles
+                distance_miles = group.avg_distance / 1609.34
+                if 5 <= distance_miles <= 25:
+                    commute_routes.append({
+                        'group_id': group.group_id,
+                        'name': group.name,
+                        'distance': distance_miles,
+                        'elevation': group.avg_elevation,
+                        'uses': group.uses,
+                        'last_used': group.last_used.isoformat() if group.last_used else None,
+                        'avg_speed': group.avg_speed if hasattr(group, 'avg_speed') else None
+                    })
+        
+        # Sort by most recently used
+        commute_routes.sort(key=lambda r: r['last_used'] or '', reverse=True)
+        
+        # Calculate basic trends
+        total_commutes = sum(r['uses'] for r in commute_routes)
+        avg_distance = sum(r['distance'] * r['uses'] for r in commute_routes) / total_commutes if total_commutes > 0 else 0
+        
+        context = {
+            'page_title': 'Commute History',
+            'recent_commutes': commute_routes[:20],  # Top 20 most recent
+            'performance_trends': {
+                'total_commutes': total_commutes,
+                'avg_distance': round(avg_distance, 1),
+                'unique_routes': len(commute_routes)
+            },
+            'weather_correlations': {
+                'note': 'Weather correlation analysis requires historical weather data'
+            }
+        }
+        
+        return render_template('commute/history.html', **context)
     
-    return render_template('commute/history.html', **context)
+    except Exception as e:
+        current_app.logger.error(f"Error loading commute history: {e}")
+        current_app.logger.debug(traceback.format_exc())
+        context = {
+            'page_title': 'Commute History',
+            'recent_commutes': [],
+            'performance_trends': {},
+            'weather_correlations': {},
+            'error': str(e)
+        }
+        return render_template('commute/history.html', **context)
 
 
 @bp.route('/api/current')

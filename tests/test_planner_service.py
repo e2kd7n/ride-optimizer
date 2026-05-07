@@ -92,7 +92,7 @@ class TestPlannerServiceInitialization:
     
     def test_init_creates_service(self, mock_config):
         """Test that service can be created."""
-        with patch('app.services.planner_service.WeatherFetcher'):
+        with patch('app.services.planner_service.WeatherService'):
             service = PlannerService(mock_config)
             assert service is not None
             assert service.config == mock_config
