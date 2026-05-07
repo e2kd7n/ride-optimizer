@@ -16,6 +16,7 @@ from src.next_commute_recommender import NextCommuteRecommender, CommuteRecommen
 from src.route_analyzer import RouteGroup
 from src.location_finder import Location
 from src.config import Config
+from app.services.weather_service import WeatherService
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,7 @@ class CommuteService:
         Args:
             config: Configuration object
         """
+        self.weather_service = WeatherService(config)
         self.config = config
         self._recommender: Optional[NextCommuteRecommender] = None
     
@@ -228,18 +230,159 @@ class CommuteService:
         evening_start = self._recommender.evening_window_start
         evening_end = self._recommender.evening_window_end
         
+        # Calculate optimal times based on weather
+        morning_optimal = self._calculate_optimal_time(
+            morning_start, morning_end, self._recommender.home_location
+        )
+        evening_optimal = self._calculate_optimal_time(
+            evening_start, evening_end, self._recommender.work_location
+        )
+        
         return {
             'morning': {
                 'start': morning_start.strftime('%H:%M'),
                 'end': morning_end.strftime('%H:%M'),
-                'optimal': '08:00'  # TODO: Calculate based on weather/traffic
+                'optimal': morning_optimal
             },
             'evening': {
                 'start': evening_start.strftime('%H:%M'),
                 'end': evening_end.strftime('%H:%M'),
-                'optimal': '16:30'  # TODO: Calculate based on weather/traffic
+                'optimal': evening_optimal
             }
         }
+    
+    def _calculate_optimal_time(
+        self,
+        window_start: time,
+        window_end: time,
+        location: Location
+    ) -> str:
+        """
+        Calculate optimal departure time within window based on weather.
+        
+        Strategy:
+        - Sample weather at 30-minute intervals within window
+        - Score each time slot based on weather conditions
+        - Return time with best weather score
+        
+        Args:
+            window_start: Start of time window
+            window_end: End of time window
+            location: Location for weather lookup
+            
+        Returns:
+            Optimal time as HH:MM string
+        """
+        from datetime import datetime, timedelta
+        
+        try:
+            # Get today's date for weather lookup
+            today = datetime.now().date()
+            
+            # Sample times at 30-minute intervals
+            current_time = datetime.combine(today, window_start)
+            end_time = datetime.combine(today, window_end)
+            
+            best_time = None
+            best_score = -1.0
+            
+            while current_time <= end_time:
+                # Get weather for this time
+                snapshot = self.weather_service.get_weather_snapshot(
+                    lat=location.lat,
+                    lon=location.lon,
+                    target_date=today,
+                    target_hour=current_time.hour
+                )
+                
+                if snapshot:
+                    # Score this time slot
+                    score = self._score_weather_for_commute(snapshot)
+                    
+                    if score > best_score:
+                        best_score = score
+                        best_time = current_time
+                
+                # Move to next 30-minute interval
+                current_time += timedelta(minutes=30)
+            
+            if best_time:
+                return best_time.strftime('%H:%M')
+        
+        except Exception as e:
+            logger.error(f"Error calculating optimal departure time: {e}")
+        
+        # Fallback to middle of window
+        window_duration = (
+            datetime.combine(today, window_end) -
+            datetime.combine(today, window_start)
+        ).seconds / 2
+        optimal = datetime.combine(today, window_start) + timedelta(seconds=window_duration)
+        return optimal.strftime('%H:%M')
+    
+    def _score_weather_for_commute(self, snapshot) -> float:
+        """
+        Score weather conditions for commuting (0.0-1.0).
+        
+        Factors:
+        - Temperature: Prefer 50-75°F
+        - Precipitation: Avoid rain
+        - Wind: Avoid high winds
+        - Conditions: Prefer clear/partly cloudy
+        
+        Args:
+            snapshot: WeatherSnapshot object
+            
+        Returns:
+            Weather score (0.0-1.0)
+        """
+        score = 1.0
+        
+        # Temperature scoring
+        temp = snapshot.temperature_f
+        if temp < 32:  # Freezing
+            score *= 0.4
+        elif temp < 40:
+            score *= 0.6
+        elif temp < 50:
+            score *= 0.8
+        elif temp <= 75:
+            score *= 1.0  # Ideal
+        elif temp <= 85:
+            score *= 0.9
+        elif temp <= 95:
+            score *= 0.7
+        else:
+            score *= 0.5
+        
+        # Precipitation scoring (any rain is bad for commuting)
+        if snapshot.precipitation_in > 0.5:
+            score *= 0.2
+        elif snapshot.precipitation_in > 0.1:
+            score *= 0.4
+        elif snapshot.precipitation_in > 0:
+            score *= 0.7
+        
+        # Wind scoring
+        if snapshot.wind_speed_mph > 25:
+            score *= 0.5
+        elif snapshot.wind_speed_mph > 20:
+            score *= 0.7
+        elif snapshot.wind_speed_mph > 15:
+            score *= 0.85
+        
+        # Conditions scoring
+        conditions = snapshot.conditions.lower()
+        if 'rain' in conditions or 'storm' in conditions:
+            score *= 0.3
+        elif 'snow' in conditions or 'ice' in conditions:
+            score *= 0.2
+        elif 'clear' in conditions or 'sunny' in conditions:
+            score *= 1.1
+        elif 'partly' in conditions:
+            score *= 1.0
+        
+        return min(score, 1.0)
     
     def _format_recommendation(self, rec: CommuteRecommendation) -> Dict[str, Any]:
         """
