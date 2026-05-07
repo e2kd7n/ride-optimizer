@@ -169,17 +169,33 @@ class TestCommuteAnalyze:
         """Test analyze endpoint with default parameters."""
         mock_get_services.return_value = mock_services
         
+        # Mock the service to return a proper dictionary (not a Mock object)
+        mock_services['commute'].get_workout_aware_commute.return_value = {
+            'status': 'success',
+            'route': {'name': 'Test Route', 'distance': 10000},
+            'score': 0.85
+        }
+        
         response = client.post('/commute/analyze', json={})
         
         assert response.status_code == 200
         data = response.get_json()
         assert data['status'] == 'success'
         assert 'analysis_timestamp' in data
+        assert 'recommendation' in data
 
     @patch('app.routes.commute.get_services')
     def test_analyze_with_params(self, mock_get_services, client, mock_services):
         """Test analyze endpoint with custom parameters."""
         mock_get_services.return_value = mock_services
+        
+        # Mock the service to return a proper dictionary (not a Mock object)
+        mock_services['commute'].get_workout_aware_commute.return_value = {
+            'status': 'success',
+            'route': {'name': 'Test Route', 'distance': 10000},
+            'score': 0.85,
+            'direction': 'from_work'
+        }
         
         request_data = {
             'departure_time': '2026-05-07T07:30:00',
@@ -192,6 +208,7 @@ class TestCommuteAnalyze:
         assert response.status_code == 200
         data = response.get_json()
         assert data['status'] == 'success'
+        assert 'recommendation' in data
 
     @patch('app.routes.commute.get_services')
     def test_analyze_no_json_body(self, mock_get_services, client, mock_services):
