@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app import create_app
 from app.models.workouts import WorkoutMetadata
+from app.models.base import db
 from app.services.trainerroad_service import TrainerRoadService
 from src.config import Config
 
@@ -221,15 +222,33 @@ def test_workout_sync():
         workouts = service.parse_ics_feed(SAMPLE_ICS_FEED)
         
         for workout_data in workouts:
-            workout = WorkoutMetadata.create_or_update(
-                workout_date=workout_data['workout_date'],
-                workout_name=workout_data['workout_name'],
-                workout_type=workout_data['workout_type'],
-                duration_minutes=workout_data['duration_minutes'],
-                tss=workout_data.get('tss'),
-                intensity_factor=workout_data.get('intensity_factor'),
-                description=workout_data.get('description')
-            )
+            # Check if workout already exists
+            workout = WorkoutMetadata.query.filter_by(
+                workout_id=workout_data['workout_id']
+            ).first()
+            
+            if workout:
+                # Update existing
+                workout.workout_name = workout_data['workout_name']
+                workout.workout_type = workout_data['workout_type']
+                workout.duration_minutes = workout_data['duration_minutes']
+                workout.tss = workout_data.get('tss')
+                workout.intensity_factor = workout_data.get('intensity_factor')
+            else:
+                # Create new
+                workout = WorkoutMetadata(
+                    workout_id=workout_data['workout_id'],
+                    workout_name=workout_data['workout_name'],
+                    workout_date=workout_data['workout_date'],
+                    workout_type=workout_data['workout_type'],
+                    duration_minutes=workout_data['duration_minutes'],
+                    tss=workout_data.get('tss'),
+                    intensity_factor=workout_data.get('intensity_factor'),
+                    status=workout_data.get('status', 'scheduled')
+                )
+                db.session.add(workout)
+            
+            db.session.commit()
             print(f"   ✓ Stored: {workout.workout_name} on {workout.workout_date}")
         
         # Test 2: Retrieve workouts

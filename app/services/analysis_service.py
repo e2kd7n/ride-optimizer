@@ -42,6 +42,11 @@ class AnalysisService:
         """
         self.config = config
         
+        # Initialize JSON storage
+        from src.json_storage import JSONStorage
+        self.storage = JSONStorage()
+        self._cache_loaded = False
+        
         # Lazy initialization - don't authenticate until needed
         self._strava_client = None
         self._data_fetcher = None
@@ -318,11 +323,11 @@ class AnalysisService:
                 'is_stale': bool
             }
         """
-        has_data = (
-            self._activities is not None and
-            self._route_groups is not None and
-            self._long_rides is not None
-        )
+        # Load cached data if not already loaded
+        self._load_from_cache()
+        
+        # Check if we have route groups (primary indicator of data)
+        has_data = (self._route_groups is not None and len(self._route_groups) > 0)
         
         data_age_hours = None
         is_stale = True
