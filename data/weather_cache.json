@@ -35,6 +35,60 @@
       },
       "timestamp": "2026-05-07T09:39:55.331629",
       "location_name": "Home"
+    },
+    "41.9874_-87.6545": {
+      "weather_data": {
+        "timestamp": "2026-05-07T12:15",
+        "temp_c": 8.6,
+        "wind_speed_kph": 16.8,
+        "wind_gust_kph": 24.5,
+        "wind_direction_deg": 125,
+        "wind_direction_cardinal": "SE",
+        "humidity": 51,
+        "precipitation_mm": 0.0,
+        "lat": 41.98713364532019,
+        "lon": -87.65536625615763,
+        "comfort_score": 1.0,
+        "cycling_favorability": "favorable"
+      },
+      "timestamp": "2026-05-07T12:41:19.317675",
+      "location_name": "Home"
+    },
+    "41.9871_-87.6554": {
+      "weather_data": {
+        "timestamp": "2026-05-07T12:15",
+        "temp_c": 8.6,
+        "wind_speed_kph": 16.8,
+        "wind_gust_kph": 24.5,
+        "wind_direction_deg": 125,
+        "wind_direction_cardinal": "SE",
+        "humidity": 51,
+        "precipitation_mm": 0.0,
+        "lat": 41.98713364532019,
+        "lon": -87.65536625615763,
+        "comfort_score": 1.0,
+        "cycling_favorability": "favorable"
+      },
+      "timestamp": "2026-05-07T12:27:57.209999",
+      "location_name": "Home"
+    },
+    "41.8825_-87.6348": {
+      "weather_data": {
+        "timestamp": "2026-05-07T12:15",
+        "temp_c": 9.3,
+        "wind_speed_kph": 13.7,
+        "wind_gust_kph": 22.7,
+        "wind_direction_deg": 120,
+        "wind_direction_cardinal": "ESE",
+        "humidity": 44,
+        "precipitation_mm": 0.0,
+        "lat": 41.88246246305419,
+        "lon": -87.63480901477833,
+        "comfort_score": 1.0,
+        "cycling_favorability": "favorable"
+      },
+      "timestamp": "2026-05-07T12:27:57.500024",
+      "location_name": "Work"
     }
   }
 }

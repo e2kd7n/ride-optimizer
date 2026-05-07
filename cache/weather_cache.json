@@ -1,137 +1,34 @@
 {
-  "40.7128,-74.006": {
+  "41.98713364532019,-87.65536625615763": {
     "data": {
-      "timestamp": "2026-05-07T10:15",
-      "temp_c": 12.8,
-      "wind_speed_kph": 11.1,
-      "wind_gust_kph": 16.6,
-      "wind_direction_deg": 306,
-      "wind_direction_cardinal": "NW",
-      "humidity": 68,
+      "timestamp": "2026-05-07T12:15",
+      "temp_c": 8.6,
+      "wind_speed_kph": 16.8,
+      "wind_gust_kph": 24.5,
+      "wind_direction_deg": 125,
+      "wind_direction_cardinal": "SE",
+      "humidity": 51,
       "precipitation_mm": 0.0,
-      "lat": 40.7128,
-      "lon": -74.006
+      "lat": 41.98713364532019,
+      "lon": -87.65536625615763,
+      "comfort_score": 1.0,
+      "cycling_favorability": "favorable"
     },
-    "timestamp": "2026-05-07T09:23:57.121747"
+    "timestamp": "2026-05-07T12:27:57.208600"
   },
-  "41.98736,-87.65454": {
+  "41.88246246305419,-87.63480901477833": {
     "data": {
-      "timestamp": "2026-05-07T09:30",
-      "temp_c": 9.6,
-      "wind_speed_kph": 10.1,
-      "wind_gust_kph": 20.5,
-      "wind_direction_deg": 274,
-      "wind_direction_cardinal": "W",
+      "timestamp": "2026-05-07T12:15",
+      "temp_c": 9.3,
+      "wind_speed_kph": 13.7,
+      "wind_gust_kph": 22.7,
+      "wind_direction_deg": 120,
+      "wind_direction_cardinal": "ESE",
       "humidity": 44,
       "precipitation_mm": 0.0,
-      "lat": 41.98736,
-      "lon": -87.65454
+      "lat": 41.88246246305419,
+      "lon": -87.63480901477833
     },
-    "timestamp": "2026-05-07T09:37:42.228897"
-  },
-  "41.93416,-87.63184": {
-    "data": {
-      "timestamp": "2026-05-07T09:30",
-      "temp_c": 10.0,
-      "wind_speed_kph": 10.4,
-      "wind_gust_kph": 17.6,
-      "wind_direction_deg": 284,
-      "wind_direction_cardinal": "WNW",
-      "humidity": 42,
-      "precipitation_mm": 0.0,
-      "lat": 41.93416,
-      "lon": -87.63184
-    },
-    "timestamp": "2026-05-07T09:37:42.380813"
-  },
-  "41.88374,-87.6339": {
-    "data": {
-      "timestamp": "2026-05-07T09:30",
-      "temp_c": 9.7,
-      "wind_speed_kph": 9.2,
-      "wind_gust_kph": 16.9,
-      "wind_direction_deg": 281,
-      "wind_direction_cardinal": "W",
-      "humidity": 43,
-      "precipitation_mm": 0.0,
-      "lat": 41.88374,
-      "lon": -87.6339
-    },
-    "timestamp": "2026-05-07T09:37:42.544006"
-  },
-  "41.91327,-87.62775": {
-    "data": {
-      "timestamp": "2026-05-07T09:30",
-      "temp_c": 10.0,
-      "wind_speed_kph": 10.4,
-      "wind_gust_kph": 17.6,
-      "wind_direction_deg": 284,
-      "wind_direction_cardinal": "WNW",
-      "humidity": 42,
-      "precipitation_mm": 0.0,
-      "lat": 41.91327,
-      "lon": -87.62775
-    },
-    "timestamp": "2026-05-07T09:37:42.869343"
-  },
-  "41.95416,-87.64101": {
-    "data": {
-      "timestamp": "2026-05-07T09:30",
-      "temp_c": 9.6,
-      "wind_speed_kph": 9.8,
-      "wind_gust_kph": 19.1,
-      "wind_direction_deg": 276,
-      "wind_direction_cardinal": "W",
-      "humidity": 44,
-      "precipitation_mm": 0.0,
-      "lat": 41.95416,
-      "lon": -87.64101
-    },
-    "timestamp": "2026-05-07T09:37:43.142685"
-  },
-  "41.92035,-87.65829": {
-    "data": {
-      "timestamp": "2026-05-07T09:30",
-      "temp_c": 9.9,
-      "wind_speed_kph": 10.4,
-      "wind_gust_kph": 17.6,
-      "wind_direction_deg": 284,
-      "wind_direction_cardinal": "WNW",
-      "humidity": 42,
-      "precipitation_mm": 0.0,
-      "lat": 41.92035,
-      "lon": -87.65829
-    },
-    "timestamp": "2026-05-07T09:37:43.682395"
-  },
-  "41.9429,-87.69578": {
-    "data": {
-      "timestamp": "2026-05-07T09:30",
-      "temp_c": 9.8,
-      "wind_speed_kph": 9.1,
-      "wind_gust_kph": 25.6,
-      "wind_direction_deg": 279,
-      "wind_direction_cardinal": "W",
-      "humidity": 44,
-      "precipitation_mm": 0.0,
-      "lat": 41.9429,
-      "lon": -87.69578
-    },
-    "timestamp": "2026-05-07T09:37:43.924597"
-  },
-  "41.9415,-87.67111": {
-    "data": {
-      "timestamp": "2026-05-07T09:30",
-      "temp_c": 9.7,
-      "wind_speed_kph": 9.8,
-      "wind_gust_kph": 17.6,
-      "wind_direction_deg": 278,
-      "wind_direction_cardinal": "W",
-      "humidity": 44,
-      "precipitation_mm": 0.0,
-      "lat": 41.9415,
-      "lon": -87.67111
-    },
-    "timestamp": "2026-05-07T09:37:44.146610"
+    "timestamp": "2026-05-07T12:27:57.499197"
   }
 }
