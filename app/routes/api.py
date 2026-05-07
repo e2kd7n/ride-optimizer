@@ -12,6 +12,9 @@ Provides JSON API for:
 from flask import Blueprint, jsonify, request, current_app
 from datetime import datetime
 
+from app.scheduler import scheduler, HealthChecker
+from app.scheduler.scheduler import get_scheduler_status
+
 bp = Blueprint('api', __name__, url_prefix='/api')
 
 
@@ -22,18 +25,10 @@ def health():
     
     Returns system health status for monitoring.
     """
-    # TODO: Add actual health checks (Issue #130)
-    return jsonify({
-        'status': 'healthy',
-        'timestamp': datetime.now().isoformat(),
-        'version': '3.0.0-dev',
-        'components': {
-            'database': 'healthy',  # TODO: Check database connection
-            'strava_api': 'unknown',  # TODO: Check Strava API status
-            'weather_api': 'unknown',  # TODO: Check weather API status
-            'geocoding': 'healthy'  # TODO: Check geocoding service
-        }
-    })
+    health_checker = HealthChecker()
+    system_health = health_checker.check_all()
+    
+    return jsonify(system_health.to_dict())
 
 
 @bp.route('/status')
@@ -42,35 +37,23 @@ def status():
     Detailed system status.
     
     Returns comprehensive status information including:
+    - Scheduler status
     - Data freshness
     - Background job status
-    - Cache statistics
-    - API rate limits
     """
     current_app.logger.info('System status requested')
     
-    # TODO: Implement with service layer (Issue #130)
+    # Get scheduler status
+    scheduler_status = get_scheduler_status()
+    
+    # Get health status
+    health_checker = HealthChecker()
+    system_health = health_checker.check_all()
+    
     return jsonify({
         'timestamp': datetime.now().isoformat(),
-        'data_freshness': {
-            'activities': None,  # TODO: Get last activity sync time
-            'weather': None,  # TODO: Get last weather update
-            'geocoding': None  # TODO: Get geocoding status
-        },
-        'background_jobs': {
-            'active': 0,  # TODO: Count active jobs
-            'queued': 0,  # TODO: Count queued jobs
-            'failed': 0  # TODO: Count failed jobs
-        },
-        'cache': {
-            'geocoding_entries': 0,  # TODO: Count cache entries
-            'weather_entries': 0,
-            'route_groups_entries': 0
-        },
-        'api_limits': {
-            'strava_remaining': None,  # TODO: Get Strava rate limit
-            'weather_remaining': None  # TODO: Get weather API limit
-        }
+        'scheduler': scheduler_status,
+        'health': system_health.to_dict()
     })
 
 
@@ -105,67 +88,84 @@ def sync():
     }), 202
 
 
-@bp.route('/jobs')
-def jobs():
+@bp.route('/scheduler/jobs')
+def scheduler_jobs():
     """
-    List background jobs.
+    List scheduled jobs.
     
-    Query params:
-    - status: Filter by status (active, queued, completed, failed)
-    - limit: Maximum results (default: 50)
-    
-    Returns list of jobs with status.
+    Returns list of all scheduled jobs with their next run times.
     """
-    status_filter = request.args.get('status', 'all')
-    limit = request.args.get('limit', 50, type=int)
+    current_app.logger.info('Scheduled jobs list requested')
     
-    current_app.logger.info(f'Jobs list requested: status={status_filter}, limit={limit}')
+    scheduler_status = get_scheduler_status()
     
-    # TODO: Implement with service layer (Issue #137)
     return jsonify({
-        'jobs': [],  # TODO: Get jobs from database
-        'count': 0,
-        'filter': status_filter,
-        'limit': limit
+        'jobs': scheduler_status.get('jobs', []),
+        'count': len(scheduler_status.get('jobs', [])),
+        'running': scheduler_status.get('running', False)
     })
 
 
-@bp.route('/jobs/<job_id>')
-def job_status(job_id):
+@bp.route('/scheduler/jobs/<job_id>')
+def scheduler_job_detail(job_id):
     """
-    Get status of a specific background job.
+    Get details of a specific scheduled job.
     
-    Returns detailed job information including progress.
+    Returns detailed job information.
     """
-    current_app.logger.info(f'Job status requested: job_id={job_id}')
+    current_app.logger.info(f'Scheduled job detail requested: job_id={job_id}')
     
-    # TODO: Implement with service layer (Issue #137)
+    if scheduler is None or not scheduler.running:
+        return jsonify({
+            'error': 'Scheduler not running'
+        }), 503
+    
+    job = scheduler.get_job(job_id)
+    if job is None:
+        return jsonify({
+            'error': 'Job not found'
+        }), 404
+    
     return jsonify({
-        'job_id': job_id,
-        'status': 'unknown',  # TODO: Get actual status
-        'progress': 0.0,
-        'created_at': None,
-        'started_at': None,
-        'completed_at': None,
-        'error': None
+        'id': job.id,
+        'name': job.name,
+        'next_run_time': job.next_run_time.isoformat() if job.next_run_time else None,
+        'trigger': str(job.trigger)
     })
 
 
-@bp.route('/jobs/<job_id>/cancel', methods=['POST'])
-def cancel_job(job_id):
+@bp.route('/scheduler/trigger/<job_id>', methods=['POST'])
+def trigger_job(job_id):
     """
-    Cancel a running or queued job.
+    Manually trigger a scheduled job.
     
-    Returns cancellation status.
+    Returns trigger status.
     """
-    current_app.logger.info(f'Job cancellation requested: job_id={job_id}')
+    current_app.logger.info(f'Manual job trigger requested: job_id={job_id}')
     
-    # TODO: Implement with service layer (Issue #137)
-    return jsonify({
-        'status': 'cancelled',
-        'job_id': job_id,
-        'cancelled_at': datetime.now().isoformat()
-    })
+    if scheduler is None or not scheduler.running:
+        return jsonify({
+            'error': 'Scheduler not running'
+        }), 503
+    
+    job = scheduler.get_job(job_id)
+    if job is None:
+        return jsonify({
+            'error': 'Job not found'
+        }), 404
+    
+    try:
+        job.modify(next_run_time=datetime.now())
+        return jsonify({
+            'status': 'triggered',
+            'job_id': job_id,
+            'triggered_at': datetime.now().isoformat()
+        })
+    except Exception as e:
+        current_app.logger.error(f'Failed to trigger job {job_id}: {e}')
+        return jsonify({
+            'error': f'Failed to trigger job: {str(e)}'
+        }), 500
 
 
 @bp.route('/cache/stats')
