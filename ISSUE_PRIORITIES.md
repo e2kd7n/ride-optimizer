@@ -1,15 +1,12 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-05-07 16:41:02 UTC / 2026-05-07 11:41:02 CDT
+**Last Updated:** 2026-05-07 17:53:22 UTC / 2026-05-07 12:53:22 CDT
 
 This file reflects the current state of GitHub issues by priority. Issues are managed via GitHub labels (P0-critical, P1-high, P2-medium, P3-low, P4-future).
 
 ## 🔴 P0 - CRITICAL (Drop Everything)
 Issues that make the application unusable or cause data loss.
 
-- #235 - [EPIC-001] Restore Interactive Maps to Web App
-- #229 - [EPIC-001] Add route comparison map to commute page
-- #228 - [EPIC-001] Add interactive map to route detail page
 - #216 - Create Analytics Service Module
 - #215 - Implement Missing PlannerService Methods
 - #214 - Implement Missing WeatherService Methods
@@ -19,8 +16,6 @@ Issues that make the application unusable or cause data loss.
 ## 🔴 P1 - HIGH (Current Sprint)
 Issues that significantly impact core functionality or user experience.
 
-- #231 - [EPIC-001] Add overview map to dashboard
-- #230 - [EPIC-001] Add long ride visualization map to planner page
 - #226 - Fix Planner Error Handling Test
 - #224 - Fix Route Library Search API Response Format
 - #223 - Fix Mobile Navigation Elements
@@ -49,12 +44,12 @@ Issues that significantly impact core functionality or user experience.
 - #102 - Refactor report template to extract JavaScript into separate files
 - #91 - Add Rate Limiting to API Endpoints
 - #90 - Implement Input Validation with Marshmallow
+- #89 - Add Data Persistence Layer for API
+- #83 - Implement Geocoding API Endpoint
 
 ## 🟡 P2 - MEDIUM (Next Sprint)
 Important improvements that enhance functionality but don't block core workflows.
 
-- #233 - [EPIC-001] Add weather overlays to maps
-- #232 - [EPIC-001] Add interactive map filtering and route selection
 - #227 - Improve Test Coverage for New Features
 - #209 - Implement graceful degradation for unavailable services
 - #207 - Implement dependency injection pattern for better testability
@@ -83,11 +78,12 @@ Important improvements that enhance functionality but don't block core workflows
 - #127 - Reduce excessive whitespace between report sections
 - #122 - [LOW PRIORITY] Grey out unselected routes on map when route is clicked
 - #121 - [LOW PRIORITY] Color code route names to match map line colors
+- #116 - Add visual weather icons and color coding
+- #115 - Display optimal departure time suggestions
 
 ## 🟢 P3 - LOW (Backlog)
 Nice-to-have improvements and minor UX enhancements.
 
-- #234 - [EPIC-001] Add advanced map features (elevation, analytics)
 - #202 - Setup weekly maintenance routine
 - #201 - Reduce P1 issue count to <25
 - #200 - Route naming improvements (Start → Main → End format)
@@ -133,7 +129,9 @@ Issues without priority labels that need to be triaged.
 ## 📝 Workspace TODOs & Tasks
 Code comments and inline tasks found in the workspace that may need attention.
 
-**No TODO/FIXME comments found in code** ✅
+Found **1** code comments requiring attention:
+
+- `app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
 
 ## Priority Guidelines
 
