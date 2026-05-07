@@ -17,3 +17,6 @@ project_comms/
 .mailmap
 rewrite_git_history.sh
 
+# Mock object directories (test artifacts)
+<Mock*
+<Magic*

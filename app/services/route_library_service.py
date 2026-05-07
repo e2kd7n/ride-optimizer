@@ -16,7 +16,7 @@ from datetime import datetime
 from src.route_analyzer import RouteGroup, Route
 from src.long_ride_analyzer import LongRide
 from src.config import Config
-from app.models import db, FavoriteRoute
+from src.json_storage import JSONStorage
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ class RouteLibraryService:
     - Search and filter capabilities
     - Route statistics and details
     - Route comparison
-    - Favorite management
+    - Favorite management (JSON-based storage)
     """
     
     def __init__(self, config: Config):
@@ -41,17 +41,18 @@ class RouteLibraryService:
             config: Configuration object
         """
         self.config = config
+        self.storage = JSONStorage()
         self._route_groups: Optional[List[RouteGroup]] = None
         self._long_rides: Optional[List[LongRide]] = None
         self._favorites: set = set()
         self._load_favorites()
     
     def _load_favorites(self):
-        """Load favorites from database into memory cache."""
+        """Load favorites from JSON file into memory cache."""
         try:
-            favorites = FavoriteRoute.query.all()
-            self._favorites = {fav.route_id for fav in favorites}
-            logger.info(f"Loaded {len(self._favorites)} favorites from database")
+            data = self.storage.read('favorites.json', default={'routes': [], 'updated_at': None})
+            self._favorites = set(data.get('routes', []))
+            logger.info(f"Loaded {len(self._favorites)} favorites from JSON storage")
         except Exception as e:
             logger.error(f"Error loading favorites: {e}")
             self._favorites = set()
@@ -311,35 +312,20 @@ class RouteLibraryService:
             if is_favorite:
                 # Add to favorites
                 self._favorites.add(route_id)
-                
-                # Check if already in database
-                existing = FavoriteRoute.query.filter_by(route_id=route_id).first()
-                if not existing:
-                    # Determine route type based on route_id format or lookup
-                    route_type = 'long_ride'  # Default
-                    if self._route_groups:
-                        for group in self._route_groups:
-                            if group.group_id == route_id:
-                                route_type = 'commute'
-                                break
-                    
-                    favorite = FavoriteRoute(
-                        route_id=route_id,
-                        route_type=route_type
-                    )
-                    db.session.add(favorite)
-                    db.session.commit()
-                    logger.info(f"Added favorite: {route_id}")
+                logger.info(f"Added favorite: {route_id}")
             else:
                 # Remove from favorites
                 self._favorites.discard(route_id)
-                
-                # Remove from database
-                favorite = FavoriteRoute.query.filter_by(route_id=route_id).first()
-                if favorite:
-                    db.session.delete(favorite)
-                    db.session.commit()
-                    logger.info(f"Removed favorite: {route_id}")
+                logger.info(f"Removed favorite: {route_id}")
+            
+            # Save to JSON file
+            success = self.storage.write('favorites.json', {
+                'routes': list(self._favorites),
+                'updated_at': datetime.now().isoformat()
+            })
+            
+            if not success:
+                raise Exception("Failed to write favorites to JSON storage")
             
             return {
                 'status': 'success',
@@ -348,8 +334,7 @@ class RouteLibraryService:
             }
         
         except Exception as e:
-            logger.error(f"Error toggling favorite: {e}")
-            db.session.rollback()
+            logger.error(f"Error toggling favorite: {e}", exc_info=True)
             return {
                 'status': 'error',
                 'message': str(e),
