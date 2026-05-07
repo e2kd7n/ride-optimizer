@@ -86,7 +86,7 @@ def configure_logging(app):
 def register_blueprints(app):
     """Register Flask blueprints for different sections of the application."""
     from app.routes_DEPRECATED_FLASK import dashboard, commute, planner, route_library, settings, api
-    from app.api import map_api
+    from app.api import map_api, maps_api
     
     # Register blueprints with URL prefixes
     app.register_blueprint(dashboard.bp)
@@ -96,6 +96,7 @@ def register_blueprints(app):
     app.register_blueprint(settings.bp, url_prefix='/settings')
     app.register_blueprint(api.bp, url_prefix='/api')
     app.register_blueprint(map_api.bp)  # Map API (already has /api/map prefix)
+    app.register_blueprint(maps_api.bp)  # Maps API for page-level data (already has /api/maps prefix)
     
     app.logger.info('Registered all blueprints')
 
