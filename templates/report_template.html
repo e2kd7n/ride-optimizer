@@ -4844,26 +4844,132 @@
                 }
             };
 
-            // Simple toast notification function
-            function showToast(message, type = 'info') {
+            // Issue #245: Single-level undo functionality with toast
+            let undoStack = null;
+            let currentToast = null;
+            
+            // Enhanced toast with undo functionality
+            function showToast(message, type = 'info', undoAction = null) {
+                // Remove existing toast (only one at a time)
+                if (currentToast && currentToast.parentElement) {
+                    currentToast.remove();
+                }
+                
                 // Create toast element
                 const toast = document.createElement('div');
                 toast.className = `alert alert-${type} position-fixed`;
                 toast.style.cssText = 'bottom: 20px; right: 20px; z-index: 9999; min-width: 300px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);';
-                toast.innerHTML = `
-                    <strong>${type === 'success' ? '✓' : type === 'warning' ? '⚠' : 'ℹ'}</strong> ${message}
+                toast.setAttribute('role', 'alert');
+                toast.setAttribute('aria-live', 'assertive');
+                toast.setAttribute('aria-atomic', 'true');
+                
+                // Build toast content
+                let toastContent = `<strong>${type === 'success' ? '✓' : type === 'warning' ? '⚠' : 'ℹ'}</strong> ${message}`;
+                
+                // Add undo button if undo action provided
+                if (undoAction) {
+                    toastContent += `
+                        <button type="button" class="btn btn-sm btn-outline-light ms-2" onclick="window.performUndo()" aria-label="Undo last action" style="border-color: currentColor;">
+                            ↶ Undo
+                        </button>
+                    `;
+                }
+                
+                toastContent += `
                     <button type="button" class="btn-close float-end" onclick="this.parentElement.remove()" aria-label="Dismiss notification"></button>
                 `;
                 
-                document.body.appendChild(toast);
+                toast.innerHTML = toastContent;
+                toast.tabIndex = 0; // Make keyboard accessible
                 
-                // Auto-remove after 5 seconds
-                setTimeout(() => {
-                    if (toast.parentElement) {
+                // Handle Escape key to dismiss
+                toast.addEventListener('keydown', function(e) {
+                    if (e.key === 'Escape') {
                         toast.remove();
                     }
+                });
+                
+                document.body.appendChild(toast);
+                currentToast = toast;
+                
+                // Store undo action
+                if (undoAction) {
+                    undoStack = undoAction;
+                }
+                
+                // Auto-remove after 5 seconds
+                const timeout = setTimeout(() => {
+                    if (toast.parentElement) {
+                        toast.remove();
+                        if (currentToast === toast) {
+                            currentToast = null;
+                            undoStack = null;
+                        }
+                    }
                 }, 5000);
+                
+                // Clear timeout if manually dismissed
+                toast.addEventListener('click', function(e) {
+                    if (e.target.classList.contains('btn-close')) {
+                        clearTimeout(timeout);
+                        undoStack = null;
+                    }
+                });
             }
+            
+            // Perform undo action
+            window.performUndo = function() {
+                if (undoStack && typeof undoStack === 'function') {
+                    undoStack();
+                    if (currentToast && currentToast.parentElement) {
+                        currentToast.remove();
+                    }
+                    currentToast = null;
+                    undoStack = null;
+                    showToast('Action undone', 'info');
+                }
+            };
+            
+            // Example undo-able actions (to be used by other functions)
+            window.hideRouteWithUndo = function(routeId) {
+                // Get current hidden routes
+                const hiddenRoutes = JSON.parse(localStorage.getItem('hiddenRoutes') || '[]');
+                
+                // Add to hidden
+                hiddenRoutes.push(routeId);
+                localStorage.setItem('hiddenRoutes', JSON.stringify(hiddenRoutes));
+                
+                // Show toast with undo
+                showToast('Route hidden', 'warning', function() {
+                    // Undo: remove from hidden
+                    const routes = JSON.parse(localStorage.getItem('hiddenRoutes') || '[]');
+                    const index = routes.indexOf(routeId);
+                    if (index > -1) {
+                        routes.splice(index, 1);
+                        localStorage.setItem('hiddenRoutes', JSON.stringify(routes));
+                    }
+                });
+            };
+            
+            window.unfavoriteRouteWithUndo = function(routeId) {
+                // Get current favorites
+                const favorites = JSON.parse(localStorage.getItem('favoriteRoutes') || '[]');
+                const index = favorites.indexOf(routeId);
+                
+                if (index > -1) {
+                    // Remove from favorites
+                    favorites.splice(index, 1);
+                    localStorage.setItem('favoriteRoutes', JSON.stringify(favorites));
+                    
+                    // Show toast with undo
+                    showToast('Route unfavorited', 'warning', function() {
+                        // Undo: add back to favorites
+                        const faves = JSON.parse(localStorage.getItem('favoriteRoutes') || '[]');
+                        faves.push(routeId);
+                        localStorage.setItem('favoriteRoutes', JSON.stringify(faves));
+                    });
+                }
+            };
 
             // Issue #244: Debounced auto-save (500ms)
             let autoSaveTimeout = null;
