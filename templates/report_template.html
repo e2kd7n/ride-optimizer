@@ -1542,6 +1542,263 @@
             [data-bs-toggle="tooltip"] {
                 cursor: pointer;
             }
+        
+        /* Issue #253: Help Modal with Keyboard Shortcuts */
+        .help-modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 10000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.2s ease-out;
+        }
+        
+        .help-modal-backdrop.show {
+            display: flex;
+        }
+        
+        .help-modal {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            max-width: 800px;
+            width: 90%;
+            max-height: 85vh;
+            display: flex;
+            flex-direction: column;
+            animation: scaleIn 0.3s ease-out;
+        }
+        
+        .help-modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 12px 12px 0 0;
+        }
+        
+        .help-modal-header h2 {
+            margin: 0;
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+        
+        .help-modal-close {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+        
+        .help-modal-close:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        
+        .help-modal-close:focus {
+            outline: 3px solid white;
+            outline-offset: 2px;
+        }
+        
+        .help-modal-body {
+            padding: 24px;
+            overflow-y: auto;
+            flex: 1;
+        }
+        
+        .help-search {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            font-size: 1rem;
+            margin-bottom: 20px;
+            transition: border-color 0.2s;
+        }
+        
+        .help-search:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .help-category {
+            margin-bottom: 24px;
+        }
+        
+        .help-category-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #667eea;
+        }
+        
+        .help-shortcut {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            margin-bottom: 8px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            transition: background 0.2s;
+        }
+        
+        .help-shortcut:hover {
+            background: #e9ecef;
+        }
+        
+        .help-shortcut-desc {
+            flex: 1;
+            color: #495057;
+        }
+        
+        .help-shortcut-keys {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+        
+        .help-key {
+            background: white;
+            border: 2px solid #dee2e6;
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #495057;
+            box-shadow: 0 2px 0 #dee2e6;
+            min-width: 32px;
+            text-align: center;
+        }
+        
+        .help-tip {
+            background: #e7f3ff;
+            border-left: 4px solid #007bff;
+            padding: 12px 16px;
+            border-radius: 4px;
+            margin-top: 16px;
+            color: #004085;
+        }
+        
+        .help-tip strong {
+            color: #003366;
+        }
+        
+        .help-no-results {
+            text-align: center;
+            padding: 40px 20px;
+            color: #6c757d;
+        }
+        
+        .help-no-results-icon {
+            font-size: 3rem;
+            margin-bottom: 16px;
+        }
+        
+        /* Help button in header */
+        .help-button {
+            position: fixed;
+            bottom: 80px;
+            right: 20px;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s, box-shadow 0.2s;
+            z-index: 1000;
+        }
+        
+        .help-button:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5);
+        }
+        
+        .help-button:focus {
+            outline: 3px solid #667eea;
+            outline-offset: 2px;
+        }
+        
+        .help-button:active {
+            transform: scale(0.95);
+        }
+        
+        /* Mobile responsive */
+        @media (max-width: 768px) {
+            .help-modal {
+                width: 95%;
+                max-height: 90vh;
+            }
+            
+            .help-modal-header {
+                padding: 16px 20px;
+            }
+            
+            .help-modal-header h2 {
+                font-size: 1.25rem;
+            }
+            
+            .help-modal-body {
+                padding: 16px;
+            }
+            
+            .help-shortcut {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 8px;
+            }
+            
+            .help-shortcut-keys {
+                justify-content: flex-start;
+            }
+            
+            .help-button {
+                bottom: 140px; /* Above mobile nav */
+                right: 16px;
+                width: 48px;
+                height: 48px;
+                font-size: 20px;
+            }
+        }
+        
+        /* Respect prefers-reduced-motion */
+        @media (prefers-reduced-motion: reduce) {
+            .help-modal-backdrop,
+            .help-modal {
+                animation: none;
+            }
+            
+            .help-button:hover {
+                transform: none;
+            }
+        }
         }
     </style>
 </head>
@@ -6388,6 +6645,194 @@
                 </a>
             </li>
         </ul>
+    
+    <!-- Issue #253: Help Modal with Keyboard Shortcuts -->
+    <button class="help-button" onclick="showHelpModal()" aria-label="Show keyboard shortcuts and help" title="Press ? for help">
+        ?
+    </button>
+    
+    <div class="help-modal-backdrop" id="helpModalBackdrop" onclick="closeHelpModal(event)" role="dialog" aria-modal="true" aria-labelledby="helpModalTitle">
+        <div class="help-modal" onclick="event.stopPropagation()">
+            <div class="help-modal-header">
+                <h2 id="helpModalTitle">⌨️ Keyboard Shortcuts & Help</h2>
+                <button class="help-modal-close" onclick="closeHelpModal()" aria-label="Close help modal">
+                    ×
+                </button>
+            </div>
+            <div class="help-modal-body">
+                <input 
+                    type="search" 
+                    class="help-search" 
+                    id="helpSearch" 
+                    placeholder="Search shortcuts..." 
+                    aria-label="Search keyboard shortcuts"
+                    autocomplete="off"
+                >
+                
+                <div id="helpContent">
+                    <!-- Navigation Category -->
+                    <div class="help-category" data-category="navigation">
+                        <h3 class="help-category-title">🧭 Navigation</h3>
+                        <div class="help-shortcut" data-keywords="help shortcuts modal">
+                            <span class="help-shortcut-desc">Show this help modal</span>
+                            <div class="help-shortcut-keys">
+                                <kbd class="help-key">?</kbd>
+                            </div>
+                        </div>
+                        <div class="help-shortcut" data-keywords="close escape modal">
+                            <span class="help-shortcut-desc">Close modal or dialog</span>
+                            <div class="help-shortcut-keys">
+                                <kbd class="help-key">Esc</kbd>
+                            </div>
+                        </div>
+                        <div class="help-shortcut" data-keywords="tab switch navigate">
+                            <span class="help-shortcut-desc">Navigate between tabs</span>
+                            <div class="help-shortcut-keys">
+                                <kbd class="help-key">Tab</kbd>
+                            </div>
+                        </div>
+                        <div class="help-shortcut" data-keywords="skip navigation main content">
+                            <span class="help-shortcut-desc">Skip to main content</span>
+                            <div class="help-shortcut-keys">
+                                <kbd class="help-key">Tab</kbd>
+                                <span style="margin: 0 4px;">then</span>
+                                <kbd class="help-key">Enter</kbd>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Routes Category -->
+                    <div class="help-category" data-category="routes">
+                        <h3 class="help-category-title">🗺️ Routes</h3>
+                        <div class="help-shortcut" data-keywords="click select route map">
+                            <span class="help-shortcut-desc">Select route and show on map</span>
+                            <div class="help-shortcut-keys">
+                                <kbd class="help-key">Click</kbd>
+                                <span style="margin-left: 4px;">on route row</span>
+                            </div>
+                        </div>
+                        <div class="help-shortcut" data-keywords="favorite star route">
+                            <span class="help-shortcut-desc">Toggle route as favorite</span>
+                            <div class="help-shortcut-keys">
+                                <kbd class="help-key">Click</kbd>
+                                <span style="margin-left: 4px;">⭐ icon</span>
+                            </div>
+                        </div>
+                        <div class="help-shortcut" data-keywords="hide route visibility">
+                            <span class="help-shortcut-desc">Hide/show route</span>
+                            <div class="help-shortcut-keys">
+                                <kbd class="help-key">Click</kbd>
+                                <span style="margin-left: 4px;">👁️ icon</span>
+                            </div>
+                        </div>
+                        <div class="help-shortcut" data-keywords="sort table column">
+                            <span class="help-shortcut-desc">Sort table by column</span>
+                            <div class="help-shortcut-keys">
+                                <kbd class="help-key">Click</kbd>
+                                <span style="margin-left: 4px;">column header</span>
+                            </div>
+                        </div>
+                        <div class="help-shortcut" data-keywords="filter direction commute">
+                            <span class="help-shortcut-desc">Filter by direction</span>
+                            <div class="help-shortcut-keys">
+                                <kbd class="help-key">Click</kbd>
+                                <span style="margin-left: 4px;">direction buttons</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Mobile Gestures Category -->
+                    <div class="help-category" data-category="mobile">
+                        <h3 class="help-category-title">📱 Mobile Gestures</h3>
+                        <div class="help-shortcut" data-keywords="swipe left right tab navigation">
+                            <span class="help-shortcut-desc">Switch to next/previous tab</span>
+                            <div class="help-shortcut-keys">
+                                <span>Swipe left/right</span>
+                            </div>
+                        </div>
+                        <div class="help-shortcut" data-keywords="swipe down refresh reload">
+                            <span class="help-shortcut-desc">Refresh page</span>
+                            <div class="help-shortcut-keys">
+                                <span>Swipe down</span>
+                            </div>
+                        </div>
+                        <div class="help-shortcut" data-keywords="tap touch select">
+                            <span class="help-shortcut-desc">Select route or button</span>
+                            <div class="help-shortcut-keys">
+                                <span>Tap</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Settings Category -->
+                    <div class="help-category" data-category="settings">
+                        <h3 class="help-category-title">⚙️ Settings</h3>
+                        <div class="help-shortcut" data-keywords="auto save automatic">
+                            <span class="help-shortcut-desc">Enable auto-save (saves after 500ms)</span>
+                            <div class="help-shortcut-keys">
+                                <span>Toggle "Auto-save"</span>
+                            </div>
+                        </div>
+                        <div class="help-shortcut" data-keywords="undo revert changes">
+                            <span class="help-shortcut-desc">Undo last change</span>
+                            <div class="help-shortcut-keys">
+                                <span>Click "Undo" in toast</span>
+                            </div>
+                        </div>
+                        <div class="help-shortcut" data-keywords="save settings preferences">
+                            <span class="help-shortcut-desc">Save settings manually</span>
+                            <div class="help-shortcut-keys">
+                                <kbd class="help-key">Click</kbd>
+                                <span style="margin-left: 4px;">"Save Settings"</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Accessibility Category -->
+                    <div class="help-category" data-category="accessibility">
+                        <h3 class="help-category-title">♿ Accessibility</h3>
+                        <div class="help-shortcut" data-keywords="keyboard navigation focus">
+                            <span class="help-shortcut-desc">All features keyboard accessible</span>
+                            <div class="help-shortcut-keys">
+                                <kbd class="help-key">Tab</kbd>
+                                <span style="margin: 0 4px;">+</span>
+                                <kbd class="help-key">Enter</kbd>
+                            </div>
+                        </div>
+                        <div class="help-shortcut" data-keywords="screen reader aria">
+                            <span class="help-shortcut-desc">Screen reader compatible</span>
+                            <div class="help-shortcut-keys">
+                                <span>ARIA labels on all elements</span>
+                            </div>
+                        </div>
+                        <div class="help-shortcut" data-keywords="focus indicator visible">
+                            <span class="help-shortcut-desc">Visible focus indicators (3px)</span>
+                            <div class="help-shortcut-keys">
+                                <span>Blue outline on focus</span>
+                            </div>
+                        </div>
+                        <div class="help-shortcut" data-keywords="touch target size">
+                            <span class="help-shortcut-desc">Touch targets ≥44x44px</span>
+                            <div class="help-shortcut-keys">
+                                <span>WCAG 2.5.5 compliant</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="helpNoResults" class="help-no-results" style="display: none;">
+                    <div class="help-no-results-icon">🔍</div>
+                    <p><strong>No shortcuts found</strong></p>
+                    <p>Try a different search term</p>
+                </div>
+                
+                <div class="help-tip">
+                    <strong>💡 Tip:</strong> This app is fully keyboard accessible and screen reader friendly. 
+                    All interactive elements have ARIA labels and visible focus indicators.
+                </div>
+            </div>
+        </div>
+    </div>
     </nav>
     
     <script>
@@ -6573,6 +7018,135 @@
             } else {
                 syncMobileNav();
             }
+        })();
+    </script>
+    
+    <script>
+        // Issue #253: Help Modal with Keyboard Shortcuts
+        (function() {
+            const helpModalBackdrop = document.getElementById('helpModalBackdrop');
+            const helpSearch = document.getElementById('helpSearch');
+            const helpContent = document.getElementById('helpContent');
+            const helpNoResults = document.getElementById('helpNoResults');
+            
+            // Show help modal
+            window.showHelpModal = function() {
+                helpModalBackdrop.classList.add('show');
+                document.body.style.overflow = 'hidden';
+                
+                // Focus search input for accessibility
+                setTimeout(() => {
+                    helpSearch.focus();
+                }, 100);
+            };
+            
+            // Close help modal
+            window.closeHelpModal = function(event) {
+                // Close if clicking backdrop or close button, or if no event (programmatic close)
+                if (!event || event.target === helpModalBackdrop || event.target.classList.contains('help-modal-close')) {
+                    helpModalBackdrop.classList.remove('show');
+                    document.body.style.overflow = 'auto';
+                    helpSearch.value = ''; // Clear search
+                    filterShortcuts(''); // Reset filter
+                }
+            };
+            
+            // Filter shortcuts based on search
+            function filterShortcuts(searchTerm) {
+                const term = searchTerm.toLowerCase().trim();
+                const categories = helpContent.querySelectorAll('.help-category');
+                let visibleCount = 0;
+                
+                categories.forEach(category => {
+                    const shortcuts = category.querySelectorAll('.help-shortcut');
+                    let categoryHasVisible = false;
+                    
+                    shortcuts.forEach(shortcut => {
+                        const keywords = shortcut.dataset.keywords || '';
+                        const desc = shortcut.querySelector('.help-shortcut-desc').textContent;
+                        const searchableText = (keywords + ' ' + desc).toLowerCase();
+                        
+                        if (term === '' || searchableText.includes(term)) {
+                            shortcut.style.display = 'flex';
+                            categoryHasVisible = true;
+                            visibleCount++;
+                        } else {
+                            shortcut.style.display = 'none';
+                        }
+                    });
+                    
+                    // Hide category if no visible shortcuts
+                    category.style.display = categoryHasVisible ? 'block' : 'none';
+                });
+                
+                // Show/hide no results message
+                if (visibleCount === 0 && term !== '') {
+                    helpContent.style.display = 'none';
+                    helpNoResults.style.display = 'block';
+                } else {
+                    helpContent.style.display = 'block';
+                    helpNoResults.style.display = 'none';
+                }
+            }
+            
+            // Search input handler
+            helpSearch.addEventListener('input', function(e) {
+                filterShortcuts(e.target.value);
+            });
+            
+            // Keyboard shortcuts
+            document.addEventListener('keydown', function(e) {
+                // Show help modal with ? key (Shift + /)
+                if (e.key === '?' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                    // Don't trigger if typing in an input field
+                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+                        return;
+                    }
+                    e.preventDefault();
+                    showHelpModal();
+                }
+                
+                // Close help modal with Escape key
+                if (e.key === 'Escape') {
+                    if (helpModalBackdrop.classList.contains('show')) {
+                        e.preventDefault();
+                        closeHelpModal();
+                    }
+                }
+            });
+            
+            // Trap focus within modal when open (accessibility)
+            helpModalBackdrop.addEventListener('keydown', function(e) {
+                if (!this.classList.contains('show')) return;
+                
+                if (e.key === 'Tab') {
+                    const modal = this.querySelector('.help-modal');
+                    const focusableElements = modal.querySelectorAll(
+                        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+                    );
+                    const firstFocusable = focusableElements[0];
+                    const lastFocusable = focusableElements[focusableElements.length - 1];
+                    
+                    if (e.shiftKey) {
+                        // Shift + Tab
+                        if (document.activeElement === firstFocusable) {
+                            e.preventDefault();
+                            lastFocusable.focus();
+                        }
+                    } else {
+                        // Tab
+                        if (document.activeElement === lastFocusable) {
+                            e.preventDefault();
+                            firstFocusable.focus();
+                        }
+                    }
+                }
+            });
+            
+            // Log help modal usage for analytics (optional)
+            window.addEventListener('load', function() {
+                console.log('Help modal initialized. Press ? to open.');
+            });
         })();
     </script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
