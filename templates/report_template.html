@@ -891,8 +891,8 @@
                 <div>
                     <h1>🚴 Ride Optimizer</h1>
                     <p>Generated on {{ timestamp }}</p>
-                    <button onclick="refreshReport()" class="btn btn-light" style="margin-top: 10px;">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="vertical-align: text-bottom;">
+                    <button onclick="refreshReport()" class="btn btn-light" style="margin-top: 10px;" aria-label="Refresh report data">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="vertical-align: text-bottom;" aria-hidden="true">
                             <path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
                             <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
                         </svg>
@@ -910,8 +910,8 @@
                 {% endif %}
                 -->
                 <!-- How It Works Info Icon -->
-                <button class="btn btn-link" onclick="showHowItWorksModal()" title="How It Works" style="position: absolute; top: 20px; right: 20px; color: white; font-size: 1.8rem; text-decoration: none; padding: 0; line-height: 1;">
-                    ℹ️
+                <button class="btn btn-link" onclick="showHowItWorksModal()" aria-label="Show how the route optimizer works" style="position: absolute; top: 20px; right: 20px; color: white; font-size: 1.8rem; text-decoration: none; padding: 0; line-height: 1;">
+                    <span aria-hidden="true">ℹ️</span>
                 </button>
             </div>
         </div>
@@ -1716,7 +1716,7 @@
                 modal.innerHTML = `
                     <div class="modal-header">
                         <h5 class="modal-title">Matched Activities: ${routeName}</h5>
-                        <button class="modal-close" onclick="closeModal()">&times;</button>
+                        <button class="modal-close" onclick="closeModal()" aria-label="Close modal dialog"><span aria-hidden="true">&times;</span></button>
                     </div>
                     <div class="modal-body">
                         ${activitiesHtml}
@@ -2243,15 +2243,15 @@
                         <label for="startLocation" class="form-label"><strong>📍 Location & Radius</strong></label>
                         <div class="input-group mb-1">
                             <input type="text" class="form-control form-control-sm" id="startLocation" placeholder="City/ZIP" value="Chicago, IL" required minlength="2">
-                            <button class="btn btn-outline-secondary btn-sm" type="button" onclick="geocodeLocation()" title="Search">
-                                🔍
+                            <button class="btn btn-outline-secondary btn-sm" type="button" onclick="geocodeLocation()" aria-label="Search for location">
+                                <span aria-hidden="true">🔍</span>
                             </button>
                             <div class="invalid-feedback">Please enter a location</div>
                             <div class="valid-feedback">✓ Location set</div>
                         </div>
                         <div id="geocodeStatus" class="mb-1"></div>
                         <div class="input-group">
-                            <input type="range" class="form-range" id="radiusSlider" min="5" max="50" value="15" step="5" oninput="document.getElementById('radiusValue').textContent = this.value">
+                            <input type="range" class="form-range" id="radiusSlider" min="5" max="50" value="15" step="5" oninput="document.getElementById('radiusValue').textContent = this.value" aria-label="Search radius in miles" aria-valuemin="5" aria-valuemax="50" aria-valuenow="15">
                             <span class="input-group-text" style="font-size: 0.8rem;"><span id="radiusValue">15</span> mi</span>
                         </div>
                         <small class="text-muted">Max distance from start</small>
@@ -2259,9 +2259,9 @@
                     <div class="col-md-2">
                         <label for="distanceFilter" class="form-label"><strong>📏 Distance</strong></label>
                         <div class="input-group">
-                            <input type="number" class="form-control form-control-sm" id="minDistance" placeholder="Min" min="0" step="5">
+                            <input type="number" class="form-control form-control-sm" id="minDistance" placeholder="Min" min="0" step="5" aria-label="Minimum distance">
                             <span class="input-group-text">-</span>
-                            <input type="number" class="form-control form-control-sm" id="maxDistance" placeholder="Max" min="0" step="5">
+                            <input type="number" class="form-control form-control-sm" id="maxDistance" placeholder="Max" min="0" step="5" aria-label="Maximum distance">
                             <span class="input-group-text">{{ long_rides_stats.get('distance_unit', 'mi') if long_rides_stats else 'mi' }}</span>
                         </div>
                         <div class="invalid-feedback">Max must be greater than min</div>
@@ -2270,9 +2270,9 @@
                     <div class="col-md-2">
                         <label for="timeFilter" class="form-label"><strong>⏱️ Time</strong></label>
                         <div class="input-group">
-                            <input type="number" class="form-control form-control-sm" id="minTime" placeholder="Min" min="0" step="0.5">
+                            <input type="number" class="form-control form-control-sm" id="minTime" placeholder="Min" min="0" step="0.5" aria-label="Minimum time in hours">
                             <span class="input-group-text">-</span>
-                            <input type="number" class="form-control form-control-sm" id="maxTime" placeholder="Max" min="0" step="0.5">
+                            <input type="number" class="form-control form-control-sm" id="maxTime" placeholder="Max" min="0" step="0.5" aria-label="Maximum time in hours">
                             <span class="input-group-text">hrs</span>
                         </div>
                         <div class="invalid-feedback">Max must be greater than min</div>
@@ -2287,14 +2287,14 @@
                         <small class="text-muted">Road or gravel</small>
                     </div>
                     <div class="col-md-2 d-flex align-items-end">
-                        <button class="btn btn-primary w-100" onclick="filterAndDisplayRides()" style="margin-bottom: 20px;">
-                            🔍 Filter
+                        <button class="btn btn-primary w-100" onclick="filterAndDisplayRides()" style="margin-bottom: 20px;" aria-label="Apply filters to routes">
+                            <span aria-hidden="true">🔍</span> Filter
                         </button>
                     </div>
                 </div>
 
-                <button class="btn btn-primary btn-lg mb-4" onclick="filterAndDisplayRides()">
-                    🔍 Get Recommendations
+                <button class="btn btn-primary btn-lg mb-4" onclick="filterAndDisplayRides()" aria-label="Get route recommendations based on current filters">
+                    <span aria-hidden="true">🔍</span> Get Recommendations
                 </button>
 
                 <!-- No Data Message -->
@@ -2325,21 +2325,21 @@
                         <div class="card">
                             <div class="card-header d-flex justify-content-between align-items-center">
                                 <div>
-                                    <h5 class="mb-0">🚴 Routes <span id="ridesCount" class="badge bg-primary">0</span></h5>
-                                    <small class="text-muted">Showing <span id="pageInfo">0-0 of 0</span></small>
+                                    <h5 class="mb-0">🚴 Routes <span id="ridesCount" class="badge bg-primary" aria-live="polite" aria-atomic="true">0</span></h5>
+                                    <small class="text-muted">Showing <span id="pageInfo" aria-live="polite" aria-atomic="true">0-0 of 0</span></small>
                                 </div>
                             </div>
                             <!-- Filters Bar -->
                             <div class="card-body p-2" style="border-bottom: 1px solid #dee2e6;">
                                 <div class="d-flex gap-2 align-items-center flex-wrap">
-                                    <select class="form-select form-select-sm" id="directionFilter" style="width: auto;" onchange="filterAndDisplayRides()">
+                                    <select class="form-select form-select-sm" id="directionFilter" style="width: auto;" onchange="filterAndDisplayRides()" aria-label="Filter routes by direction">
                                         <option value="all">All Directions</option>
                                         <option value="north">North</option>
                                         <option value="south">South</option>
                                         <option value="east">East</option>
                                         <option value="west">West</option>
                                     </select>
-                                    <select class="form-select form-select-sm" id="sortBy" style="width: auto;" onchange="sortRides()">
+                                    <select class="form-select form-select-sm" id="sortBy" style="width: auto;" onchange="sortRides()" aria-label="Sort routes by">
                                         <option value="distance">Distance</option>
                                         <option value="time">Time</option>
                                         <option value="elevation">Elevation</option>
@@ -2380,8 +2380,8 @@
                             <div class="card-header d-flex justify-content-between align-items-center">
                                 <h5 class="mb-0">🗺️ Routes Map</h5>
                                 <div class="btn-group btn-group-sm">
-                                    <button class="btn btn-outline-secondary" onclick="fitMapToRoutes()" title="Fit all routes">🎯 Fit All</button>
-                                    <button class="btn btn-outline-secondary" onclick="clearMapSelection()" title="Clear selection">🔄 Clear</button>
+                                    <button class="btn btn-outline-secondary" onclick="fitMapToRoutes()" aria-label="Fit all routes in map view"><span aria-hidden="true">🎯</span> Fit All</button>
+                                    <button class="btn btn-outline-secondary" onclick="clearMapSelection()" aria-label="Clear route selection"><span aria-hidden="true">🔄</span> Clear</button>
                                 </div>
                             </div>
                             <div class="card-body p-0">
@@ -2493,9 +2493,9 @@
                     <div class="card-header">
                         <h3>🗺️ All Long Rides</h3>
                         <div class="mt-2">
-                            <button class="btn btn-sm btn-outline-secondary" onclick="filterMapRoutes('all')">🌍 Show All</button>
-                            <button class="btn btn-sm btn-outline-secondary" onclick="filterMapRoutes('loops')">🔄 Loops Only</button>
-                            <button class="btn btn-sm btn-outline-secondary" onclick="filterMapRoutes('point-to-point')">➡️ Point-to-Point</button>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="filterMapRoutes('all')" aria-label="Show all routes on map"><span aria-hidden="true">🌍</span> Show All</button>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="filterMapRoutes('loops')" aria-label="Show only loop routes"><span aria-hidden="true">🔄</span> Loops Only</button>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="filterMapRoutes('point-to-point')" aria-label="Show only point-to-point routes"><span aria-hidden="true">➡️</span> Point-to-Point</button>
                         </div>
                     </div>
                     <div class="card-body p-0">
@@ -2563,28 +2563,28 @@
                         <div class="mb-3">
                             <label class="form-label"><strong>Export Data</strong></label>
                             <div class="d-grid gap-2">
-                                <button class="btn btn-outline-primary" onclick="exportPreferences()">
-                                    📤 Export Preferences
+                                <button class="btn btn-outline-primary" onclick="exportPreferences()" aria-label="Export user preferences to file">
+                                    <span aria-hidden="true">📤</span> Export Preferences
                                 </button>
-                                <button class="btn btn-outline-primary" onclick="exportFavorites()">
-                                    ⭐ Export Favorites
+                                <button class="btn btn-outline-primary" onclick="exportFavorites()" aria-label="Export favorite routes to file">
+                                    <span aria-hidden="true">⭐</span> Export Favorites
                                 </button>
                             </div>
                             <small class="text-muted">Download your data as JSON</small>
                         </div>
                         <div class="mb-3">
                             <label class="form-label"><strong>Import Data</strong></label>
-                            <input type="file" class="form-control" id="importFile" accept=".json">
+                            <input type="file" class="form-control" id="importFile" accept=".json" aria-label="Select JSON file to import">
                             <small class="text-muted">Import previously exported data</small>
                         </div>
                         <div class="mb-3">
                             <label class="form-label"><strong>Clear Data</strong></label>
                             <div class="d-grid gap-2">
-                                <button class="btn btn-outline-warning" onclick="clearFavorites()">
-                                    🗑️ Clear Favorites
+                                <button class="btn btn-outline-warning" onclick="clearFavorites()" aria-label="Clear all favorite routes">
+                                    <span aria-hidden="true">🗑️</span> Clear Favorites
                                 </button>
-                                <button class="btn btn-outline-danger" onclick="clearAllData()">
-                                    ⚠️ Clear All Local Data
+                                <button class="btn btn-outline-danger" onclick="clearAllData()" aria-label="Clear all local data and reset application">
+                                    <span aria-hidden="true">⚠️</span> Clear All Local Data
                                 </button>
                             </div>
                             <small class="text-muted">Remove stored preferences and favorites</small>
@@ -2614,11 +2614,11 @@
                 <!-- Save Button -->
                 <div class="row mt-4">
                     <div class="col-12">
-                        <button class="btn btn-primary btn-lg" onclick="saveSettings()">
-                            💾 Save Settings
+                        <button class="btn btn-primary btn-lg" onclick="saveSettings()" aria-label="Save current settings">
+                            <span aria-hidden="true">💾</span> Save Settings
                         </button>
-                        <button class="btn btn-outline-secondary btn-lg ms-2" onclick="resetSettings()">
-                            🔄 Reset to Defaults
+                        <button class="btn btn-outline-secondary btn-lg ms-2" onclick="resetSettings()" aria-label="Reset all settings to default values">
+                            <span aria-hidden="true">🔄</span> Reset to Defaults
                         </button>
                     </div>
                 </div>
@@ -2738,7 +2738,7 @@
             errorDiv.setAttribute('aria-live', 'polite');
             errorDiv.innerHTML = `
                 <strong>Error:</strong> ${message}
-                <button type="button" class="btn-close float-end" onclick="this.parentElement.remove()" aria-label="Close error message"></button>
+                <button type="button" class="btn-close float-end" onclick="this.parentElement.remove()" aria-label="Dismiss error message"></button>
             `;
             
             container.insertBefore(errorDiv, container.firstChild);
@@ -2765,7 +2765,7 @@
             successDiv.setAttribute('aria-live', 'polite');
             successDiv.innerHTML = `
                 <strong>Success:</strong> ${message}
-                <button type="button" class="btn-close float-end" onclick="this.parentElement.remove()" aria-label="Close success message"></button>
+                <button type="button" class="btn-close float-end" onclick="this.parentElement.remove()" aria-label="Dismiss success message"></button>
             `;
             
             container.insertBefore(successDiv, container.firstChild);
@@ -4572,7 +4572,7 @@
         <div class="modal" onclick="event.stopPropagation()">
             <div class="modal-header">
                 <h3>📊 How the Route Optimizer Works</h3>
-                <button class="modal-close" onclick="closeHowItWorksModal()">&times;</button>
+                <button class="modal-close" onclick="closeHowItWorksModal()" aria-label="Close how it works dialog"><span aria-hidden="true">&times;</span></button>
             </div>
             <div class="modal-body">
                 <p class="lead">The route optimizer uses a multi-criteria scoring system to recommend the best commute routes based on your historical riding data.</p>
@@ -4795,7 +4795,7 @@
                 toast.style.cssText = 'bottom: 20px; right: 20px; z-index: 9999; min-width: 300px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);';
                 toast.innerHTML = `
                     <strong>${type === 'success' ? '✓' : type === 'warning' ? '⚠' : 'ℹ'}</strong> ${message}
-                    <button type="button" class="btn-close float-end" onclick="this.parentElement.remove()"></button>
+                    <button type="button" class="btn-close float-end" onclick="this.parentElement.remove()" aria-label="Dismiss notification"></button>
                 `;
                 
                 document.body.appendChild(toast);
