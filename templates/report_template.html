@@ -1216,6 +1216,114 @@
         .debug-touch-targets .touch-target-guide::after {
             display: block;
         }
+        
+        /* Issue #251: Mobile Bottom Navigation */
+        .mobile-bottom-nav {
+            display: none; /* Hidden on desktop */
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 56px;
+            background: white;
+            border-top: 1px solid #dee2e6;
+            box-shadow: 0 -2px 8px rgba(0,0,0,0.1);
+            z-index: 1000;
+            padding: 0;
+        }
+        
+        .mobile-bottom-nav-list {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+        
+        .mobile-bottom-nav-item {
+            flex: 1;
+            height: 100%;
+        }
+        
+        .mobile-bottom-nav-link {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            min-height: 56px;
+            padding: 4px 8px;
+            text-decoration: none;
+            color: #6c757d;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+        
+        .mobile-bottom-nav-link:hover {
+            background-color: #f8f9fa;
+            color: #667eea;
+        }
+        
+        .mobile-bottom-nav-link.active {
+            color: #667eea;
+            font-weight: 600;
+        }
+        
+        .mobile-bottom-nav-link.active::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: #667eea;
+        }
+        
+        .mobile-bottom-nav-icon {
+            font-size: 20px;
+            margin-bottom: 2px;
+        }
+        
+        .mobile-bottom-nav-label {
+            font-size: 11px;
+            line-height: 1.2;
+        }
+        
+        /* Show bottom nav on mobile, hide top nav */
+        @media (max-width: 768px) {
+            .mobile-bottom-nav {
+                display: block;
+            }
+            
+            /* Hide desktop navigation on mobile */
+            .nav-tabs {
+                display: none;
+            }
+            
+            /* Add padding to bottom of content to prevent overlap */
+            body {
+                padding-bottom: 56px;
+            }
+            
+            /* Adjust toast container to not overlap bottom nav */
+            .toast-container {
+                bottom: 76px; /* 56px nav + 20px spacing */
+            }
+        }
+        
+        /* Smooth transitions for navigation */
+        .mobile-bottom-nav-link {
+            transition: color 0.2s ease, background-color 0.2s ease;
+        }
+        
+        /* Respect prefers-reduced-motion */
+        @media (prefers-reduced-motion: reduce) {
+            .mobile-bottom-nav-link {
+                transition: none;
+            }
+        }
         }
         .metric-icon { font-size: 1rem; }
         .metric-value { font-weight: 500; color: #333; }
@@ -6257,6 +6365,87 @@
         });
     </script>
 
+    
+    <!-- Issue #251: Mobile Bottom Navigation (visible only on mobile <768px) -->
+    <nav class="mobile-bottom-nav" role="navigation" aria-label="Mobile navigation">
+        <ul class="mobile-bottom-nav-list">
+            <li class="mobile-bottom-nav-item">
+                <a href="#home" class="mobile-bottom-nav-link active" data-tab="home" role="tab" aria-selected="true" aria-label="Home">
+                    <span class="mobile-bottom-nav-icon">🏠</span>
+                    <span class="mobile-bottom-nav-label">Home</span>
+                </a>
+            </li>
+            <li class="mobile-bottom-nav-item">
+                <a href="#routes" class="mobile-bottom-nav-link" data-tab="routes" role="tab" aria-selected="false" aria-label="Routes">
+                    <span class="mobile-bottom-nav-icon">🗺️</span>
+                    <span class="mobile-bottom-nav-label">Routes</span>
+                </a>
+            </li>
+            <li class="mobile-bottom-nav-item">
+                <a href="#settings" class="mobile-bottom-nav-link" data-tab="settings" role="tab" aria-selected="false" aria-label="Settings">
+                    <span class="mobile-bottom-nav-icon">⚙️</span>
+                    <span class="mobile-bottom-nav-label">Settings</span>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    
+    <script>
+        // Issue #251: Mobile Bottom Navigation - Active State Management
+        (function() {
+            // Sync mobile bottom nav with desktop tabs
+            function syncMobileNav() {
+                const mobileLinks = document.querySelectorAll('.mobile-bottom-nav-link');
+                const desktopTabs = document.querySelectorAll('.nav-tabs .nav-link');
+                
+                // Handle mobile nav clicks
+                mobileLinks.forEach(link => {
+                    link.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        const tabId = this.dataset.tab;
+                        
+                        // Update mobile nav active state
+                        mobileLinks.forEach(l => {
+                            l.classList.remove('active');
+                            l.setAttribute('aria-selected', 'false');
+                        });
+                        this.classList.add('active');
+                        this.setAttribute('aria-selected', 'true');
+                        
+                        // Trigger desktop tab click (which handles content switching)
+                        const desktopTab = document.querySelector(`.nav-tabs .nav-link[data-bs-target="#${tabId}"]`);
+                        if (desktopTab) {
+                            desktopTab.click();
+                        }
+                    });
+                });
+                
+                // Listen for desktop tab changes to sync mobile nav
+                desktopTabs.forEach(tab => {
+                    tab.addEventListener('shown.bs.tab', function(e) {
+                        const targetId = this.dataset.bsTarget.replace('#', '');
+                        const mobileLink = document.querySelector(`.mobile-bottom-nav-link[data-tab="${targetId}"]`);
+                        
+                        if (mobileLink) {
+                            mobileLinks.forEach(l => {
+                                l.classList.remove('active');
+                                l.setAttribute('aria-selected', 'false');
+                            });
+                            mobileLink.classList.add('active');
+                            mobileLink.setAttribute('aria-selected', 'true');
+                        }
+                    });
+                });
+            }
+            
+            // Initialize on page load
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', syncMobileNav);
+            } else {
+                syncMobileNav();
+            }
+        })();
+    </script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </body>
 </html>
