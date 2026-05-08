@@ -929,6 +929,100 @@
         .map-container {
             height: 600px; /* Same height to prevent shift */
         }
+        
+        /* Issue #249: Toast Notification System */
+        .toast-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            max-width: 400px;
+            pointer-events: none;
+        }
+        
+        .toast-item {
+            pointer-events: auto;
+            min-width: 300px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            border-radius: 6px;
+            padding: 12px 16px;
+            transform: translateX(400px);
+            opacity: 0;
+            transition: all 0.3s ease-out;
+        }
+        
+        .toast-item.toast-show {
+            transform: translateX(0);
+            opacity: 1;
+        }
+        
+        /* Toast types with semantic colors */
+        .toast-item.alert-success {
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+        
+        .toast-item.alert-error,
+        .toast-item.alert-danger {
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        
+        .toast-item.alert-warning {
+            background-color: #fff3cd;
+            border-color: #ffeaa7;
+            color: #856404;
+        }
+        
+        .toast-item.alert-info {
+            background-color: #d1ecf1;
+            border-color: #bee5eb;
+            color: #0c5460;
+        }
+        
+        /* Mobile: bottom-center positioning */
+        @media (max-width: 768px) {
+            .toast-container {
+                bottom: 20px;
+                left: 50%;
+                right: auto;
+                transform: translateX(-50%);
+                max-width: calc(100% - 40px);
+            }
+            
+            .toast-item {
+                min-width: 280px;
+                width: 100%;
+            }
+        }
+        
+        /* Respect prefers-reduced-motion */
+        @media (prefers-reduced-motion: reduce) {
+            .toast-item {
+                transition: none;
+                transform: translateX(0);
+                opacity: 1;
+            }
+            
+            .toast-item.toast-show {
+                animation: none;
+            }
+        }
+        
+        /* Toast close button styling */
+        .toast-item .btn-close {
+            padding: 0.5rem;
+            opacity: 0.7;
+        }
+        
+        .toast-item .btn-close:hover {
+            opacity: 1;
+        }
         }
         .metric-icon { font-size: 1rem; }
         .metric-value { font-weight: 500; color: #333; }
@@ -5467,40 +5561,127 @@
                 }
             };
 
-            // Issue #245: Single-level undo functionality with toast
+            // Issue #245 & #249: Toast notification system with queue support
             let undoStack = null;
-            let currentToast = null;
+            let toastQueue = [];
+            let toastContainer = null;
             
-            // Enhanced toast with undo functionality
-            function showToast(message, type = 'info', undoAction = null) {
-                // Remove existing toast (only one at a time)
-                if (currentToast && currentToast.parentElement) {
-                    currentToast.remove();
+            // Initialize toast container
+            function initToastContainer() {
+                if (!toastContainer) {
+                    toastContainer = document.createElement('div');
+                    toastContainer.className = 'toast-container';
+                    toastContainer.setAttribute('aria-live', 'polite');
+                    toastContainer.setAttribute('aria-atomic', 'false');
+                    document.body.appendChild(toastContainer);
                 }
+                return toastContainer;
+            }
+            
+            /**
+             * Show a toast notification
+             * @param {string} message - Message to display
+             * @param {string} type - Toast type: 'success', 'error', 'warning', 'info'
+             * @param {Object} options - Configuration options
+             * @param {Function} options.undoAction - Optional undo callback
+             * @param {number} options.duration - Auto-dismiss duration in ms (default: 5000, 0 = no auto-dismiss)
+             * @param {boolean} options.dismissible - Show close button (default: true)
+             */
+            
+            /**
+             * Toast Notification System - Usage Examples
+             * 
+             * Basic usage:
+             * showToast('Settings saved successfully!', 'success');
+             * showToast('Failed to load data', 'error');
+             * showToast('Please review your changes', 'warning');
+             * showToast('Processing your request...', 'info');
+             * 
+             * With custom duration:
+             * showToast('Quick message', 'info', { duration: 3000 }); // 3 seconds
+             * showToast('Persistent message', 'warning', { duration: 0 }); // No auto-dismiss
+             * 
+             * With undo action:
+             * showToast('Route hidden', 'warning', {
+             *     undoAction: function() {
+             *         // Restore the route
+             *         console.log('Undo action triggered');
+             *     },
+             *     duration: 5000
+             * });
+             * 
+             * Non-dismissible toast:
+             * showToast('Loading...', 'info', { dismissible: false, duration: 0 });
+             * 
+             * Queue multiple toasts:
+             * showToast('First notification', 'success');
+             * showToast('Second notification', 'info');
+             * showToast('Third notification', 'warning');
+             * // All three will stack vertically
+             * 
+             * Backwards compatibility (Issue #245):
+             * showToast('Message', 'info', undoFunction); // Still works
+             */
+            window.showToast = function(message, type = 'info', options = {}) {
+                const {
+                    undoAction = null,
+                    duration = 5000,
+                    dismissible = true
+                } = typeof options === 'function' ? { undoAction: options } : options;
+                
+                const container = initToastContainer();
                 
                 // Create toast element
                 const toast = document.createElement('div');
-                toast.className = `alert alert-${type} position-fixed`;
-                toast.style.cssText = 'bottom: 20px; right: 20px; z-index: 9999; min-width: 300px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);';
+                toast.className = `toast-item alert alert-${type}`;
                 toast.setAttribute('role', 'alert');
                 toast.setAttribute('aria-live', 'assertive');
                 toast.setAttribute('aria-atomic', 'true');
                 
+                // Icon mapping
+                const icons = {
+                    success: '✓',
+                    error: '✗',
+                    warning: '⚠',
+                    info: 'ℹ'
+                };
+                
                 // Build toast content
-                let toastContent = `<strong>${type === 'success' ? '✓' : type === 'warning' ? '⚠' : 'ℹ'}</strong> ${message}`;
+                let toastContent = `<strong>${icons[type] || icons.info}</strong> ${message}`;
                 
                 // Add undo button if undo action provided
                 if (undoAction) {
+                    const undoId = 'undo-' + Date.now();
                     toastContent += `
-                        <button type="button" class="btn btn-sm btn-outline-light ms-2" onclick="window.performUndo()" aria-label="Undo last action" style="border-color: currentColor;">
+                        <button type="button" class="btn btn-sm btn-outline-light ms-2"
+                                id="${undoId}"
+                                aria-label="Undo last action"
+                                style="border-color: currentColor;">
                             ↶ Undo
                         </button>
                     `;
+                    
+                    // Store undo action
+                    setTimeout(() => {
+                        const undoBtn = document.getElementById(undoId);
+                        if (undoBtn) {
+                            undoBtn.addEventListener('click', function() {
+                                if (typeof undoAction === 'function') {
+                                    undoAction();
+                                    toast.remove();
+                                    toastQueue = toastQueue.filter(t => t !== toast);
+                                }
+                            });
+                        }
+                    }, 0);
                 }
                 
-                toastContent += `
-                    <button type="button" class="btn-close float-end" onclick="this.parentElement.remove()" aria-label="Dismiss notification"></button>
-                `;
+                // Add close button if dismissible
+                if (dismissible) {
+                    toastContent += `
+                        <button type="button" class="btn-close float-end" aria-label="Dismiss notification"></button>
+                    `;
+                }
                 
                 toast.innerHTML = toastContent;
                 toast.tabIndex = 0; // Make keyboard accessible
@@ -5509,36 +5690,43 @@
                 toast.addEventListener('keydown', function(e) {
                     if (e.key === 'Escape') {
                         toast.remove();
+                        toastQueue = toastQueue.filter(t => t !== toast);
                     }
                 });
                 
-                document.body.appendChild(toast);
-                currentToast = toast;
-                
-                // Store undo action
-                if (undoAction) {
-                    undoStack = undoAction;
+                // Handle close button click
+                const closeBtn = toast.querySelector('.btn-close');
+                if (closeBtn) {
+                    closeBtn.addEventListener('click', function() {
+                        toast.remove();
+                        toastQueue = toastQueue.filter(t => t !== toast);
+                    });
                 }
                 
-                // Auto-remove after 5 seconds
-                const timeout = setTimeout(() => {
-                    if (toast.parentElement) {
-                        toast.remove();
-                        if (currentToast === toast) {
-                            currentToast = null;
-                            undoStack = null;
-                        }
-                    }
-                }, 5000);
+                // Add to queue and container
+                toastQueue.push(toast);
+                container.appendChild(toast);
                 
-                // Clear timeout if manually dismissed
-                toast.addEventListener('click', function(e) {
-                    if (e.target.classList.contains('btn-close')) {
-                        clearTimeout(timeout);
-                        undoStack = null;
-                    }
+                // Trigger slide-in animation
+                requestAnimationFrame(() => {
+                    toast.classList.add('toast-show');
                 });
-            }
+                
+                // Auto-remove after duration
+                if (duration > 0) {
+                    setTimeout(() => {
+                        if (toast.parentElement) {
+                            toast.classList.remove('toast-show');
+                            setTimeout(() => {
+                                toast.remove();
+                                toastQueue = toastQueue.filter(t => t !== toast);
+                            }, 300); // Wait for slide-out animation
+                        }
+                    }, duration);
+                }
+                
+                return toast;
+            };
             
             // Perform undo action
             window.performUndo = function() {
