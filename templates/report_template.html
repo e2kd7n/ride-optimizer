@@ -1323,6 +1323,135 @@
             .mobile-bottom-nav-link {
                 transition: none;
             }
+        
+        /* Issue #252: Swipe Gesture Visual Feedback Enhancement */
+        .swipe-indicator {
+            position: fixed;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 60px;
+            height: 60px;
+            background: rgba(102, 126, 234, 0.9);
+            border-radius: 50%;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            color: white;
+            z-index: 10001;
+            pointer-events: none;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+            animation: swipeIndicatorPulse 0.3s ease-out;
+        }
+        
+        .swipe-indicator.left {
+            left: 20px;
+        }
+        
+        .swipe-indicator.right {
+            right: 20px;
+        }
+        
+        .swipe-indicator.show {
+            display: flex;
+        }
+        
+        @keyframes swipeIndicatorPulse {
+            0% {
+                transform: translateY(-50%) scale(0.5);
+                opacity: 0;
+            }
+            50% {
+                transform: translateY(-50%) scale(1.1);
+            }
+            100% {
+                transform: translateY(-50%) scale(1);
+                opacity: 1;
+            }
+        }
+        
+        /* Swipe progress bar */
+        .swipe-progress {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            z-index: 10002;
+            pointer-events: none;
+            transition: width 0.1s linear;
+            display: none;
+        }
+        
+        .swipe-progress.show {
+            display: block;
+        }
+        
+        /* Refresh indicator for pull-down */
+        .refresh-indicator {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(102, 126, 234, 0.9);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            display: none;
+            align-items: center;
+            gap: 8px;
+            z-index: 10001;
+            pointer-events: none;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+            animation: refreshIndicatorSlide 0.3s ease-out;
+        }
+        
+        .refresh-indicator.show {
+            display: flex;
+        }
+        
+        .refresh-indicator-icon {
+            animation: refreshSpin 1s linear infinite;
+        }
+        
+        @keyframes refreshIndicatorSlide {
+            from {
+                transform: translateX(-50%) translateY(-100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(-50%) translateY(0);
+                opacity: 1;
+            }
+        }
+        
+        @keyframes refreshSpin {
+            from {
+                transform: rotate(0deg);
+            }
+            to {
+                transform: rotate(360deg);
+            }
+        }
+        
+        /* Respect prefers-reduced-motion */
+        @media (prefers-reduced-motion: reduce) {
+            .swipe-indicator,
+            .refresh-indicator {
+                animation: none;
+            }
+            
+            .refresh-indicator-icon {
+                animation: none;
+            }
+            
+            .swipe-progress {
+                transition: none;
+            }
+        }
         }
         }
         .metric-icon { font-size: 1rem; }
@@ -6645,6 +6774,20 @@
                 </a>
             </li>
         </ul>
+    </nav>
+    
+    <!-- Issue #252: Swipe Gesture Visual Feedback Indicators -->
+    <div class="swipe-indicator left" id="swipeIndicatorLeft" aria-hidden="true">
+        ←
+    </div>
+    <div class="swipe-indicator right" id="swipeIndicatorRight" aria-hidden="true">
+        →
+    </div>
+    <div class="swipe-progress" id="swipeProgress" aria-hidden="true"></div>
+    <div class="refresh-indicator" id="refreshIndicator" aria-hidden="true">
+        <span class="refresh-indicator-icon">↻</span>
+        <span>Release to refresh</span>
+    </div>
     
     <!-- Issue #253: Help Modal with Keyboard Shortcuts -->
     <button class="help-button" onclick="showHelpModal()" aria-label="Show keyboard shortcuts and help" title="Press ? for help">
@@ -6864,16 +7007,23 @@
                         }
     
     <script>
-        // Issue #252: Swipe Gestures for Mobile Navigation
+        // Issue #252: Swipe Gestures for Mobile Navigation (Enhanced with Visual Feedback)
         (function() {
             let touchStartX = 0;
             let touchStartY = 0;
             let touchEndX = 0;
             let touchEndY = 0;
             let isSwiping = false;
+            let touchStartTime = 0;
             
             const SWIPE_THRESHOLD = 50; // Minimum distance for swipe
             const SWIPE_VELOCITY_THRESHOLD = 0.3; // Minimum velocity
+            
+            // Get indicator elements
+            const swipeIndicatorLeft = document.getElementById('swipeIndicatorLeft');
+            const swipeIndicatorRight = document.getElementById('swipeIndicatorRight');
+            const swipeProgress = document.getElementById('swipeProgress');
+            const refreshIndicator = document.getElementById('refreshIndicator');
             
             // Get current active tab index
             function getCurrentTabIndex() {
@@ -6896,6 +7046,38 @@
                 }
             }
             
+            // Show swipe indicator
+            function showSwipeIndicator(direction) {
+                if (direction === 'left') {
+                    swipeIndicatorLeft.classList.add('show');
+                    setTimeout(() => swipeIndicatorLeft.classList.remove('show'), 500);
+                } else if (direction === 'right') {
+                    swipeIndicatorRight.classList.add('show');
+                    setTimeout(() => swipeIndicatorRight.classList.remove('show'), 500);
+                }
+            }
+            
+            // Update swipe progress bar
+            function updateSwipeProgress(deltaX) {
+                const progress = Math.min(Math.abs(deltaX) / window.innerWidth * 100, 100);
+                swipeProgress.style.width = progress + '%';
+                
+                if (progress > 0) {
+                    swipeProgress.classList.add('show');
+                } else {
+                    swipeProgress.classList.remove('show');
+                }
+            }
+            
+            // Show/hide refresh indicator
+            function updateRefreshIndicator(deltaY) {
+                if (deltaY > SWIPE_THRESHOLD && touchStartY < 100) {
+                    refreshIndicator.classList.add('show');
+                } else {
+                    refreshIndicator.classList.remove('show');
+                }
+            }
+            
             // Handle swipe gesture
             function handleSwipe() {
                 const deltaX = touchEndX - touchStartX;
@@ -6903,16 +7085,26 @@
                 const absDeltaX = Math.abs(deltaX);
                 const absDeltaY = Math.abs(deltaY);
                 
+                // Hide progress indicators
+                swipeProgress.classList.remove('show');
+                refreshIndicator.classList.remove('show');
+                
                 // Horizontal swipe (left/right navigation)
                 if (absDeltaX > absDeltaY && absDeltaX > SWIPE_THRESHOLD) {
                     const currentIndex = getCurrentTabIndex();
                     
                     if (deltaX > 0) {
                         // Swipe right - go to previous tab
-                        navigateToTab(currentIndex - 1);
+                        if (currentIndex > 0) {
+                            showSwipeIndicator('left');
+                            navigateToTab(currentIndex - 1);
+                        }
                     } else {
                         // Swipe left - go to next tab
-                        navigateToTab(currentIndex + 1);
+                        if (currentIndex < 2) {
+                            showSwipeIndicator('right');
+                            navigateToTab(currentIndex + 1);
+                        }
                     }
                 }
                 
@@ -6932,6 +7124,7 @@
                 
                 touchStartX = e.changedTouches[0].screenX;
                 touchStartY = e.changedTouches[0].screenY;
+                touchStartTime = Date.now();
                 isSwiping = true;
             }
             
@@ -6945,6 +7138,20 @@
                 
                 touchEndX = e.changedTouches[0].screenX;
                 touchEndY = e.changedTouches[0].screenY;
+                
+                const deltaX = touchEndX - touchStartX;
+                const deltaY = touchEndY - touchStartY;
+                const absDeltaX = Math.abs(deltaX);
+                const absDeltaY = Math.abs(deltaY);
+                
+                // Update visual feedback during swipe
+                if (absDeltaX > absDeltaY) {
+                    // Horizontal swipe - show progress bar
+                    updateSwipeProgress(deltaX);
+                } else if (absDeltaY > absDeltaX && deltaY > 0) {
+                    // Vertical swipe down - show refresh indicator
+                    updateRefreshIndicator(deltaY);
+                }
             }
             
             function handleTouchEnd(e) {
@@ -6953,6 +7160,8 @@
                 // Don't interfere with map gestures
                 if (e.target.closest('.map-container') || e.target.closest('#nextCommuteMap')) {
                     isSwiping = false;
+                    swipeProgress.classList.remove('show');
+                    refreshIndicator.classList.remove('show');
                     return;
                 }
                 
