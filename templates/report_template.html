@@ -4769,6 +4769,9 @@
                 
                 localStorage.setItem('rideOptimizerSettings', JSON.stringify(settings));
                 
+                // Clear unsaved changes flag after manual save
+                hasUnsavedChanges = false;
+                
                 // Show success message
                 showToast('Settings saved successfully!', 'success');
             };
@@ -4972,8 +4975,10 @@
             };
 
             // Issue #244: Debounced auto-save (500ms)
+            // Issue #246: Track unsaved changes
             let autoSaveTimeout = null;
             let saveIndicator = null;
+            let hasUnsavedChanges = false;
             
             function debouncedAutoSave() {
                 // Clear existing timeout
@@ -4997,6 +5002,9 @@
                         };
                         
                         localStorage.setItem('rideOptimizerSettings', JSON.stringify(settings));
+                        
+                        // Clear unsaved changes flag after successful save
+                        hasUnsavedChanges = false;
                         
                         // Show "All changes saved" confirmation
                         showSaveIndicator('saved');
@@ -5047,6 +5055,9 @@
                 const inputs = document.querySelectorAll('#settings input, #settings select');
                 inputs.forEach(input => {
                     input.addEventListener('change', function() {
+                        // Mark as having unsaved changes
+                        hasUnsavedChanges = true;
+                        
                         const autoSave = document.getElementById('autoSave');
                         if (autoSave && autoSave.checked) {
                             debouncedAutoSave();
@@ -5055,11 +5066,12 @@
                 });
             }
             
-            // Save on page unload
-            window.addEventListener('beforeunload', function() {
+            // Issue #246: Warn before leaving with unsaved changes
+            window.addEventListener('beforeunload', function(e) {
                 const autoSave = document.getElementById('autoSave');
+                
+                // If auto-save is enabled, save synchronously
                 if (autoSave && autoSave.checked) {
-                    // Synchronous save on unload
                     try {
                         const settings = {
                             unitSystem: document.getElementById('unitSystem').value,
@@ -5070,9 +5082,18 @@
                             savedAt: new Date().toISOString()
                         };
                         localStorage.setItem('rideOptimizerSettings', JSON.stringify(settings));
+                        hasUnsavedChanges = false;
                     } catch (error) {
                         console.error('Failed to save on unload:', error);
                     }
+                }
+                
+                // Show warning if there are unsaved changes
+                if (hasUnsavedChanges) {
+                    const message = 'You have unsaved changes. Are you sure you want to leave? Your changes will be lost.';
+                    e.preventDefault();
+                    e.returnValue = message; // Standard for most browsers
+                    return message; // For some older browsers
                 }
             });
 
