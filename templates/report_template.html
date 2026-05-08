@@ -868,24 +868,29 @@
         </div>
         {% endif %}
 
-        <!-- Navigation Tabs (Simplified to 2 tabs) -->
+        <!-- Navigation Tabs (3 tabs: Home, Routes, Settings) -->
         <ul class="nav nav-tabs" id="reportTabs" role="tablist">
             <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="commute-tab" data-bs-toggle="tab" data-bs-target="#commute" type="button" role="tab">
-                    🚴 Commute Routes
+                <button class="nav-link active" id="home-tab" data-bs-toggle="tab" data-bs-target="#home" type="button" role="tab" aria-controls="home" aria-selected="true">
+                    🏠 Home
                 </button>
             </li>
             <li class="nav-item" role="presentation">
-                <button class="nav-link" id="longrides-tab" data-bs-toggle="tab" data-bs-target="#longrides" type="button" role="tab">
-                    🚵 Long Rides
+                <button class="nav-link" id="routes-tab" data-bs-toggle="tab" data-bs-target="#routes" type="button" role="tab" aria-controls="routes" aria-selected="false">
+                    🚴 Routes
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="settings-tab" data-bs-toggle="tab" data-bs-target="#settings" type="button" role="tab" aria-controls="settings" aria-selected="false">
+                    ⚙️ Settings
                 </button>
             </li>
         </ul>
 
         <!-- Tab Content -->
         <div class="tab-content" id="reportTabContent" style="margin-top: 12px;">
-            <!-- Commute Routes Tab -->
-            <div class="tab-pane fade show active" id="commute" role="tabpanel" aria-labelledby="commute-tab">
+            <!-- Home Tab (formerly Commute Routes) -->
+            <div class="tab-pane fade show active" id="home" role="tabpanel" aria-labelledby="home-tab">
 
         <!-- Time-Aware Next Commute Recommendations -->
         {% if next_commutes %}
@@ -2148,8 +2153,8 @@
     </div><!-- End Commute Routes Tab -->
 
 
-    <!-- Long Rides Tab -->
-    <div class="tab-pane fade" id="longrides" role="tabpanel" aria-labelledby="longrides-tab">
+    <!-- Routes Tab (formerly Long Rides) -->
+    <div class="tab-pane fade" id="routes" role="tabpanel" aria-labelledby="routes-tab">
         <div class="card mb-4">
             <div class="card-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
                 <h3 class="mb-0">🚵 Long Ride Recommendations</h3>
@@ -2426,6 +2431,126 @@
             </div>
         </div>
     </div>
+    <!-- Settings Tab -->
+    <div class="tab-pane fade" id="settings" role="tabpanel" aria-labelledby="settings-tab">
+        <div class="card">
+            <div class="card-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                <h3 class="mb-0">⚙️ Settings & Preferences</h3>
+                <p class="mb-0 mt-2" style="font-size: 0.95em;">Customize your experience and manage your data</p>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <!-- User Preferences Section -->
+                    <div class="col-md-6 mb-4">
+                        <h4>👤 User Preferences</h4>
+                        <div class="mb-3">
+                            <label for="unitSystem" class="form-label"><strong>Unit System</strong></label>
+                            <select class="form-select" id="unitSystem">
+                                <option value="metric">Metric (km, °C)</option>
+                                <option value="imperial" selected>Imperial (mi, °F)</option>
+                            </select>
+                            <small class="text-muted">Distance and temperature units</small>
+                        </div>
+                        <div class="mb-3">
+                            <label for="defaultView" class="form-label"><strong>Default View</strong></label>
+                            <select class="form-select" id="defaultView">
+                                <option value="home" selected>Home</option>
+                                <option value="routes">Routes</option>
+                            </select>
+                            <small class="text-muted">Page to show on startup</small>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label"><strong>Display Options</strong></label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="showWeatherDetails" checked>
+                                <label class="form-check-label" for="showWeatherDetails">
+                                    Show detailed weather information
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="showElevation" checked>
+                                <label class="form-check-label" for="showElevation">
+                                    Show elevation data
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="autoSave" checked>
+                                <label class="form-check-label" for="autoSave">
+                                    Auto-save preferences
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Data Management Section -->
+                    <div class="col-md-6 mb-4">
+                        <h4>💾 Data Management</h4>
+                        <div class="mb-3">
+                            <label class="form-label"><strong>Export Data</strong></label>
+                            <div class="d-grid gap-2">
+                                <button class="btn btn-outline-primary" onclick="exportPreferences()">
+                                    📤 Export Preferences
+                                </button>
+                                <button class="btn btn-outline-primary" onclick="exportFavorites()">
+                                    ⭐ Export Favorites
+                                </button>
+                            </div>
+                            <small class="text-muted">Download your data as JSON</small>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label"><strong>Import Data</strong></label>
+                            <input type="file" class="form-control" id="importFile" accept=".json">
+                            <small class="text-muted">Import previously exported data</small>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label"><strong>Clear Data</strong></label>
+                            <div class="d-grid gap-2">
+                                <button class="btn btn-outline-warning" onclick="clearFavorites()">
+                                    🗑️ Clear Favorites
+                                </button>
+                                <button class="btn btn-outline-danger" onclick="clearAllData()">
+                                    ⚠️ Clear All Local Data
+                                </button>
+                            </div>
+                            <small class="text-muted">Remove stored preferences and favorites</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- About Section -->
+                <div class="row mt-4">
+                    <div class="col-12">
+                        <h4>ℹ️ About</h4>
+                        <p><strong>Ride Optimizer</strong> - Intelligent route recommendations based on weather, wind, and your riding history.</p>
+                        <p class="mb-1"><strong>Version:</strong> 0.6.0</p>
+                        <p class="mb-1"><strong>Data Source:</strong> Strava API</p>
+                        <p class="mb-1"><strong>Weather Data:</strong> Open-Meteo API</p>
+                        <p class="mt-3">
+                            <a href="https://github.com/yourusername/ride-optimizer" target="_blank" class="btn btn-sm btn-outline-primary">
+                                📚 Documentation
+                            </a>
+                            <a href="https://github.com/yourusername/ride-optimizer/issues" target="_blank" class="btn btn-sm btn-outline-secondary">
+                                🐛 Report Issue
+                            </a>
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Save Button -->
+                <div class="row mt-4">
+                    <div class="col-12">
+                        <button class="btn btn-primary btn-lg" onclick="saveSettings()">
+                            💾 Save Settings
+                        </button>
+                        <button class="btn btn-outline-secondary btn-lg ms-2" onclick="resetSettings()">
+                            🔄 Reset to Defaults
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
 
     </div><!-- End Tab Content -->
     </div><!-- End Container -->
@@ -4383,6 +4508,161 @@
             </div>
         </div>
     </div>
+    <script>
+        // Settings Page Functions
+        (function() {
+            // Load settings from localStorage on page load
+            function loadSettings() {
+                const settings = JSON.parse(localStorage.getItem('rideOptimizerSettings') || '{}');
+                
+                // Apply saved settings
+                if (settings.unitSystem) {
+                    document.getElementById('unitSystem').value = settings.unitSystem;
+                }
+                if (settings.defaultView) {
+                    document.getElementById('defaultView').value = settings.defaultView;
+                }
+                if (settings.showWeatherDetails !== undefined) {
+                    document.getElementById('showWeatherDetails').checked = settings.showWeatherDetails;
+                }
+                if (settings.showElevation !== undefined) {
+                    document.getElementById('showElevation').checked = settings.showElevation;
+                }
+                if (settings.autoSave !== undefined) {
+                    document.getElementById('autoSave').checked = settings.autoSave;
+                }
+            }
+
+            // Save settings to localStorage
+            window.saveSettings = function() {
+                const settings = {
+                    unitSystem: document.getElementById('unitSystem').value,
+                    defaultView: document.getElementById('defaultView').value,
+                    showWeatherDetails: document.getElementById('showWeatherDetails').checked,
+                    showElevation: document.getElementById('showElevation').checked,
+                    autoSave: document.getElementById('autoSave').checked,
+                    savedAt: new Date().toISOString()
+                };
+                
+                localStorage.setItem('rideOptimizerSettings', JSON.stringify(settings));
+                
+                // Show success message
+                showToast('Settings saved successfully!', 'success');
+            };
+
+            // Reset settings to defaults
+            window.resetSettings = function() {
+                if (confirm('Are you sure you want to reset all settings to defaults?')) {
+                    localStorage.removeItem('rideOptimizerSettings');
+                    
+                    // Reset form to defaults
+                    document.getElementById('unitSystem').value = 'imperial';
+                    document.getElementById('defaultView').value = 'home';
+                    document.getElementById('showWeatherDetails').checked = true;
+                    document.getElementById('showElevation').checked = true;
+                    document.getElementById('autoSave').checked = true;
+                    
+                    showToast('Settings reset to defaults', 'info');
+                }
+            };
+
+            // Export preferences as JSON
+            window.exportPreferences = function() {
+                const settings = JSON.parse(localStorage.getItem('rideOptimizerSettings') || '{}');
+                const dataStr = JSON.stringify(settings, null, 2);
+                const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(dataBlob);
+                
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `ride-optimizer-preferences-${new Date().toISOString().split('T')[0]}.json`;
+                link.click();
+                
+                URL.revokeObjectURL(url);
+                showToast('Preferences exported successfully!', 'success');
+            };
+
+            // Export favorites as JSON
+            window.exportFavorites = function() {
+                const favorites = JSON.parse(localStorage.getItem('favoriteRoutes') || '[]');
+                const dataStr = JSON.stringify(favorites, null, 2);
+                const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(dataBlob);
+                
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `ride-optimizer-favorites-${new Date().toISOString().split('T')[0]}.json`;
+                link.click();
+                
+                URL.revokeObjectURL(url);
+                showToast('Favorites exported successfully!', 'success');
+            };
+
+            // Clear favorites
+            window.clearFavorites = function() {
+                if (confirm('Are you sure you want to clear all favorites? This cannot be undone.')) {
+                    localStorage.removeItem('favoriteRoutes');
+                    showToast('Favorites cleared', 'warning');
+                }
+            };
+
+            // Clear all local data
+            window.clearAllData = function() {
+                if (confirm('Are you sure you want to clear ALL local data? This includes settings, favorites, and hidden routes. This cannot be undone.')) {
+                    if (confirm('This is your last chance. Are you absolutely sure?')) {
+                        localStorage.clear();
+                        showToast('All local data cleared', 'warning');
+                        
+                        // Reset form to defaults
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1500);
+                    }
+                }
+            };
+
+            // Simple toast notification function
+            function showToast(message, type = 'info') {
+                // Create toast element
+                const toast = document.createElement('div');
+                toast.className = `alert alert-${type} position-fixed`;
+                toast.style.cssText = 'bottom: 20px; right: 20px; z-index: 9999; min-width: 300px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);';
+                toast.innerHTML = `
+                    <strong>${type === 'success' ? '✓' : type === 'warning' ? '⚠' : 'ℹ'}</strong> ${message}
+                    <button type="button" class="btn-close float-end" onclick="this.parentElement.remove()"></button>
+                `;
+                
+                document.body.appendChild(toast);
+                
+                // Auto-remove after 5 seconds
+                setTimeout(() => {
+                    if (toast.parentElement) {
+                        toast.remove();
+                    }
+                }, 5000);
+            }
+
+            // Auto-save on change if enabled
+            function setupAutoSave() {
+                const inputs = document.querySelectorAll('#settings input, #settings select');
+                inputs.forEach(input => {
+                    input.addEventListener('change', function() {
+                        const autoSave = document.getElementById('autoSave');
+                        if (autoSave && autoSave.checked) {
+                            saveSettings();
+                        }
+                    });
+                });
+            }
+
+            // Initialize on page load
+            document.addEventListener('DOMContentLoaded', function() {
+                loadSettings();
+                setupAutoSave();
+            });
+        })();
+    </script>
+
 
     <script>
         // How It Works Modal Functions
