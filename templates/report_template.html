@@ -12,9 +12,9 @@
         body { font-family: Arial, sans-serif; background-color: #f8f9fa; }
         .container-fluid { padding: 16px; }  /* md - reduced from 30px */
         .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 24px; border-radius: 10px; margin-bottom: 16px; }  /* lg padding, md margin - reduced from 40px/30px */
-        .card { border: none; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 12px; }  /* reduced from 20px */
-        .card-header { background-color: #667eea; color: white; font-weight: bold; padding: 12px 16px; }  /* optimized padding */
-        .card-body { padding: 16px; }  /* md - explicit card body padding */
+        .card { border: none; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 8px; }  /* Further reduced */
+        .card-header { background-color: #667eea; color: white; font-weight: bold; padding: 8px 12px; }  /* Reduced padding */
+        .card-body { padding: 12px; }  /* Reduced from 16px */
         .metric { text-align: center; padding: 12px; }  /* reduced from 20px */
         .metric-value { font-size: 2em; font-weight: bold; color: #667eea; }
         .metric-label { color: #6c757d; font-size: 0.9em; }
@@ -34,7 +34,7 @@
         .pagination-controls button { margin: 0 5px; }
         .page-info { color: #6c757d; }
         .direction-filter { margin-bottom: 12px; }  /* reduced from 15px */
-        .table td, .table th { padding: 8px 12px; }  /* sm vertical, optimized horizontal */
+        .table td, .table th { padding: 6px 10px; }  /* Further reduced for compact layout */
         .direction-filter .btn-group { box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .direction-filter .btn { border-radius: 0; }
         .direction-filter .btn:first-child { border-radius: 5px 0 0 5px; }
@@ -452,32 +452,85 @@
             animation: slideInRight 0.3s ease-out;
         }
         
+        /* Home Page Compact Layout (Issue #239) */
+        .home-compact-info-bar {
+            display: flex;
+            gap: 16px;
+            padding: 12px 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            height: 72px;
+            align-items: center;
+        }
+        .home-info-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .home-info-title {
+            font-size: 0.85rem;
+            opacity: 0.9;
+            margin-bottom: 2px;
+        }
+        .home-info-value {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+        .home-quick-actions {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+            height: 48px;
+        }
+        .home-quick-actions .btn {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            font-size: 0.9rem;
+            padding: 8px 12px;
+        }
+        .home-recent-routes {
+            height: 592px;
+            overflow-y: auto;
+        }
+        .home-recent-routes table {
+            font-size: 0.9rem;
+        }
+        .home-recent-routes .route-row {
+            height: 56px;
+        }
+        
         /* Next Commute Recommendations Styles */
         .next-commute-container {
             display: flex;
-            gap: 16px;
-            align-items: stretch;  /* Make children equal height */
-            min-height: 400px;     /* Container has minimum height */
+            gap: 12px;
+            align-items: stretch;
+            min-height: 300px;  /* Reduced from 400px */
         }
         .next-commute-cards-column {
-            flex: 0 0 400px;
+            flex: 0 0 350px;  /* Reduced from 400px */
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 8px;  /* Reduced from 12px */
         }
         .next-commute-map-column {
             flex: 1;
-            min-width: 500px;
-            display: flex;          /* Make this a flex container */
+            min-width: 450px;  /* Reduced from 500px */
+            display: flex;
             flex-direction: column;
         }
         .next-commute-map-container {
-            flex: 1;                /* Fill available space in parent */
-            min-height: 400px;
+            flex: 1;
+            min-height: 300px;  /* Reduced from 400px */
         }
         .next-commute-card {
-            padding: 12px 16px;
-            border-radius: 8px;
+            padding: 8px 12px;  /* Reduced padding */
+            border-radius: 6px;
             cursor: pointer;
             transition: all 0.2s ease;
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
@@ -493,13 +546,13 @@
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
-            margin-bottom: 8px;
+            margin-bottom: 6px;  /* Reduced from 8px */
         }
         .commute-metrics {
             display: flex;
             flex-wrap: wrap;
-            gap: 12px;
-            font-size: 0.9rem;
+            gap: 8px;  /* Reduced from 12px */
+            font-size: 0.85rem;  /* Reduced from 0.9rem */
         }
         .metric-compact {
             display: flex;
@@ -1410,7 +1463,7 @@
         
         // Pagination functionality
         (function() {
-            const ROUTES_PER_PAGE = 10;
+            const ROUTES_PER_PAGE = 5;  /* Reduced for compact Home view */
             let currentPage = 1;
             const allRouteRows = document.querySelectorAll('.route-row');
             
