@@ -742,6 +742,193 @@
                 margin-top: 4px;
             }
         }
+        
+        /* Issue #248: Skeleton Loading States */
+        /* Base skeleton styles - CSS-only animations */
+        .skeleton {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: skeleton-loading 1.5s ease-in-out infinite;
+            border-radius: 4px;
+        }
+        
+        @keyframes skeleton-loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+        
+        /* Respect prefers-reduced-motion */
+        @media (prefers-reduced-motion: reduce) {
+            .skeleton {
+                animation: none;
+                background: #f0f0f0;
+            }
+        }
+        
+        /* Skeleton for compact route card (56px height) */
+        .skeleton-route-card {
+            height: 56px;
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            border-radius: 6px;
+            background: white;
+            border: 1px solid #e0e0e0;
+            margin-bottom: 8px;
+            gap: 12px;
+        }
+        
+        .skeleton-route-card-rank {
+            width: 32px;
+            height: 24px;
+            flex-shrink: 0;
+        }
+        
+        .skeleton-route-card-name {
+            flex: 1;
+            height: 20px;
+            max-width: 200px;
+        }
+        
+        .skeleton-route-card-metrics {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        
+        .skeleton-route-card-metric {
+            width: 60px;
+            height: 16px;
+        }
+        
+        /* Skeleton for map container */
+        .skeleton-map {
+            width: 100%;
+            height: 600px;
+            border-radius: 10px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .skeleton-map::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 60px;
+            height: 60px;
+            border: 4px solid #e0e0e0;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: skeleton-map-spin 1s linear infinite;
+        }
+        
+        @keyframes skeleton-map-spin {
+            to { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        
+        @media (prefers-reduced-motion: reduce) {
+            .skeleton-map::after {
+                animation: none;
+                border-top-color: #e0e0e0;
+            }
+        }
+        
+        /* Skeleton for weather widget */
+        .skeleton-weather {
+            padding: 12px;
+            border-radius: 6px;
+            background: white;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .skeleton-weather-header {
+            width: 120px;
+            height: 20px;
+            margin-bottom: 12px;
+        }
+        
+        .skeleton-weather-metrics {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        
+        .skeleton-weather-metric {
+            width: 80px;
+            height: 40px;
+        }
+        
+        /* Skeleton for card (generic) */
+        .skeleton-card {
+            padding: 16px;
+            border-radius: 10px;
+            background: white;
+            border: 1px solid #e0e0e0;
+            margin-bottom: 16px;
+        }
+        
+        .skeleton-card-header {
+            width: 150px;
+            height: 24px;
+            margin-bottom: 16px;
+        }
+        
+        .skeleton-card-content {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        .skeleton-card-line {
+            height: 16px;
+        }
+        
+        .skeleton-card-line.short {
+            width: 60%;
+        }
+        
+        .skeleton-card-line.medium {
+            width: 80%;
+        }
+        
+        .skeleton-card-line.long {
+            width: 100%;
+        }
+        
+        /* Fade-in transition when real content loads */
+        .skeleton-container {
+            position: relative;
+        }
+        
+        .skeleton-container.loaded .skeleton {
+            display: none;
+        }
+        
+        .skeleton-container.loaded .real-content {
+            animation: fade-in 0.3s ease-in;
+        }
+        
+        @keyframes fade-in {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        /* Prevent layout shift (CLS = 0) */
+        .skeleton-container {
+            min-height: inherit;
+        }
+        
+        .skeleton-route-card,
+        .route-card-compact {
+            height: 56px; /* Same height to prevent shift */
+        }
+        
+        .skeleton-map,
+        .map-container {
+            height: 600px; /* Same height to prevent shift */
+        }
         }
         .metric-icon { font-size: 1rem; }
         .metric-value { font-weight: 500; color: #333; }
@@ -3985,6 +4172,175 @@
             const bounds = L.latLngBounds(allCoords);
             nextCommuteMap.fitBounds(bounds, { padding: [50, 50] });
             
+        
+        // Issue #248: Skeleton Loading State Helpers
+        /**
+         * Creates a skeleton loader for route cards
+         * @param {number} count - Number of skeleton cards to create
+         * @returns {HTMLElement} Container with skeleton cards
+         */
+        window.createSkeletonRouteCards = function(count = 5) {
+            const container = document.createElement('div');
+            container.className = 'skeleton-container';
+            container.setAttribute('aria-busy', 'true');
+            container.setAttribute('aria-label', 'Loading routes');
+            
+            for (let i = 0; i < count; i++) {
+                const card = document.createElement('div');
+                card.className = 'skeleton-route-card';
+                
+                const rank = document.createElement('div');
+                rank.className = 'skeleton skeleton-route-card-rank';
+                card.appendChild(rank);
+                
+                const name = document.createElement('div');
+                name.className = 'skeleton skeleton-route-card-name';
+                card.appendChild(name);
+                
+                const metrics = document.createElement('div');
+                metrics.className = 'skeleton-route-card-metrics';
+                
+                for (let j = 0; j < 4; j++) {
+                    const metric = document.createElement('div');
+                    metric.className = 'skeleton skeleton-route-card-metric';
+                    metrics.appendChild(metric);
+                }
+                
+                card.appendChild(metrics);
+                container.appendChild(card);
+            }
+            
+            return container;
+        };
+        
+        /**
+         * Creates a skeleton loader for map
+         * @returns {HTMLElement} Skeleton map element
+         */
+        window.createSkeletonMap = function() {
+            const skeleton = document.createElement('div');
+            skeleton.className = 'skeleton skeleton-map';
+            skeleton.setAttribute('aria-busy', 'true');
+            skeleton.setAttribute('aria-label', 'Loading map');
+            return skeleton;
+        };
+        
+        /**
+         * Creates a skeleton loader for weather widget
+         * @returns {HTMLElement} Skeleton weather element
+         */
+        window.createSkeletonWeather = function() {
+            const skeleton = document.createElement('div');
+            skeleton.className = 'skeleton-weather';
+            skeleton.setAttribute('aria-busy', 'true');
+            skeleton.setAttribute('aria-label', 'Loading weather');
+            
+            const header = document.createElement('div');
+            header.className = 'skeleton skeleton-weather-header';
+            skeleton.appendChild(header);
+            
+            const metrics = document.createElement('div');
+            metrics.className = 'skeleton-weather-metrics';
+            
+            for (let i = 0; i < 4; i++) {
+                const metric = document.createElement('div');
+                metric.className = 'skeleton skeleton-weather-metric';
+                metrics.appendChild(metric);
+            }
+            
+            skeleton.appendChild(metrics);
+            return skeleton;
+        };
+        
+        /**
+         * Creates a generic skeleton card
+         * @param {Object} options - Configuration options
+         * @param {number} options.lines - Number of content lines (default: 3)
+         * @param {string} options.headerWidth - Width of header (default: '150px')
+         * @returns {HTMLElement} Skeleton card element
+         */
+        window.createSkeletonCard = function(options = {}) {
+            const { lines = 3, headerWidth = '150px' } = options;
+            
+            const card = document.createElement('div');
+            card.className = 'skeleton-card';
+            card.setAttribute('aria-busy', 'true');
+            card.setAttribute('aria-label', 'Loading content');
+            
+            const header = document.createElement('div');
+            header.className = 'skeleton skeleton-card-header';
+            header.style.width = headerWidth;
+            card.appendChild(header);
+            
+            const content = document.createElement('div');
+            content.className = 'skeleton-card-content';
+            
+            const widths = ['long', 'medium', 'short'];
+            for (let i = 0; i < lines; i++) {
+                const line = document.createElement('div');
+                line.className = `skeleton skeleton-card-line ${widths[i % widths.length]}`;
+                content.appendChild(line);
+            }
+            
+            card.appendChild(content);
+            return card;
+        };
+        
+        /**
+         * Replaces skeleton with real content
+         * @param {HTMLElement} container - Container with skeleton
+         * @param {HTMLElement} realContent - Real content to show
+         */
+        window.replaceSkeletonWithContent = function(container, realContent) {
+            if (!container || !realContent) return;
+            
+            // Mark container as loaded
+            container.classList.add('loaded');
+            container.setAttribute('aria-busy', 'false');
+            
+            // Add real content
+            realContent.classList.add('real-content');
+            container.appendChild(realContent);
+            
+            // Remove skeleton after fade-in animation
+            setTimeout(() => {
+                const skeletons = container.querySelectorAll('.skeleton, .skeleton-route-card, .skeleton-map, .skeleton-weather, .skeleton-card');
+                skeletons.forEach(s => s.remove());
+            }, 300);
+        };
+        
+        /**
+         * Example usage documentation for skeleton loaders:
+         * 
+         * // Show skeleton while loading
+         * const container = document.getElementById('route-list');
+         * const skeleton = createSkeletonRouteCards(5);
+         * container.appendChild(skeleton);
+         * 
+         * // Fetch data
+         * fetchRoutes().then(routes => {
+         *     const realContent = document.createElement('div');
+         *     routes.forEach(route => {
+         *         realContent.appendChild(createCompactRouteCard(route));
+         *     });
+         *     replaceSkeletonWithContent(skeleton, realContent);
+         * });
+         * 
+         * // For map
+         * const mapContainer = document.getElementById('map');
+         * const mapSkeleton = createSkeletonMap();
+         * mapContainer.appendChild(mapSkeleton);
+         * 
+         * // For weather
+         * const weatherContainer = document.getElementById('weather');
+         * const weatherSkeleton = createSkeletonWeather();
+         * weatherContainer.appendChild(weatherSkeleton);
+         * 
+         * // For generic card
+         * const cardContainer = document.getElementById('card');
+         * const cardSkeleton = createSkeletonCard({ lines: 4, headerWidth: '200px' });
+         * cardContainer.appendChild(cardSkeleton);
+         */
         }
         
         function addDirectionArrows(polyline, route) {
