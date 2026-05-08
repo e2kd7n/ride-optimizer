@@ -182,10 +182,59 @@
             border-width: 0;
         }
         
-        /* Focus visible for keyboard navigation */
+        /* Issue #242: Enhanced focus indicators (2px minimum, WCAG 2.4.7) */
         *:focus-visible {
-            outline: 2px solid #667eea;
+            outline: 3px solid #667eea;
+            outline-offset: 3px;
+            border-radius: 4px;
+        }
+        
+        /* High contrast focus for buttons */
+        button:focus-visible,
+        .btn:focus-visible {
+            outline: 3px solid #667eea;
+            outline-offset: 3px;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3);
+        }
+        
+        /* Focus for form controls */
+        input:focus-visible,
+        select:focus-visible,
+        textarea:focus-visible {
+            outline: 3px solid #667eea;
             outline-offset: 2px;
+            border-color: #667eea;
+        }
+        
+        /* Focus for links */
+        a:focus-visible {
+            outline: 3px solid #667eea;
+            outline-offset: 3px;
+            text-decoration: underline;
+            text-decoration-thickness: 2px;
+        }
+        
+        /* Focus for nav tabs */
+        .nav-link:focus-visible {
+            outline: 3px solid #667eea;
+            outline-offset: 2px;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3);
+        }
+        
+        /* Focus for table rows */
+        .route-row:focus-visible,
+        tr:focus-visible {
+            outline: 3px solid #667eea;
+            outline-offset: -3px;
+            background-color: rgba(102, 126, 234, 0.1);
+        }
+        
+        /* Focus for cards */
+        .card:focus-visible {
+            outline: 3px solid #667eea;
+            outline-offset: 3px;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3);
+        }
         
         /* Issue #240: Direction arrow styles */
         .direction-arrow {
