@@ -186,6 +186,21 @@
         *:focus-visible {
             outline: 2px solid #667eea;
             outline-offset: 2px;
+        
+        /* Issue #240: Direction arrow styles */
+        .direction-arrow {
+            background: transparent !important;
+            border: none !important;
+            pointer-events: none;
+        }
+        
+        /* Issue #240: Responsive layout for Routes page */
+        @media (max-width: 991px) {
+            .col-12.col-lg-4 {
+                max-width: 100% !important;
+                margin-bottom: 16px;
+            }
+        }
         }
         
         /* Skip to content link for screen readers */
@@ -2303,36 +2318,43 @@
                 </div>
                 {% else %}
                 
-                <!-- Results Container: Table on Left, Map on Right -->
+                <!-- Results Container: Side-by-Side Layout (Issue #240) -->
                 <div class="row" id="resultsContainer">
-                    <!-- Left Column: Rides Table -->
-                    <div class="col-md-5">
+                    <!-- Left Column: Rides List (360px) -->
+                    <div class="col-12 col-lg-4" style="max-width: 360px;">
                         <div class="card">
-                            <div class="card-header">
-                                <h5 class="mb-0">🚴 Recommended Rides <span id="ridesCount" class="badge bg-primary">0</span></h5>
-                                <small class="text-muted">Showing <span id="pageInfo">0-0 of 0</span></small>
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h5 class="mb-0">🚴 Routes <span id="ridesCount" class="badge bg-primary">0</span></h5>
+                                    <small class="text-muted">Showing <span id="pageInfo">0-0 of 0</span></small>
+                                </div>
+                            </div>
+                            <!-- Filters Bar -->
+                            <div class="card-body p-2" style="border-bottom: 1px solid #dee2e6;">
+                                <div class="d-flex gap-2 align-items-center flex-wrap">
+                                    <select class="form-select form-select-sm" id="directionFilter" style="width: auto;" onchange="filterAndDisplayRides()">
+                                        <option value="all">All Directions</option>
+                                        <option value="north">North</option>
+                                        <option value="south">South</option>
+                                        <option value="east">East</option>
+                                        <option value="west">West</option>
+                                    </select>
+                                    <select class="form-select form-select-sm" id="sortBy" style="width: auto;" onchange="sortRides()">
+                                        <option value="distance">Distance</option>
+                                        <option value="time">Time</option>
+                                        <option value="elevation">Elevation</option>
+                                        <option value="uses">Uses</option>
+                                    </select>
+                                </div>
                             </div>
                             <div class="card-body p-0">
-                                <div class="table-responsive" style="max-height: 700px; overflow-y: auto;">
+                                <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
                                     <table class="table table-hover table-sm mb-0" id="ridesTable">
                                         <thead class="sticky-top bg-light">
                                             <tr>
-                                                <th>#</th>
-                                                <th style="cursor: pointer;" onclick="sortTable('name')" title="Click to sort">
-                                                    Name <span id="sort-name"></span>
-                                                </th>
-                                                <th style="cursor: pointer;" onclick="sortTable('distance')" title="Click to sort">
-                                                    Distance <span id="sort-distance"></span>
-                                                </th>
-                                                <th style="cursor: pointer;" onclick="sortTable('time')" title="Click to sort">
-                                                    Time <span id="sort-time"></span>
-                                                </th>
-                                                <th style="cursor: pointer;" onclick="sortTable('elevation')" title="Click to sort">
-                                                    Elevation <span id="sort-elevation"></span>
-                                                </th>
-                                                <th style="cursor: pointer;" onclick="sortTable('uses')" title="Click to sort">
-                                                    Uses <span id="sort-uses"></span>
-                                                </th>
+                                                <th style="width: 30px;">#</th>
+                                                <th>Route</th>
+                                                <th style="width: 60px;">Dist</th>
                                             </tr>
                                         </thead>
                                         <tbody id="ridesTableBody">
@@ -2341,7 +2363,7 @@
                                     </table>
                                 </div>
                             </div>
-                            <div class="card-footer">
+                            <div class="card-footer p-2">
                                 <!-- Pagination Controls -->
                                 <nav>
                                     <ul class="pagination pagination-sm mb-0 justify-content-center" id="pagination">
@@ -2352,14 +2374,14 @@
                         </div>
                     </div>
                     
-                    <!-- Right Column: Map -->
-                    <div class="col-md-7">
+                    <!-- Right Column: Interactive Map (640px) -->
+                    <div class="col-12 col-lg-8">
                         <div class="card">
-                            <div class="card-header">
+                            <div class="card-header d-flex justify-content-between align-items-center">
                                 <h5 class="mb-0">🗺️ Routes Map</h5>
-                                <div class="mt-2">
-                                    <button class="btn btn-sm btn-outline-secondary" onclick="fitMapToRoutes()">🎯 Fit All</button>
-                                    <button class="btn btn-sm btn-outline-secondary" onclick="clearMapSelection()">🔄 Clear Selection</button>
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-outline-secondary" onclick="fitMapToRoutes()" title="Fit all routes">🎯 Fit All</button>
+                                    <button class="btn btn-outline-secondary" onclick="clearMapSelection()" title="Clear selection">🔄 Clear</button>
                                 </div>
                             </div>
                             <div class="card-body p-0">
@@ -4133,7 +4155,7 @@
             updatePagination();
         }
         
-        // Update table with current page
+        // Update table with current page (Issue #240 - Compact layout)
         function updateTable() {
             const tbody = document.getElementById('ridesTableBody');
             if (!tbody) {
@@ -4149,14 +4171,25 @@
                 const globalIndex = start + index + 1;
                 const row = document.createElement('tr');
                 row.style.cursor = 'pointer';
-                row.onclick = () => selectRide(ride.activity_id);
+                row.dataset.activityId = ride.activity_id;
+                
+                // Support Ctrl/Cmd+Click for multi-select
+                row.onclick = (e) => {
+                    if (e.ctrlKey || e.metaKey) {
+                        toggleRideSelection(ride.activity_id);
+                    } else {
+                        selectRide(ride.activity_id);
+                    }
+                };
+                
+                // Compact layout: # | Name | Distance
                 row.innerHTML = `
-                    <td>${globalIndex}</td>
-                    <td>${ride.name}</td>
-                    <td>${ride.distance.toFixed(1)} ${ride.distance_unit}</td>
-                    <td>${ride.duration_hours.toFixed(1)} h</td>
-                    <td>${ride.elevation.toLocaleString('en-US', {maximumFractionDigits: 0})} ${ride.elevation_unit}</td>
-                    <td>${ride.uses || 1}</td>
+                    <td style="text-align: center;">${globalIndex}</td>
+                    <td style="font-size: 0.9em;">
+                        <div style="font-weight: 500;">${ride.name}</div>
+                        <small class="text-muted">${ride.duration_hours.toFixed(1)}h • ${ride.elevation.toLocaleString('en-US', {maximumFractionDigits: 0})}${ride.elevation_unit}</small>
+                    </td>
+                    <td style="text-align: right; white-space: nowrap;">${ride.distance.toFixed(1)}</td>
                 `;
                 tbody.appendChild(row);
             });
@@ -4166,7 +4199,7 @@
             document.getElementById('pageInfo').textContent = `${start + 1}-${end} of ${filteredRides.length}`;
         }
         
-        // Update map with all filtered rides
+        // Update map with all filtered rides (Issue #240 - Direction arrows)
         function updateMap() {
             if (!recommendationsMap) {
                 return;
@@ -4190,6 +4223,28 @@
                 polyline.originalColor = color;
                 polyline.activityId = ride.activity_id;
                 
+                // Add direction arrow at midpoint
+                if (ride.coordinates.length > 1) {
+                    const midIndex = Math.floor(ride.coordinates.length / 2);
+                    const midPoint = ride.coordinates[midIndex];
+                    const prevPoint = ride.coordinates[midIndex - 1];
+                    
+                    // Calculate bearing for arrow rotation
+                    const bearing = Math.atan2(
+                        midPoint[1] - prevPoint[1],
+                        midPoint[0] - prevPoint[0]
+                    ) * 180 / Math.PI;
+                    
+                    const arrowIcon = L.divIcon({
+                        html: `<div style="transform: rotate(${bearing}deg); font-size: 16px;">▶</div>`,
+                        className: 'direction-arrow',
+                        iconSize: [20, 20]
+                    });
+                    
+                    const arrow = L.marker(midPoint, { icon: arrowIcon }).addTo(recommendationsMap);
+                    mapLayers.push(arrow);
+                }
+                
                 polyline.bindPopup(`
                     <strong>${ride.name}</strong><br>
                     Distance: ${ride.distance.toFixed(1)} ${ride.distance_unit}<br>
@@ -4200,7 +4255,13 @@
                     <a href="https://www.strava.com/activities/${ride.activity_id}" target="_blank" rel="noopener noreferrer">View on Strava</a>
                 `);
                 
-                polyline.on('click', () => selectRide(ride.activity_id));
+                polyline.on('click', (e) => {
+                    if (e.originalEvent.ctrlKey || e.originalEvent.metaKey) {
+                        toggleRideSelection(ride.activity_id);
+                    } else {
+                        selectRide(ride.activity_id);
+                    }
+                });
                 
                 mapLayers.push(polyline);
             });
@@ -4252,20 +4313,40 @@
             updatePagination();
         }
         
+        // Multi-select support (Issue #240)
+        let selectedRideIds = [];
+        
         // Select a ride (highlight on map and table)
         function selectRide(activityId) {
-            selectedRideId = activityId;
-            
+            selectedRideIds = [activityId];
+            updateSelectionDisplay();
+        }
+        
+        // Toggle ride selection for multi-select
+        function toggleRideSelection(activityId) {
+            const index = selectedRideIds.indexOf(activityId);
+            if (index > -1) {
+                selectedRideIds.splice(index, 1);
+            } else {
+                selectedRideIds.push(activityId);
+            }
+            updateSelectionDisplay();
+        }
+        
+        // Update visual display of selected routes
+        function updateSelectionDisplay() {
             // Highlight on map with greyscale subduing
             mapLayers.forEach(layer => {
-                if (layer.activityId === activityId) {
+                if (selectedRideIds.includes(layer.activityId)) {
                     // Highlight selected route - brightest with original color
                     layer.setStyle({
                         color: layer.originalColor,
                         weight: 6,
                         opacity: 1
                     });
-                    layer.openPopup();
+                    if (selectedRideIds.length === 1) {
+                        layer.openPopup();
+                    }
                 } else {
                     // Grey out unselected routes
                     layer.setStyle({
@@ -4276,18 +4357,47 @@
                 }
             });
             
+            // Auto-zoom to selected routes
+            if (selectedRideIds.length > 0 && recommendationsMap) {
+                const selectedRides = filteredRides.filter(r => selectedRideIds.includes(r.activity_id));
+                const bounds = L.latLngBounds(selectedRides.flatMap(r => r.coordinates));
+                recommendationsMap.fitBounds(bounds, { padding: [50, 50] });
+            }
+            
             // Highlight in table
             const rows = document.querySelectorAll('#ridesTableBody tr');
             rows.forEach(row => {
-                row.classList.remove('table-active');
+                const activityId = parseInt(row.dataset.activityId);
+                if (selectedRideIds.includes(activityId)) {
+                    row.classList.add('table-active');
+                } else {
+                    row.classList.remove('table-active');
+                }
             });
-            const selectedRow = Array.from(rows).find(row => {
-                const name = row.cells[1].textContent;
-                return filteredRides.some(r => r.name === name && r.activity_id === activityId);
+        }
+        
+        // Sort rides by selected criteria
+        function sortRides() {
+            const sortBy = document.getElementById('sortBy').value;
+            
+            filteredRides.sort((a, b) => {
+                switch(sortBy) {
+                    case 'distance':
+                        return b.distance_km - a.distance_km;
+                    case 'time':
+                        return b.duration_hours - a.duration_hours;
+                    case 'elevation':
+                        return b.elevation - a.elevation;
+                    case 'uses':
+                        return (b.uses || 1) - (a.uses || 1);
+                    default:
+                        return 0;
+                }
             });
-            if (selectedRow) {
-                selectedRow.classList.add('table-active');
-            }
+            
+            currentPage = 1;
+            updateTable();
+            updatePagination();
         }
         
         // Fit map to all routes
@@ -4299,7 +4409,10 @@
         
         // Clear selection
         function clearMapSelection() {
-            selectedRideId = null;
+            selectedRideIds = [];
+            updateSelectionDisplay();
+            
+            // Reset all routes to original colors
             mapLayers.forEach(layer => {
                 // Restore original color
                 layer.setStyle({
