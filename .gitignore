@@ -20,3 +20,4 @@ rewrite_git_history.sh
 # Mock object directories (test artifacts)
 <Mock*
 <Magic*
+config/.trainerroad_encryption_key
