@@ -623,6 +623,125 @@
             align-items: center;
             gap: 4px;
             white-space: nowrap;
+        
+        /* Issue #247: Compact Route Card Component (56px height) */
+        .route-card-compact {
+            height: 56px;
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            background: white;
+            border: 1px solid #e0e0e0;
+            margin-bottom: 8px;
+            position: relative;
+        }
+        
+        .route-card-compact:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            transform: translateX(4px);
+        }
+        
+        .route-card-compact:focus {
+            outline: 3px solid #667eea;
+            outline-offset: 2px;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+        }
+        
+        .route-card-compact.selected {
+            background-color: #f0f7ff;
+            border-color: #667eea;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+        }
+        
+        .route-card-compact.optimal {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+            border-left: 4px solid #667eea;
+        }
+        
+        .route-card-compact-rank {
+            flex: 0 0 32px;
+            font-weight: bold;
+            color: #667eea;
+            font-size: 1.1em;
+        }
+        
+        .route-card-compact-name {
+            flex: 1;
+            font-weight: 600;
+            color: #333;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            padding-right: 8px;
+        }
+        
+        .route-card-compact-metrics {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            font-size: 0.85em;
+            color: #6c757d;
+        }
+        
+        .route-card-compact-metric {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            white-space: nowrap;
+        }
+        
+        .route-card-compact-metric-icon {
+            font-size: 1em;
+        }
+        
+        .route-card-compact-score {
+            font-weight: 600;
+            color: #667eea;
+        }
+        
+        .route-card-compact-weather {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.8em;
+        }
+        
+        .route-card-compact-weather.favorable {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        
+        .route-card-compact-weather.unfavorable {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        
+        .route-card-compact-weather.neutral {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        
+        /* Responsive adjustments for compact cards */
+        @media (max-width: 768px) {
+            .route-card-compact {
+                height: auto;
+                min-height: 56px;
+                flex-wrap: wrap;
+                padding: 10px 12px;
+            }
+            
+            .route-card-compact-metrics {
+                flex-wrap: wrap;
+                gap: 8px;
+                margin-top: 4px;
+            }
+        }
         }
         .metric-icon { font-size: 1rem; }
         .metric-value { font-weight: 500; color: #333; }
@@ -3903,6 +4022,151 @@
             card.addEventListener('click', function() {
                 // Remove active class from all cards
                 document.querySelectorAll('.next-commute-card').forEach(c => c.classList.remove('active'));
+        
+        // Issue #247: Compact Route Card Component Generator
+        /**
+         * Creates a compact route card (56px height) with all required information
+         * @param {Object} routeData - Route data object
+         * @param {number} routeData.rank - Route ranking (1-based)
+         * @param {string} routeData.id - Route ID
+         * @param {string} routeData.name - Route name
+         * @param {number} routeData.score - Route score
+         * @param {number} routeData.distance - Distance in meters
+         * @param {number} routeData.duration - Duration in seconds
+         * @param {number} routeData.elevation - Elevation gain in meters (optional)
+         * @param {Object} routeData.weather - Weather data (optional)
+         * @param {boolean} routeData.isOptimal - Whether this is the optimal route
+         * @param {Function} routeData.onClick - Click handler (optional)
+         * @returns {HTMLElement} The compact route card element
+         */
+        window.createCompactRouteCard = function(routeData) {
+            const card = document.createElement('div');
+            card.className = 'route-card-compact';
+            card.setAttribute('role', 'button');
+            card.setAttribute('tabindex', '0');
+            card.setAttribute('data-route-id', routeData.id);
+            card.setAttribute('aria-label', `Route ${routeData.rank}: ${routeData.name}, Score ${routeData.score.toFixed(1)}`);
+            
+            if (routeData.isOptimal) {
+                card.classList.add('optimal');
+                card.setAttribute('aria-label', `Optimal route: ${routeData.name}, Score ${routeData.score.toFixed(1)}`);
+            }
+            
+            // Rank
+            const rank = document.createElement('div');
+            rank.className = 'route-card-compact-rank';
+            rank.textContent = routeData.rank;
+            card.appendChild(rank);
+            
+            // Name
+            const name = document.createElement('div');
+            name.className = 'route-card-compact-name';
+            name.textContent = routeData.name;
+            name.title = routeData.name; // Full name on hover
+            card.appendChild(name);
+            
+            // Metrics container
+            const metrics = document.createElement('div');
+            metrics.className = 'route-card-compact-metrics';
+            
+            // Score
+            const scoreMetric = document.createElement('div');
+            scoreMetric.className = 'route-card-compact-metric';
+            scoreMetric.innerHTML = `
+                <span class="route-card-compact-metric-icon">⭐</span>
+                <span class="route-card-compact-score">${routeData.score.toFixed(1)}</span>
+            `;
+            metrics.appendChild(scoreMetric);
+            
+            // Distance
+            const distanceMetric = document.createElement('div');
+            distanceMetric.className = 'route-card-compact-metric';
+            const distanceKm = (routeData.distance / 1000).toFixed(1);
+            distanceMetric.innerHTML = `
+                <span class="route-card-compact-metric-icon">📏</span>
+                <span>${distanceKm} km</span>
+            `;
+            metrics.appendChild(distanceMetric);
+            
+            // Duration
+            const durationMetric = document.createElement('div');
+            durationMetric.className = 'route-card-compact-metric';
+            const durationMin = Math.round(routeData.duration / 60);
+            durationMetric.innerHTML = `
+                <span class="route-card-compact-metric-icon">⏱️</span>
+                <span>${durationMin} min</span>
+            `;
+            metrics.appendChild(durationMetric);
+            
+            // Elevation (optional)
+            if (routeData.elevation !== undefined && routeData.elevation > 0) {
+                const elevationMetric = document.createElement('div');
+                elevationMetric.className = 'route-card-compact-metric';
+                elevationMetric.innerHTML = `
+                    <span class="route-card-compact-metric-icon">⛰️</span>
+                    <span>${Math.round(routeData.elevation)} m</span>
+                `;
+                metrics.appendChild(elevationMetric);
+            }
+            
+            // Weather (optional)
+            if (routeData.weather) {
+                const weatherDiv = document.createElement('div');
+                weatherDiv.className = `route-card-compact-weather ${routeData.weather.favorability || 'neutral'}`;
+                weatherDiv.innerHTML = `
+                    <span>${routeData.weather.icon || '🌬️'}</span>
+                    <span>${routeData.weather.label || 'Wind'}</span>
+                `;
+                weatherDiv.title = routeData.weather.tooltip || '';
+                metrics.appendChild(weatherDiv);
+            }
+            
+            card.appendChild(metrics);
+            
+            // Click handler
+            const handleClick = routeData.onClick || function() {
+                card.classList.toggle('selected');
+                // Announce selection to screen readers
+                const isSelected = card.classList.contains('selected');
+                card.setAttribute('aria-pressed', isSelected);
+            };
+            
+            card.addEventListener('click', handleClick);
+            card.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleClick();
+                }
+            });
+            
+            return card;
+        };
+        
+        /**
+         * Example usage documentation for createCompactRouteCard:
+         * 
+         * const card = createCompactRouteCard({
+         *     rank: 1,
+         *     id: 'route-123',
+         *     name: 'Main Street to Downtown',
+         *     score: 87.5,
+         *     distance: 5200,  // meters
+         *     duration: 1200,  // seconds (20 min)
+         *     elevation: 45,   // meters (optional)
+         *     weather: {       // optional
+         *         favorability: 'favorable',  // 'favorable', 'unfavorable', 'neutral'
+         *         icon: '🌬️',
+         *         label: 'Tailwind',
+         *         tooltip: 'Favorable wind conditions'
+         *     },
+         *     isOptimal: true,
+         *     onClick: function() {
+         *         console.log('Route clicked:', this.dataset.routeId);
+         *     }
+         * });
+         * 
+         * document.getElementById('route-list').appendChild(card);
+         */
                 // Add active class to clicked card
                 this.classList.add('active');
                 
