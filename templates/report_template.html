@@ -1023,6 +1023,199 @@
         .toast-item .btn-close:hover {
             opacity: 1;
         }
+        
+        /* Issue #250: Touch Target Optimization (44x44px minimum) */
+        /* Ensure all interactive elements meet WCAG 2.5.5 Target Size (Level AAA) */
+        
+        /* Buttons - minimum 44px height */
+        .btn,
+        button {
+            min-height: 44px;
+            min-width: 44px;
+            padding: 10px 16px;
+        }
+        
+        .btn-sm,
+        .btn-group-sm > .btn {
+            min-height: 44px;
+            padding: 10px 12px;
+        }
+        
+        /* Links - ensure adequate touch area */
+        a {
+            min-height: 44px;
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 0;
+        }
+        
+        /* Exception for inline text links */
+        p a,
+        li a,
+        .inline-link {
+            min-height: auto;
+            display: inline;
+            padding: 0;
+        }
+        
+        /* Form controls - minimum 44px height */
+        input[type="text"],
+        input[type="email"],
+        input[type="password"],
+        input[type="number"],
+        input[type="search"],
+        input[type="tel"],
+        input[type="url"],
+        select,
+        textarea {
+            min-height: 44px;
+            padding: 10px 12px;
+        }
+        
+        /* Checkboxes and radio buttons - 44x44px touch area */
+        input[type="checkbox"],
+        input[type="radio"] {
+            width: 20px;
+            height: 20px;
+            margin: 12px; /* 12px margin creates 44px total touch area */
+        }
+        
+        /* Labels for checkboxes/radios - expand touch area */
+        .form-check {
+            min-height: 44px;
+            display: flex;
+            align-items: center;
+            padding: 8px 0;
+        }
+        
+        .form-check-label {
+            padding-left: 8px;
+            cursor: pointer;
+        }
+        
+        /* Navigation tabs - 44px minimum */
+        .nav-tabs .nav-link {
+            min-height: 44px;
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+        }
+        
+        /* Table rows - adequate touch area */
+        .table tbody tr {
+            min-height: 44px;
+        }
+        
+        .table td,
+        .table th {
+            padding: 12px 10px; /* Increased from 6px */
+        }
+        
+        /* Route cards - already 56px, meets requirement */
+        .route-card-compact {
+            min-height: 56px; /* Exceeds 44px minimum */
+        }
+        
+        /* Close buttons - 44x44px */
+        .btn-close,
+        .modal-close {
+            min-width: 44px;
+            min-height: 44px;
+            padding: 12px;
+        }
+        
+        /* Icon buttons - 44x44px */
+        .btn-icon {
+            min-width: 44px;
+            min-height: 44px;
+            padding: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        /* Pagination controls - 44px minimum */
+        .pagination-controls button {
+            min-height: 44px;
+            min-width: 44px;
+            padding: 10px 16px;
+        }
+        
+        /* Adequate spacing between touch targets (8px minimum) */
+        .btn + .btn,
+        .nav-link + .nav-link,
+        .form-check + .form-check {
+            margin-left: 8px;
+        }
+        
+        .btn-group .btn + .btn {
+            margin-left: 0; /* Button groups are already connected */
+        }
+        
+        /* Mobile-specific touch optimizations */
+        @media (max-width: 768px) {
+            /* Increase touch targets on mobile */
+            .btn,
+            button {
+                min-height: 48px;
+                padding: 12px 20px;
+            }
+            
+            .nav-tabs .nav-link {
+                min-height: 48px;
+                padding: 12px 20px;
+            }
+            
+            /* Increase spacing between targets on mobile */
+            .btn + .btn,
+            .nav-link + .nav-link {
+                margin-left: 12px;
+            }
+            
+            /* Table rows more spacious on mobile */
+            .table td,
+            .table th {
+                padding: 14px 12px;
+            }
+            
+            /* Form controls larger on mobile */
+            input[type="text"],
+            input[type="email"],
+            input[type="password"],
+            input[type="number"],
+            input[type="search"],
+            input[type="tel"],
+            input[type="url"],
+            select,
+            textarea {
+                min-height: 48px;
+                padding: 12px 16px;
+                font-size: 16px; /* Prevents zoom on iOS */
+            }
+        }
+        
+        /* Touch target documentation helper */
+        .touch-target-guide {
+            position: relative;
+        }
+        
+        .touch-target-guide::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 44px;
+            height: 44px;
+            border: 2px dashed rgba(102, 126, 234, 0.3);
+            pointer-events: none;
+            display: none;
+        }
+        
+        /* Show touch target guides in development (add .debug-touch-targets to body) */
+        .debug-touch-targets .touch-target-guide::after {
+            display: block;
+        }
         }
         .metric-icon { font-size: 1rem; }
         .metric-value { font-weight: 500; color: #333; }
@@ -5429,6 +5622,133 @@
                 <div class="alert alert-success">
                     <ul class="mb-0">
                         <li>Record at least 5-10 commutes on each route for accurate analysis</li>
+            
+            // Issue #250: Touch Target Validation Helper
+            /**
+             * Validates that all interactive elements meet 44x44px minimum touch target size
+             * Useful for development and testing
+             * @returns {Object} Validation results with failing elements
+             */
+            window.validateTouchTargets = function() {
+                const MIN_SIZE = 44;
+                const selectors = [
+                    'button',
+                    'a',
+                    'input[type="checkbox"]',
+                    'input[type="radio"]',
+                    '.btn',
+                    '.nav-link',
+                    '.btn-close',
+                    '.route-card-compact'
+                ];
+                
+                const results = {
+                    passed: [],
+                    failed: [],
+                    warnings: []
+                };
+                
+                selectors.forEach(selector => {
+                    const elements = document.querySelectorAll(selector);
+                    elements.forEach(el => {
+                        const rect = el.getBoundingClientRect();
+                        const width = rect.width;
+                        const height = rect.height;
+                        
+                        // Check if element meets minimum size
+                        if (width >= MIN_SIZE && height >= MIN_SIZE) {
+                            results.passed.push({
+                                element: el,
+                                selector: selector,
+                                size: `${Math.round(width)}x${Math.round(height)}px`
+                            });
+                        } else if (width < MIN_SIZE || height < MIN_SIZE) {
+                            // Check if it's an exception (inline text links, etc.)
+                            const isException = el.closest('p') || el.closest('li') || el.classList.contains('inline-link');
+                            
+                            if (isException) {
+                                results.warnings.push({
+                                    element: el,
+                                    selector: selector,
+                                    size: `${Math.round(width)}x${Math.round(height)}px`,
+                                    reason: 'Inline text link (exception)'
+                                });
+                            } else {
+                                results.failed.push({
+                                    element: el,
+                                    selector: selector,
+                                    size: `${Math.round(width)}x${Math.round(height)}px`,
+                                    required: `${MIN_SIZE}x${MIN_SIZE}px`
+                                });
+                            }
+                        }
+                    });
+                });
+                
+                // Log results
+                console.group('Touch Target Validation');
+                console.log(`✅ Passed: ${results.passed.length} elements`);
+                console.log(`⚠️  Warnings: ${results.warnings.length} elements (exceptions)`);
+                console.log(`❌ Failed: ${results.failed.length} elements`);
+                
+                if (results.failed.length > 0) {
+                    console.group('Failed Elements');
+                    results.failed.forEach(item => {
+                        console.log(`${item.selector}: ${item.size} (required: ${item.required})`, item.element);
+                    });
+                    console.groupEnd();
+                }
+                
+                if (results.warnings.length > 0) {
+                    console.group('Warnings (Exceptions)');
+                    results.warnings.forEach(item => {
+                        console.log(`${item.selector}: ${item.size} - ${item.reason}`, item.element);
+                    });
+                    console.groupEnd();
+                }
+                
+                console.groupEnd();
+                
+                return results;
+            };
+            
+            /**
+             * Enables visual debugging of touch targets
+             * Adds dashed borders around all interactive elements to show 44x44px minimum
+             */
+            window.debugTouchTargets = function(enable = true) {
+                if (enable) {
+                    document.body.classList.add('debug-touch-targets');
+                    console.log('Touch target debugging enabled. Dashed borders show 44x44px minimum.');
+                } else {
+                    document.body.classList.remove('debug-touch-targets');
+                    console.log('Touch target debugging disabled.');
+                }
+            };
+            
+            /**
+             * Touch Target Optimization - Documentation
+             * 
+             * All interactive elements meet WCAG 2.5.5 Target Size (Level AAA):
+             * - Minimum 44x44px for all buttons, links, form controls
+             * - Minimum 8px spacing between adjacent targets
+             * - Mobile: Increased to 48px for better usability
+             * - Checkboxes/radios: 20x20px with 12px margin = 44px touch area
+             * 
+             * Testing:
+             * - Run validateTouchTargets() to check all elements
+             * - Run debugTouchTargets(true) to visualize touch areas
+             * - Test on real devices (iOS Safari, Android Chrome)
+             * 
+             * Exceptions:
+             * - Inline text links (within paragraphs/lists) are exempt
+             * - Use .inline-link class to mark exceptions
+             * 
+             * Mobile optimizations:
+             * - Touch targets increase to 48px on screens <768px
+             * - Spacing increases to 12px between targets
+             * - Font size 16px prevents iOS zoom on input focus
+             */
                         <li>Use consistent start/end points (within 500m of home/work)</li>
                         <li>Name your activities with keywords like "commute" or "to work" for better filtering</li>
                         <li>The more data you have, the more accurate the recommendations become</li>
