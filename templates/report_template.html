@@ -6417,6 +6417,135 @@
                         if (desktopTab) {
                             desktopTab.click();
                         }
+    
+    <script>
+        // Issue #252: Swipe Gestures for Mobile Navigation
+        (function() {
+            let touchStartX = 0;
+            let touchStartY = 0;
+            let touchEndX = 0;
+            let touchEndY = 0;
+            let isSwiping = false;
+            
+            const SWIPE_THRESHOLD = 50; // Minimum distance for swipe
+            const SWIPE_VELOCITY_THRESHOLD = 0.3; // Minimum velocity
+            
+            // Get current active tab index
+            function getCurrentTabIndex() {
+                const tabs = ['home', 'routes', 'settings'];
+                const activeLink = document.querySelector('.mobile-bottom-nav-link.active');
+                if (activeLink) {
+                    return tabs.indexOf(activeLink.dataset.tab);
+                }
+                return 0;
+            }
+            
+            // Navigate to tab by index
+            function navigateToTab(index) {
+                const tabs = ['home', 'routes', 'settings'];
+                if (index >= 0 && index < tabs.length) {
+                    const link = document.querySelector(`.mobile-bottom-nav-link[data-tab="${tabs[index]}"]`);
+                    if (link) {
+                        link.click();
+                    }
+                }
+            }
+            
+            // Handle swipe gesture
+            function handleSwipe() {
+                const deltaX = touchEndX - touchStartX;
+                const deltaY = touchEndY - touchStartY;
+                const absDeltaX = Math.abs(deltaX);
+                const absDeltaY = Math.abs(deltaY);
+                
+                // Horizontal swipe (left/right navigation)
+                if (absDeltaX > absDeltaY && absDeltaX > SWIPE_THRESHOLD) {
+                    const currentIndex = getCurrentTabIndex();
+                    
+                    if (deltaX > 0) {
+                        // Swipe right - go to previous tab
+                        navigateToTab(currentIndex - 1);
+                    } else {
+                        // Swipe left - go to next tab
+                        navigateToTab(currentIndex + 1);
+                    }
+                }
+                
+                // Vertical swipe down (refresh)
+                if (absDeltaY > absDeltaX && deltaY > SWIPE_THRESHOLD && touchStartY < 100) {
+                    // Only trigger if swipe starts near top of screen
+                    window.location.reload();
+                }
+            }
+            
+            // Touch event handlers
+            function handleTouchStart(e) {
+                // Don't interfere with map gestures
+                if (e.target.closest('.map-container') || e.target.closest('#nextCommuteMap')) {
+                    return;
+                }
+                
+                touchStartX = e.changedTouches[0].screenX;
+                touchStartY = e.changedTouches[0].screenY;
+                isSwiping = true;
+            }
+            
+            function handleTouchMove(e) {
+                if (!isSwiping) return;
+                
+                // Don't interfere with map gestures
+                if (e.target.closest('.map-container') || e.target.closest('#nextCommuteMap')) {
+                    return;
+                }
+                
+                touchEndX = e.changedTouches[0].screenX;
+                touchEndY = e.changedTouches[0].screenY;
+            }
+            
+            function handleTouchEnd(e) {
+                if (!isSwiping) return;
+                
+                // Don't interfere with map gestures
+                if (e.target.closest('.map-container') || e.target.closest('#nextCommuteMap')) {
+                    isSwiping = false;
+                    return;
+                }
+                
+                touchEndX = e.changedTouches[0].screenX;
+                touchEndY = e.changedTouches[0].screenY;
+                
+                handleSwipe();
+                isSwiping = false;
+            }
+            
+            // Initialize swipe gestures on mobile only
+            function initSwipeGestures() {
+                if (window.innerWidth <= 768) {
+                    document.addEventListener('touchstart', handleTouchStart, { passive: true });
+                    document.addEventListener('touchmove', handleTouchMove, { passive: true });
+                    document.addEventListener('touchend', handleTouchEnd, { passive: true });
+                }
+            }
+            
+            // Reinitialize on resize
+            let resizeTimeout;
+            window.addEventListener('resize', function() {
+                clearTimeout(resizeTimeout);
+                resizeTimeout = setTimeout(function() {
+                    if (window.innerWidth <= 768) {
+                        initSwipeGestures();
+                    }
+                }, 250);
+            });
+            
+            // Initialize on page load
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', initSwipeGestures);
+            } else {
+                initSwipeGestures();
+            }
+        })();
+    </script>
                     });
                 });
                 
