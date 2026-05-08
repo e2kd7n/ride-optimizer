@@ -844,6 +844,11 @@
         }
     </style>
 </head>
+    <!-- Issue #243: Skip Navigation Links (WCAG 2.4.1) -->
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+    <a href="#route-list" class="skip-link">Skip to route list</a>
+    <a href="#route-map" class="skip-link">Skip to map</a>
+    
 <body>
     <!-- Anti-Piracy Protection -->
     <script>
@@ -1008,6 +1013,7 @@
         <div class="tab-content" id="reportTabContent" style="margin-top: 12px;">
             <!-- Home Tab (formerly Commute Routes) -->
             <div class="tab-pane fade show active" id="home" role="tabpanel" aria-labelledby="home-tab">
+                <div id="main-content" tabindex="-1"></div>
 
         <!-- Time-Aware Next Commute Recommendations -->
         {% if next_commutes %}
@@ -2371,6 +2377,7 @@
                 <div class="row" id="resultsContainer">
                     <!-- Left Column: Rides List (360px) -->
                     <div class="col-12 col-lg-4" style="max-width: 360px;">
+                        <div id="route-list" tabindex="-1"></div>
                         <div class="card">
                             <div class="card-header d-flex justify-content-between align-items-center">
                                 <div>
@@ -2425,6 +2432,7 @@
                     
                     <!-- Right Column: Interactive Map (640px) -->
                     <div class="col-12 col-lg-8">
+                        <div id="route-map" tabindex="-1"></div>
                         <div class="card">
                             <div class="card-header d-flex justify-content-between align-items-center">
                                 <h5 class="mb-0">🗺️ Routes Map</h5>
