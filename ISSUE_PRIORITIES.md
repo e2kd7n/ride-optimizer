@@ -1,33 +1,20 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-05-08 16:41:49 UTC / 2026-05-08 11:41:49 CDT
+**Last Updated:** 2026-05-09 23:02:52 UTC / 2026-05-09 18:02:52 CDT
 
 This file reflects the current state of GitHub issues by priority. Issues are managed via GitHub labels (P0-critical, P1-high, P2-medium, P3-low, P4-future).
 
 ## 🔴 P0 - CRITICAL (Drop Everything)
 Issues that make the application unusable or cause data loss.
 
-- #237 - Epic: UI/UX Redesign - Lightweight Web App Optimization
-- #246 - Add Unsaved Changes Warning
-- #245 - Add Single-Level Undo Functionality with Toast
-- #244 - Implement Debounced Auto-Save for User Preferences
-- #243 - Add Skip Navigation Links
-- #242 - Implement Visible Focus Indicators (2px Minimum)
-- #241 - Add ARIA Labels to All Interactive Elements
-- #240 - Redesign Routes Page with Side-by-Side Layout
-- #239 - Optimize Home Page for 1024x768 Viewport (No Scroll)
-- #238 - Consolidate Navigation from 4 Tabs to 2 Tabs
-
+**No P0 issues currently open** ✅
 
 ## 🔴 P1 - HIGH (Current Sprint)
 Issues that significantly impact core functionality or user experience.
 
-- #252 - Add Swipe Gestures for Mobile Navigation
-- #251 - Implement Mobile Bottom Navigation
-- #250 - Optimize Touch Targets (44px Minimum)
-- #249 - Add Toast Notification System
-- #248 - Implement Skeleton Loading States
-- #247 - Create Compact Route Card Component
+- #256 - UI/UX Refinements: Design Critique Follow-up
+- #255 - Add Comprehensive E2E Testing for UI/UX Features
+- #254 - Implement Animated GIF Tutorials for Key Features
 - #226 - Fix Planner Error Handling Test
 - #224 - Fix Route Library Search API Response Format
 - #223 - Fix Mobile Navigation Elements
@@ -52,13 +39,13 @@ Issues that significantly impact core functionality or user experience.
 - #144 - 🌐 EPIC: Personal Web Platform Migration (v3.0.0)
 - #119 - Update TECHNICAL_SPEC.md with comprehensive implementation details
 - #118 - Re-enable geocoding after rate limit expires
+- #117 - Fix map zoom to show start and finish when route is selected
+- #102 - Refactor report template to extract JavaScript into separate files
+- #91 - Add Rate Limiting to API Endpoints
 
 ## 🟡 P2 - MEDIUM (Next Sprint)
 Important improvements that enhance functionality but don't block core workflows.
 
-- #255 - Add Comprehensive E2E Testing for UI/UX Features
-- #254 - Implement Animated GIF Tutorials for Key Features
-- #253 - Add Help Modal with Keyboard Shortcuts
 - #227 - Improve Test Coverage for New Features
 - #209 - Implement graceful degradation for unavailable services
 - #207 - Implement dependency injection pattern for better testability
@@ -86,6 +73,9 @@ Important improvements that enhance functionality but don't block core workflows
 - #128 - Fix "Unnamed Activity" display in Route Comparison uses modal
 - #127 - Reduce excessive whitespace between report sections
 - #122 - [LOW PRIORITY] Grey out unselected routes on map when route is clicked
+- #121 - [LOW PRIORITY] Color code route names to match map line colors
+- #116 - Add visual weather icons and color coding
+- #115 - Display optimal departure time suggestions
 
 ## 🟢 P3 - LOW (Backlog)
 Nice-to-have improvements and minor UX enhancements.

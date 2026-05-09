@@ -1,6 +1,96 @@
 # AGENTS.md
 
 This file provides guidance to agents when working with code in this repository.
+## ⚠️ CRITICAL ARCHITECTURE RULES ⚠️
+
+### Product Vision: WEB APPLICATION (NOT CLI Tool)
+
+**THE PRODUCT IS A WEB APPLICATION. Period.**
+
+- ✅ **Active System:** `launch.py` (port 8083) + `static/` files + `app/services/`
+- ❌ **Deprecated System:** `main.py` + `templates/` (archived to `archive/deprecated_cli_system/`)
+
+### Where to Make Changes
+
+#### ✅ FOR WEB APP UI/UX WORK (CORRECT):
+```
+static/dashboard.html       # Home page
+static/routes.html          # Routes library
+static/commute.html         # Commute recommendations
+static/planner.html         # Long ride planner
+static/css/main.css         # Styles
+static/js/*.js              # Client-side logic
+launch.py                   # API endpoints
+app/services/*.py           # Business logic
+```
+
+#### ❌ NEVER EDIT THESE FOR UI/UX (WRONG):
+```
+archive/deprecated_cli_system/templates/*  # DEPRECATED - archived
+main.py                                     # CLI tool - not for UI work
+```
+
+### The Epic #237 Mistake (May 2026)
+
+**What Happened:**
+- Epic #237 (UI/UX Redesign, 14 issues, 40-60 hours) was implemented in `templates/report_template.html`
+- This is the DEPRECATED CLI system
+- The web app uses `static/` files
+- Result: All work was wasted and needs to be redone
+
+**Cost:** 40-60 hours of misdirected development
+
+**Root Cause:** Insufficient deprecation warnings (now fixed)
+
+**Prevention:**
+1. Templates archived to `archive/deprecated_cli_system/`
+2. Strong warnings added to `main.py`
+3. This section added to AGENTS.md
+4. Issue #257 created to port Epic #237 to correct system
+
+### Architecture Decision Tree
+
+**If implementing a UI/UX feature:**
+1. Is it for the web app? → Edit `static/` files
+2. Is it for API endpoints? → Edit `launch.py`
+3. Is it for business logic? → Edit `app/services/`
+4. Is it for CLI data analysis? → Edit `main.py` (but NOT templates)
+
+**If you see "templates/" in an issue:**
+- STOP and ask for clarification
+- The issue may be misdirected
+- Templates are deprecated for UI work
+
+### Web App Architecture (ACTIVE)
+```
+User Browser
+    ↓
+launch.py (Flask API on port 8083)
+    ↓
+Serves: static/*.html (client-side rendering)
+    ↓
+Calls: /api/weather, /api/recommendation, /api/routes, /api/status
+    ↓
+Uses: app/services/*.py (business logic)
+    ↓
+Reads: data/*.json (cached data)
+```
+
+### CLI Tool Architecture (DEPRECATED FOR UI)
+```
+User Terminal
+    ↓
+main.py --analyze
+    ↓
+Uses: src/*.py (analysis logic)
+    ↓
+Generates: archive/deprecated_cli_system/templates/report_template.html
+    ↓
+Outputs: output/report.html (static file)
+```
+
+**The CLI tool is ONLY for data analysis, NOT for UI/UX work.**
+
 
 ## Workflow Orchestration
 
