@@ -1,5 +1,26 @@
 #!/usr/bin/env python3
 """
+⚠️ DEPRECATED CLI TOOL - FOR DATA ANALYSIS ONLY ⚠️
+
+This CLI tool is DEPRECATED for UI/UX work.
+
+DO NOT implement UI/UX features in templates/report_template.html
+The templates/ directory has been archived to archive/deprecated_cli_system/
+
+FOR WEB APP UI/UX WORK:
+- Edit files in static/ directory (static/dashboard.html, static/routes.html, etc.)
+- Edit launch.py for API endpoints
+- Edit app/services/ for business logic
+
+This CLI tool (main.py) is only for:
+- Data fetching from Strava API
+- Route analysis and optimization
+- Generating static reports for personal use
+
+The product vision is a WEB APPLICATION (launch.py), not a CLI tool.
+
+---
+
 Strava Commute Route Analyzer - Main Entry Point
 
 Analyzes Strava cycling activities to determine optimal commute routes
