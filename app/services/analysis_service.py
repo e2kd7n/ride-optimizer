@@ -397,6 +397,7 @@ class AnalysisService:
         Returns:
             List of RouteGroup objects, or empty list if no analysis has been run
         """
+        self._load_from_cache()
         return self._route_groups if self._route_groups else []
     
     def get_long_rides(self) -> List[LongRide]:
@@ -406,6 +407,7 @@ class AnalysisService:
         Returns:
             List of LongRide objects, or empty list if no analysis has been run
         """
+        self._load_from_cache()
         return self._long_rides if self._long_rides else []
     
     def get_activities(self) -> List[Activity]:
@@ -415,6 +417,7 @@ class AnalysisService:
         Returns:
             List of Activity objects, or empty list if no data has been fetched
         """
+        self._load_from_cache()
         return self._activities if self._activities else []
     
     def get_locations(self) -> Tuple[Optional[Location], Optional[Location]]:
@@ -424,6 +427,7 @@ class AnalysisService:
         Returns:
             Tuple of (home_location, work_location), or (None, None) if not found
         """
+        self._load_from_cache()
         return (self._home_location, self._work_location)
     
     def generate_dashboard_overview_map(self) -> Optional[str]:

@@ -18,7 +18,7 @@
     <style>
         /* Page-specific styles */
         .map-container {
-            height: 500px;
+            height: 400px;
             width: 100%;
             border-radius: 0.375rem;
         }
@@ -26,6 +26,19 @@
         @media (max-width: 767px) {
             .map-container {
                 height: 300px;
+            }
+        }
+        
+        /* Viewport optimization for 1024x768 */
+        @media (min-width: 768px) and (max-height: 768px) {
+            .map-container {
+                height: 350px;
+            }
+            h1 {
+                margin-bottom: 1rem !important;
+            }
+            .card {
+                margin-bottom: 0.75rem !important;
             }
         }
     </style>
@@ -258,7 +271,7 @@
                                     </div>
                                 </div>
                                 <div class="card-body p-0">
-                                    <div id="routes-map" class="map-container" style="height: 600px;" role="img" aria-label="Map showing selected routes"></div>
+                                    <div id="routes-map" class="map-container" style="height: min(600px, 70vh);" role="img" aria-label="Map showing selected routes"></div>
                                 </div>
                             </div>
                         </div>
