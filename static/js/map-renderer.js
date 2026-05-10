@@ -45,15 +45,9 @@ class MapRenderer {
             }
 
             // Add feature layers (for multi-route maps)
+            // All routes are shown by default, no layer control needed
             if (mapData.layers && mapData.layers.length > 0) {
-                this.addFeatureLayers(mapData.layers);
-            }
-
-            // Add layer control if we have layers
-            if (Object.keys(this.layers).length > 1) {
-                this.layerControl = L.control.layers(null, this.layers, {
-                    collapsed: false
-                }).addTo(this.map);
+                this.addFeatureLayersAsRoutes(mapData.layers);
             }
 
             console.log(`Map rendered successfully for ${this.pageType}`);
@@ -196,13 +190,12 @@ class MapRenderer {
     }
 
     /**
-     * Add feature layers (for multi-route maps with layer control)
+     * Add feature layers as direct routes (no layer control)
+     * All routes are shown by default with tooltips on hover
      */
-    addFeatureLayers(layers) {
+    addFeatureLayersAsRoutes(layers) {
         layers.forEach(layerData => {
-            const featureGroup = L.featureGroup();
-
-            // Add routes to feature group
+            // Add routes directly to map
             if (layerData.routes) {
                 layerData.routes.forEach(route => {
                     const polyline = L.polyline(route.coordinates, {
@@ -211,19 +204,25 @@ class MapRenderer {
                         opacity: route.opacity || 0.8
                     });
 
+                    // Always show tooltip on hover (per design guidelines)
+                    if (route.tooltip) {
+                        polyline.bindTooltip(route.tooltip, {
+                            permanent: false,
+                            direction: 'top',
+                            className: 'route-tooltip'
+                        });
+                    }
+
+                    // Optional popup on click
                     if (route.popup_html) {
                         polyline.bindPopup(route.popup_html, { maxWidth: 320 });
                     }
 
-                    if (route.tooltip) {
-                        polyline.bindTooltip(route.tooltip);
-                    }
-
-                    polyline.addTo(featureGroup);
+                    polyline.addTo(this.map);
                 });
             }
 
-            // Add markers to feature group
+            // Add markers directly to map
             if (layerData.markers) {
                 layerData.markers.forEach(marker => {
                     const icon = this.createIcon(marker.icon);
@@ -237,17 +236,9 @@ class MapRenderer {
                         leafletMarker.bindTooltip(marker.tooltip);
                     }
 
-                    leafletMarker.addTo(featureGroup);
+                    leafletMarker.addTo(this.map);
                 });
             }
-
-            // Add to map if show is true
-            if (layerData.show) {
-                featureGroup.addTo(this.map);
-            }
-
-            // Store in layers for layer control
-            this.layers[layerData.name] = featureGroup;
         });
     }
 

@@ -1,0 +1,53 @@
+bug	Something isn't working	#d73a4a
+documentation	Improvements or additions to documentation	#0075ca
+duplicate	This issue or pull request already exists	#cfd3d7
+enhancement	New feature or request	#a2eeef
+help wanted	Extra attention is needed	#008672
+good first issue	Good for newcomers	#7057ff
+invalid	This doesn't seem right	#e4e669
+question	Further information is requested	#d876e3
+wontfix	This will not be worked on	#ffffff
+P0-critical	Critical priority - immediate attention	#B60205
+P1-high	High priority - next sprint	#D93F0B
+P2-medium	Medium priority - backlog	#FBCA04
+P3-low	Low priority - nice to have	#0E8A16
+architecture	Architecture and infrastructure changes	#0E8A16
+P4-future	Future consideration	#C5DEF5
+performance	Performance improvements	#FBCA04
+testing	Testing and QA	#D4C5F9
+security	Security vulnerabilities and hardening	#B60205
+backend	Backend changes	#1D76DB
+frontend	Frontend changes	#1D76DB
+infrastructure	Infrastructure and system resources	#5319e7
+accessibility	Accessibility improvements	#D93F0B
+design	Design and UI	#0E8A16
+ux	User experience improvements	#FBCA04
+deployment	Deployment and DevOps	#1D76DB
+docker	Docker and containerization	#0052cc
+ci/cd	Continuous Integration/Continuous Deployment	#1d76db
+raspberry-pi	Raspberry Pi specific	#D93F0B
+blocking-launch	Cannot launch without fixing this	#B60205
+quick-win	Quick win - high impact, low effort	#0E8A16
+data-loss-prevention	Prevents user data loss	#B60205
+epic	Epic issue tracking multiple related issues	#8B5CF6
+navigation	Navigation and routing changes	#1D76DB
+breaking-change	Breaking changes requiring migration	#B60205
+a11y	Accessibility (WCAG compliance)	#D93F0B
+keyboard-navigation	Keyboard navigation support	#FBCA04
+mobile	Mobile-specific features	#1D76DB
+component	Reusable component	#0E8A16
+error-recovery	Error recovery and data loss prevention	#D93F0B
+layout	Layout and viewport optimization	#1D76DB
+routes	Route-related features	#0E8A16
+touch	Touch interaction	#FBCA04
+WCAG	WCAG compliance	#B60205
+gestures	Gesture support	#FBCA04
+help	Help and documentation	#0075ca
+e2e	End-to-end testing	#D4C5F9
+onboarding	User onboarding	#0E8A16
+loading	Loading states	#FBCA04
+quality	Quality assurance	#D4C5F9
+notifications	Notifications and toasts	#0E8A16
+undo	Undo functionality	#FBCA04
+toast	Toast notifications	#0E8A16
+viewport-optimization	Viewport optimization	#1D76DB

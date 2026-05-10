@@ -1357,3 +1357,33 @@ input[type="radio"] {
 }
 
 /* Made with Bob - Epic #237 Port Complete */
+
+
+/* ===== Map Route Tooltips ===== */
+/* Custom styling for route tooltips on hover */
+.leaflet-tooltip.route-tooltip {
+    background-color: rgba(0, 0, 0, 0.85);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    white-space: nowrap;
+}
+
+.leaflet-tooltip.route-tooltip::before {
+    border-top-color: rgba(0, 0, 0, 0.85);
+}
+
+/* Hide Leaflet layer control (not needed per design guidelines) */
+.leaflet-control-layers {
+    display: none !important;
+}
+
+/* Route polyline hover effects */
+.leaflet-interactive:hover {
+    cursor: pointer;
+    filter: brightness(1.1);
+}
