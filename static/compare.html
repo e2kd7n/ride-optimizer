@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compare Routes - Ride Optimizer</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+    <link rel="stylesheet" href="/css/main.css">
+    <style>
+        .comparison-table {
+            overflow-x: auto;
+        }
+        .comparison-table th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            position: sticky;
+            left: 0;
+            z-index: 10;
+        }
+        .comparison-table td:first-child {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            position: sticky;
+            left: 0;
+            z-index: 5;
+        }
+        .route-map-small {
+            height: 200px;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        .metric-highlight {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+        .winner-badge {
+            background-color: #28a745;
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-bicycle"></i> Ride Optimizer
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item"><a class="nav-link" href="/">Home</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="/routes.html">Routes</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/settings.html">Settings</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="container mt-4">
+        <div class="row mb-3">
+            <div class="col-12">
+                <a href="/routes.html" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left"></i> Back to Routes
+                </a>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-12">
+                <h2><i class="bi bi-arrow-left-right"></i> Route Comparison</h2>
+                <p class="text-muted">Compare routes side-by-side</p>
+            </div>
+        </div>
+
+        <div id="comparison-live-region" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
+
+        <div id="comparison-content">
+            <div class="text-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading comparison...</span>
+                </div>
+                <p class="mt-3 text-muted">Loading routes for comparison...</p>
+            </div>
+        </div>
+    </main>
+
+    <footer class="mt-5 py-3 bg-light">
+        <div class="container text-center text-muted">
+            <small>Ride Optimizer v0.11.0 - Smart Static Architecture</small>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <script src="/js/common.js"></script>
+    <script src="/js/api-client.js"></script>
+    <script>
+        (function() {
+            let mapInstances = [];
+
+            function byId(id) {
+                return document.getElementById(id);
+            }
+
+            function announce(message) {
+                const liveRegion = byId('comparison-live-region');
+                if (liveRegion) {
+                    liveRegion.textContent = message;
+                }
+            }
+
+            function getRouteIds() {
+                const params = new URLSearchParams(window.location.search);
+                const ids = params.get('ids');
+                return ids ? ids.split(',') : [];
+            }
+
+            function formatDuration(durationMinutes) {
+                const totalMinutes = Math.round(Number(durationMinutes || 0));
+                const hours = Math.floor(totalMinutes / 60);
+                const minutes = totalMinutes % 60;
+                return hours > 0 ? `${hours}h ${minutes}m` : `${totalMinutes} min`;
+            }
+
+            function getDifficultyBadge(difficulty) {
+                const colors = {
+                    'easy': 'success',
+                    'moderate': 'warning',
+                    'hard': 'danger'
+                };
+                return `<span class="badge bg-${colors[difficulty] || 'secondary'}">${difficulty || 'N/A'}</span>`;
+            }
+
+            function renderMap(containerId, coordinates) {
+                const mapElement = byId(containerId);
+                if (!mapElement || !Array.isArray(coordinates) || !coordinates.length) {
+                    return;
+                }
+
+                const map = L.map(containerId);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors',
+                    maxZoom: 19
+                }).addTo(map);
+
+                const polyline = L.polyline(coordinates, {
+                    color: '#007bff',
+                    weight: 4,
+                    opacity: 0.8
+                }).addTo(map);
+
+                map.fitBounds(polyline.getBounds(), { padding: [10, 10] });
+                mapInstances.push(map);
+            }
+
+            function findBestValue(routes, key, preferLower = true) {
+                const values = routes.map(r => Number(r[key] || 0));
+                return preferLower ? Math.min(...values) : Math.max(...values);
+            }
+
+            function renderComparison(routes) {
+                if (!routes || routes.length === 0) {
+                    byId('comparison-content').innerHTML = `
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle"></i> No routes selected for comparison.
+                        </div>
+                    `;
+                    return;
+                }
+
+                // Find best values for highlighting
+                const bestDistance = findBestValue(routes, 'distance', true);
+                const bestDuration = findBestValue(routes, 'duration', true);
+                const bestElevation = findBestValue(routes, 'elevation_gain', true);
+                const bestSpeed = findBestValue(routes, 'average_speed', false);
+
+                const content = `
+                    <div class="row g-4">
+                        ${routes.map((route, index) => `
+                            <div class="col-12 col-md-${routes.length === 2 ? '6' : '4'}">
+                                <div class="card h-100">
+                                    <div class="card-body">
+                                        <h3 class="h5 mb-3">${route.name}</h3>
+                                        <div id="map-${index}" class="route-map-small"></div>
+                                        
+                                        <div class="row g-2 mb-3">
+                                            <div class="col-6">
+                                                <div class="text-center p-2 border rounded">
+                                                    <div class="small text-muted">Distance</div>
+                                                    <div class="metric-highlight">${window.formatDistance(route.distance)}</div>
+                                                    ${Number(route.distance) === bestDistance ? '<div class="winner-badge mt-1">Shortest</div>' : ''}
+                                                </div>
+                                            </div>
+                                            <div class="col-6">
+                                                <div class="text-center p-2 border rounded">
+                                                    <div class="small text-muted">Duration</div>
+                                                    <div class="metric-highlight">${formatDuration(route.duration)}</div>
+                                                    ${Number(route.duration) === bestDuration ? '<div class="winner-badge mt-1">Fastest</div>' : ''}
+                                                </div>
+                                            </div>
+                                            <div class="col-6">
+                                                <div class="text-center p-2 border rounded">
+                                                    <div class="small text-muted">Elevation</div>
+                                                    <div class="metric-highlight">${window.formatElevation(route.elevation_gain || route.elevation)}</div>
+                                                    ${Number(route.elevation_gain || route.elevation) === bestElevation ? '<div class="winner-badge mt-1">Flattest</div>' : ''}
+                                                </div>
+                                            </div>
+                                            <div class="col-6">
+                                                <div class="text-center p-2 border rounded">
+                                                    <div class="small text-muted">Avg Speed</div>
+                                                    <div class="metric-highlight">${window.formatSpeed(route.average_speed || 0)}</div>
+                                                    ${Number(route.average_speed) === bestSpeed ? '<div class="winner-badge mt-1">Fastest</div>' : ''}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="mb-2">
+                                            <strong>Difficulty:</strong> ${getDifficultyBadge(route.difficulty)}
+                                        </div>
+                                        <div class="mb-2">
+                                            <strong>Type:</strong> ${route.sport_type || route.type || 'Ride'}
+                                        </div>
+                                        <div class="mb-2">
+                                            <strong>Uses:</strong> ${route.uses || route.frequency || 0} times
+                                        </div>
+                                        
+                                        <a href="/route-detail.html?id=${route.id}" class="btn btn-outline-primary btn-sm w-100 mt-3">
+                                            <i class="bi bi-eye"></i> View Details
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+
+                    <div class="card mt-4">
+                        <div class="card-body">
+                            <h3 class="h5 mb-3">Detailed Comparison</h3>
+                            <div class="table-responsive comparison-table">
+                                <table class="table table-bordered table-hover mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Metric</th>
+                                            ${routes.map(r => `<th>${r.name}</th>`).join('')}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>Distance</td>
+                                            ${routes.map(r => `<td>${window.formatDistance(r.distance)}</td>`).join('')}
+                                        </tr>
+                                        <tr>
+                                            <td>Duration</td>
+                                            ${routes.map(r => `<td>${formatDuration(r.duration)}</td>`).join('')}
+                                        </tr>
+                                        <tr>
+                                            <td>Elevation Gain</td>
+                                            ${routes.map(r => `<td>${window.formatElevation(r.elevation_gain || r.elevation)}</td>`).join('')}
+                                        </tr>
+                                        <tr>
+                                            <td>Average Speed</td>
+                                            ${routes.map(r => `<td>${window.formatSpeed(r.average_speed || 0)}</td>`).join('')}
+                                        </tr>
+                                        <tr>
+                                            <td>Difficulty</td>
+                                            ${routes.map(r => `<td>${getDifficultyBadge(r.difficulty)}</td>`).join('')}
+                                        </tr>
+                                        <tr>
+                                            <td>Sport Type</td>
+                                            ${routes.map(r => `<td>${r.sport_type || r.type || 'Ride'}</td>`).join('')}
+                                        </tr>
+                                        <tr>
+                                            <td>Times Used</td>
+                                            ${routes.map(r => `<td>${r.uses || r.frequency || 0}</td>`).join('')}
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                byId('comparison-content').innerHTML = content;
+
+                // Render maps after DOM is updated
+                setTimeout(() => {
+                    routes.forEach((route, index) => {
+                        if (route.coordinates) {
+                            renderMap(`map-${index}`, route.coordinates);
+                        }
+                    });
+                }, 100);
+
+                announce(`Comparing ${routes.length} routes`);
+            }
+
+            async function loadComparison() {
+                const routeIds = getRouteIds();
+                
+                if (routeIds.length === 0) {
+                    byId('comparison-content').innerHTML = `
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle"></i> No routes selected for comparison.
+                            <a href="/routes.html" class="alert-link">Go back to routes</a>
+                        </div>
+                    `;
+                    return;
+                }
+
+                try {
+                    // Fetch all routes
+                    const response = await window.apiClient.getRoutes();
+                    const allRoutes = Array.isArray(response.routes) ? response.routes : [];
+                    
+                    // Filter to selected routes
+                    const selectedRoutes = allRoutes.filter(r => routeIds.includes(r.id));
+                    
+                    if (selectedRoutes.length === 0) {
+                        throw new Error('Selected routes not found');
+                    }
+
+                    renderComparison(selectedRoutes);
+                } catch (error) {
+                    console.error('Failed to load comparison:', error);
+                    byId('comparison-content').innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle"></i> Failed to load route comparison.
+                        </div>
+                    `;
+                    announce('Failed to load comparison');
+                }
+            }
+
+            document.addEventListener('DOMContentLoaded', loadComparison);
+        })();
+    </script>
+</body>
+</html>

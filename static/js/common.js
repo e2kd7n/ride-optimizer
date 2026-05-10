@@ -526,6 +526,128 @@ window.unfavoriteRouteWithUndo = function(routeId) {
     }
 };
 
-console.log('✓ common.js loaded - Toast, auto-save, and undo utilities ready');
+// Unit conversion utilities
+/**
+ * Get user's preferred unit system from settings
+ * @returns {string} 'metric' or 'imperial'
+ */
+window.getUnitSystem = function() {
+    const settings = JSON.parse(localStorage.getItem('rideOptimizerSettings') || '{}');
+    return settings.unitSystem || 'imperial'; // Default to imperial
+};
+
+/**
+ * Convert kilometers to miles
+ * @param {number} km - Distance in kilometers
+ * @returns {number} Distance in miles
+ */
+window.kmToMiles = function(km) {
+    return km * 0.621371;
+};
+
+/**
+ * Convert miles to kilometers
+ * @param {number} miles - Distance in miles
+ * @returns {number} Distance in kilometers
+ */
+window.milesToKm = function(miles) {
+    return miles / 0.621371;
+};
+
+/**
+ * Convert meters to feet
+ * @param {number} meters - Elevation in meters
+ * @returns {number} Elevation in feet
+ */
+window.metersToFeet = function(meters) {
+    return meters * 3.28084;
+};
+
+/**
+ * Convert feet to meters
+ * @param {number} feet - Elevation in feet
+ * @returns {number} Elevation in meters
+ */
+window.feetToMeters = function(feet) {
+    return feet / 3.28084;
+};
+
+/**
+ * Format distance based on user's unit preference
+ * @param {number} distanceKm - Distance in kilometers
+ * @param {number} decimals - Number of decimal places (default: 1)
+ * @returns {string} Formatted distance with unit
+ */
+window.formatDistance = function(distanceKm, decimals = 1) {
+    const unitSystem = getUnitSystem();
+    if (unitSystem === 'imperial') {
+        const miles = kmToMiles(distanceKm);
+        return `${miles.toFixed(decimals)} mi`;
+    }
+    return `${Number(distanceKm).toFixed(decimals)} km`;
+};
+
+/**
+ * Format elevation based on user's unit preference
+ * @param {number} elevationMeters - Elevation in meters
+ * @param {number} decimals - Number of decimal places (default: 0)
+ * @returns {string} Formatted elevation with unit
+ */
+window.formatElevation = function(elevationMeters, decimals = 0) {
+    const unitSystem = getUnitSystem();
+    if (unitSystem === 'imperial') {
+        const feet = metersToFeet(elevationMeters);
+        return `${feet.toFixed(decimals)} ft`;
+    }
+    return `${Number(elevationMeters).toFixed(decimals)} m`;
+};
+
+/**
+ * Format temperature based on user's unit preference
+ * @param {number} tempCelsius - Temperature in Celsius
+ * @param {number} decimals - Number of decimal places (default: 1)
+ * @returns {string} Formatted temperature with unit
+ */
+window.formatTemperature = function(tempCelsius, decimals = 1) {
+    const unitSystem = getUnitSystem();
+    if (unitSystem === 'imperial') {
+        const fahrenheit = (tempCelsius * 9/5) + 32;
+        return `${fahrenheit.toFixed(decimals)}°F`;
+    }
+    return `${Number(tempCelsius).toFixed(decimals)}°C`;
+};
+
+/**
+ * Format speed based on user's unit preference
+ * @param {number} speedKmh - Speed in km/h
+ * @param {number} decimals - Number of decimal places (default: 1)
+ * @returns {string} Formatted speed with unit
+ */
+window.formatSpeed = function(speedKmh, decimals = 1) {
+    const unitSystem = getUnitSystem();
+    if (unitSystem === 'imperial') {
+        const mph = kmToMiles(speedKmh);
+        return `${mph.toFixed(decimals)} mph`;
+    }
+    return `${Number(speedKmh).toFixed(decimals)} km/h`;
+};
+
+/**
+ * Get distance unit label
+ * @returns {string} 'mi' or 'km'
+ */
+window.getDistanceUnit = function() {
+    return getUnitSystem() === 'imperial' ? 'mi' : 'km';
+};
+
+/**
+ * Get elevation unit label
+ * @returns {string} 'ft' or 'm'
+ */
+window.getElevationUnit = function() {
+    return getUnitSystem() === 'imperial' ? 'ft' : 'm';
+};
+
+console.log('✓ common.js loaded - Toast, auto-save, undo, and unit conversion utilities ready');
 
 // Made with Bob

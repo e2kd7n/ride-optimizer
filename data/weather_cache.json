@@ -38,20 +38,20 @@
     },
     "41.9874_-87.6545": {
       "weather_data": {
-        "timestamp": "2026-05-09T22:00",
-        "temp_c": 10.9,
-        "wind_speed_kph": 10.1,
-        "wind_gust_kph": 18.7,
-        "wind_direction_deg": 356,
-        "wind_direction_cardinal": "N",
-        "humidity": 68,
+        "timestamp": "2026-05-10T07:30",
+        "temp_c": 8.5,
+        "wind_speed_kph": 6.0,
+        "wind_gust_kph": 9.0,
+        "wind_direction_deg": 327,
+        "wind_direction_cardinal": "NNW",
+        "humidity": 70,
         "precipitation_mm": 0.0,
         "lat": 41.98736,
         "lon": -87.65454,
         "comfort_score": 1.0,
         "cycling_favorability": "favorable"
       },
-      "timestamp": "2026-05-09T22:11:26.927680",
+      "timestamp": "2026-05-10T07:38:06.788610",
       "location_name": "Home"
     },
     "41.9871_-87.6554": {
