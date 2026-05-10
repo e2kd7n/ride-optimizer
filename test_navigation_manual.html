@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Navigation Test</title>
+    <script>
+        window.onload = function() {
+            console.log('Testing navigation at http://localhost:8083');
+            
+            // Test 1: Check if page loads
+            fetch('http://localhost:8083/')
+                .then(r => r.text())
+                .then(html => {
+                    console.log('✓ Page loads');
+                    
+                    // Test 2: Check for Bootstrap
+                    if (html.includes('bootstrap')) {
+                        console.log('✓ Bootstrap included');
+                    } else {
+                        console.error('✗ Bootstrap missing');
+                    }
+                    
+                    // Test 3: Check for tab buttons
+                    if (html.includes('data-bs-toggle="tab"')) {
+                        console.log('✓ Tab buttons present');
+                    } else {
+                        console.error('✗ Tab buttons missing');
+                    }
+                    
+                    // Test 4: Check for tab panes
+                    if (html.includes('role="tabpanel"')) {
+                        console.log('✓ Tab panes present');
+                    } else {
+                        console.error('✗ Tab panes missing');
+                    }
+                    
+                    console.log('\nOpen http://localhost:8083 in browser and check console for errors');
+                })
+                .catch(e => console.error('✗ Failed to load page:', e));
+        };
+    </script>
+</head>
+<body>
+    <h1>Navigation Test</h1>
+    <p>Check browser console for results</p>
+    <p><a href="http://localhost:8083" target="_blank">Open App</a></p>
+</body>
+</html>
