@@ -767,9 +767,25 @@ def kill_existing_server(port):
         logger.warning(f"Error checking for existing server: {e}")
 
 
+def run_server(port):
+    """Run the Flask server (called in subprocess)."""
+    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+
+
 if __name__ == '__main__':
     # Development server
     import os
+    import sys
+    import subprocess
+    
+    # Check if running as server subprocess
+    if len(sys.argv) > 1 and sys.argv[1] == '--serve':
+        port = int(sys.argv[2]) if len(sys.argv) > 2 else 8083
+        logger.info(f"Running server on port {port}")
+        run_server(port)
+        sys.exit(0)
+    
+    # Main launcher process
     port = int(os.environ.get('PORT', 8083))
     
     # Kill any existing server on this port
@@ -783,10 +799,44 @@ if __name__ == '__main__':
     logger.info("  GET /api/status - System health and freshness")
     logger.info(f"Server will run on port {port}")
     
-    # Open browser in a separate thread after server starts
-    threading.Thread(target=open_browser, args=(port,), daemon=True).start()
+    # Start server in background subprocess
+    with open('/tmp/ride-optimizer-server.log', 'a') as log_file:
+        server_process = subprocess.Popen(
+            [sys.executable, __file__, '--serve', str(port)],
+            stdout=log_file,
+            stderr=log_file,
+            start_new_session=True
+        )
+        
+        logger.info(f"Server started with PID {server_process.pid}")
+        logger.info(f"Server logs: /tmp/ride-optimizer-server.log")
     
-    app.run(host='0.0.0.0', port=port, debug=False)
+    # Wait for server to start
+    time.sleep(2)
+    
+    # Open browser
+    url = f'http://localhost:{port}'
+    try:
+        import platform
+        system = platform.system()
+        
+        if system == 'Darwin':  # macOS
+            os.system(f'open -a "Google Chrome" {url} 2>/dev/null || open {url}')
+        elif system == 'Windows':
+            os.system(f'start chrome {url} 2>nul || start {url}')
+        elif system == 'Linux':
+            os.system(f'google-chrome {url} 2>/dev/null || xdg-open {url}')
+        else:
+            webbrowser.open(url)
+        
+        logger.info(f"Browser opened at {url}")
+    except Exception as e:
+        logger.warning(f"Could not open browser: {e}")
+        logger.info(f"Please open your browser manually to: {url}")
+    
+    # Exit cleanly
+    logger.info("Launch complete. Server running in background.")
+    sys.exit(0)
 
 
 # Made with Bob
