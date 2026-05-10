@@ -100,6 +100,24 @@ class APIClient {
     }
 
     /**
+     * Get route details by route ID
+     */
+    async getRouteDetails(routeId, routeType = null) {
+        const params = new URLSearchParams();
+
+        if (routeType) {
+            params.append('type', routeType);
+        }
+
+        const queryString = params.toString();
+        const endpoint = queryString
+            ? `/routes/${encodeURIComponent(routeId)}?${queryString}`
+            : `/routes/${encodeURIComponent(routeId)}`;
+
+        return this.fetch(endpoint);
+    }
+
+    /**
      * Toggle route favorite status
      */
     async toggleFavorite(routeId) {

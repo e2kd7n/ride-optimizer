@@ -6,10 +6,29 @@
     <title>Route Details - Ride Optimizer</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+    <link rel="stylesheet" href="/css/main.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        #route-map {
+            min-height: 320px;
+            border-radius: 0.5rem;
+        }
+        .metric-card {
+            height: 100%;
+        }
+        .detail-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.35rem 0.65rem;
+            border-radius: 999px;
+            background: #f8f9fa;
+            margin: 0 0.5rem 0.5rem 0;
+        }
+    </style>
 </head>
 <body>
-    <!-- Navigation -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
         <div class="container-fluid">
             <a class="navbar-brand" href="/">
@@ -20,26 +39,15 @@
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav">
-                    <li class="nav-item">
-                        <a class="nav-link" href="/dashboard.html">Dashboard</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/commute.html">Commute</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/planner.html">Planner</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/routes.html">Routes</a>
-                    </li>
+                    <li class="nav-item"><a class="nav-link" href="/">Home</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="/routes.html">Routes</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/settings.html">Settings</a></li>
                 </ul>
             </div>
         </div>
     </nav>
 
-    <!-- Main Content -->
-    <div class="container mt-4">
-        <!-- Back Button -->
+    <main class="container mt-4">
         <div class="row mb-3">
             <div class="col-12">
                 <a href="/routes.html" class="btn btn-outline-secondary">
@@ -48,138 +56,413 @@
             </div>
         </div>
 
-        <!-- Route Details -->
+        <div id="route-detail-live-region" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
+
         <div id="route-details">
             <div class="text-center py-5">
                 <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">Loading...</span>
+                    <span class="visually-hidden">Loading route details...</span>
                 </div>
                 <p class="mt-3 text-muted">Loading route details...</p>
             </div>
         </div>
-    </div>
+    </main>
 
-    <!-- Footer -->
     <footer class="mt-5 py-3 bg-light">
         <div class="container text-center text-muted">
             <small>Ride Optimizer v0.11.0 - Smart Static Architecture</small>
         </div>
     </footer>
 
-    <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="/static/js/api-client.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <script src="/js/common.js"></script>
+    <script src="/js/api-client.js"></script>
     <script>
-        // Get route ID from URL
-        const urlParams = new URLSearchParams(window.location.search);
-        const routeId = urlParams.get('id');
+        (function() {
+            let mapInstance = null;
 
-        if (!routeId) {
-            document.getElementById('route-details').innerHTML = `
-                <div class="alert alert-danger">
-                    <i class="bi bi-exclamation-triangle"></i> No route ID specified
-                </div>
-            `;
-        } else {
-            loadRouteDetails(routeId);
-        }
+            function byId(id) {
+                return document.getElementById(id);
+            }
 
-        async function loadRouteDetails(routeId) {
-            try {
-                // For now, fetch all routes and find the one we need
-                const data = await window.apiClient.getRoutes();
-                const route = data.routes.find(r => r.id === routeId);
+            function announce(message) {
+                const liveRegion = byId('route-detail-live-region');
+                if (liveRegion) {
+                    liveRegion.textContent = message;
+                }
+            }
 
-                if (!route) {
-                    document.getElementById('route-details').innerHTML = `
-                        <div class="alert alert-warning">
-                            <i class="bi bi-exclamation-triangle"></i> Route not found
-                        </div>
-                    `;
+            function getRouteParams() {
+                const params = new URLSearchParams(window.location.search);
+                return {
+                    id: params.get('id'),
+                    type: params.get('type')
+                };
+            }
+
+            function formatDuration(durationMinutes) {
+                const totalMinutes = Math.round(Number(durationMinutes || 0));
+                const hours = Math.floor(totalMinutes / 60);
+                const minutes = totalMinutes % 60;
+                return hours > 0 ? `${hours}h ${minutes}m` : `${totalMinutes} min`;
+            }
+
+            function renderError(message, variant = 'danger') {
+                byId('route-details').innerHTML = `
+                    <div class="alert alert-${variant}" role="alert">
+                        <i class="bi bi-exclamation-triangle"></i> ${message}
+                    </div>
+                `;
+                announce(message);
+            }
+
+            function renderMap(coordinates) {
+                const mapElement = byId('route-map');
+                if (!mapElement || !Array.isArray(coordinates) || !coordinates.length) {
                     return;
                 }
 
-                // Display route details
-                document.getElementById('route-details').innerHTML = `
-                    <div class="row">
-                        <div class="col-12">
-                            <h2>${route.name}</h2>
-                            ${route.is_favorite ? '<span class="badge bg-warning text-dark"><i class="bi bi-star-fill"></i> Favorite</span>' : ''}
-                        </div>
-                    </div>
+                if (mapInstance) {
+                    mapInstance.remove();
+                }
 
-                    <div class="row mt-4">
-                        <div class="col-md-3">
-                            <div class="card">
-                                <div class="card-body text-center">
-                                    <i class="bi bi-rulers fs-1 text-primary"></i>
-                                    <h5 class="mt-2">${route.distance.toFixed(1)} mi</h5>
-                                    <p class="text-muted mb-0">Distance</p>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="card">
-                                <div class="card-body text-center">
-                                    <i class="bi bi-graph-up fs-1 text-success"></i>
-                                    <h5 class="mt-2">${route.elevation_gain} ft</h5>
-                                    <p class="text-muted mb-0">Elevation Gain</p>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="card">
-                                <div class="card-body text-center">
-                                    <i class="bi bi-bicycle fs-1 text-info"></i>
-                                    <h5 class="mt-2">${route.sport_type || 'Ride'}</h5>
-                                    <p class="text-muted mb-0">Type</p>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="card">
-                                <div class="card-body text-center">
-                                    <i class="bi bi-arrow-repeat fs-1 text-warning"></i>
-                                    <h5 class="mt-2">${route.uses || 0}</h5>
-                                    <p class="text-muted mb-0">Times Used</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                mapInstance = L.map('route-map');
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors',
+                    maxZoom: 19
+                }).addTo(mapInstance);
 
-                    <div class="row mt-4">
-                        <div class="col-12">
-                            <div class="card">
-                                <div class="card-body">
-                                    <h5 class="card-title">Route Information</h5>
-                                    <p class="text-muted">
-                                        This route has been ridden ${route.uses || 0} time${route.uses !== 1 ? 's' : ''}.
-                                        ${route.type === 'commute' ? 'This is a commute route.' : 'This is a long ride.'}
-                                    </p>
-                                    ${route.is_plus_route ? '<p class="text-success"><i class="bi bi-star-fill"></i> This is a PLUS route (longer variant)</p>' : ''}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                const polyline = L.polyline(coordinates, {
+                    color: '#007bff',
+                    weight: 5,
+                    opacity: 0.85
+                }).addTo(mapInstance);
 
-                    <div class="row mt-4">
-                        <div class="col-12">
-                            <div class="alert alert-info">
-                                <i class="bi bi-info-circle"></i> 
-                                <strong>Coming Soon:</strong> Map visualization, elevation profile, and detailed statistics will be available in a future update.
-                            </div>
-                        </div>
-                    </div>
-                `;
-            } catch (error) {
-                console.error('Failed to load route details:', error);
-                document.getElementById('route-details').innerHTML = `
-                    <div class="alert alert-danger">
-                        <i class="bi bi-exclamation-triangle"></i> Failed to load route details. Please try again later.
-                    </div>
-                `;
+                mapInstance.fitBounds(polyline.getBounds(), { padding: [20, 20] });
+
+                const start = coordinates[0];
+                const end = coordinates[coordinates.length - 1];
+
+                L.marker(start).addTo(mapInstance).bindTooltip('Start');
+                L.marker(end).addTo(mapInstance).bindTooltip('End');
             }
-        }
+
+            function renderPerformanceCharts(route) {
+                // Only show if we have route history with multiple data points
+                if (!Array.isArray(route.routes) || route.routes.length < 2) {
+                    return;
+                }
+
+                const metricsCard = byId('performance-metrics-card');
+                if (metricsCard) {
+                    metricsCard.style.display = 'block';
+                }
+
+                // Sort routes by timestamp
+                const sortedRoutes = [...route.routes].sort((a, b) =>
+                    new Date(a.timestamp) - new Date(b.timestamp)
+                );
+
+                // Prepare data
+                const labels = sortedRoutes.map(r => {
+                    const date = new Date(r.timestamp);
+                    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                });
+
+                const speedData = sortedRoutes.map(r => r.average_speed || 0);
+                const durationData = sortedRoutes.map(r => (r.duration || 0) / 60); // Convert to minutes
+                const heartrateData = sortedRoutes.map(r => r.average_heartrate || null);
+                const powerData = sortedRoutes.map(r => r.average_watts || null);
+
+                // Chart configuration
+                const chartConfig = {
+                    type: 'line',
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: false
+                            }
+                        }
+                    }
+                };
+
+                // Speed Chart
+                const speedCtx = byId('speed-chart');
+                if (speedCtx) {
+                    new Chart(speedCtx, {
+                        ...chartConfig,
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Avg Speed (km/h)',
+                                data: speedData,
+                                borderColor: '#007bff',
+                                backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                                tension: 0.3,
+                                fill: true
+                            }]
+                        }
+                    });
+                }
+
+                // Duration Chart
+                const durationCtx = byId('duration-chart');
+                if (durationCtx) {
+                    new Chart(durationCtx, {
+                        ...chartConfig,
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Duration (min)',
+                                data: durationData,
+                                borderColor: '#28a745',
+                                backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                                tension: 0.3,
+                                fill: true
+                            }]
+                        }
+                    });
+                }
+
+                // Heart Rate Chart (if data available)
+                const heartrateCtx = byId('heartrate-chart');
+                if (heartrateCtx && heartrateData.some(v => v !== null)) {
+                    new Chart(heartrateCtx, {
+                        ...chartConfig,
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Avg Heart Rate (bpm)',
+                                data: heartrateData,
+                                borderColor: '#dc3545',
+                                backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                                tension: 0.3,
+                                fill: true,
+                                spanGaps: true
+                            }]
+                        }
+                    });
+                } else if (heartrateCtx) {
+                    heartrateCtx.parentElement.innerHTML = '<p class="text-muted text-center">No heart rate data available</p>';
+                }
+
+                // Power Chart (if data available)
+                const powerCtx = byId('power-chart');
+                if (powerCtx && powerData.some(v => v !== null)) {
+                    new Chart(powerCtx, {
+                        ...chartConfig,
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Avg Power (watts)',
+                                data: powerData,
+                                borderColor: '#ffc107',
+                                backgroundColor: 'rgba(255, 193, 7, 0.1)',
+                                tension: 0.3,
+                                fill: true,
+                                spanGaps: true
+                            }]
+                        }
+                    });
+                } else if (powerCtx) {
+                    powerCtx.parentElement.innerHTML = '<p class="text-muted text-center">No power data available</p>';
+                }
+            }
+
+            function renderRoute(route) {
+                document.title = `${route.name} - Route Details`;
+
+                const weatherMarkup = route.weather
+                    ? `
+                        <div class="card mt-4">
+                            <div class="card-body">
+                                <h2 class="h5">Weather</h2>
+                                <pre class="mb-0 small">${JSON.stringify(route.weather, null, 2)}</pre>
+                            </div>
+                        </div>
+                    `
+                    : '';
+
+                const routeHistoryMarkup = Array.isArray(route.routes) && route.routes.length
+                    ? `
+                        <div class="card mt-4">
+                            <div class="card-body">
+                                <h2 class="h5">Recent route records</h2>
+                                <div class="table-responsive">
+                                    <table class="table table-sm align-middle mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th scope="col">Activity</th>
+                                                <th scope="col">Distance</th>
+                                                <th scope="col">Duration</th>
+                                                <th scope="col">Elevation</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${route.routes.slice(0, 10).map(item => `
+                                                <tr>
+                                                    <td>${item.activity_name || item.activity_id || 'Route record'}</td>
+                                                    <td>${window.formatDistance(item.distance)}</td>
+                                                    <td>${formatDuration(item.duration)}</td>
+                                                    <td>${window.formatElevation(item.elevation)}</td>
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    `
+                    : '';
+
+                byId('route-details').innerHTML = `
+                    <section aria-labelledby="route-title">
+                        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3 mb-4">
+                            <div>
+                                <h1 id="route-title" class="mb-2">${route.name}</h1>
+                                <div>
+                                    <span class="detail-chip"><i class="bi bi-signpost-split"></i> ${route.type || 'route'}</span>
+                                    ${route.direction ? `<span class="detail-chip"><i class="bi bi-arrow-left-right"></i> ${route.direction}</span>` : ''}
+                                    ${route.sport_type ? `<span class="detail-chip"><i class="bi bi-bicycle"></i> ${route.sport_type}</span>` : ''}
+                                    ${route.difficulty ? `<span class="detail-chip"><i class="bi bi-bar-chart"></i> ${route.difficulty}</span>` : ''}
+                                    ${route.is_favorite ? `<span class="detail-chip"><i class="bi bi-star-fill text-warning"></i> Favorite</span>` : ''}
+                                </div>
+                            </div>
+                            <div class="text-md-end text-muted">
+                                <div>${route.is_plus_route ? 'PLUS route' : ''}</div>
+                            </div>
+                        </div>
+
+                        <div class="row g-3">
+                            <div class="col-6 col-lg-3">
+                                <div class="card metric-card">
+                                    <div class="card-body text-center">
+                                        <i class="bi bi-rulers fs-2 text-primary"></i>
+                                        <div class="small text-muted mt-2">Distance</div>
+                                        <div class="fw-semibold">${window.formatDistance(route.distance)}</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-6 col-lg-3">
+                                <div class="card metric-card">
+                                    <div class="card-body text-center">
+                                        <i class="bi bi-clock fs-2 text-info"></i>
+                                        <div class="small text-muted mt-2">Duration</div>
+                                        <div class="fw-semibold">${formatDuration(route.duration)}</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-6 col-lg-3">
+                                <div class="card metric-card">
+                                    <div class="card-body text-center">
+                                        <i class="bi bi-graph-up-arrow fs-2 text-success"></i>
+                                        <div class="small text-muted mt-2">Elevation</div>
+                                        <div class="fw-semibold">${window.formatElevation(route.elevation)}</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-6 col-lg-3">
+                                <div class="card metric-card">
+                                    <div class="card-body text-center">
+                                        <i class="bi bi-arrow-repeat fs-2 text-warning"></i>
+                                        <div class="small text-muted mt-2">Uses</div>
+                                        <div class="fw-semibold">${route.uses || 0}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card mt-4">
+                            <div class="card-body">
+                                <h2 class="h5">Map</h2>
+                                <div id="route-map" aria-label="Interactive route map"></div>
+                            </div>
+                        </div>
+
+                        ${weatherMarkup}
+                        ${routeHistoryMarkup}
+                        
+                        <!-- Performance Metrics Charts -->
+                        <div class="card mt-4" id="performance-metrics-card" style="display: none;">
+                            <div class="card-body">
+                                <h2 class="h5 mb-4">
+                                    <i class="bi bi-graph-up"></i> Performance Trends
+                                </h2>
+                                <div class="row g-4">
+                                    <div class="col-12 col-lg-6">
+                                        <h3 class="h6 text-muted mb-3">Average Speed Over Time</h3>
+                                        <canvas id="speed-chart" style="max-height: 250px;"></canvas>
+                                    </div>
+                                    <div class="col-12 col-lg-6">
+                                        <h3 class="h6 text-muted mb-3">Duration Trends</h3>
+                                        <canvas id="duration-chart" style="max-height: 250px;"></canvas>
+                                    </div>
+                                    <div class="col-12 col-lg-6">
+                                        <h3 class="h6 text-muted mb-3">Heart Rate (if available)</h3>
+                                        <canvas id="heartrate-chart" style="max-height: 250px;"></canvas>
+                                    </div>
+                                    <div class="col-12 col-lg-6">
+                                        <h3 class="h6 text-muted mb-3">Power Output (if available)</h3>
+                                        <canvas id="power-chart" style="max-height: 250px;"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                `;
+
+                if (Array.isArray(route.coordinates) && route.coordinates.length > 1) {
+                    renderMap(route.coordinates);
+                } else {
+                    const mapCard = byId('route-map');
+                    if (mapCard) {
+                        mapCard.outerHTML = '<div class="alert alert-warning mt-2 mb-0">Map unavailable for this route.</div>';
+                    }
+                }
+
+                // Render performance charts
+                renderPerformanceCharts(route);
+
+                announce(`Loaded route details for ${route.name}`);
+            }
+
+            async function loadRouteDetails() {
+                const params = getRouteParams();
+
+                if (!params.id) {
+                    renderError('No route ID specified.', 'danger');
+                    return;
+                }
+
+                try {
+                    const response = await window.apiClient.getRouteDetails(params.id, params.type);
+                    if (!response || response.status !== 'success' || !response.route) {
+                        renderError('Route not found.', 'warning');
+                        return;
+                    }
+
+                    renderRoute(response.route);
+                } catch (error) {
+                    if (String(error.message || '').includes('404')) {
+                        renderError('Route not found.', 'warning');
+                        return;
+                    }
+
+                    console.error('Failed to load route details:', error);
+                    renderError('Failed to load route details. Please try again later.', 'danger');
+                }
+            }
+
+            document.addEventListener('DOMContentLoaded', loadRouteDetails);
+        })();
     </script>
 </body>
 </html>
