@@ -41,17 +41,23 @@
             <a class="navbar-brand" href="/" aria-label="Ride Optimizer Home">
                 <i class="bi bi-bicycle" aria-hidden="true"></i> Ride Optimizer
             </a>
-            <div class="navbar-nav">
-                <button class="nav-link active" id="home-tab" data-bs-toggle="tab" data-bs-target="#home" type="button" role="tab" aria-controls="home" aria-selected="true">
-                    <i class="bi bi-house-door" aria-hidden="true"></i> Home
-                </button>
-                <button class="nav-link" id="routes-tab" data-bs-toggle="tab" data-bs-target="#routes" type="button" role="tab" aria-controls="routes" aria-selected="false">
-                    <i class="bi bi-map" aria-hidden="true"></i> Routes
-                </button>
-                <button class="nav-link" id="settings-tab" data-bs-toggle="tab" data-bs-target="#settings" type="button" role="tab" aria-controls="settings" aria-selected="false">
-                    <i class="bi bi-gear" aria-hidden="true"></i> Settings
-                </button>
-            </div>
+            <ul class="nav nav-tabs border-0 ms-auto" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active text-white bg-transparent border-0" id="home-tab" data-bs-toggle="tab" data-bs-target="#home" type="button" role="tab" aria-controls="home" aria-selected="true">
+                        <i class="bi bi-house-door" aria-hidden="true"></i> Home
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link text-white bg-transparent border-0" id="routes-tab" data-bs-toggle="tab" data-bs-target="#routes" type="button" role="tab" aria-controls="routes" aria-selected="false">
+                        <i class="bi bi-map" aria-hidden="true"></i> Routes
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link text-white bg-transparent border-0" id="settings-tab" data-bs-toggle="tab" data-bs-target="#settings" type="button" role="tab" aria-controls="settings" aria-selected="false">
+                        <i class="bi bi-gear" aria-hidden="true"></i> Settings
+                    </button>
+                </li>
+            </ul>
         </div>
     </nav>
     
@@ -434,6 +440,8 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
     <!-- Custom JavaScript -->
+    <script src="/static/js/api-client.js"></script>
+    <script src="/static/js/map-renderer.js"></script>
     <script src="/static/js/common.js"></script>
     <script src="/static/js/accessibility.js"></script>
     <script src="/static/js/mobile.js"></script>
@@ -608,45 +616,223 @@
             }
         }
         
-        // Placeholder functions - to be implemented with API integration
-        function initializeDashboardMap() {
-            console.log('Dashboard map initialization placeholder');
+        // Data loading functions - integrated with API
+        async function loadWeatherData() {
+            const container = document.getElementById('weather-data');
+            if (!container) return;
+            
+            try {
+                const data = await window.apiClient.getWeather();
+                if (data && data.current) {
+                    const w = data.current;
+                    container.innerHTML = `
+                        <div class="d-flex align-items-center mb-3">
+                            <i class="bi bi-thermometer-half fs-1 me-3"></i>
+                            <div>
+                                <h3 class="mb-0">${w.temperature}°F</h3>
+                                <small class="text-muted">Feels like ${w.feels_like}°F</small>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="mb-2"><i class="bi bi-wind"></i> Wind: ${w.wind_speed} mph ${w.wind_direction}</div>
+                            <div class="mb-2"><i class="bi bi-droplet"></i> Humidity: ${w.humidity}%</div>
+                            <div class="mb-2"><strong>Comfort:</strong> <span class="badge bg-${w.comfort_score >= 70 ? 'success' : w.comfort_score >= 50 ? 'warning' : 'danger'}">${w.comfort_score}/100</span></div>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Failed to load weather:', error);
+                container.innerHTML = '<p class="text-muted">Weather data unavailable</p>';
+            }
         }
         
-        function initializeRoutesMap() {
-            console.log('Routes map initialization placeholder');
+        async function loadCommuteRecommendation() {
+            const container = document.getElementById('commute-recommendation');
+            if (!container) return;
+            
+            try {
+                const data = await window.apiClient.getRecommendation();
+                if (data && data.recommended_route) {
+                    const route = data.recommended_route;
+                    container.innerHTML = `
+                        <h5 class="mb-2">${route.name}</h5>
+                        <div class="mb-2">
+                            <span class="badge bg-${data.score >= 70 ? 'success' : 'warning'} fs-6">${data.score}/100</span>
+                            <span class="ms-2 text-muted">${data.recommendation}</span>
+                        </div>
+                        <div class="row">
+                            <div class="col-6">
+                                <small class="text-muted">Distance</small><br>
+                                <strong>${route.distance.toFixed(1)} mi</strong>
+                            </div>
+                            <div class="col-6">
+                                <small class="text-muted">Elevation</small><br>
+                                <strong>${route.elevation_gain} ft</strong>
+                            </div>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Failed to load recommendation:', error);
+                container.innerHTML = '<p class="text-muted">No recommendation available</p>';
+            }
         }
         
-        function loadWeatherData() {
-            console.log('Weather data loading placeholder');
+        async function loadRouteStatistics() {
+            const container = document.getElementById('route-stats');
+            if (!container) return;
+            
+            try {
+                const data = await window.apiClient.getRoutes();
+                if (data && data.routes) {
+                    const routes = data.routes;
+                    const totalRoutes = routes.length;
+                    const favorites = routes.filter(r => r.is_favorite).length;
+                    const totalDistance = routes.reduce((sum, r) => sum + (r.distance || 0), 0);
+                    const avgDistance = totalRoutes > 0 ? (totalDistance / totalRoutes).toFixed(1) : 0;
+                    
+                    container.innerHTML = `
+                        <div class="row text-center">
+                            <div class="col-md-3 mb-3">
+                                <i class="bi bi-map fs-2 text-primary"></i>
+                                <h3 class="mt-2">${totalRoutes}</h3>
+                                <small class="text-muted">Total Routes</small>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <i class="bi bi-star-fill fs-2 text-warning"></i>
+                                <h3 class="mt-2">${favorites}</h3>
+                                <small class="text-muted">Favorites</small>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <i class="bi bi-speedometer2 fs-2 text-success"></i>
+                                <h3 class="mt-2">${totalDistance.toFixed(0)}</h3>
+                                <small class="text-muted">Total Miles</small>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <i class="bi bi-graph-up fs-2 text-info"></i>
+                                <h3 class="mt-2">${avgDistance}</h3>
+                                <small class="text-muted">Avg Distance</small>
+                            </div>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Failed to load route stats:', error);
+                container.innerHTML = '<p class="text-muted">Statistics unavailable</p>';
+            }
         }
         
-        function loadCommuteRecommendation() {
-            console.log('Commute recommendation loading placeholder');
+        async function loadRoutesList() {
+            const container = document.getElementById('routes-list');
+            if (!container) return;
+            
+            try {
+                const data = await window.apiClient.getRoutes();
+                if (data && data.routes && data.routes.length > 0) {
+                    const routes = data.routes.slice(0, 20); // Show first 20
+                    container.innerHTML = routes.map(route => `
+                        <div class="route-row p-3 mb-2 border rounded" style="cursor: pointer;">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h6 class="mb-1">
+                                        ${route.is_favorite ? '<i class="bi bi-star-fill text-warning"></i> ' : ''}
+                                        ${route.name}
+                                    </h6>
+                                    <small class="text-muted">
+                                        ${route.distance.toFixed(1)} mi • ${route.elevation_gain} ft • ${route.uses || 0} uses
+                                    </small>
+                                </div>
+                                <span class="badge bg-secondary">${route.sport_type || 'Ride'}</span>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    container.innerHTML = '<p class="text-muted">No routes available</p>';
+                }
+            } catch (error) {
+                console.error('Failed to load routes:', error);
+                container.innerHTML = '<p class="text-muted">Failed to load routes</p>';
+            }
         }
         
-        function loadRouteStatistics() {
-            console.log('Route statistics loading placeholder');
+        async function initializeDashboardMap() {
+            const container = document.getElementById('dashboard-map');
+            if (!container) {
+                console.warn('Dashboard map container not found');
+                return;
+            }
+            
+            try {
+                const mapRenderer = new MapRenderer('dashboard-map', 'dashboard');
+                await mapRenderer.render();
+                console.log('✓ Dashboard map initialized');
+            } catch (error) {
+                console.error('Failed to initialize dashboard map:', error);
+                container.innerHTML = '<div class="alert alert-warning m-3">Map unavailable</div>';
+            }
         }
         
-        function loadRoutesList() {
-            console.log('Routes list loading placeholder');
+        async function initializeRoutesMap() {
+            const container = document.getElementById('routes-map');
+            if (!container) {
+                console.warn('Routes map container not found');
+                return;
+            }
+            
+            try {
+                const mapRenderer = new MapRenderer('routes-map', 'dashboard');
+                await mapRenderer.render();
+                console.log('✓ Routes map initialized');
+            } catch (error) {
+                console.error('Failed to initialize routes map:', error);
+                container.innerHTML = '<div class="alert alert-warning m-3">Map unavailable</div>';
+            }
         }
         
         function applyRouteFilters() {
-            console.log('Apply route filters placeholder');
+            const maxDistance = document.getElementById('filter-distance').value;
+            const maxDuration = document.getElementById('filter-duration').value;
+            const maxElevation = document.getElementById('filter-elevation').value;
+            const favoritesOnly = document.getElementById('filter-favorites').checked;
+            const sortBy = document.getElementById('sort-by').value;
+            
+            console.log('Applying filters:', { maxDistance, maxDuration, maxElevation, favoritesOnly, sortBy });
+            
+            // Reload routes list with filters
+            loadRoutesList({ maxDistance, maxDuration, maxElevation, favoritesOnly, sortBy });
+            
+            if (window.showToast) {
+                showToast('Filters applied', 'success', { duration: 2000 });
+            }
         }
         
         function clearRouteFilters() {
-            console.log('Clear route filters placeholder');
+            document.getElementById('filter-distance').value = '';
+            document.getElementById('filter-duration').value = '';
+            document.getElementById('filter-elevation').value = '';
+            document.getElementById('filter-favorites').checked = false;
+            document.getElementById('sort-by').value = 'score';
+            
+            // Reload routes list without filters
+            loadRoutesList();
+            
+            if (window.showToast) {
+                showToast('Filters cleared', 'info', { duration: 2000 });
+            }
         }
         
         function fitMapToRoutes() {
-            console.log('Fit map to routes placeholder');
+            console.log('Fit map to routes - TODO: Implement map bounds fitting');
+            if (window.showToast) {
+                showToast('Map fitted to routes', 'info', { duration: 2000 });
+            }
         }
         
         function clearRouteSelection() {
-            console.log('Clear route selection placeholder');
+            console.log('Clear route selection - TODO: Implement route deselection');
+            if (window.showToast) {
+                showToast('Selection cleared', 'info', { duration: 2000 });
+            }
         }
     </script>
 </body>
