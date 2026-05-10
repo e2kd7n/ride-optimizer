@@ -1,25 +1,26 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-05-10 03:41:00 UTC / 2026-05-09 22:41:00 CDT
+**Last Updated:** 2026-05-10 18:21:57 UTC / 2026-05-10 13:21:57 CDT
 
 This file reflects the current state of GitHub issues by priority. Issues are managed via GitHub labels (P0-critical, P1-high, P2-medium, P3-low, P4-future).
 
 ## 🔴 P0 - CRITICAL (Drop Everything)
 Issues that make the application unusable or cause data loss.
 
-- #267 - Route Cards Non-Interactive, Missing Detail View API
-- #266 - Mobile Bottom Navigation Non-Functional
+- #265 - 🎯 EPIC: UAT Findings - Critical Navigation & Interaction Fixes + UX Enhancements
+- #264 - Dashboard and Route Library UX Review
+- #204 - UI/UX: Update polyline colors
+- #177 - UI/UX: Add clickable 'Uses' column with modal
+- #176 - UI/UX: Add table sorting functionality
+- #175 - UI/UX: Simplify route counter
+- #174 - UI/UX: Fix route name display
+- #173 - UI/UX: Fix page counter display
+- #144 - 🌐 EPIC: Personal Web Platform Migration (v3.0.0)
+- #117 - Fix map zoom to show start and finish when route is selected
 
 ## 🔴 P1 - HIGH (Current Sprint)
 Issues that significantly impact core functionality or user experience.
 
-- #271 - Add Performance Metrics and Historical Data
-- #270 - Implement Route Comparison Feature
-- #269 - Improve Mobile Filter UX with Quick Presets
-- #268 - Add Difficulty Ratings to All Routes
-- #265 - 🎯 EPIC: UAT Findings - Critical Navigation & Interaction Fixes + UX Enhancements
-- #264 - Dashboard and Route Library UX Review
-- #262 - Remove Legacy CLI Application Remnants
 - #260 - Implement guided FTUE for Strava API key setup with in-app configuration
 - #256 - UI/UX Refinements: Design Critique Follow-up
 - #255 - Add Comprehensive E2E Testing for UI/UX Features
@@ -33,16 +34,20 @@ Issues that significantly impact core functionality or user experience.
 - #208 - Create test data fixtures for integration testing
 - #206 - Implement lazy service initialization to fix performance issues
 - #205 - Create missing QA test harnesses for dashboard, commute, and planner
-- #204 - UI/UX: Update polyline colors
-- #177 - UI/UX: Add clickable 'Uses' column with modal
-- #176 - UI/UX: Add table sorting functionality
-- #175 - UI/UX: Simplify route counter
-- #174 - UI/UX: Fix route name display
-- #173 - UI/UX: Fix page counter display
 - #172 - Add Marshmallow validation schemas for planner endpoints
 - #171 - Build planner frontend UI (currently placeholder only)
-- #164 - Test Coverage: report_generator.py (47% → 80%)
 - #163 - Test Coverage: data_fetcher.py (49% → 80%)
+- #162 - Test Coverage: long_ride_analyzer.py (13% → 50%)
+- #161 - Test Coverage: route_analyzer.py (20% → 50%)
+- #119 - Update TECHNICAL_SPEC.md with comprehensive implementation details
+- #118 - Re-enable geocoding after rate limit expires
+- #91 - Add Rate Limiting to API Endpoints
+- #90 - Implement Input Validation with Marshmallow
+- #89 - Add Data Persistence Layer for API
+- #83 - Implement Geocoding API Endpoint
+- #82 - Implement Recommendations API Endpoint
+- #81 - Create Flask API Server for Long Rides
+- #54 - Weather Dashboard Implementation (Epic)
 
 ## 🟡 P2 - MEDIUM (Next Sprint)
 Important improvements that enhance functionality but don't block core workflows.
@@ -72,11 +77,11 @@ Important improvements that enhance functionality but don't block core workflows
 - #178 - Implement log rotation with RotatingFileHandler
 - #168 - Create PRIVACY.md policy for compliance
 - #165 - Test Coverage: route_namer.py (15% → 50%)
-- #158 - 📋 Version Rebaseline Complete - Documentation Record
 - #141 - Add repeat-a-past-ride flow and saved plan support
 - #136 - Implement settings and preferences page for home/work locations, units, time windows, and planner defaults
 - #128 - Fix "Unnamed Activity" display in Route Comparison uses modal
-- #127 - Reduce excessive whitespace between report sections
+- #122 - [LOW PRIORITY] Grey out unselected routes on map when route is clicked
+- #121 - [LOW PRIORITY] Color code route names to match map line colors
 
 ## 🟢 P3 - LOW (Backlog)
 Nice-to-have improvements and minor UX enhancements.
@@ -92,11 +97,8 @@ Nice-to-have improvements and minor UX enhancements.
 - #145 - 🌤️ EPIC: Weather Dashboard & Forecast Integration
 - #120 - [LOW PRIORITY] Debug and fix Bootstrap tab switching functionality
 - #54 - Weather Dashboard Implementation (Epic)
-- #49 - Implement Metric/Imperial Unit Toggle with Complete Consistency
 - #48 - Implement Data Export in JSON, GPX, and CSV Formats
-- #46 - Add PDF Export Option
 - #45 - Add QR Code Generation for Mobile Transfer
-- #44 - Extract HTML Template to External File
 
 ## 📋 P4 - FUTURE ENHANCEMENTS
 Feature requests and enhancements for future releases.
@@ -105,17 +107,13 @@ Feature requests and enhancements for future releases.
 - #80 - Integrate Weather Forecast into Commute Tab
 - #79 - Add "How It Works" Modal
 - #68 - ✨ Visual Hierarchy & Polish
-- #67 - 📱 Mobile Navigation Patterns
 - #66 - 🎓 Feature Discovery & Onboarding
-- #65 - 👆 Touch-Optimized Interactions
 - #64 - 📊 Progressive Disclosure for Metrics
-- #63 - 📱 Mobile-First Responsive Layout
 - #62 - 🎨 EPIC: Mobile-First UI/UX Redesign & Accessibility
 - #47 - Add Side-by-Side Route Comparison Feature
 - #39 - Evaluate Photon API as Nominatim alternative
 - #38 - Add social features (compare with other commuters)
 - #37 - Add real-time route suggestions
-- #36 - Create mobile app version
 - #35 - Add integration with other fitness platforms
 
 ## ⚠️ Unprioritized Issues
