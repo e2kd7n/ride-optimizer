@@ -13,40 +13,40 @@
 
 ## Time Tracking by Release
 
-### v2.4.0 (March 29-30, 2026) - Long Rides Feature Complete + Design Audit
+### v0.9.0 (March 29-30, 2026) - Long Rides Feature Complete + Design Audit
 - **Time Invested:** 2.5 hours
 - **Estimated Without AI:** 12-20 hours
 - **Time Saved:** 9.5-17.5 hours
 - **Multiplier:** 5-8x
 - **Details:** See below
 
-### v2.3.0 (March 27, 2026) - Segment-Based Route Naming & Security
+### v0.8.0 (March 27, 2026) - Segment-Based Route Naming & Security
 - **Time Invested:** 2 hours
 - **Estimated Without AI:** 14-19 hours
 - **Time Saved:** 12-17 hours
 - **Multiplier:** 7-9.5x
 - **Details:** See below
 
-### v2.2.0 (March 27, 2026) - Bug Fixes & Performance
+### v0.7.0 (March 27, 2026) - Bug Fixes & Performance
 - **Time Invested:** 0.5 hours
 - **Estimated Without AI:** 3-5 hours
 - **Time Saved:** 2.5-4.5 hours
 - **Multiplier:** 6-10x
 - **Details:** JSON serialization fix, performance optimizations
 
-### v2.1.0 (March 26, 2026) - Code Quality & Design System
+### v0.6.0 (March 26, 2026) - Code Quality & Design System
 - **Time Invested:** 1.25 hours
 - **Estimated Without AI:** 17-26 hours
 - **Time Saved:** 16-25 hours
 - **Multiplier:** 14-21x
-- **Details:** [TIME_TRACKING_v2.1.0.md](TIME_TRACKING_v2.1.0.md)
+- **Details:** [TIME_TRACKING_v0.6.0.md](TIME_TRACKING_v0.6.0.md)
 
-### v0.1.0 - v2.0.0 (March 11-13, 2026) - Initial Development
+### v0.1.0 - v0.5.0 (March 11-13, 2026) - Initial Development
 - **Time Invested:** 7.25 hours
 - **Estimated Without AI:** 49-60 hours
 - **Time Saved:** 42-53 hours
 - **Multiplier:** 7-8x
-- **Details:** [TIME_TRACKING_v0.1.0-v2.0.0.md](TIME_TRACKING_v0.1.0-v2.0.0.md)
+- **Details:** [TIME_TRACKING_v0.1.0-v0.5.0.md](TIME_TRACKING_v0.1.0-v0.5.0.md)
 
 ---
 
@@ -54,11 +54,11 @@
 
 | Release | Date | Time Invested | Est. Without AI | Time Saved | Multiplier |
 |---------|------|---------------|-----------------|------------|------------|
-| v2.4.0 | Mar 29-30, 2026 | 2.5 hours | 12-20 hours | 9.5-17.5 hours | 5-8x |
-| v2.3.0 | Mar 27, 2026 | 2 hours | 14-19 hours | 12-17 hours | 7-9.5x |
-| v2.2.0 | Mar 27, 2026 | 0.5 hours | 3-5 hours | 2.5-4.5 hours | 6-10x |
-| v2.1.0 | Mar 26, 2026 | 1.25 hours | 17-26 hours | 16-25 hours | 14-21x |
-| v2.0.0 | Mar 13, 2026 | ~1 hour | 8-12 hours | 7-11 hours | 8-12x |
+| v0.9.0 | Mar 29-30, 2026 | 2.5 hours | 12-20 hours | 9.5-17.5 hours | 5-8x |
+| v0.8.0 | Mar 27, 2026 | 2 hours | 14-19 hours | 12-17 hours | 7-9.5x |
+| v0.7.0 | Mar 27, 2026 | 0.5 hours | 3-5 hours | 2.5-4.5 hours | 6-10x |
+| v0.6.0 | Mar 26, 2026 | 1.25 hours | 17-26 hours | 16-25 hours | 14-21x |
+| v0.5.0 | Mar 13, 2026 | ~1 hour | 8-12 hours | 7-11 hours | 8-12x |
 | v0.1.0 | Mar 11-13, 2026 | 6.25 hours | 41-48 hours | 35-42 hours | 6-7x |
 | **Total** | | **13.5 hours** | **95-130 hours** | **81.5-116.5 hours** | **7-10x** |
 
@@ -150,16 +150,16 @@ The **8-10x productivity multiplier** isn't just about speed—it's about:
 ## Version-Specific Time Tracking
 
 For detailed time tracking of each release, see:
-- [TIME_TRACKING_v2.1.0.md](TIME_TRACKING_v2.1.0.md) - Code Quality & Design System
-- [TIME_TRACKING_v0.1.0-v2.0.0.md](TIME_TRACKING_v0.1.0-v2.0.0.md) - Initial Development
+- [TIME_TRACKING_v0.6.0.md](TIME_TRACKING_v0.6.0.md) - Code Quality & Design System
+- [TIME_TRACKING_v0.1.0-v0.5.0.md](TIME_TRACKING_v0.1.0-v0.5.0.md) - Initial Development
 
 ---
 
 ## Future Releases
 
 Time tracking for future releases will be documented in separate files:
-- `TIME_TRACKING_v2.2.0.md` - Mobile-First UI/UX Redesign (planned)
-- `TIME_TRACKING_v2.3.0.md` - Future enhancements
+- `TIME_TRACKING_v0.7.0.md` - Mobile-First UI/UX Redesign (planned)
+- `TIME_TRACKING_v0.8.0.md` - Future enhancements
 - etc.
 
 ---
@@ -169,7 +169,7 @@ Time tracking for future releases will be documented in separate files:
 
 ---
 
-## v2.4.0 Detailed Tracking (March 29-30, 2026)
+## v0.9.0 Detailed Tracking (March 29-30, 2026)
 
 ### Time Investment: 2.5 hours
 
@@ -180,7 +180,7 @@ Time tracking for future releases will be documented in separate files:
 - Added 'uses' column to show route popularity
 - Fixed template rendering errors (Jinja2 syntax, dictionary keys)
 - Fixed pagination issues for commute routes
-- Released v2.4.0 with all user-facing features complete
+- Released v0.9.0 with all user-facing features complete
 
 **Session 2: Design Principles Audit (1 hour)**
 - Reviewed all 43 open GitHub issues against DESIGN_PRINCIPLES.md
@@ -188,7 +188,7 @@ Time tracking for future releases will be documented in separate files:
 - Updated 13 issues with mobile-first and accessibility requirements
 - Updated 2 epics (#54, #57) to enforce design principles
 - Created comprehensive audit document (DESIGN_PRINCIPLES_ISSUE_AUDIT.md)
-- Consolidated v2.5.0/v2.6.0/v2.7.0 plans into unified roadmap
+- Consolidated v0.10.0/v2.6.0/v2.7.0 plans into unified roadmap
 
 ### Estimated Time Without AI: 12-20 hours
 
@@ -204,14 +204,14 @@ Time tracking for future releases will be documented in separate files:
 
 ### Key Achievements
 
-**v2.4.0 Long Rides Feature Complete:**
+**v0.9.0 Long Rides Feature Complete:**
 - ✅ Fixed 'uses' field to display values >1
 - ✅ Hardware-aware parallelism (multiprocessing)
 - ✅ Sortable table headers with visual indicators
 - ✅ 'Uses' column shows route popularity
 - ✅ Fixed all template rendering errors
 - ✅ Fixed pagination issues
-- ✅ Released v2.4.0 production-ready
+- ✅ Released v0.9.0 production-ready
 
 **Design Principles Audit:**
 - ✅ Reviewed 43 open issues for design alignment
@@ -222,10 +222,10 @@ Time tracking for future releases will be documented in separate files:
 - ✅ Consolidated future release plans
 
 **Documentation:**
-- ✅ Updated ISSUE_PRIORITIES.md with v2.4.0 completion
+- ✅ Updated ISSUE_PRIORITIES.md with v0.9.0 completion
 - ✅ Created DESIGN_PRINCIPLES_ISSUE_AUDIT.md
 - ✅ Updated TIME_TRACKING.md
-- ✅ Consolidated plans into v2.5.0 roadmap
+- ✅ Consolidated plans into v0.10.0 roadmap
 
 ### Productivity Multiplier: 5-8x
 
@@ -241,22 +241,22 @@ Time tracking for future releases will be documented in separate files:
 - `src/long_ride_analyzer.py` - Hardware-aware parallelism
 - `src/route_analyzer.py` - Route matching optimization
 - `templates/report_template.html` - Sortable headers, uses column, template fixes
-- `ISSUE_PRIORITIES.md` - v2.4.0 completion tracking
+- `ISSUE_PRIORITIES.md` - v0.9.0 completion tracking
 - `DESIGN_PRINCIPLES_ISSUE_AUDIT.md` - New comprehensive audit
 - `TIME_TRACKING.md` - This file
-- `plans/v2.5.0/README.md` - Consolidated roadmap
+- `plans/v0.10.0/README.md` - Consolidated roadmap
 - GitHub: 14 issues updated (1 closed, 13 updated)
 
 ### Impact
-- v2.4.0 Long Rides feature fully production-ready
+- v0.9.0 Long Rides feature fully production-ready
 - All open issues now aligned with design principles
 - Mobile-first and accessibility requirements enforced
-- Clear roadmap for v2.5.0 development
+- Clear roadmap for v0.10.0 development
 - Improved code quality and performance
 
 ---
 
-## v2.3.0 Detailed Tracking (March 27, 2026)
+## v0.8.0 Detailed Tracking (March 27, 2026)
 
 ### Time Investment: 2 hours
 
@@ -316,7 +316,7 @@ Time tracking for future releases will be documented in separate files:
 - `ISSUE_PRIORITIES.md` - Completion tracking
 - `README.md` - Features and version history
 - `TIME_TRACKING.md` - This file
-- `archive/security_scans/security_scan_v2.3.0.json` - Security audit
+- `archive/security_scans/security_scan_v0.8.0.json` - Security audit
 
 ### Impact
 - Route names now show complete journey context
@@ -327,7 +327,7 @@ Time tracking for future releases will be documented in separate files:
 
 ---
 
-## v2.1.0 UI/UX Update - Next Commute Map (March 27, 2026)
+## v0.6.0 UI/UX Update - Next Commute Map (March 27, 2026)
 
 ### Time Investment: 1 hour
 
@@ -387,7 +387,7 @@ Time tracking for future releases will be documented in separate files:
 
 ---
 
-## v2.2.0 Detailed Tracking (March 27, 2026)
+## v0.7.0 Detailed Tracking (March 27, 2026)
 
 ### Time Investment: 0.5 hours
 

@@ -1,4 +1,4 @@
-up# Release Notes - v2.1.0
+up# Release Notes - v0.6.0
 
 **Release Date:** 2026-03-26  
 **Release Type:** Minor Release - Code Quality & Design System
@@ -9,7 +9,7 @@ up# Release Notes - v2.1.0
 
 ## 🎯 Release Highlights
 
-This release focuses on **code quality improvements**, **security enhancements**, and establishing a **comprehensive design system** for future UI/UX work. While no user-facing features are added in this release, it lays the foundation for significant mobile-first improvements coming in v2.2.0.
+This release focuses on **code quality improvements**, **security enhancements**, and establishing a **comprehensive design system** for future UI/UX work. While no user-facing features are added in this release, it lays the foundation for significant mobile-first improvements coming in v0.7.0.
 
 ### Key Achievements
 - ✅ Improved exception handling across codebase
@@ -96,7 +96,7 @@ This release focuses on **code quality improvements**, **security enhancements**
 ## 🎨 UI/UX Redesign Roadmap
 
 ### Epic #62: Mobile-First UI/UX Redesign
-**Status:** Planning Complete, Implementation Scheduled for v2.2.0
+**Status:** Planning Complete, Implementation Scheduled for v0.7.0
 
 **Sub-Issues Created:**
 1. **#63** - Mobile-First Responsive Layout (P1-high, 3-4 hours)
@@ -122,12 +122,12 @@ This release focuses on **code quality improvements**, **security enhancements**
 - `DESIGN_PRINCIPLES.md` - Comprehensive design system (398 lines)
 - `P1_ISSUES_IMPLEMENTATION_PLAN.md` - Detailed implementation plan (449 lines)
 - `UIUX_IMPROVEMENTS_EPIC.md` - UI/UX redesign specifications (717 lines)
-- `RELEASE_NOTES_v2.1.0.md` - This document
+- `RELEASE_NOTES_v0.6.0.md` - This document
 
 ### Updated Documents
 - `ISSUE_PRIORITIES.md` - Added UI/UX epic to P2-medium
 - `ISSUES_TRACKING.md` - Updated repository URL
-- `requirements.txt` - Updated dependency versions (v2.0.0)
+- `requirements.txt` - Updated dependency versions (v0.5.0)
 
 ---
 
@@ -204,7 +204,7 @@ This release focuses on **code quality improvements**, **security enhancements**
 
 ---
 
-## 🔮 What's Next (v2.2.0)
+## 🔮 What's Next (v0.7.0)
 
 ### Planned Features
 1. **Mobile-First Responsive Layout** - Full mobile support
@@ -215,9 +215,9 @@ This release focuses on **code quality improvements**, **security enhancements**
 6. **Map Direction Indicators** - Visual route direction
 
 ### Timeline
-- **v2.2.0 Alpha:** 2 weeks (mobile layout + touch interactions)
-- **v2.2.0 Beta:** 4 weeks (full UI/UX redesign)
-- **v2.2.0 Release:** 6 weeks (tested and polished)
+- **v0.7.0 Alpha:** 2 weeks (mobile layout + touch interactions)
+- **v0.7.0 Beta:** 4 weeks (full UI/UX redesign)
+- **v0.7.0 Release:** 6 weeks (tested and polished)
 
 ---
 
@@ -237,9 +237,9 @@ This release represents significant planning and foundation work for the future 
 
 ## 🏷️ Release Metadata
 
-- **Version:** v2.1.0
+- **Version:** v0.6.0
 - **Release Date:** 2026-03-26
-- **Git Tag:** v2.1.0
+- **Git Tag:** v0.6.0
 - **Repository:** ride-optimizer
 - **Milestone:** Code Quality & Design System
 - **Issues Closed:** #59, #61
@@ -247,4 +247,4 @@ This release represents significant planning and foundation work for the future 
 
 ---
 
-**Full Changelog:** https://github.com/e2kd7n/ride-optimizer/compare/v2.0.0...v2.1.0
+**Full Changelog:** https://github.com/e2kd7n/ride-optimizer/compare/v0.5.0...v0.6.0
