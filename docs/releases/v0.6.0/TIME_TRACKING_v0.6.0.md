@@ -1,4 +1,4 @@
-# Time Tracking - v2.1.0
+# Time Tracking - v0.6.0
 
 **Release Date:** March 26, 2026  
 **Release Type:** Code Quality & Design System
@@ -58,7 +58,7 @@
 - Updated `ISSUES_TRACKING.md` with new repository URL
 - Created comprehensive release notes
 - Pushed all changes to GitHub
-- Created GitHub release v2.1.0 with detailed notes
+- Created GitHub release v0.6.0 with detailed notes
 - Updated time tracking documentation
 - Split time tracking by version
 
@@ -158,7 +158,7 @@
 
 ### Planning
 - ✅ Epic #62 created with 7 sub-issues
-- ✅ 15-20 hours estimated for v2.2.0
+- ✅ 15-20 hours estimated for v0.7.0
 - ✅ Detailed specifications for each sub-issue
 - ✅ Implementation plans documented
 
@@ -198,7 +198,7 @@
 - `DESIGN_PRINCIPLES.md` (398 lines)
 - `UIUX_IMPROVEMENTS_EPIC.md` (717 lines)
 - `P1_ISSUES_IMPLEMENTATION_PLAN.md` (449 lines)
-- `TIME_TRACKING_v2.1.0.md` (this document)
+- `TIME_TRACKING_v0.6.0.md` (this document)
 
 ### Documentation Updated
 - `ISSUE_PRIORITIES.md`
@@ -218,9 +218,9 @@
 - **Created:** #62 (Epic), #63-#69 (Sub-issues)
 
 ### Release
-- **Tag:** v2.1.0
+- **Tag:** v0.6.0
 - **Commit:** 34033a4
-- **URL:** https://github.com/e2kd7n/ride-optimizer/releases/tag/v2.1.0
+- **URL:** https://github.com/e2kd7n/ride-optimizer/releases/tag/v0.6.0
 
 ---
 

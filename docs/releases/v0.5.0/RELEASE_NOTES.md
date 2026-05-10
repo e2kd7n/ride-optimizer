@@ -4,7 +4,7 @@ This document tracks completed features and bug fixes organized by release.
 
 ---
 
-## Release v2.1.0 (March 26, 2026)
+## Release v0.6.0 (March 26, 2026)
 
 ### 🎯 Release Highlights
 
@@ -81,7 +81,7 @@ Created 7 sub-issues (#63-#69):
 - #68: Visual Hierarchy & Polish (P3-low, 2 hours)
 - #69: Map Direction Indicators (P2-medium, 2-3 hours)
 
-**Total Estimated Time:** 15-20 hours for v2.2.0
+**Total Estimated Time:** 15-20 hours for v0.7.0
 
 ### 📝 Documentation
 
@@ -93,7 +93,7 @@ Created 7 sub-issues (#63-#69):
 **Updated Documents:**
 - `ISSUE_PRIORITIES.md` - Added UI/UX epic
 - `ISSUES_TRACKING.md` - Updated repository name
-- `TIME_TRACKING.md` - Added v2.1.0 session tracking
+- `TIME_TRACKING.md` - Added v0.6.0 session tracking
 
 **Total:** 2,381 lines of documentation
 
@@ -116,13 +116,13 @@ Created 7 sub-issues (#63-#69):
 
 ### 🔗 Links
 
-- **Release:** https://github.com/e2kd7n/ride-optimizer/releases/tag/v2.1.0
+- **Release:** https://github.com/e2kd7n/ride-optimizer/releases/tag/v0.6.0
 - **Epic #62:** https://github.com/e2kd7n/ride-optimizer/issues/62
 - **Commit:** 34033a4
 
 ---
 
-## Release v2.3.0 (March 27, 2026)
+## Release v0.8.0 (March 27, 2026)
 
 ### 🎯 Release Highlights
 
@@ -150,8 +150,8 @@ Implemented comprehensive route naming system that shows complete journey with c
 - More descriptive route names
 
 **Documentation:**
-- `plans/v2.3.0/ROUTE_NAMING_EPIC.md` - Epic planning and implementation
-- `plans/v2.3.0/INCREMENTAL_ANALYSIS_GUIDE.md` - Performance guide
+- `plans/v0.8.0/ROUTE_NAMING_EPIC.md` - Epic planning and implementation
+- `plans/v0.8.0/INCREMENTAL_ANALYSIS_GUIDE.md` - Performance guide
 
 ### ⚡ Performance Improvements
 
@@ -178,7 +178,7 @@ Intelligent caching system for dramatic performance improvements.
 
 ---
 
-## Release v2.2.0 (March 27, 2026)
+## Release v0.7.0 (March 27, 2026)
 
 ### 🎯 Release Highlights
 
@@ -206,7 +206,7 @@ Fixed all 16 failing tests to achieve 100% pass rate (43/43 tests passing).
 - `tests/test_integration.py` - End-to-end workflow tests
 
 **Documentation:**
-- `plans/v2.2.0/TEST_REMEDIATION_PLAN.md` - Remediation strategy
+- `plans/v0.7.0/TEST_REMEDIATION_PLAN.md` - Remediation strategy
 - `tests/TEST_DATA_README.md` - Test data guide
 - `tests/README.md` - Test suite documentation
 
