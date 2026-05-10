@@ -178,11 +178,23 @@ After marking any task complete:
 - **P3-low**: Backlog - nice-to-haves
 - **P4-future**: Long-term planning
 
+### GitHub Labels Cache
+**IMPORTANT:** Use `.bob/github_labels.md` for available labels - updated weekly during maintenance.
+
+Common label combinations:
+- Bug reports: `P1-high,bug,backend`
+- UI/UX enhancements: `P2-medium,enhancement,ux,design,frontend`
+- Accessibility: `P1-high,accessibility,a11y,WCAG`
+- Performance: `P2-medium,performance,backend`
+- Documentation: `P3-low,documentation,help`
+
+**Do NOT query GitHub for labels** - use the cache to avoid failed issue creation.
+
 ### Issue Workflow
-- **Create issues via**: `gh issue create --label "P1-high,bug"`
+- **Create issues via**: `gh issue create --label "P1-high,bug"` (use labels from `.bob/github_labels.md`)
 - **Reference in commits**: `Fixes #123: Description` (auto-closes on merge)
 - **Update priorities**: Run `./scripts/update-issue-priorities.sh` to regenerate `ISSUE_PRIORITIES.md`
-- **Weekly maintenance**: Review open issues, close completed, update labels
+- **Weekly maintenance**: Review open issues, close completed, update labels, refresh `.bob/github_labels.md`
 
 ### Issue Closure Protocol (CRITICAL)
 After completing and testing any work:

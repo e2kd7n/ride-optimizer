@@ -1,8 +1,0 @@
-Collecting icalendar
-  Downloading icalendar-7.1.0-py3-none-any.whl.metadata (6.9 kB)
-Requirement already satisfied: python-dateutil in /Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages (from icalendar) (2.9.0.post0)
-Requirement already satisfied: tzdata>=2025.3 in /Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages (from icalendar) (2025.3)
-Requirement already satisfied: six>=1.5 in /Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages (from python-dateutil->icalendar) (1.17.0)
-Downloading icalendar-7.1.0-py3-none-any.whl (471 kB)
-Installing collected packages: icalendar
-Successfully installed icalendar-7.1.0

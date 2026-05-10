@@ -7,6 +7,7 @@ application factory pattern for better testability and configuration management.
 
 import os
 import logging
+from pathlib import Path
 from flask import Flask
 from flask_cors import CORS
 
@@ -21,9 +22,14 @@ def create_app(config_name='default'):
     Returns:
         Configured Flask application instance
     """
+    # Get project root directory (parent of app package)
+    project_root = Path(__file__).parent.parent
+    static_folder = project_root / 'static'
+    
     app = Flask(__name__,
                 template_folder='templates',
-                static_folder='static')
+                static_folder=str(static_folder),
+                static_url_path='')
     
     # Load configuration
     from app.config import config as config_dict
@@ -85,15 +91,29 @@ def configure_logging(app):
 
 def register_blueprints(app):
     """Register Flask blueprints for different sections of the application."""
-    from app.routes_DEPRECATED_FLASK import dashboard, commute, planner, route_library, settings, api
+    from flask import send_from_directory, current_app
     from app.api import map_api, maps_api
     
-    # Register blueprints with URL prefixes
-    app.register_blueprint(dashboard.bp)
-    app.register_blueprint(commute.bp, url_prefix='/commute')
-    app.register_blueprint(planner.bp, url_prefix='/planner')
-    app.register_blueprint(route_library.bp, url_prefix='/routes')
-    app.register_blueprint(settings.bp, url_prefix='/settings')
+    # Serve static HTML files (Issue #257 - Epic #237 UI/UX Redesign)
+    @app.route('/')
+    def index():
+        """Serve the main application page with 3-tab navigation."""
+        return send_from_directory(current_app.static_folder, 'index.html')
+    
+    @app.route('/routes')
+    @app.route('/routes.html')
+    def routes_page():
+        """Serve routes page."""
+        return send_from_directory(current_app.static_folder, 'routes.html')
+    
+    @app.route('/settings')
+    @app.route('/settings.html')
+    def settings_page():
+        """Serve settings page."""
+        return send_from_directory(current_app.static_folder, 'settings.html')
+    
+    # Register API blueprints only
+    from app.routes_DEPRECATED_FLASK import api
     app.register_blueprint(api.bp, url_prefix='/api')
     app.register_blueprint(map_api.bp)  # Map API (already has /api/map prefix)
     app.register_blueprint(maps_api.bp)  # Maps API for page-level data (already has /api/maps prefix)

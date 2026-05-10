@@ -1,17 +1,19 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-05-10 00:06:47 UTC / 2026-05-09 19:06:47 CDT
+**Last Updated:** 2026-05-10 02:33:41 UTC / 2026-05-09 21:33:41 CDT
 
 This file reflects the current state of GitHub issues by priority. Issues are managed via GitHub labels (P0-critical, P1-high, P2-medium, P3-low, P4-future).
 
 ## 🔴 P0 - CRITICAL (Drop Everything)
 Issues that make the application unusable or cause data loss.
 
-- #257 - Sync Epic #237 UI/UX Redesign to Static HTML Files (launch.py)
+**No P0 issues currently open** ✅
 
 ## 🔴 P1 - HIGH (Current Sprint)
 Issues that significantly impact core functionality or user experience.
 
+- #262 - Remove Legacy CLI Application Remnants
+- #260 - Implement guided FTUE for Strava API key setup with in-app configuration
 - #256 - UI/UX Refinements: Design Critique Follow-up
 - #255 - Add Comprehensive E2E Testing for UI/UX Features
 - #254 - Implement Animated GIF Tutorials for Key Features
@@ -40,12 +42,11 @@ Issues that significantly impact core functionality or user experience.
 - #119 - Update TECHNICAL_SPEC.md with comprehensive implementation details
 - #118 - Re-enable geocoding after rate limit expires
 - #117 - Fix map zoom to show start and finish when route is selected
-- #102 - Refactor report template to extract JavaScript into separate files
-- #91 - Add Rate Limiting to API Endpoints
 
 ## 🟡 P2 - MEDIUM (Next Sprint)
 Important improvements that enhance functionality but don't block core workflows.
 
+- #263 - Refine Settings Form Structure
 - #227 - Improve Test Coverage for New Features
 - #209 - Implement graceful degradation for unavailable services
 - #207 - Implement dependency injection pattern for better testability
@@ -75,7 +76,6 @@ Important improvements that enhance functionality but don't block core workflows
 - #122 - [LOW PRIORITY] Grey out unselected routes on map when route is clicked
 - #121 - [LOW PRIORITY] Color code route names to match map line colors
 - #116 - Add visual weather icons and color coding
-- #115 - Display optimal departure time suggestions
 
 ## 🟢 P3 - LOW (Backlog)
 Nice-to-have improvements and minor UX enhancements.
@@ -120,14 +120,16 @@ Feature requests and enhancements for future releases.
 ## ⚠️ Unprioritized Issues
 Issues without priority labels that need to be triaged.
 
+- #261 - Senior Engineer Code Review Request
 - #166 - Complete and review full analysis with Fréchet algorithm
 
 ## 📝 Workspace TODOs & Tasks
 Code comments and inline tasks found in the workspace that may need attention.
 
-Found **1** code comments requiring attention:
+Found **2** code comments requiring attention:
 
 - `app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
+- `static/js/dashboard.js` - 7:// NOTE: Initialization is handled by inline script in index.html
 
 ## Priority Guidelines
 
