@@ -1,13 +1,13 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-05-09 23:02:52 UTC / 2026-05-09 18:02:52 CDT
+**Last Updated:** 2026-05-09 23:18:45 UTC / 2026-05-09 18:18:45 CDT
 
 This file reflects the current state of GitHub issues by priority. Issues are managed via GitHub labels (P0-critical, P1-high, P2-medium, P3-low, P4-future).
 
 ## 🔴 P0 - CRITICAL (Drop Everything)
 Issues that make the application unusable or cause data loss.
 
-**No P0 issues currently open** ✅
+- #257 - Sync Epic #237 UI/UX Redesign to Static HTML Files (launch.py)
 
 ## 🔴 P1 - HIGH (Current Sprint)
 Issues that significantly impact core functionality or user experience.
