@@ -3,11 +3,52 @@
 ## Purpose
 This document defines recurring maintenance tasks to keep project documentation synchronized with the codebase.
 
+## Parallel Task Execution
+
+**For Long-Running Tasks:** Some maintenance tasks (like issue management, comprehensive audits, or bulk updates) can take significant time. To avoid blocking other work:
+
+### Run in Separate Terminals
+```bash
+# Terminal 1: Issue management (can take 10-30 minutes)
+./scripts/update-issue-priorities.sh
+
+# Terminal 2: Continue with other maintenance tasks
+# Documentation updates, code reviews, etc.
+```
+
+### Background Task Pattern
+```bash
+# Start long-running task in background
+./scripts/update-issue-priorities.sh > logs/issue-update.log 2>&1 &
+
+# Note the process ID
+echo $! > /tmp/maintenance-task.pid
+
+# Continue with other work
+# Check progress: tail -f logs/issue-update.log
+# Check if complete: ps -p $(cat /tmp/maintenance-task.pid)
+```
+
+### Tasks That Benefit from Parallel Execution
+- **Issue Management** (10-30 min): `./scripts/update-issue-priorities.sh`
+- **GitHub Label Sync** (5-10 min): `./scripts/sync-github-labels.sh`
+- **Test Suite** (5-15 min): `./scripts/run_tests.sh all`
+- **Dependency Updates** (5-10 min): `pip list --outdated`
+- **Security Scans** (2-5 min): `safety check`
+
+### Quick Tasks (Run Inline)
+- Version reference updates (1-2 min)
+- Documentation edits (2-5 min)
+- Git operations (1-2 min)
+- File renames (1-2 min)
+
+---
+
 ## Weekly Tasks (Every 7 Days)
 
 ### 1. Documentation Sync Review
-**Frequency:** Weekly (every Monday or first work day of week)  
-**Estimated Time:** 30-45 minutes
+**Frequency:** Weekly (every Monday or first work day of week)
+**Estimated Time:** 30-45 minutes (excluding parallel tasks)
 
 #### Tasks:
 1. **Review Project Plan (PLAN.md)**
@@ -118,11 +159,20 @@ echo "Please review and update documentation as needed."
 
 ## Last Sync Date
 
-**Last Documentation Sync:** 2026-05-07 23:39 UTC
-**Next Scheduled Sync:** 2026-05-14
+**Last Documentation Sync:** 2026-05-10 02:58 UTC
+**Next Scheduled Sync:** 2026-05-17
 **Performed By:** Bob (AI Assistant)
 
 **Changes in This Sync:**
+- **Version Rebaseline Complete:** Renamed all v2.x.0 release directories to v0.x.0 format
+- Updated 6 directories: v2.0.0→v0.5.0, v2.1.0→v0.6.0, v2.2.0→v0.7.0, v2.3.0→v0.8.0, v2.4.0→v0.9.0, v2.5.0→v0.10.0
+- Renamed 3 files with version numbers in filenames
+- Updated 15+ markdown files with version references (HISTORICAL_RELEASES.md, README.md, TIME_TRACKING.md, etc.)
+- Verified 0 old version references remaining (v2.x.0 or v1.0.0)
+- All releases documentation now aligned with 0.x.x versioning scheme per VERSIONING_PLAN.md
+- **Time Invested:** ~15 minutes (directory renames, bulk sed replacements, verification)
+
+**Previous Sync (2026-05-07 23:39 UTC):**
 - Updated ISSUE_PRIORITIES.md (50+ commits since last sync on 2026-03-30)
 - Reviewed project architecture changes (Web Platform Migration Epic #144)
 - Verified major features completed: Interactive Maps (#236), P0 issue resolution (#212-#216)
@@ -133,18 +183,18 @@ echo "Please review and update documentation as needed."
 - Recommended action: Create GitHub issue for comprehensive documentation update to reflect web platform
 
 **Previous Sync (2026-03-30 03:40 UTC):**
-- Updated ISSUE_PRIORITIES.md with v2.4.0 completion and design audit results
-- Updated TIME_TRACKING.md with v2.4.0 detailed tracking (2.5 hours invested)
+- Updated ISSUE_PRIORITIES.md with v0.9.0 completion and design audit results
+- Updated TIME_TRACKING.md with v0.9.0 detailed tracking (2.5 hours invested)
 - Reviewed TECHNICAL_SPEC.md for accuracy (no changes needed)
 - Created DESIGN_PRINCIPLES_ISSUE_AUDIT.md (comprehensive 43-issue review)
-- Completed v2.4.0 Long Rides feature with bug fixes and polish
+- Completed v0.9.0 Long Rides feature with bug fixes and polish
 - Fixed 'uses' field display, template errors, and pagination issues
 - Added sortable headers and 'uses' column to Long Rides table
 - Implemented hardware-aware parallelism for route matching
 - Reviewed and updated 13 GitHub issues with design requirements
 - Closed 1 duplicate issue (#22)
 - Updated 2 epics (#54, #57) to enforce design principles
-- Consolidated v2.5.0/v2.6.0/v2.7.0 plans into unified roadmap
+- Consolidated v0.10.0/v0.11.0/v0.12.0 plans into unified roadmap
 
 ## Notes
 

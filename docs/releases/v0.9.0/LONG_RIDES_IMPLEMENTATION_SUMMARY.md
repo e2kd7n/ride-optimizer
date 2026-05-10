@@ -133,7 +133,7 @@ Given the substantial remaining work for Phase 2, I recommend:
 1. **Test Phase 1 first** - Verify core functionality works
 2. **Prioritize enhancements** - Which is most valuable?
 3. **Consider incremental delivery:**
-   - v2.4.0: Core features (Phase 1) ✅
+   - v0.9.0: Core features (Phase 1) ✅
    - v2.4.1: Pagination
    - v2.4.2: Preview maps
    - v2.4.3: Distance/Time filters

@@ -10,26 +10,26 @@ This directory contains release documentation organized by version for the Ride 
 
 Each version directory contains documentation specific to that release:
 
-- **`/v2.0.0/`** - Initial production release
-  - [`RELEASE_NOTES.md`](v2.0.0/RELEASE_NOTES.md) - Release notes
-  - [`TIME_TRACKING_v0.1.0-v2.0.0.md`](v2.0.0/TIME_TRACKING_v0.1.0-v2.0.0.md) - Development time tracking
+- **`/v0.5.0/`** - Initial production release
+  - [`RELEASE_NOTES.md`](v0.5.0/RELEASE_NOTES.md) - Release notes
+  - [`TIME_TRACKING_v0.1.0-v0.5.0.md`](v0.5.0/TIME_TRACKING_v0.1.0-v0.5.0.md) - Development time tracking
 
-- **`/v2.1.0/`** - UI/UX improvements
-  - [`RELEASE_NOTES_v2.1.0.md`](v2.1.0/RELEASE_NOTES_v2.1.0.md) - Release notes
-  - [`TIME_TRACKING_v2.1.0.md`](v2.1.0/TIME_TRACKING_v2.1.0.md) - Development time tracking
+- **`/v0.6.0/`** - UI/UX improvements
+  - [`RELEASE_NOTES_v0.6.0.md`](v0.6.0/RELEASE_NOTES_v0.6.0.md) - Release notes
+  - [`TIME_TRACKING_v0.6.0.md`](v0.6.0/TIME_TRACKING_v0.6.0.md) - Development time tracking
 
-- **`/v2.2.0/`** - Performance optimizations
-  - [`USES_COUNT_FIX.md`](v2.2.0/USES_COUNT_FIX.md) - Uses count feature implementation
-  - [`USES_FIELD_CLICKABLE_TODO.md`](v2.2.0/USES_FIELD_CLICKABLE_TODO.md) - Clickable uses field
+- **`/v0.7.0/`** - Performance optimizations
+  - [`USES_COUNT_FIX.md`](v0.7.0/USES_COUNT_FIX.md) - Uses count feature implementation
+  - [`USES_FIELD_CLICKABLE_TODO.md`](v0.7.0/USES_FIELD_CLICKABLE_TODO.md) - Clickable uses field
 
-- **`/v2.3.0/`** - Next commute feature
-  - [`NEXT_COMMUTE_FEATURE.md`](v2.3.0/NEXT_COMMUTE_FEATURE.md) - Next commute recommendation implementation
+- **`/v0.8.0/`** - Next commute feature
+  - [`NEXT_COMMUTE_FEATURE.md`](v0.8.0/NEXT_COMMUTE_FEATURE.md) - Next commute recommendation implementation
 
-- **`/v2.4.0/`** - Long rides feature
-  - [`LONG_RIDES_IMPLEMENTATION_SUMMARY.md`](v2.4.0/LONG_RIDES_IMPLEMENTATION_SUMMARY.md) - Long rides analysis implementation
+- **`/v0.9.0/`** - Long rides feature
+  - [`LONG_RIDES_IMPLEMENTATION_SUMMARY.md`](v0.9.0/LONG_RIDES_IMPLEMENTATION_SUMMARY.md) - Long rides analysis implementation
 
-- **`/v2.5.0/`** - Background geocoding (In Progress)
-  - [`BACKGROUND_GEOCODING_IMPLEMENTATION.md`](v2.5.0/BACKGROUND_GEOCODING_IMPLEMENTATION.md) - Background geocoding improvements
+- **`/v0.10.0/`** - Background geocoding (In Progress)
+  - [`BACKGROUND_GEOCODING_IMPLEMENTATION.md`](v0.10.0/BACKGROUND_GEOCODING_IMPLEMENTATION.md) - Background geocoding improvements
 
 ### Root-Level Documentation
 
@@ -40,31 +40,31 @@ Each version directory contains documentation specific to that release:
 
 ## 📋 Release Timeline
 
-### v0.1.0 - v2.0.0 (Initial Development)
+### v0.1.0 - v0.5.0 (Initial Development)
 - Core functionality implementation
 - Route analysis and optimization
 - Weather integration
 - Carbon calculator
 
-### v2.1.0 (UI/UX Improvements)
+### v0.6.0 (UI/UX Improvements)
 - Enhanced user interface
 - Improved mobile experience
 - Better data visualization
 
-### v2.2.0 (Performance Optimizations)
+### v0.7.0 (Performance Optimizations)
 - Cache improvements
 - Route similarity optimizations
 - Uses count tracking
 
-### v2.3.0 (Next Commute Feature)
+### v0.8.0 (Next Commute Feature)
 - Next commute recommendations
 - Improved route matching
 
-### v2.4.0 (Long Rides Feature)
+### v0.9.0 (Long Rides Feature)
 - Long ride analysis
 - Extended route recommendations
 
-### v2.5.0 (Background Geocoding - In Progress)
+### v0.10.0 (Background Geocoding - In Progress)
 - Background geocoding improvements
 - Enhanced location services
 
@@ -73,8 +73,8 @@ Each version directory contains documentation specific to that release:
 ## 🔍 Finding Documentation
 
 ### By Version
-- **v2.0.0:** See [`v2.0.0/RELEASE_NOTES.md`](v2.0.0/RELEASE_NOTES.md)
-- **v2.1.0:** See [`v2.1.0/RELEASE_NOTES_v2.1.0.md`](v2.1.0/RELEASE_NOTES_v2.1.0.md)
+- **v0.5.0:** See [`v0.5.0/RELEASE_NOTES.md`](v0.5.0/RELEASE_NOTES.md)
+- **v0.6.0:** See [`v0.6.0/RELEASE_NOTES_v0.6.0.md`](v0.6.0/RELEASE_NOTES_v0.6.0.md)
 - **Latest:** See [`HISTORICAL_RELEASES.md`](HISTORICAL_RELEASES.md)
 
 ### [`/maintenance/`](maintenance/)
@@ -85,9 +85,9 @@ Maintenance reports and checklists for system health and upkeep.
 - [Maintenance Checklist](maintenance/MAINTENANCE_CHECKLIST.md)
 
 ### By Feature
-- **Next Commute:** See [`v2.3.0/NEXT_COMMUTE_FEATURE.md`](v2.3.0/NEXT_COMMUTE_FEATURE.md)
-- **Long Rides:** See [`v2.4.0/LONG_RIDES_IMPLEMENTATION_SUMMARY.md`](v2.4.0/LONG_RIDES_IMPLEMENTATION_SUMMARY.md)
-- **Background Geocoding:** See [`v2.5.0/BACKGROUND_GEOCODING_IMPLEMENTATION.md`](v2.5.0/BACKGROUND_GEOCODING_IMPLEMENTATION.md)
+- **Next Commute:** See [`v0.8.0/NEXT_COMMUTE_FEATURE.md`](v0.8.0/NEXT_COMMUTE_FEATURE.md)
+- **Long Rides:** See [`v0.9.0/LONG_RIDES_IMPLEMENTATION_SUMMARY.md`](v0.9.0/LONG_RIDES_IMPLEMENTATION_SUMMARY.md)
+- **Background Geocoding:** See [`v0.10.0/BACKGROUND_GEOCODING_IMPLEMENTATION.md`](v0.10.0/BACKGROUND_GEOCODING_IMPLEMENTATION.md)
 
 ### By Activity Type
 - **Time Tracking:** See version-specific TIME_TRACKING files or [`TIME_TRACKING.md`](TIME_TRACKING.md)

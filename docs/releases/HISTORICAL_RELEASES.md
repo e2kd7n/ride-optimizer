@@ -1,12 +1,12 @@
 # Historical Releases - Ride Optimizer
 
-This document provides comprehensive release notes for all versions leading up to v2.1.0.
+This document provides comprehensive release notes for all versions leading up to v0.6.0.
 
 ---
 
-## Release v2.3.0 (March 26, 2026)
+## Release v0.8.0 (March 26, 2026)
 
-**Commit:** 1fdbc5c  
+**Commit:** 1fdbc5c
 **Release Type:** Minor Release - Segment-Based Route Naming & Security Enhancements
 
 ### 🎯 Highlights
@@ -41,13 +41,13 @@ This document provides comprehensive release notes for all versions leading up t
 - 6329a9d: docs: Correct issue #58 numbering discrepancy
 - 10d0f2d: chore: Organize scripts into /scripts folder
 - 25019ae: chore: Organize planning documents into /plans folder
-- 1fdbc5c: Release v2.3.0: Segment-Based Route Naming & Security Enhancements
+- 1fdbc5c: Release v0.8.0: Segment-Based Route Naming & Security Enhancements
 
 ---
 
-## Release v2.2.0 (March 26, 2026)
+## Release v0.7.0 (March 26, 2026)
 
-**Commit:** 3df3bd8  
+**Commit:** 3df3bd8
 **Release Type:** Minor Release - Test Suite & Cache Improvements
 
 ### 🎯 Highlights
@@ -66,24 +66,24 @@ This document provides comprehensive release notes for all versions leading up t
 - Fixed test data setup
 
 ### 📝 Documentation
-- Updated TECHNICAL_SPEC.md for v2.2.0
+- Updated TECHNICAL_SPEC.md for v0.7.0
 - Closed completed issues in ISSUE_PRIORITIES.md
 - Organized time tracking by version
 
 **Commits:**
-- 08af21c: docs: Comprehensive TECHNICAL_SPEC.md update for v2.2.0
+- 08af21c: docs: Comprehensive TECHNICAL_SPEC.md update for v0.7.0
 - ccdb477: docs: Update ISSUE_PRIORITIES.md - close completed issues
 - 90e62b7: fix: Resolve all test suite failures and implement cache separation
-- 3df3bd8: chore: Rename repository to ride-optimizer and add v2.2 P1 features
+- 3df3bd8: chore: Rename repository to ride-optimizer and add v0.7.0 P1 features
 - d0d2b9c: Organize time tracking by version and update release notes
 
 ---
 
-## Release v2.1.0 (March 26, 2026)
+## Release v0.6.0 (March 26, 2026)
 
-**Commit:** 34033a4  
-**Release Type:** Minor Release - Code Quality, Security & Design System  
-**Tag:** v2.1.0 ✅
+**Commit:** 34033a4
+**Release Type:** Minor Release - Code Quality, Security & Design System
+**Tag:** v0.6.0 ✅
 
 ### 🎯 Highlights
 - Improved exception handling across codebase
@@ -125,11 +125,11 @@ This document provides comprehensive release notes for all versions leading up t
 **Commits:**
 - 9f15d5f: docs: update ISSUE_PRIORITIES.md with security issues #59, #60, #61
 - 2cdab97: Archive completed analysis and debug files
-- 34033a4: Release v2.1.0: Code Quality, Security & Design System
+- 34033a4: Release v0.6.0: Code Quality, Security & Design System
 
 ---
 
-## Release v2.0.0 (March 24, 2026)
+## Release v0.5.0 (March 24, 2026)
 
 **Commit:** efbcc1c  
 **Release Type:** Major Release - Feature Complete
@@ -206,7 +206,7 @@ This document provides comprehensive release notes for all versions leading up t
 
 ---
 
-## Release v1.0.0 (March 12-13, 2026)
+## Release v0.1.0 (March 12-13, 2026)
 
 **Commit:** 7731a69  
 **Release Type:** Major Release - Long Rides & Security
@@ -342,11 +342,10 @@ This document provides comprehensive release notes for all versions leading up t
 | Version | Date | Type | Key Features |
 |---------|------|------|--------------|
 | v0.1.0 | Mar 11-12, 2026 | Initial | Strava integration, route analysis, weather, interactive maps |
-| v1.0.0 | Mar 12-13, 2026 | Major | Long rides, security fixes, Fréchet distance, UI improvements |
-| v2.0.0 | Mar 24, 2026 | Major | QR codes, PDF export, multi-select, parallel processing, plus routes |
-| v2.1.0 | Mar 26, 2026 | Minor | Code quality, security (SHA256), design system |
-| v2.2.0 | Mar 26, 2026 | Minor | Test suite fixes, cache separation |
-| v2.3.0 | Mar 26, 2026 | Minor | Segment-based route naming, repository organization |
+| v0.5.0 | Mar 24, 2026 | Major | QR codes, PDF export, multi-select, parallel processing, plus routes |
+| v0.6.0 | Mar 26, 2026 | Minor | Code quality, security (SHA256), design system |
+| v0.7.0 | Mar 26, 2026 | Minor | Test suite fixes, cache separation |
+| v0.8.0 | Mar 26, 2026 | Minor | Segment-based route naming, repository organization |
 
 ---
 
