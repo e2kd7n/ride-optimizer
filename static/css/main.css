@@ -226,18 +226,27 @@ footer {
 }
 
 /* ===== Route Cards ===== */
-.route-card {
+.route-card,
+.route-library-card {
     border: 1px solid #dee2e6;
     border-radius: 0.5rem;
     padding: 1rem;
     margin-bottom: 1rem;
     background-color: white;
     transition: all 0.2s ease;
+    cursor: pointer;
 }
 
-.route-card:hover {
+.route-card:hover,
+.route-library-card:hover {
     border-color: var(--primary-color);
     box-shadow: 0 4px 8px rgba(0, 123, 255, 0.15);
+    transform: translateY(-4px);
+}
+
+.route-library-card:active {
+    transform: translateY(-2px);
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.2);
 }
 
 .route-card-header {
