@@ -918,37 +918,27 @@ def analyze_routes(config, output_dir, n_workers=2, generate_pdf=False, force_re
         (map_html, preview_map_html, visualizer), duration = run_step_with_progress("🗺️  Generating map", step7)
         debug_logger.info(f"Step 7 completed in {duration:.2f}s")
         
-        # Step 8: Save report
-        def step8():
-            debug_logger.info("Step 8: Saving report...")
-            try:
-                # Build complete analysis results
-                analysis_results = {
-                    **optimization_results,
-                    'route_groups': route_groups,
-                    'home': home,
-                    'work': work,
-                    'map_html': map_html,
-                    'preview_map_html': preview_map_html,
-                    'all_activities': all_activities,
-                    'commute_activities': commute_activities,
-                    'visualizer': visualizer,
-                    'long_rides': long_rides,
-                    'long_ride_analyzer': long_ride_analyzer,
-                    'config': config,
-                    'next_commutes': next_commutes
-                }
-                
-                # Save and open report
-                report_path = _save_report(analysis_results, output_dir, generate_pdf)
-                return (report_path, analysis_results)
-            except Exception as e:
-                debug_logger.error(f"Step 8 failed: {e}", exc_info=True)
-                tqdm_module.write(f"\n❌ ERROR at Step 8 (Saving report): {e}")
-                raise
+        # Step 8: Prepare analysis results (report generation disabled - use web app)
+        debug_logger.info("Step 8: Preparing analysis results...")
         
-        (report_path, analysis_results), duration = run_step_with_progress("💾 Saving report", step8)
-        debug_logger.info(f"Step 8 completed in {duration:.2f}s")
+        # Build complete analysis results
+        analysis_results = {
+            **optimization_results,
+            'route_groups': route_groups,
+            'home': home,
+            'work': work,
+            'map_html': map_html,
+            'preview_map_html': preview_map_html,
+            'all_activities': all_activities,
+            'commute_activities': commute_activities,
+            'visualizer': visualizer,
+            'long_rides': long_rides,
+            'long_ride_analyzer': long_ride_analyzer,
+            'config': config,
+            'next_commutes': next_commutes
+        }
+        
+        debug_logger.info("Analysis results prepared (report generation skipped)")
         
         # Calculate runtime
         end_time = time.time()
@@ -961,7 +951,6 @@ def analyze_routes(config, output_dir, n_workers=2, generate_pdf=False, force_re
         tqdm_module.write("\n" + "="*60)
         tqdm_module.write("✅  ANALYSIS COMPLETE!")
         tqdm_module.write("="*60)
-        tqdm_module.write(f"📄  Report: {report_path.name}")
         tqdm_module.write(f"🚴  Route: {analysis_results['optimal_route'].name}")
         tqdm_module.write(f"⭐  Score: {analysis_results['optimal_score']:.1f}/100")
         tqdm_module.write(f"⏱️   Runtime: {runtime_display}")
@@ -970,7 +959,38 @@ def analyze_routes(config, output_dir, n_workers=2, generate_pdf=False, force_re
         # Log runtime to file for performance tracking
         _log_runtime(runtime_seconds, len(commute_activities), len(route_groups))
         
-        _open_report_in_browser(report_path)
+        # Launch web app instead of opening static report
+        tqdm_module.write("🌐 Launching web app...")
+        
+        # Start web app in background (detached process)
+        if sys.platform == 'darwin':  # macOS
+            subprocess.Popen(
+                ['python3', 'launch.py'],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True  # Detach from parent process
+            )
+        else:
+            subprocess.Popen(
+                ['python3', 'launch.py'],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == 'win32' else 0
+            )
+        
+        # Give server time to start
+        import time as time_module
+        time_module.sleep(2)
+        
+        # Open web app in browser
+        if sys.platform == 'darwin':  # macOS
+            subprocess.run(['open', '-a', 'Google Chrome', 'http://localhost:8083'], check=False)
+        elif sys.platform == 'win32':  # Windows
+            webbrowser.open('http://localhost:8083')
+        else:  # Linux
+            subprocess.run(['google-chrome', 'http://localhost:8083'], check=False)
+        
+        tqdm_module.write("🌐 Web app launched at http://localhost:8083")
         
         debug_logger.info("="*60)
         debug_logger.info("Analysis completed successfully")

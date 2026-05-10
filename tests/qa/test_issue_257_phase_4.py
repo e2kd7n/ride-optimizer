@@ -70,15 +70,15 @@ class TestIssue257Phase4:
             if response.status_code == 200:
                 html = response.data.decode('utf-8')
                 
-                # Check for 3-tab navigation
-                has_home_tab = 'Home' in html or 'home' in html.lower()
-                has_routes_tab = 'Routes' in html or 'routes' in html.lower()
-                has_settings_tab = 'Settings' in html or 'settings' in html.lower()
+                # Check for 3-tab navigation in nav element
+                has_home_tab = 'id="home-tab"' in html
+                has_routes_tab = 'id="routes-tab"' in html
+                has_settings_tab = 'id="settings-tab"' in html
                 
-                # Should NOT have old 4-tab navigation
-                has_dashboard_tab = 'Dashboard' in html
-                has_commute_tab = 'Commute' in html
-                has_planner_tab = 'Planner' in html
+                # Should NOT have old 4-tab navigation tabs
+                has_dashboard_tab = 'id="dashboard-tab"' in html
+                has_commute_tab = 'id="commute-tab"' in html
+                has_planner_tab = 'id="planner-tab"' in html
                 
                 if has_home_tab and has_routes_tab and has_settings_tab:
                     if not (has_dashboard_tab or has_commute_tab or has_planner_tab):
@@ -146,7 +146,7 @@ class TestIssue257Phase4:
         
         try:
             # Check if main.css exists and is served
-            response = self.client.get('/static/css/main.css')
+            response = self.client.get('/css/main.css')
             if response.status_code == 200:
                 css = response.data.decode('utf-8')
                 
@@ -185,7 +185,7 @@ class TestIssue257Phase4:
         
         for js_file in js_files:
             try:
-                response = self.client.get(f'/static/js/{js_file}')
+                response = self.client.get(f'/js/{js_file}')
                 if response.status_code == 200:
                     self.log_test(f"JavaScript: {js_file}", "PASS", "File accessible")
                 else:

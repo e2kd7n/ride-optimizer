@@ -1,74 +1,56 @@
-# Archive
+# Archive Directory
 
-This directory contains archived documentation that is no longer actively maintained but kept for historical reference.
+This directory contains historical documentation that has been completed or superseded.
 
----
+## Directory Structure
 
-## 📁 Directory Structure
+### `/qa-reports/`
+Completed QA test reports and summaries:
+- `QA_EPIC_235_FINAL_REPORT.md` - Final report for Epic #235
+- `QA_EPIC_237_PHASE_1_2_TEST_REPORT.md` - Phase 1-2 testing for Epic #237
+- `QA_EPIC_SUMMARY.md` - Overall QA epic summary
+- `QA_ISSUE_257_DESIGNER_REVIEW.md` - Designer review for Issue #257
+- `QA_ISSUES_CREATED_SUMMARY.md` - Summary of QA-created issues
 
-### [`/completed_work/`](completed_work/)
-Organized archive of completed project work, including:
-- **[`phase_reports/`](completed_work/phase_reports/)** - Phase implementation plans and progress reports (7 files)
-- **[`qa_sessions/`](completed_work/qa_sessions/)** - QA testing sessions and bug reports (14 files)
-- **[`squad_coordination/`](completed_work/squad_coordination/)** - Squad organization and coordination docs (4 files)
-- **[`issue_templates/`](completed_work/issue_templates/)** - GitHub issue templates and bug reports (6 files)
-- **[`architecture/`](completed_work/architecture/)** - ~~Architecture proposals and assessments~~ (moved to [`plans/v0.11.0/`](../../plans/v0.11.0/))
-- **[`misc/`](completed_work/misc/)** - Other completed work (issue reports, PR reviews, task summaries) (8 files)
+### `/epic-237/`
+Epic #237 (UI/UX Redesign) documentation:
+- `EPIC_237_COMPLETION_REPORT.md` - Completion report
+- `EPIC_237_DESIGN_CRITIQUE.md` - Design critique and analysis
+- `EPIC_237_MISTAKE_ANALYSIS.md` - Analysis of implementation mistakes
+- `UIUX_REDESIGN_GAP_ANALYSIS.md` - Gap analysis between design and implementation
 
----
+### `/issue-analysis/`
+Individual issue analysis and completion reports:
+- `DESIGN_EVALUATION_ISSUE.md` - Design evaluation report
+- `ISSUE_211_FINAL_SUMMARY.md` - Issue #211 completion summary
+- `ISSUE_257_PHASE_3_COMPLETE.md` - Issue #257 Phase 3 completion
+- `ISSUE_257_PHASE_4_TEST_REPORT.md` - Issue #257 Phase 4 testing
+- `ISSUE_257_PHASE_4_TEST_RESULTS.md` - Issue #257 Phase 4 results
+- `ISSUE_CLOSURE_EVALUATION_REPORT.md` - Issue closure evaluation
+- `ISSUE_HANDLING_BREAKDOWN_ANALYSIS.md` - Issue handling analysis
 
-## 📚 Archived Documents
+### Root Archive Files
+- `DEPLOYMENT_STATUS.md` - Historical deployment status
+- `WEEKLY_MAINTENANCE_REPORT_2026-05-07.md` - Weekly maintenance report
+- `GITHUB_ISSUE_FTUE_STRAVA_SETUP.md` - FTUE Strava setup issue draft
+- `INTEGRATION_TESTING_GUIDE.md` - Integration testing guide
 
-### Issue Tracking (Superseded)
-- [`ISSUES_TRACKING.md`](ISSUES_TRACKING.md) - Manual issue tracking (superseded by GitHub issues + ISSUE_PRIORITIES.md)
-- [`FUTURE_TODOS.md`](FUTURE_TODOS.md) - Future TODOs and planned features (superseded by ISSUE_PRIORITIES.md and GitHub issue tracking)
+## Archive Policy
 
-### Project Planning & Proposals
-- [`WEB_PLATFORM_PROPOSAL.md`](WEB_PLATFORM_PROPOSAL.md) - Future web platform proposal (2026-03-30)
-- [`DOCUMENTATION_REORGANIZATION.md`](DOCUMENTATION_REORGANIZATION.md) - Documentation reorganization summary (2026-05-05)
+Documents are moved to this archive when:
+1. The associated work is completed
+2. The document is superseded by newer documentation
+3. The document is historical reference material
+4. The document clutters the root directory
 
-### Code Reviews & Audits
-- [`DESIGN_PRINCIPLES_ISSUE_AUDIT.md`](DESIGN_PRINCIPLES_ISSUE_AUDIT.md) - Design principles audit
-- [`SENIOR_DEV_CODE_REVIEW.md`](SENIOR_DEV_CODE_REVIEW.md) - Senior developer code review
+## Active Documentation
 
-### Security Documentation
-- [`SECURITY_AUDIT_PENETRATION_TEST.md`](SECURITY_AUDIT_PENETRATION_TEST.md) - Security audit and penetration testing
-- [`SECURITY_FIX_XXE_VULNERABILITY.md`](SECURITY_FIX_XXE_VULNERABILITY.md) - XXE vulnerability fix
-- [`SECURITY_FIXES_IMPLEMENTED.md`](SECURITY_FIXES_IMPLEMENTED.md) - Implemented security fixes
-- [`SECURITY_MIGRATION_GUIDE.md`](SECURITY_MIGRATION_GUIDE.md) - Security migration guide
-- [`SECURITY_SCAN_REPORT.md`](SECURITY_SCAN_REPORT.md) - Security scan report
-- [`SECURITY.md`](SECURITY.md) - General security documentation
-
----
-
-## 🗂️ Archive Policy
-
-Documents are moved to the archive when:
-1. They document completed work that is no longer actively referenced
-2. They have been superseded by newer documentation
-3. They are historical records of past decisions or implementations
-4. They are security audits or reviews that have been addressed
-
----
-
-## 📝 Accessing Archived Documents
-
-While these documents are archived, they remain valuable for:
-- Understanding historical context
-- Reviewing past decisions
-- Learning from previous implementations
-- Compliance and audit trails
+For current, active documentation, see:
+- `/docs/` - Current technical documentation
+- `/docs/guides/` - User and developer guides
+- `/docs/releases/` - Release notes and version history
+- Root `README.md` - Project overview and quick start
 
 ---
 
-## 📚 Related Documentation
-
-- **Active Documentation:** [`../`](../)
-- **Release Notes:** [`../releases/`](../releases/)
-- **Guides:** [`../guides/`](../guides/)
-- **Project README:** [`../../README.md`](../../README.md)
-
----
-
-**Last Updated:** May 5, 2026  
-**Maintained By:** Development Team
+**Last Updated:** 2026-05-10
