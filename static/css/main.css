@@ -191,6 +191,40 @@ footer {
     display: block;
 }
 
+/* Preset filter buttons */
+.preset-filter {
+    min-width: 120px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.preset-filter.active {
+    background-color: var(--primary-color) !important;
+    color: white !important;
+    border-color: var(--primary-color) !important;
+}
+
+.preset-filter:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Mobile-specific filter improvements */
+@media (max-width: 768px) {
+    .filters-section {
+        padding: 1rem;
+    }
+    
+    .preset-filter {
+        flex: 1 1 calc(50% - 0.5rem);
+        min-width: 0;
+    }
+    
+    .filter-group label {
+        font-size: 0.9rem;
+    }
+}
+
 /* ===== Route Cards ===== */
 .route-card {
     border: 1px solid #dee2e6;
@@ -869,6 +903,7 @@ input[type="radio"] {
 }
 
 /* ===== Issue #251: Mobile Bottom Navigation ===== */
+/* Issue #266 Fix: Ensure bottom nav shows on mobile with proper specificity */
 .bottom-nav,
 .mobile-bottom-nav {
     display: none;
@@ -884,6 +919,20 @@ input[type="radio"] {
     padding: 0;
     justify-content: space-around;
     align-items: center;
+}
+
+/* Show on mobile devices - override Bootstrap d-md-none with !important */
+@media (max-width: 767.98px) {
+    .bottom-nav,
+    .mobile-bottom-nav {
+        display: flex !important;
+    }
+    
+    /* Add padding to main content to prevent overlap with bottom nav */
+    main,
+    .container-fluid {
+        padding-bottom: 72px;
+    }
 }
 
 .bottom-nav-item,

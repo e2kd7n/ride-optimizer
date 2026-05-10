@@ -282,6 +282,50 @@ def get_routes():
         }), 500
 
 
+@app.route('/api/routes/<route_id>')
+def get_route_detail(route_id):
+    """Get a single route detail payload by route ID."""
+    initialize_services()
+
+    try:
+        route_type = request.args.get('type')
+        route = _route_library_service.get_route_by_id(route_id, route_type=route_type)
+
+        if not route:
+            return jsonify({
+                'status': 'error',
+                'message': f'Route {route_id} not found'
+            }), 404
+
+        return jsonify({
+            'status': 'success',
+            'route': {
+                'id': route.get('id'),
+                'name': route.get('name', 'Unknown Route'),
+                'type': route.get('type'),
+                'direction': route.get('direction'),
+                'distance': route.get('distance', 0),
+                'duration': route.get('duration', 0),
+                'elevation': route.get('elevation', 0),
+                'uses': route.get('uses', 0),
+                'coordinates': route.get('coordinates', []),
+                'weather': route.get('weather'),
+                'difficulty': route.get('difficulty'),
+                'routes': route.get('routes', []),
+                'is_favorite': route.get('is_favorite', False),
+                'is_plus_route': route.get('is_plus_route', False),
+                'sport_type': route.get('sport_type', route.get('ride_type', route.get('type', 'Ride')))
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting route detail for {route_id}: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
 @app.route('/api/status')
 def get_status():
     """

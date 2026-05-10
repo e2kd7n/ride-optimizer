@@ -1,17 +1,24 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-05-10 02:33:41 UTC / 2026-05-09 21:33:41 CDT
+**Last Updated:** 2026-05-10 03:41:00 UTC / 2026-05-09 22:41:00 CDT
 
 This file reflects the current state of GitHub issues by priority. Issues are managed via GitHub labels (P0-critical, P1-high, P2-medium, P3-low, P4-future).
 
 ## 🔴 P0 - CRITICAL (Drop Everything)
 Issues that make the application unusable or cause data loss.
 
-**No P0 issues currently open** ✅
+- #267 - Route Cards Non-Interactive, Missing Detail View API
+- #266 - Mobile Bottom Navigation Non-Functional
 
 ## 🔴 P1 - HIGH (Current Sprint)
 Issues that significantly impact core functionality or user experience.
 
+- #271 - Add Performance Metrics and Historical Data
+- #270 - Implement Route Comparison Feature
+- #269 - Improve Mobile Filter UX with Quick Presets
+- #268 - Add Difficulty Ratings to All Routes
+- #265 - 🎯 EPIC: UAT Findings - Critical Navigation & Interaction Fixes + UX Enhancements
+- #264 - Dashboard and Route Library UX Review
 - #262 - Remove Legacy CLI Application Remnants
 - #260 - Implement guided FTUE for Strava API key setup with in-app configuration
 - #256 - UI/UX Refinements: Design Critique Follow-up
@@ -36,16 +43,13 @@ Issues that significantly impact core functionality or user experience.
 - #171 - Build planner frontend UI (currently placeholder only)
 - #164 - Test Coverage: report_generator.py (47% → 80%)
 - #163 - Test Coverage: data_fetcher.py (49% → 80%)
-- #162 - Test Coverage: long_ride_analyzer.py (13% → 50%)
-- #161 - Test Coverage: route_analyzer.py (20% → 50%)
-- #144 - 🌐 EPIC: Personal Web Platform Migration (v3.0.0)
-- #119 - Update TECHNICAL_SPEC.md with comprehensive implementation details
-- #118 - Re-enable geocoding after rate limit expires
-- #117 - Fix map zoom to show start and finish when route is selected
 
 ## 🟡 P2 - MEDIUM (Next Sprint)
 Important improvements that enhance functionality but don't block core workflows.
 
+- #274 - Add Last Updated Timestamps
+- #273 - Implement Route Sorting Options
+- #272 - Add Hourly Weather Forecast
 - #263 - Refine Settings Form Structure
 - #227 - Improve Test Coverage for New Features
 - #209 - Implement graceful degradation for unavailable services
@@ -73,9 +77,6 @@ Important improvements that enhance functionality but don't block core workflows
 - #136 - Implement settings and preferences page for home/work locations, units, time windows, and planner defaults
 - #128 - Fix "Unnamed Activity" display in Route Comparison uses modal
 - #127 - Reduce excessive whitespace between report sections
-- #122 - [LOW PRIORITY] Grey out unselected routes on map when route is clicked
-- #121 - [LOW PRIORITY] Color code route names to match map line colors
-- #116 - Add visual weather icons and color coding
 
 ## 🟢 P3 - LOW (Backlog)
 Nice-to-have improvements and minor UX enhancements.

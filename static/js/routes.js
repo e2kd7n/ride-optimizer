@@ -1,510 +1,719 @@
 /**
- * routes.js - Route management utilities for Ride Optimizer
- * Epic #237 - UI/UX Redesign
- * 
- * Features:
- * - Compact route card component (Issue #247)
- * - Skeleton loading states (Issue #248)
- * - Route filtering and sorting
- * - Route selection and highlighting
- * - Touch target validation (Issue #250)
+ * routes.js - Route library page interactions
  */
 
-/**
- * Creates a compact route card (56px height) with all required information
- * @param {Object} routeData - Route data object
- * @param {number} routeData.rank - Route ranking (1-based)
- * @param {string} routeData.id - Route ID
- * @param {string} routeData.name - Route name
- * @param {number} routeData.score - Route score
- * @param {number} routeData.distance - Distance in meters
- * @param {number} routeData.duration - Duration in seconds
- * @param {number} routeData.elevation - Elevation gain in meters (optional)
- * @param {Object} routeData.weather - Weather data (optional)
- * @param {boolean} routeData.isOptimal - Whether this is the optimal route
- * @param {Function} routeData.onClick - Click handler (optional)
- * @returns {HTMLElement} The compact route card element
- */
-window.createCompactRouteCard = function(routeData) {
-    const card = document.createElement('div');
-    card.className = 'route-card-compact';
-    card.setAttribute('role', 'button');
-    card.setAttribute('tabindex', '0');
-    card.setAttribute('data-route-id', routeData.id);
-    card.setAttribute('aria-label', `Route ${routeData.rank}: ${routeData.name}, Score ${routeData.score.toFixed(1)}`);
-    
-    if (routeData.isOptimal) {
-        card.classList.add('optimal');
-        card.setAttribute('aria-label', `Optimal route: ${routeData.name}, Score ${routeData.score.toFixed(1)}`);
-    }
-    
-    // Rank
-    const rank = document.createElement('div');
-    rank.className = 'route-card-compact-rank';
-    rank.textContent = routeData.rank;
-    card.appendChild(rank);
-    
-    // Name
-    const name = document.createElement('div');
-    name.className = 'route-card-compact-name';
-    name.textContent = routeData.name;
-    name.title = routeData.name; // Full name on hover
-    card.appendChild(name);
-    
-    // Metrics container
-    const metrics = document.createElement('div');
-    metrics.className = 'route-card-compact-metrics';
-    
-    // Score
-    const scoreMetric = document.createElement('div');
-    scoreMetric.className = 'route-card-compact-metric';
-    scoreMetric.innerHTML = `
-        <span class="route-card-compact-metric-icon">⭐</span>
-        <span class="route-card-compact-score">${routeData.score.toFixed(1)}</span>
-    `;
-    metrics.appendChild(scoreMetric);
-    
-    // Distance
-    const distanceMetric = document.createElement('div');
-    distanceMetric.className = 'route-card-compact-metric';
-    const distanceKm = (routeData.distance / 1000).toFixed(1);
-    distanceMetric.innerHTML = `
-        <span class="route-card-compact-metric-icon">📏</span>
-        <span>${distanceKm} km</span>
-    `;
-    metrics.appendChild(distanceMetric);
-    
-    // Duration
-    const durationMetric = document.createElement('div');
-    durationMetric.className = 'route-card-compact-metric';
-    const durationMin = Math.round(routeData.duration / 60);
-    durationMetric.innerHTML = `
-        <span class="route-card-compact-metric-icon">⏱️</span>
-        <span>${durationMin} min</span>
-    `;
-    metrics.appendChild(durationMetric);
-    
-    // Elevation (optional)
-    if (routeData.elevation !== undefined && routeData.elevation > 0) {
-        const elevationMetric = document.createElement('div');
-        elevationMetric.className = 'route-card-compact-metric';
-        elevationMetric.innerHTML = `
-            <span class="route-card-compact-metric-icon">⛰️</span>
-            <span>${Math.round(routeData.elevation)} m</span>
-        `;
-        metrics.appendChild(elevationMetric);
-    }
-    
-    // Weather (optional)
-    if (routeData.weather) {
-        const weatherDiv = document.createElement('div');
-        weatherDiv.className = `route-card-compact-weather ${routeData.weather.favorability || 'neutral'}`;
-        weatherDiv.innerHTML = `
-            <span>${routeData.weather.icon || '🌬️'}</span>
-            <span>${routeData.weather.label || 'Wind'}</span>
-        `;
-        weatherDiv.title = routeData.weather.tooltip || '';
-        metrics.appendChild(weatherDiv);
-    }
-    
-    card.appendChild(metrics);
-    
-    // Click handler
-    const handleClick = routeData.onClick || function() {
-        card.classList.toggle('selected');
-        // Announce selection to screen readers
-        const isSelected = card.classList.contains('selected');
-        card.setAttribute('aria-pressed', isSelected);
-        
-        if (window.announceToScreenReader) {
-            announceToScreenReader(`Route ${isSelected ? 'selected' : 'deselected'}`);
-        }
+(function() {
+    const state = {
+        routes: [],
+        filteredRoutes: [],
+        selectedForComparison: [],
+        mapInstance: null,
+        displayedRoutes: new Map(), // Map of routeId -> {polyline, markers}
+        routeColors: ['#007bff', '#28a745', '#dc3545', '#ffc107', '#17a2b8', '#6f42c1', '#fd7e14']
     };
-    
-    card.addEventListener('click', handleClick);
-    card.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            handleClick();
+
+    function byId(id) {
+        return document.getElementById(id);
+    }
+
+    function getFilters() {
+        return {
+            favorite: byId('filter-favorite')?.value || '',
+            sport_type: byId('filter-sport-type')?.value || '',
+            difficulty: byId('filter-difficulty')?.value || '',
+            min_distance: byId('filter-min-distance')?.value || '',
+            max_distance: byId('filter-max-distance')?.value || '',
+            sort_by: byId('sort-by')?.value || 'name',
+            search: (byId('search-query')?.value || '').trim().toLowerCase()
+        };
+    }
+
+    function announce(message) {
+        const liveRegion = byId('routes-live-region');
+        if (liveRegion) {
+            liveRegion.textContent = message;
         }
-    });
-    
-    return card;
-};
+    }
 
-/**
- * Creates a skeleton loader for route cards
- * @param {number} count - Number of skeleton cards to create
- * @returns {HTMLElement} Container with skeleton cards
- */
-window.createSkeletonRouteCards = function(count = 5) {
-    const container = document.createElement('div');
-    container.className = 'skeleton-container';
-    container.setAttribute('aria-busy', 'true');
-    container.setAttribute('aria-label', 'Loading routes');
-    
-    for (let i = 0; i < count; i++) {
-        const card = document.createElement('div');
-        card.className = 'skeleton-route-card';
-        
-        const rank = document.createElement('div');
-        rank.className = 'skeleton skeleton-route-card-rank';
-        card.appendChild(rank);
-        
-        const name = document.createElement('div');
-        name.className = 'skeleton skeleton-route-card-name';
-        card.appendChild(name);
-        
-        const metrics = document.createElement('div');
-        metrics.className = 'skeleton-route-card-metrics';
-        
-        for (let j = 0; j < 4; j++) {
-            const metric = document.createElement('div');
-            metric.className = 'skeleton skeleton-route-card-metric';
-            metrics.appendChild(metric);
+    function initializeMap() {
+        if (state.mapInstance) {
+            return; // Already initialized
         }
-        
-        card.appendChild(metrics);
-        container.appendChild(card);
-    }
-    
-    return container;
-};
 
-/**
- * Creates a skeleton loader for map
- * @returns {HTMLElement} Skeleton map element
- */
-window.createSkeletonMap = function() {
-    const skeleton = document.createElement('div');
-    skeleton.className = 'skeleton skeleton-map';
-    skeleton.setAttribute('aria-busy', 'true');
-    skeleton.setAttribute('aria-label', 'Loading map');
-    return skeleton;
-};
+        const mapElement = byId('routes-map');
+        if (!mapElement) {
+            console.warn('Map container not found');
+            return;
+        }
 
-/**
- * Creates a skeleton loader for weather widget
- * @returns {HTMLElement} Skeleton weather element
- */
-window.createSkeletonWeather = function() {
-    const skeleton = document.createElement('div');
-    skeleton.className = 'skeleton-weather';
-    skeleton.setAttribute('aria-busy', 'true');
-    skeleton.setAttribute('aria-label', 'Loading weather');
-    
-    const header = document.createElement('div');
-    header.className = 'skeleton skeleton-weather-header';
-    skeleton.appendChild(header);
-    
-    const metrics = document.createElement('div');
-    metrics.className = 'skeleton-weather-metrics';
-    
-    for (let i = 0; i < 4; i++) {
-        const metric = document.createElement('div');
-        metric.className = 'skeleton skeleton-weather-metric';
-        metrics.appendChild(metric);
-    }
-    
-    skeleton.appendChild(metrics);
-    return skeleton;
-};
+        // Check if the map container has already been initialized by another script
+        if (mapElement._leaflet_id) {
+            console.log('Map container already initialized, skipping...');
+            return;
+        }
 
-/**
- * Creates a generic skeleton card
- * @param {Object} options - Configuration options
- * @param {number} options.lines - Number of content lines (default: 3)
- * @param {string} options.headerWidth - Width of header (default: '150px')
- * @returns {HTMLElement} Skeleton card element
- */
-window.createSkeletonCard = function(options = {}) {
-    const { lines = 3, headerWidth = '150px' } = options;
-    
-    const card = document.createElement('div');
-    card.className = 'skeleton-card';
-    card.setAttribute('aria-busy', 'true');
-    card.setAttribute('aria-label', 'Loading content');
-    
-    const header = document.createElement('div');
-    header.className = 'skeleton skeleton-card-header';
-    header.style.width = headerWidth;
-    card.appendChild(header);
-    
-    const content = document.createElement('div');
-    content.className = 'skeleton-card-content';
-    
-    const widths = ['long', 'medium', 'short'];
-    for (let i = 0; i < lines; i++) {
-        const line = document.createElement('div');
-        line.className = `skeleton skeleton-card-line ${widths[i % widths.length]}`;
-        content.appendChild(line);
-    }
-    
-    card.appendChild(content);
-    return card;
-};
+        try {
+            state.mapInstance = L.map('routes-map').setView([41.8781, -87.6298], 11); // Default to Chicago
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 19
+            }).addTo(state.mapInstance);
 
-/**
- * Replaces skeleton with real content
- * @param {HTMLElement} container - Container with skeleton
- * @param {HTMLElement} realContent - Real content to show
- */
-window.replaceSkeletonWithContent = function(container, realContent) {
-    if (!container || !realContent) return;
-    
-    // Mark container as loaded
-    container.classList.add('loaded');
-    container.setAttribute('aria-busy', 'false');
-    
-    // Add real content
-    realContent.classList.add('real-content');
-    container.appendChild(realContent);
-    
-    // Remove skeleton after fade-in animation
-    setTimeout(() => {
-        const skeletons = container.querySelectorAll('.skeleton, .skeleton-route-card, .skeleton-map, .skeleton-weather, .skeleton-card');
-        skeletons.forEach(s => s.remove());
-    }, 300);
-};
-
-/**
- * Validates that all interactive elements meet 44x44px minimum touch target size
- * Useful for development and testing
- * @returns {Object} Validation results with failing elements
- */
-window.validateTouchTargets = function() {
-    const MIN_SIZE = 44;
-    const selectors = [
-        'button',
-        'a',
-        'input[type="checkbox"]',
-        'input[type="radio"]',
-        '.btn',
-        '.nav-link',
-        '.btn-close',
-        '.route-card-compact'
-    ];
-    
-    const results = {
-        passed: [],
-        failed: [],
-        warnings: []
-    };
-    
-    selectors.forEach(selector => {
-        const elements = document.querySelectorAll(selector);
-        elements.forEach(el => {
-            const rect = el.getBoundingClientRect();
-            const width = rect.width;
-            const height = rect.height;
-            
-            // Check if element meets minimum size
-            if (width >= MIN_SIZE && height >= MIN_SIZE) {
-                results.passed.push({
-                    element: el,
-                    selector: selector,
-                    size: `${Math.round(width)}x${Math.round(height)}px`
-                });
-            } else if (width < MIN_SIZE || height < MIN_SIZE) {
-                // Check if it's an exception (inline text links, etc.)
-                const isException = el.closest('p') || el.closest('li') || el.classList.contains('inline-link');
-                
-                if (isException) {
-                    results.warnings.push({
-                        element: el,
-                        selector: selector,
-                        size: `${Math.round(width)}x${Math.round(height)}px`,
-                        reason: 'Inline text link (exception)'
-                    });
-                } else {
-                    results.failed.push({
-                        element: el,
-                        selector: selector,
-                        size: `${Math.round(width)}x${Math.round(height)}px`,
-                        required: `${MIN_SIZE}x${MIN_SIZE}px`
-                    });
+            // Fix map size after initialization
+            setTimeout(() => {
+                if (state.mapInstance) {
+                    state.mapInstance.invalidateSize();
                 }
+            }, 100);
+
+            updateMapStatus();
+            console.log('✓ Map initialized successfully');
+        } catch (error) {
+            console.error('Failed to initialize map:', error);
+        }
+    }
+
+    function updateMapStatus() {
+        const statusElement = byId('map-status');
+        if (!statusElement) return;
+
+        const count = state.displayedRoutes.size;
+        if (count === 0) {
+            statusElement.textContent = 'Click on routes below to display them on the map';
+            statusElement.className = 'mt-2 text-muted small';
+        } else {
+            statusElement.textContent = `Showing ${count} route${count > 1 ? 's' : ''} on map`;
+            statusElement.className = 'mt-2 text-primary small';
+        }
+    }
+
+    function getRouteColor(index) {
+        return state.routeColors[index % state.routeColors.length];
+    }
+
+    async function toggleRouteOnMap(route) {
+        console.log('toggleRouteOnMap called for:', route.name, route.id);
+        
+        if (!state.mapInstance) {
+            console.log('Map not initialized, initializing now...');
+            initializeMap();
+        }
+
+        const routeId = route.id;
+
+        // If route is already displayed, remove it
+        if (state.displayedRoutes.has(routeId)) {
+            console.log('Route already on map, removing...');
+            const mapObjects = state.displayedRoutes.get(routeId);
+            if (mapObjects.polyline) {
+                state.mapInstance.removeLayer(mapObjects.polyline);
+            }
+            if (mapObjects.startMarker) {
+                state.mapInstance.removeLayer(mapObjects.startMarker);
+            }
+            if (mapObjects.endMarker) {
+                state.mapInstance.removeLayer(mapObjects.endMarker);
+            }
+            state.displayedRoutes.delete(routeId);
+            updateMapStatus();
+            
+            // Update card styling
+            const card = document.querySelector(`[data-route-id="${routeId}"]`);
+            if (card) {
+                card.style.borderColor = '';
+                card.style.borderWidth = '';
+            }
+            return;
+        }
+
+        // Fetch route details to get coordinates
+        try {
+            const response = await window.apiClient.getRouteDetails(routeId, route.type);
+            if (!response || !response.route || !response.route.coordinates || !response.route.coordinates.length) {
+                console.warn('No coordinates available for route:', routeId);
+                return;
+            }
+
+            const coordinates = response.route.coordinates;
+            const colorIndex = state.displayedRoutes.size;
+            const color = getRouteColor(colorIndex);
+
+            // Create polyline
+            const polyline = L.polyline(coordinates, {
+                color: color,
+                weight: 4,
+                opacity: 0.8
+            }).addTo(state.mapInstance);
+
+            polyline.bindPopup(`<strong>${route.name}</strong><br>${window.formatDistance(route.distance)}`);
+
+            // Add start and end markers
+            const start = coordinates[0];
+            const end = coordinates[coordinates.length - 1];
+
+            const startMarker = L.marker(start, {
+                icon: L.divIcon({
+                    className: 'custom-marker',
+                    html: `<div style="background-color: ${color}; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.5);"></div>`,
+                    iconSize: [12, 12]
+                })
+            }).addTo(state.mapInstance);
+            startMarker.bindTooltip('Start', { permanent: false });
+
+            const endMarker = L.marker(end, {
+                icon: L.divIcon({
+                    className: 'custom-marker',
+                    html: `<div style="background-color: ${color}; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.5);"></div>`,
+                    iconSize: [12, 12]
+                })
+            }).addTo(state.mapInstance);
+            endMarker.bindTooltip('End', { permanent: false });
+
+            // Store map objects
+            state.displayedRoutes.set(routeId, {
+                polyline: polyline,
+                startMarker: startMarker,
+                endMarker: endMarker,
+                color: color
+            });
+
+            // Fit bounds to show all routes
+            fitAllRoutes();
+            updateMapStatus();
+
+            // Update card styling to show it's on the map
+            const card = document.querySelector(`[data-route-id="${routeId}"]`);
+            if (card) {
+                card.style.borderColor = color;
+                card.style.borderWidth = '3px';
+            }
+
+        } catch (error) {
+            console.error('Failed to load route coordinates:', error);
+        }
+    }
+
+    function fitAllRoutes() {
+        if (!state.mapInstance || state.displayedRoutes.size === 0) {
+            return;
+        }
+
+        const bounds = L.latLngBounds();
+        state.displayedRoutes.forEach(mapObjects => {
+            if (mapObjects.polyline) {
+                bounds.extend(mapObjects.polyline.getBounds());
             }
         });
-    });
-    
-    // Log results
-    console.group('Touch Target Validation');
-    console.log(`✅ Passed: ${results.passed.length} elements`);
-    console.log(`⚠️  Warnings: ${results.warnings.length} elements (exceptions)`);
-    console.log(`❌ Failed: ${results.failed.length} elements`);
-    
-    if (results.failed.length > 0) {
-        console.group('Failed Elements');
-        results.failed.forEach(item => {
-            console.log(`${item.selector}: ${item.size} (required: ${item.required})`, item.element);
-        });
-        console.groupEnd();
-    }
-    
-    if (results.warnings.length > 0) {
-        console.group('Warnings (Exceptions)');
-        results.warnings.forEach(item => {
-            console.log(`${item.selector}: ${item.size} - ${item.reason}`, item.element);
-        });
-        console.groupEnd();
-    }
-    
-    console.groupEnd();
-    
-    return results;
-};
 
-/**
- * Enables visual debugging of touch targets
- * Adds dashed borders around all interactive elements to show 44x44px minimum
- */
-window.debugTouchTargets = function(enable = true) {
-    if (enable) {
-        document.body.classList.add('debug-touch-targets');
-        console.log('Touch target debugging enabled. Dashed borders show 44x44px minimum.');
-    } else {
-        document.body.classList.remove('debug-touch-targets');
-        console.log('Touch target debugging disabled.');
+        if (bounds.isValid()) {
+            state.mapInstance.fitBounds(bounds, { padding: [30, 30] });
+        }
     }
-};
 
-/**
- * Route filtering utility
- * @param {Array} routes - Array of route objects
- * @param {Object} filters - Filter criteria
- * @returns {Array} Filtered routes
- */
-window.filterRoutes = function(routes, filters = {}) {
-    return routes.filter(route => {
-        // Distance filter
-        if (filters.minDistance && route.distance < filters.minDistance * 1000) {
-            return false;
+    function clearAllRoutes() {
+        if (!state.mapInstance) {
+            return;
         }
-        if (filters.maxDistance && route.distance > filters.maxDistance * 1000) {
-            return false;
+
+        state.displayedRoutes.forEach((mapObjects, routeId) => {
+            if (mapObjects.polyline) {
+                state.mapInstance.removeLayer(mapObjects.polyline);
+            }
+            if (mapObjects.startMarker) {
+                state.mapInstance.removeLayer(mapObjects.startMarker);
+            }
+            if (mapObjects.endMarker) {
+                state.mapInstance.removeLayer(mapObjects.endMarker);
+            }
+
+            // Reset card styling
+            const card = document.querySelector(`[data-route-id="${routeId}"]`);
+            if (card) {
+                card.style.borderColor = '';
+                card.style.borderWidth = '';
+            }
+        });
+
+        state.displayedRoutes.clear();
+        updateMapStatus();
+        announce('Cleared all routes from map');
+    }
+
+    function navigateToRouteDetail(routeId, routeType) {
+        const params = new URLSearchParams({ id: routeId });
+        if (routeType) {
+            params.set('type', routeType);
+        }
+        window.location.href = `/route-detail.html?${params.toString()}`;
+    }
+
+    function formatDuration(durationMinutes) {
+        const totalMinutes = Math.round(Number(durationMinutes || 0));
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+
+        if (hours > 0) {
+            return `${hours}h ${minutes}m`;
+        }
+
+        return `${totalMinutes} min`;
+    }
+
+    function createRouteCard(route, mode = 'full') {
+        // Simple mode for dashboard list view
+        if (mode === 'simple') {
+            const row = document.createElement('div');
+            row.className = 'route-row p-3 mb-2 border rounded';
+            row.style.cursor = 'pointer';
+            row.setAttribute('data-route-id', route.id);
+            
+            row.innerHTML = `
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h6 class="mb-1">
+                            ${route.is_favorite ? '<i class="bi bi-star-fill text-warning"></i> ' : ''}
+                            ${route.name}
+                        </h6>
+                        <small class="text-muted">
+                            ${window.formatDistance(route.distance)} • ${window.formatElevation(route.elevation_gain || route.elevation || 0)} • ${route.uses || 0} uses
+                        </small>
+                    </div>
+                    <span class="badge bg-secondary">${route.sport_type || 'commute'}</span>
+                </div>
+            `;
+            
+            return row;
         }
         
-        // Duration filter
-        if (filters.minDuration && route.duration < filters.minDuration * 60) {
-            return false;
+        // Full mode for routes page
+        const column = document.createElement('div');
+        column.className = 'col-12 col-md-6 col-xl-4';
+
+        const card = document.createElement('div');
+        card.className = 'card h-100 shadow-sm route-library-card';
+        card.setAttribute('data-route-id', route.id);
+        card.setAttribute('data-route-type', route.type || '');
+        card.style.transition = 'transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease';
+        card.style.minHeight = '100%';
+
+        const isSelected = state.selectedForComparison.some(r => r.id === route.id);
+        card.addEventListener('focus', () => {
+            card.classList.add('border-primary');
+        });
+        card.addEventListener('blur', () => {
+            card.classList.remove('border-primary');
+        });
+        card.addEventListener('mouseenter', () => {
+            card.style.transform = 'translateY(-2px)';
+            card.style.boxShadow = '0 0.5rem 1rem rgba(0,0,0,0.12)';
+        });
+        card.addEventListener('mouseleave', () => {
+            card.style.transform = 'translateY(0)';
+            card.style.boxShadow = '';
+        });
+
+        const badge = route.is_favorite
+            ? '<span class="badge bg-warning text-dark"><i class="bi bi-star-fill"></i> Favorite</span>'
+            : '';
+
+        const plusBadge = route.is_plus_route
+            ? '<span class="badge bg-success-subtle text-success-emphasis">PLUS</span>'
+            : '';
+
+        // Difficulty badge with semantic colors
+        const difficultyColors = {
+            'easy': 'bg-success',
+            'moderate': 'bg-warning text-dark',
+            'hard': 'bg-danger'
+        };
+        const difficultyIcons = {
+            'easy': 'bi-check-circle',
+            'moderate': 'bi-dash-circle',
+            'hard': 'bi-exclamation-triangle'
+        };
+        const difficulty = route.difficulty || 'easy';
+        const difficultyBadge = `<span class="badge ${difficultyColors[difficulty]}">
+            <i class="bi ${difficultyIcons[difficulty]}"></i> ${difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}
+        </span>`;
+
+        card.innerHTML = `
+            <div class="card-body d-flex flex-column">
+                <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                    <div class="form-check">
+                        <input class="form-check-input compare-checkbox" type="checkbox"
+                               id="compare-${route.id}"
+                               data-route-id="${route.id}"
+                               ${isSelected ? 'checked' : ''}
+                               onclick="event.stopPropagation()">
+                        <label class="form-check-label small text-muted" for="compare-${route.id}">
+                            Compare
+                        </label>
+                    </div>
+                    <div class="d-flex flex-column align-items-end gap-1">
+                        ${badge}
+                        ${plusBadge}
+                        ${difficultyBadge}
+                    </div>
+                </div>
+                <div class="mb-3" style="cursor: pointer;" data-route-link>
+                    <h3 class="h5 mb-1">${route.name}</h3>
+                    <p class="text-muted mb-0 text-capitalize">${route.type || 'route'}</p>
+                </div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <div class="border rounded p-2 h-100">
+                            <div class="small text-muted">Distance</div>
+                            <div class="fw-semibold">${window.formatDistance(route.distance)}</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="border rounded p-2 h-100">
+                            <div class="small text-muted">Duration</div>
+                            <div class="fw-semibold">${formatDuration(route.duration)}</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="border rounded p-2 h-100">
+                            <div class="small text-muted">Elevation</div>
+                            <div class="fw-semibold">${window.formatElevation(route.elevation_gain || route.elevation || 0)}</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="border rounded p-2 h-100">
+                            <div class="small text-muted">Uses</div>
+                            <div class="fw-semibold">${route.uses || 0}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-auto d-flex justify-content-between align-items-center" data-route-link>
+                    <span class="text-muted small">${route.sport_type || 'Ride'}</span>
+                    <span class="text-primary fw-semibold">View details <i class="bi bi-arrow-right" aria-hidden="true"></i></span>
+                </div>
+            </div>
+        `;
+
+        // Add click handler for the card itself to toggle map display
+        card.style.cursor = 'pointer';
+        card.addEventListener('click', (e) => {
+            console.log('Card clicked:', route.name);
+            // Don't trigger if clicking on checkbox or detail links
+            if (e.target.closest('.compare-checkbox') || e.target.closest('[data-route-link]')) {
+                console.log('Click was on checkbox or link, ignoring');
+                return;
+            }
+            console.log('Calling toggleRouteOnMap');
+            toggleRouteOnMap(route);
+        });
+
+        // Add click handler for route details (but not on checkbox)
+        const linkElements = card.querySelectorAll('[data-route-link]');
+        linkElements.forEach(el => {
+            el.style.cursor = 'pointer';
+            el.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevent card click
+                navigateToRouteDetail(route.id, route.type);
+            });
+        });
+
+        // Add checkbox handler
+        const checkbox = card.querySelector('.compare-checkbox');
+        if (checkbox) {
+            checkbox.addEventListener('change', (e) => {
+                e.stopPropagation();
+                toggleRouteComparison(route);
+            });
         }
-        if (filters.maxDuration && route.duration > filters.maxDuration * 60) {
-            return false;
+
+        column.appendChild(card);
+        return column;
+    }
+
+    function toggleRouteComparison(route) {
+        const index = state.selectedForComparison.findIndex(r => r.id === route.id);
+        
+        if (index > -1) {
+            // Remove from comparison
+            state.selectedForComparison.splice(index, 1);
+        } else {
+            // Add to comparison (max 3 routes)
+            if (state.selectedForComparison.length >= 3) {
+                alert('You can compare up to 3 routes at a time. Please deselect one first.');
+                // Uncheck the checkbox
+                const checkbox = document.querySelector(`#compare-${route.id}`);
+                if (checkbox) checkbox.checked = false;
+                return;
+            }
+            state.selectedForComparison.push(route);
         }
         
-        // Elevation filter
-        if (filters.maxElevation && route.elevation > filters.maxElevation) {
-            return false;
+        updateCompareButton();
+    }
+
+    function updateCompareButton() {
+        let compareBtn = byId('compare-routes-btn');
+        const count = state.selectedForComparison.length;
+        
+        if (!compareBtn && count > 0) {
+            // Create floating compare button
+            compareBtn = document.createElement('button');
+            compareBtn.id = 'compare-routes-btn';
+            compareBtn.className = 'btn btn-primary btn-lg position-fixed';
+            compareBtn.style.cssText = 'bottom: 2rem; right: 2rem; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.3);';
+            document.body.appendChild(compareBtn);
+            
+            compareBtn.addEventListener('click', () => {
+                const ids = state.selectedForComparison.map(r => r.id).join(',');
+                window.location.href = `/compare.html?ids=${ids}`;
+            });
         }
         
-        // Score filter
-        if (filters.minScore && route.score < filters.minScore) {
-            return false;
-        }
-        
-        // Favorite filter
-        if (filters.favoritesOnly) {
-            const favorites = JSON.parse(localStorage.getItem('favoriteRoutes') || '[]');
-            if (!favorites.includes(route.id)) {
-                return false;
+        if (compareBtn) {
+            if (count > 0) {
+                compareBtn.innerHTML = `<i class="bi bi-arrow-left-right"></i> Compare ${count} Route${count > 1 ? 's' : ''}`;
+                compareBtn.style.display = 'block';
+            } else {
+                compareBtn.style.display = 'none';
             }
         }
-        
-        // Hidden routes filter
-        const hiddenRoutes = JSON.parse(localStorage.getItem('hiddenRoutes') || '[]');
-        if (hiddenRoutes.includes(route.id)) {
-            return false;
-        }
-        
-        return true;
-    });
-};
+    }
 
-/**
- * Route sorting utility
- * @param {Array} routes - Array of route objects
- * @param {string} sortBy - Sort field ('score', 'distance', 'duration', 'elevation')
- * @param {string} direction - Sort direction ('asc' or 'desc')
- * @returns {Array} Sorted routes
- */
-window.sortRoutes = function(routes, sortBy = 'score', direction = 'desc') {
-    return routes.sort((a, b) => {
-        let aVal, bVal;
-        
-        switch(sortBy) {
-            case 'score':
-                aVal = a.score;
-                bVal = b.score;
+    function applyClientFilters(routes, filters) {
+        let filtered = [...routes];
+
+        if (filters.favorite === 'true') {
+            filtered = filtered.filter(route => route.is_favorite);
+        } else if (filters.favorite === 'false') {
+            filtered = filtered.filter(route => !route.is_favorite);
+        }
+
+        if (filters.sport_type) {
+            filtered = filtered.filter(route => (route.sport_type || '') === filters.sport_type);
+        }
+
+        if (filters.difficulty) {
+            filtered = filtered.filter(route => (route.difficulty || 'easy') === filters.difficulty);
+        }
+
+        if (filters.min_distance) {
+            filtered = filtered.filter(route => Number(route.distance || 0) >= Number(filters.min_distance));
+        }
+
+        if (filters.max_distance) {
+            filtered = filtered.filter(route => Number(route.distance || 0) <= Number(filters.max_distance));
+        }
+
+        if (filters.search) {
+            filtered = filtered.filter(route =>
+                (route.name || '').toLowerCase().includes(filters.search)
+            );
+        }
+
+        switch (filters.sort_by) {
+            case 'name':
+                filtered.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+                break;
+            case 'name-desc':
+                filtered.sort((a, b) => (b.name || '').localeCompare(a.name || ''));
                 break;
             case 'distance':
-                aVal = a.distance;
-                bVal = b.distance;
+                filtered.sort((a, b) => Number(a.distance || 0) - Number(b.distance || 0));
                 break;
-            case 'duration':
-                aVal = a.duration;
-                bVal = b.duration;
+            case 'distance-desc':
+                filtered.sort((a, b) => Number(b.distance || 0) - Number(a.distance || 0));
                 break;
             case 'elevation':
-                aVal = a.elevation || 0;
-                bVal = b.elevation || 0;
+                filtered.sort((a, b) => Number(a.elevation_gain || a.elevation || 0) - Number(b.elevation_gain || b.elevation || 0));
                 break;
-            case 'name':
-                aVal = a.name.toLowerCase();
-                bVal = b.name.toLowerCase();
+            case 'elevation-desc':
+                filtered.sort((a, b) => Number(b.elevation_gain || b.elevation || 0) - Number(a.elevation_gain || a.elevation || 0));
                 break;
-            default:
-                return 0;
+            case 'uses':
+                filtered.sort((a, b) => Number(b.uses || 0) - Number(a.uses || 0));
+                break;
+        }
+
+        return filtered;
+    }
+
+    function renderSummary(count) {
+        const summary = byId('results-summary');
+        if (!summary) return;
+
+        summary.className = count > 0 ? 'alert alert-info' : 'alert alert-warning';
+        summary.innerHTML = count > 0
+            ? `<i class="bi bi-info-circle"></i> Showing ${count} route${count === 1 ? '' : 's'}`
+            : '<i class="bi bi-exclamation-triangle"></i> No routes match the current filters';
+    }
+
+    function renderRoutes(routes) {
+        const container = byId('routes-container');
+        if (!container) return;
+
+        container.innerHTML = '';
+
+        if (!routes.length) {
+            renderSummary(0);
+            announce('No routes found');
+            container.innerHTML = `
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i> No routes found.
+                </div>
+            `;
+            return;
+        }
+
+        const row = document.createElement('div');
+        row.className = 'row g-3';
+
+        routes.forEach(route => {
+            row.appendChild(createRouteCard(route));
+        });
+
+        container.appendChild(row);
+        renderSummary(routes.length);
+        announce(`Showing ${routes.length} routes`);
+    }
+
+    async function loadRoutes() {
+        const container = byId('routes-container');
+        if (container) {
+            container.innerHTML = `
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading routes...</span>
+                    </div>
+                    <p class="mt-3 text-muted">Loading routes...</p>
+                </div>
+            `;
+        }
+
+        try {
+            const response = await window.apiClient.getRoutes();
+            state.routes = Array.isArray(response.routes) ? response.routes : [];
+            state.filteredRoutes = applyClientFilters(state.routes, getFilters());
+            renderRoutes(state.filteredRoutes);
+        } catch (error) {
+            console.error('Failed to load routes:', error);
+            if (container) {
+                container.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle"></i> Failed to load routes.
+                    </div>
+                `;
+            }
+            renderSummary(0);
+            announce('Failed to load routes');
+        }
+    }
+
+    function applyPreset(preset) {
+        const minDistanceInput = byId('filter-min-distance');
+        const maxDistanceInput = byId('filter-max-distance');
+        
+        // Clear active state from all preset buttons
+        document.querySelectorAll('.preset-filter').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        
+        // Set the clicked button as active
+        const activeButton = document.querySelector(`[data-preset="${preset}"]`);
+        if (activeButton) {
+            activeButton.classList.add('active');
         }
         
-        if (direction === 'asc') {
-            return aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
+        // Apply preset filters (convert km to miles: 1 km ≈ 0.621371 mi)
+        switch (preset) {
+            case 'short':
+                if (minDistanceInput) minDistanceInput.value = '';
+                if (maxDistanceInput) maxDistanceInput.value = '10';
+                break;
+            case 'medium':
+                if (minDistanceInput) minDistanceInput.value = '10';
+                if (maxDistanceInput) maxDistanceInput.value = '20';
+                break;
+            case 'long':
+                if (minDistanceInput) minDistanceInput.value = '20';
+                if (maxDistanceInput) maxDistanceInput.value = '';
+                break;
+            case 'all':
+                if (minDistanceInput) minDistanceInput.value = '';
+                if (maxDistanceInput) maxDistanceInput.value = '';
+                break;
+        }
+        
+        // Apply filters immediately
+        state.filteredRoutes = applyClientFilters(state.routes, getFilters());
+        renderRoutes(state.filteredRoutes);
+        announce(`Applied ${preset} distance filter`);
+    }
+
+    function bindEvents() {
+        const applyButton = byId('apply-filters');
+        if (applyButton) {
+            applyButton.addEventListener('click', () => {
+                state.filteredRoutes = applyClientFilters(state.routes, getFilters());
+                renderRoutes(state.filteredRoutes);
+            });
+        }
+
+        const searchInput = byId('search-query');
+        if (searchInput) {
+            searchInput.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    state.filteredRoutes = applyClientFilters(state.routes, getFilters());
+                    renderRoutes(state.filteredRoutes);
+                }
+            });
+        }
+        
+        // Bind preset filter buttons
+        document.querySelectorAll('.preset-filter').forEach(button => {
+            button.addEventListener('click', () => {
+                const preset = button.getAttribute('data-preset');
+                if (preset) {
+                    applyPreset(preset);
+                }
+            });
+        });
+
+        // Bind map control buttons
+        const fitAllBtn = byId('fit-all-btn');
+        if (fitAllBtn) {
+            fitAllBtn.addEventListener('click', () => {
+                fitAllRoutes();
+                announce('Fitted all routes in view');
+            });
+        }
+
+        const clearMapBtn = byId('clear-map-btn');
+        if (clearMapBtn) {
+            clearMapBtn.addEventListener('click', () => {
+                clearAllRoutes();
+            });
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // Only initialize if we're on the routes page (has routes-container)
+        const routesContainer = byId('routes-container');
+        if (routesContainer) {
+            console.log('✓ Routes page detected, initializing...');
+            initializeMap();
+            bindEvents();
+            loadRoutes();
         } else {
-            return aVal < bVal ? 1 : aVal > bVal ? -1 : 0;
+            console.log('ℹ Not on routes page, skipping routes.js initialization');
         }
     });
-};
-
-/**
- * Toggle route favorite status
- * @param {string} routeId - Route ID
- */
-window.toggleRouteFavorite = function(routeId) {
-    const favorites = JSON.parse(localStorage.getItem('favoriteRoutes') || '[]');
-    const index = favorites.indexOf(routeId);
     
-    if (index > -1) {
-        // Remove from favorites
-        favorites.splice(index, 1);
-        if (window.showToast) {
-            showToast('Route removed from favorites', 'info', { duration: 2000 });
-        }
-    } else {
-        // Add to favorites
-        favorites.push(routeId);
-        if (window.showToast) {
-            showToast('Route added to favorites', 'success', { duration: 2000 });
-        }
-    }
-    
-    localStorage.setItem('favoriteRoutes', JSON.stringify(favorites));
-    
-    // Announce to screen readers
-    if (window.announceToScreenReader) {
-        announceToScreenReader(index > -1 ? 'Route unfavorited' : 'Route favorited');
-    }
-};
-
-/**
- * Check if route is favorited
- * @param {string} routeId - Route ID
- * @returns {boolean} True if favorited
- */
-window.isRouteFavorited = function(routeId) {
-    const favorites = JSON.parse(localStorage.getItem('favoriteRoutes') || '[]');
-    return favorites.includes(routeId);
-};
-
-console.log('✓ routes.js loaded - Route cards, skeleton loaders, and utilities ready');
+    // Expose functions for use by dashboard
+    window.RouteRenderer = {
+        createRouteCard: createRouteCard,
+        formatDuration: formatDuration
+    };
+})();
 
 // Made with Bob

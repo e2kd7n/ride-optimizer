@@ -98,6 +98,22 @@ class MapRenderer {
      * Create base Leaflet map
      */
     createBaseMap(center, zoom) {
+        const container = document.getElementById(this.containerId);
+        
+        // Check if container is already initialized
+        if (container && container._leaflet_id) {
+            console.warn(`Map container '${this.containerId}' is already initialized. Removing existing map.`);
+            // Remove the existing map instance
+            if (container._leaflet_id && L.DomUtil.get(this.containerId)._leaflet_id) {
+                const existingMap = container._leaflet_map || L.DomUtil.get(this.containerId)._leaflet_map;
+                if (existingMap) {
+                    existingMap.remove();
+                }
+            }
+            // Clear the _leaflet_id
+            delete container._leaflet_id;
+        }
+        
         this.map = L.map(this.containerId).setView(center, zoom);
         
         // Set max bounds to prevent excessive panning

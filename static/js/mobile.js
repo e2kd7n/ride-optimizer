@@ -18,44 +18,85 @@ const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 
  * Initialize bottom navigation for mobile
  */
 function initializeBottomNav() {
-    // Only show on mobile devices
-    if (window.innerWidth >= 768) {
-        return;
-    }
-    
     const bottomNav = document.getElementById('bottom-nav');
     if (!bottomNav) {
         console.warn('Bottom navigation element not found');
         return;
     }
     
-    // Show bottom nav
-    bottomNav.style.display = 'flex';
-    
-    // Handle nav item clicks
+    // CSS handles visibility via media queries - we just set up event listeners
+    // Handle nav item clicks and keyboard navigation
     const navItems = bottomNav.querySelectorAll('.bottom-nav-item');
-    navItems.forEach(item => {
+    navItems.forEach((item, index) => {
+        // Click handler
         item.addEventListener('click', function(e) {
             e.preventDefault();
-            
-            // Remove active class from all items
-            navItems.forEach(i => i.classList.remove('active'));
-            
-            // Add active class to clicked item
-            this.classList.add('active');
-            
-            // Navigate to target
-            const target = this.getAttribute('data-target');
-            if (target) {
-                navigateToTab(target);
+            handleNavItemActivation(this, navItems);
+        });
+        
+        // Keyboard navigation handler
+        item.addEventListener('keydown', function(e) {
+            // Enter or Space to activate
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleNavItemActivation(this, navItems);
             }
             
-            // Announce to screen readers
-            if (window.announceToScreenReader) {
-                announceToScreenReader(`Navigated to ${this.getAttribute('aria-label')}`);
+            // Arrow key navigation
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                e.preventDefault();
+                const currentIndex = Array.from(navItems).indexOf(this);
+                let nextIndex;
+                
+                if (e.key === 'ArrowLeft') {
+                    nextIndex = currentIndex > 0 ? currentIndex - 1 : navItems.length - 1;
+                } else {
+                    nextIndex = currentIndex < navItems.length - 1 ? currentIndex + 1 : 0;
+                }
+                
+                navItems[nextIndex].focus();
+            }
+            
+            // Home/End keys
+            if (e.key === 'Home') {
+                e.preventDefault();
+                navItems[0].focus();
+            }
+            if (e.key === 'End') {
+                e.preventDefault();
+                navItems[navItems.length - 1].focus();
             }
         });
     });
+    
+    /**
+     * Handle navigation item activation
+     * @param {HTMLElement} item - The navigation item to activate
+     * @param {NodeList} allItems - All navigation items
+     */
+    function handleNavItemActivation(item, allItems) {
+        // Remove active class and aria-current from all items
+        allItems.forEach(i => {
+            i.classList.remove('active');
+            i.removeAttribute('aria-current');
+        });
+        
+        // Add active class to clicked item
+        item.classList.add('active');
+        item.setAttribute('aria-current', 'page');
+        
+        // Navigate to target
+        const target = item.getAttribute('data-target');
+        if (target) {
+            navigateToTab(target);
+        }
+        
+        // Announce to screen readers
+        const label = item.getAttribute('aria-label');
+        if (label && window.announceToScreenReader) {
+            announceToScreenReader(`Navigated to ${label}`);
+        }
+    }
     
     console.log('✓ Bottom navigation initialized');
 }
@@ -65,20 +106,41 @@ function initializeBottomNav() {
  * @param {string} tabId - ID of tab to navigate to
  */
 function navigateToTab(tabId) {
+    // Manual tab switching (works on both mobile and desktop)
     // Hide all tab panes
     const panes = document.querySelectorAll('.tab-pane');
     panes.forEach(pane => {
         pane.classList.remove('show', 'active');
+        pane.setAttribute('aria-hidden', 'true');
+    });
+    
+    // Deactivate all desktop tabs (if they exist)
+    const desktopTabs = document.querySelectorAll('.nav-tabs .nav-link');
+    desktopTabs.forEach(tab => {
+        tab.classList.remove('active');
+        tab.setAttribute('aria-selected', 'false');
     });
     
     // Show target pane
     const targetPane = document.getElementById(tabId);
     if (targetPane) {
         targetPane.classList.add('show', 'active');
+        targetPane.setAttribute('aria-hidden', 'false');
         
-        // Scroll to top
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        // Activate corresponding desktop tab (if it exists)
+        const correspondingTab = document.getElementById(`${tabId}-tab`);
+        if (correspondingTab) {
+            correspondingTab.classList.add('active');
+            correspondingTab.setAttribute('aria-selected', 'true');
+        }
     }
+    
+    // Scroll to top
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    
+    // Update page title
+    const pageTitle = tabId.charAt(0).toUpperCase() + tabId.slice(1);
+    document.title = `${pageTitle} - Ride Optimizer`;
 }
 
 /**

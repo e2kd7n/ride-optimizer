@@ -248,43 +248,37 @@ class RouteLibraryService:
         Returns:
             Dictionary with route details
         """
-        # Load cached data if not already loaded
-        self._load_from_cache()
-        
-        if route_type == 'commute' and self._route_groups:
-            # Handle both dict and RouteGroup objects
-            group = None
-            for g in self._route_groups:
-                g_id = g.get('id') if isinstance(g, dict) else g.id
-                if g_id == route_id:
-                    group = g
-                    break
-            
-            if group:
-                return {
-                    'status': 'success',
-                    'route': self._format_commute_route_detailed(group)
-                }
-        
-        elif route_type == 'long_ride' and self._long_rides:
-            # Handle both dict and LongRide objects
-            ride = None
-            for r in self._long_rides:
-                r_id = str(r.get('activity_id') if isinstance(r, dict) else r.activity_id)
-                if r_id == route_id:
-                    ride = r
-                    break
-            
-            if ride:
-                return {
-                    'status': 'success',
-                    'route': self._format_long_ride_detailed(ride)
-                }
+        route = self.get_route_by_id(route_id, route_type=route_type)
+        if route:
+            return {
+                'status': 'success',
+                'route': route
+            }
         
         return {
             'status': 'error',
             'message': f'Route {route_id} not found'
         }
+
+    def get_route_by_id(self, route_id: str, route_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Get a single route by ID with full detail payload."""
+        self._load_from_cache()
+
+        if route_type in (None, 'all', 'commute') and self._route_groups:
+            for group in self._route_groups:
+                group_id = group.get('id') if isinstance(group, dict) else group.id
+                if group_id == route_id:
+                    return self._format_commute_route_detailed(group)
+
+        if route_type in (None, 'all', 'long_ride') and self._long_rides:
+            for ride in self._long_rides:
+                ride_id = str(ride.get('activity_id') if isinstance(ride, dict) else ride.activity_id)
+                if ride_id == route_id:
+                    if isinstance(ride, dict):
+                        return self._format_long_ride_from_dict_detailed(ride)
+                    return self._format_long_ride_detailed(ride)
+
+        return None
     
     def get_route_statistics(self) -> Dict[str, Any]:
         """
@@ -553,6 +547,22 @@ class RouteLibraryService:
             'activity_ids': ride.activity_ids,
             'activity_dates': ride.activity_dates,
             'ride_type': ride.type
+        })
+        return base
+
+    def _format_long_ride_from_dict_detailed(self, ride: Dict[str, Any]) -> Dict[str, Any]:
+        """Format detailed long ride information from cached dict data."""
+        base = self._format_long_ride(ride)
+        base.update({
+            'coordinates': ride.get('coordinates', []),
+            'start_location': ride.get('start_location'),
+            'end_location': ride.get('end_location'),
+            'average_speed': ride.get('average_speed', 0) * 3.6 if ride.get('average_speed') else 0,
+            'activity_ids': ride.get('activity_ids', []),
+            'activity_dates': ride.get('activity_dates', []),
+            'ride_type': ride.get('type'),
+            'weather': ride.get('weather'),
+            'difficulty': ride.get('difficulty')
         })
         return base
     
