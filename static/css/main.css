@@ -69,7 +69,7 @@ body {
     border: none;
     border-radius: 0.5rem;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    margin-bottom: 1.5rem;
+    margin-bottom: 1rem;
     transition: box-shadow 0.3s ease;
 }
 
