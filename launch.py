@@ -84,8 +84,8 @@ def initialize_services():
 
 @app.route('/')
 def index():
-    """Serve the main dashboard page."""
-    return send_from_directory('static', 'dashboard.html')
+    """Serve the main application page with Epic #237 redesign."""
+    return send_from_directory('static', 'index.html')
 
 
 @app.route('/<path:path>')

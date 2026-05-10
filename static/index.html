@@ -3,19 +3,651 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="refresh" content="0; url=/dashboard.html">
     <title>Ride Optimizer</title>
+    
+    <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    
+    <!-- Leaflet CSS for maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/main.css">
+    
+    <style>
+        /* Page-specific styles */
+        .map-container {
+            height: 500px;
+            width: 100%;
+            border-radius: 0.375rem;
+        }
+        
+        @media (max-width: 767px) {
+            .map-container {
+                height: 300px;
+            }
+        }
+    </style>
 </head>
 <body>
-    <div class="container mt-5">
-        <div class="text-center">
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Loading...</span>
+    <!-- Skip Links for Accessibility (Issue #241) -->
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+    <a href="#home-tab" class="skip-link">Skip to navigation</a>
+    
+    <!-- Top Navigation (Desktop) -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary d-none d-md-block" role="navigation" aria-label="Main navigation">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/" aria-label="Ride Optimizer Home">
+                <i class="bi bi-bicycle" aria-hidden="true"></i> Ride Optimizer
+            </a>
+            <div class="navbar-nav">
+                <button class="nav-link active" id="home-tab" data-bs-toggle="tab" data-bs-target="#home" type="button" role="tab" aria-controls="home" aria-selected="true">
+                    <i class="bi bi-house-door" aria-hidden="true"></i> Home
+                </button>
+                <button class="nav-link" id="routes-tab" data-bs-toggle="tab" data-bs-target="#routes" type="button" role="tab" aria-controls="routes" aria-selected="false">
+                    <i class="bi bi-map" aria-hidden="true"></i> Routes
+                </button>
+                <button class="nav-link" id="settings-tab" data-bs-toggle="tab" data-bs-target="#settings" type="button" role="tab" aria-controls="settings" aria-selected="false">
+                    <i class="bi bi-gear" aria-hidden="true"></i> Settings
+                </button>
             </div>
-            <p class="mt-3">Redirecting to dashboard...</p>
-            <p><a href="/dashboard.html">Click here if not redirected automatically</a></p>
         </div>
-    </div>
+    </nav>
+    
+    <!-- Main Content -->
+    <main id="main-content" class="container-fluid mt-4 mb-5 pb-5" role="main">
+        <div class="tab-content" id="mainTabContent">
+            
+            <!-- HOME TAB -->
+            <div class="tab-pane fade show active" id="home" role="tabpanel" aria-labelledby="home-tab">
+                <div class="container">
+                    <h1 class="mb-4">
+                        <i class="bi bi-house-door" aria-hidden="true"></i> Dashboard
+                    </h1>
+                    
+                    <!-- Weather and Next Commute Row -->
+                    <div class="row mb-4">
+                        <!-- Weather Card -->
+                        <div class="col-md-6 mb-3">
+                            <div class="card h-100">
+                                <div class="card-body">
+                                    <h5 class="card-title">
+                                        <i class="bi bi-cloud-sun" aria-hidden="true"></i> Current Weather
+                                    </h5>
+                                    <div id="weather-data">
+                                        <!-- Skeleton loader -->
+                                        <div class="skeleton-weather" aria-busy="true" aria-label="Loading weather">
+                                            <div class="skeleton skeleton-weather-header"></div>
+                                            <div class="skeleton-weather-metrics">
+                                                <div class="skeleton skeleton-weather-metric"></div>
+                                                <div class="skeleton skeleton-weather-metric"></div>
+                                                <div class="skeleton skeleton-weather-metric"></div>
+                                                <div class="skeleton skeleton-weather-metric"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Next Commute Card -->
+                        <div class="col-md-6 mb-3">
+                            <div class="card h-100">
+                                <div class="card-body">
+                                    <h5 class="card-title">
+                                        <i class="bi bi-signpost-2" aria-hidden="true"></i> Next Commute
+                                    </h5>
+                                    <div id="commute-recommendation">
+                                        <!-- Skeleton loader -->
+                                        <div class="skeleton-card" aria-busy="true" aria-label="Loading commute recommendation">
+                                            <div class="skeleton skeleton-card-header" style="width: 150px;"></div>
+                                            <div class="skeleton-card-content">
+                                                <div class="skeleton skeleton-card-line long"></div>
+                                                <div class="skeleton skeleton-card-line medium"></div>
+                                                <div class="skeleton skeleton-card-line short"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Route Statistics -->
+                    <div class="row mb-4">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h5 class="card-title">
+                                        <i class="bi bi-bar-chart" aria-hidden="true"></i> Route Statistics
+                                    </h5>
+                                    <div id="route-stats">
+                                        <!-- Skeleton loader -->
+                                        <div class="row">
+                                            <div class="col-md-3 mb-3" v-for="i in 4">
+                                                <div class="skeleton-card" aria-busy="true">
+                                                    <div class="skeleton skeleton-card-header" style="width: 100px;"></div>
+                                                    <div class="skeleton-card-content">
+                                                        <div class="skeleton skeleton-card-line medium"></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Map -->
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-body p-0">
+                                    <div id="dashboard-map" class="map-container" role="img" aria-label="Map showing recent routes"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- ROUTES TAB -->
+            <div class="tab-pane fade" id="routes" role="tabpanel" aria-labelledby="routes-tab">
+                <div class="container-fluid">
+                    <h1 class="mb-4">
+                        <i class="bi bi-map" aria-hidden="true"></i> Routes Library
+                    </h1>
+                    
+                    <!-- Filters -->
+                    <div class="card mb-4">
+                        <div class="card-body">
+                            <h5 class="card-title">
+                                <i class="bi bi-funnel" aria-hidden="true"></i> Filters
+                            </h5>
+                            <div class="row">
+                                <div class="col-md-3 mb-3">
+                                    <label for="filter-distance" class="form-label">Max Distance (km)</label>
+                                    <input type="number" class="form-control" id="filter-distance" placeholder="Any">
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <label for="filter-duration" class="form-label">Max Duration (min)</label>
+                                    <input type="number" class="form-control" id="filter-duration" placeholder="Any">
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <label for="filter-elevation" class="form-label">Max Elevation (m)</label>
+                                    <input type="number" class="form-control" id="filter-elevation" placeholder="Any">
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <label for="sort-by" class="form-label">Sort By</label>
+                                    <select class="form-select" id="sort-by">
+                                        <option value="score">Score (High to Low)</option>
+                                        <option value="distance">Distance</option>
+                                        <option value="duration">Duration</option>
+                                        <option value="elevation">Elevation</option>
+                                        <option value="name">Name</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-12">
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="checkbox" id="filter-favorites">
+                                        <label class="form-check-label" for="filter-favorites">
+                                            <i class="bi bi-star-fill text-warning" aria-hidden="true"></i> Favorites Only
+                                        </label>
+                                    </div>
+                                    <button class="btn btn-primary btn-sm ms-3" id="apply-filters">
+                                        <i class="bi bi-check-circle" aria-hidden="true"></i> Apply Filters
+                                    </button>
+                                    <button class="btn btn-outline-secondary btn-sm ms-2" id="clear-filters">
+                                        <i class="bi bi-x-circle" aria-hidden="true"></i> Clear
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Routes Display: Side-by-side layout (40/60 split) -->
+                    <div class="row">
+                        <!-- Left: Route List (40%) -->
+                        <div class="col-lg-5 mb-4">
+                            <div class="card">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <h5 class="mb-0">
+                                        <i class="bi bi-list-ul" aria-hidden="true"></i> Routes
+                                        <span class="badge bg-primary ms-2" id="routes-count">0</span>
+                                    </h5>
+                                </div>
+                                <div class="card-body p-2" style="max-height: 600px; overflow-y: auto;">
+                                    <div id="routes-list">
+                                        <!-- Skeleton loaders -->
+                                        <div class="skeleton-container" aria-busy="true" aria-label="Loading routes">
+                                            <div class="skeleton-route-card"></div>
+                                            <div class="skeleton-route-card"></div>
+                                            <div class="skeleton-route-card"></div>
+                                            <div class="skeleton-route-card"></div>
+                                            <div class="skeleton-route-card"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Right: Map (60%) -->
+                        <div class="col-lg-7 mb-4">
+                            <div class="card">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <h5 class="mb-0">
+                                        <i class="bi bi-geo-alt" aria-hidden="true"></i> Map
+                                    </h5>
+                                    <div class="btn-group btn-group-sm">
+                                        <button class="btn btn-outline-secondary" id="fit-map" aria-label="Fit all routes in map view">
+                                            <i class="bi bi-arrows-angle-expand" aria-hidden="true"></i> Fit All
+                                        </button>
+                                        <button class="btn btn-outline-secondary" id="clear-selection" aria-label="Clear route selection">
+                                            <i class="bi bi-x-circle" aria-hidden="true"></i> Clear
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="card-body p-0">
+                                    <div id="routes-map" class="map-container" style="height: 600px;" role="img" aria-label="Map showing selected routes"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- SETTINGS TAB -->
+            <div class="tab-pane fade" id="settings" role="tabpanel" aria-labelledby="settings-tab">
+                <div class="container">
+                    <h1 class="mb-4">
+                        <i class="bi bi-gear" aria-hidden="true"></i> Settings & Preferences
+                    </h1>
+                    
+                    <div class="row">
+                        <!-- User Preferences -->
+                        <div class="col-md-6 mb-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="mb-0">
+                                        <i class="bi bi-person-gear" aria-hidden="true"></i> User Preferences
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <label for="unit-system" class="form-label"><strong>Unit System</strong></label>
+                                        <select class="form-select" id="unit-system">
+                                            <option value="metric">Metric (km, °C)</option>
+                                            <option value="imperial" selected>Imperial (mi, °F)</option>
+                                        </select>
+                                        <small class="text-muted">Distance and temperature units</small>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="default-view" class="form-label"><strong>Default View</strong></label>
+                                        <select class="form-select" id="default-view">
+                                            <option value="home" selected>Home</option>
+                                            <option value="routes">Routes</option>
+                                            <option value="settings">Settings</option>
+                                        </select>
+                                        <small class="text-muted">Page to show on startup</small>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label class="form-label"><strong>Display Options</strong></label>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="show-weather-details" checked>
+                                            <label class="form-check-label" for="show-weather-details">
+                                                Show detailed weather information
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="show-elevation" checked>
+                                            <label class="form-check-label" for="show-elevation">
+                                                Show elevation data
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="auto-save" checked>
+                                            <label class="form-check-label" for="auto-save">
+                                                Auto-save preferences
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Data Management -->
+                        <div class="col-md-6 mb-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="mb-0">
+                                        <i class="bi bi-database" aria-hidden="true"></i> Data Management
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <label class="form-label"><strong>Export Data</strong></label>
+                                        <div class="d-grid gap-2">
+                                            <button class="btn btn-outline-primary" id="export-preferences" aria-label="Export user preferences to file">
+                                                <i class="bi bi-download" aria-hidden="true"></i> Export Preferences
+                                            </button>
+                                            <button class="btn btn-outline-primary" id="export-favorites" aria-label="Export favorite routes to file">
+                                                <i class="bi bi-star" aria-hidden="true"></i> Export Favorites
+                                            </button>
+                                        </div>
+                                        <small class="text-muted">Download your data as JSON</small>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label class="form-label"><strong>Import Data</strong></label>
+                                        <input type="file" class="form-control" id="import-file" accept=".json" aria-label="Select JSON file to import">
+                                        <small class="text-muted">Import previously exported data</small>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label class="form-label"><strong>Clear Data</strong></label>
+                                        <div class="d-grid gap-2">
+                                            <button class="btn btn-outline-warning" id="clear-favorites" aria-label="Clear all favorite routes">
+                                                <i class="bi bi-trash" aria-hidden="true"></i> Clear Favorites
+                                            </button>
+                                            <button class="btn btn-outline-danger" id="clear-all-data" aria-label="Clear all local data and reset application">
+                                                <i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Clear All Local Data
+                                            </button>
+                                        </div>
+                                        <small class="text-muted">Remove stored preferences and favorites</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- About Section -->
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="mb-0">
+                                        <i class="bi bi-info-circle" aria-hidden="true"></i> About
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <p><strong>Ride Optimizer</strong> - Intelligent route recommendations based on weather, wind, and your riding history.</p>
+                                    <p class="mb-1"><strong>Version:</strong> 2.3.0</p>
+                                    <p class="mb-1"><strong>Data Source:</strong> Strava API</p>
+                                    <p class="mb-1"><strong>Weather Data:</strong> Open-Meteo API</p>
+                                    <p class="mt-3">
+                                        <a href="https://github.com/yourusername/ride-optimizer" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-primary">
+                                            <i class="bi bi-github" aria-hidden="true"></i> Documentation
+                                        </a>
+                                        <a href="https://github.com/yourusername/ride-optimizer/issues" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary ms-2">
+                                            <i class="bi bi-bug" aria-hidden="true"></i> Report Issue
+                                        </a>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Save/Reset Buttons -->
+                    <div class="row mt-4">
+                        <div class="col-12">
+                            <button class="btn btn-primary btn-lg" id="save-settings" aria-label="Save current settings">
+                                <i class="bi bi-check-circle" aria-hidden="true"></i> Save Settings
+                            </button>
+                            <button class="btn btn-outline-secondary btn-lg ms-2" id="reset-settings" aria-label="Reset all settings to default values">
+                                <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i> Reset to Defaults
+                            </button>
+                            <span id="unsaved-indicator" class="text-warning ms-3" style="display: none;">
+                                <i class="bi bi-exclamation-circle" aria-hidden="true"></i> Unsaved changes
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+    </main>
+    
+    <!-- Bottom Navigation (Mobile) - Issue #242 -->
+    <nav id="bottom-nav" class="bottom-nav d-md-none" role="navigation" aria-label="Mobile navigation">
+        <button class="bottom-nav-item active" data-target="home" aria-label="Home" aria-current="page">
+            <i class="bi bi-house-door" aria-hidden="true"></i>
+            <span>Home</span>
+        </button>
+        <button class="bottom-nav-item" data-target="routes" aria-label="Routes">
+            <i class="bi bi-map" aria-hidden="true"></i>
+            <span>Routes</span>
+        </button>
+        <button class="bottom-nav-item" data-target="settings" aria-label="Settings">
+            <i class="bi bi-gear" aria-hidden="true"></i>
+            <span>Settings</span>
+        </button>
+    </nav>
+    
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Custom JavaScript -->
+    <script src="/static/js/common.js"></script>
+    <script src="/static/js/accessibility.js"></script>
+    <script src="/static/js/mobile.js"></script>
+    <script src="/static/js/routes.js"></script>
+    <script src="/static/js/dashboard.js"></script>
+    
+    <script>
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('✓ Ride Optimizer initialized');
+            
+            // Load saved preferences
+            loadUserPreferences();
+            
+            // Initialize maps
+            initializeDashboardMap();
+            initializeRoutesMap();
+            
+            // Load data
+            loadWeatherData();
+            loadCommuteRecommendation();
+            loadRouteStatistics();
+            loadRoutesList();
+            
+            // Setup event listeners
+            setupEventListeners();
+        });
+        
+        function loadUserPreferences() {
+            const settings = JSON.parse(localStorage.getItem('rideOptimizerSettings') || '{}');
+            
+            if (settings.unitSystem) {
+                document.getElementById('unit-system').value = settings.unitSystem;
+            }
+            if (settings.defaultView) {
+                document.getElementById('default-view').value = settings.defaultView;
+                
+                // Navigate to default view if not home
+                if (settings.defaultView !== 'home') {
+                    const tab = document.getElementById(`${settings.defaultView}-tab`);
+                    if (tab) {
+                        setTimeout(() => tab.click(), 100);
+                    }
+                }
+            }
+            if (settings.showWeatherDetails !== undefined) {
+                document.getElementById('show-weather-details').checked = settings.showWeatherDetails;
+            }
+            if (settings.showElevation !== undefined) {
+                document.getElementById('show-elevation').checked = settings.showElevation;
+            }
+            if (settings.autoSave !== undefined) {
+                document.getElementById('auto-save').checked = settings.autoSave;
+            }
+        }
+        
+        function setupEventListeners() {
+            // Settings save button
+            document.getElementById('save-settings').addEventListener('click', saveSettings);
+            
+            // Settings reset button
+            document.getElementById('reset-settings').addEventListener('click', resetSettings);
+            
+            // Export buttons
+            document.getElementById('export-preferences').addEventListener('click', exportPreferences);
+            document.getElementById('export-favorites').addEventListener('click', exportFavorites);
+            
+            // Clear buttons
+            document.getElementById('clear-favorites').addEventListener('click', clearFavorites);
+            document.getElementById('clear-all-data').addEventListener('click', clearAllData);
+            
+            // Route filters
+            document.getElementById('apply-filters').addEventListener('click', applyRouteFilters);
+            document.getElementById('clear-filters').addEventListener('click', clearRouteFilters);
+            
+            // Map controls
+            document.getElementById('fit-map').addEventListener('click', fitMapToRoutes);
+            document.getElementById('clear-selection').addEventListener('click', clearRouteSelection);
+            
+            // Auto-save on settings change
+            const settingsInputs = document.querySelectorAll('#settings input, #settings select');
+            settingsInputs.forEach(input => {
+                input.addEventListener('change', function() {
+                    if (document.getElementById('auto-save').checked) {
+                        markUnsavedChanges();
+                        setupAutoSave(saveSettings);
+                    } else {
+                        markUnsavedChanges();
+                    }
+                });
+            });
+        }
+        
+        function saveSettings() {
+            const settings = {
+                unitSystem: document.getElementById('unit-system').value,
+                defaultView: document.getElementById('default-view').value,
+                showWeatherDetails: document.getElementById('show-weather-details').checked,
+                showElevation: document.getElementById('show-elevation').checked,
+                autoSave: document.getElementById('auto-save').checked,
+                savedAt: new Date().toISOString()
+            };
+            
+            localStorage.setItem('rideOptimizerSettings', JSON.stringify(settings));
+            clearUnsavedChanges();
+            showToast('Settings saved successfully!', 'success');
+        }
+        
+        function resetSettings() {
+            if (confirm('Are you sure you want to reset all settings to defaults?')) {
+                localStorage.removeItem('rideOptimizerSettings');
+                
+                // Reset form to defaults
+                document.getElementById('unit-system').value = 'imperial';
+                document.getElementById('default-view').value = 'home';
+                document.getElementById('show-weather-details').checked = true;
+                document.getElementById('show-elevation').checked = true;
+                document.getElementById('auto-save').checked = true;
+                
+                showToast('Settings reset to defaults', 'info');
+            }
+        }
+        
+        function exportPreferences() {
+            const settings = JSON.parse(localStorage.getItem('rideOptimizerSettings') || '{}');
+            const dataStr = JSON.stringify(settings, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(dataBlob);
+            
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `ride-optimizer-preferences-${new Date().toISOString().split('T')[0]}.json`;
+            link.click();
+            
+            URL.revokeObjectURL(url);
+            showToast('Preferences exported successfully!', 'success');
+        }
+        
+        function exportFavorites() {
+            const favorites = JSON.parse(localStorage.getItem('favoriteRoutes') || '[]');
+            const dataStr = JSON.stringify(favorites, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(dataBlob);
+            
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `ride-optimizer-favorites-${new Date().toISOString().split('T')[0]}.json`;
+            link.click();
+            
+            URL.revokeObjectURL(url);
+            showToast('Favorites exported successfully!', 'success');
+        }
+        
+        function clearFavorites() {
+            if (confirm('Are you sure you want to clear all favorites? This cannot be undone.')) {
+                localStorage.removeItem('favoriteRoutes');
+                showToast('Favorites cleared', 'warning');
+            }
+        }
+        
+        function clearAllData() {
+            if (confirm('Are you sure you want to clear ALL local data? This includes settings, favorites, and hidden routes. This cannot be undone.')) {
+                if (confirm('This is your last chance. Are you absolutely sure?')) {
+                    localStorage.clear();
+                    showToast('All local data cleared', 'warning');
+                    
+                    // Reload page after delay
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1500);
+                }
+            }
+        }
+        
+        // Placeholder functions - to be implemented with API integration
+        function initializeDashboardMap() {
+            console.log('Dashboard map initialization placeholder');
+        }
+        
+        function initializeRoutesMap() {
+            console.log('Routes map initialization placeholder');
+        }
+        
+        function loadWeatherData() {
+            console.log('Weather data loading placeholder');
+        }
+        
+        function loadCommuteRecommendation() {
+            console.log('Commute recommendation loading placeholder');
+        }
+        
+        function loadRouteStatistics() {
+            console.log('Route statistics loading placeholder');
+        }
+        
+        function loadRoutesList() {
+            console.log('Routes list loading placeholder');
+        }
+        
+        function applyRouteFilters() {
+            console.log('Apply route filters placeholder');
+        }
+        
+        function clearRouteFilters() {
+            console.log('Clear route filters placeholder');
+        }
+        
+        function fitMapToRoutes() {
+            console.log('Fit map to routes placeholder');
+        }
+        
+        function clearRouteSelection() {
+            console.log('Clear route selection placeholder');
+        }
+    </script>
 </body>
 </html>
