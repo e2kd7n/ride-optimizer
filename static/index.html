@@ -174,7 +174,7 @@
                             </h5>
                             <div class="row">
                                 <div class="col-md-3 mb-3">
-                                    <label for="filter-distance" class="form-label">Max Distance (km)</label>
+                                    <label for="filter-distance" class="form-label" id="filter-distance-label">Max Distance (mi)</label>
                                     <input type="number" class="form-control" id="filter-distance" placeholder="Any">
                                 </div>
                                 <div class="col-md-3 mb-3">
@@ -182,7 +182,7 @@
                                     <input type="number" class="form-control" id="filter-duration" placeholder="Any">
                                 </div>
                                 <div class="col-md-3 mb-3">
-                                    <label for="filter-elevation" class="form-label">Max Elevation (m)</label>
+                                    <label for="filter-elevation" class="form-label" id="filter-elevation-label">Max Elevation (ft)</label>
                                     <input type="number" class="form-control" id="filter-elevation" placeholder="Any">
                                 </div>
                                 <div class="col-md-3 mb-3">
@@ -473,6 +473,9 @@
         function loadUserPreferences() {
             const settings = JSON.parse(localStorage.getItem('rideOptimizerSettings') || '{}');
             
+            // Default to imperial if not set
+            const unitSystem = settings.unitSystem || 'imperial';
+            
             if (settings.unitSystem) {
                 document.getElementById('unit-system').value = settings.unitSystem;
             }
@@ -496,9 +499,33 @@
             if (settings.autoSave !== undefined) {
                 document.getElementById('auto-save').checked = settings.autoSave;
             }
+            
+            // Update filter labels based on unit system
+            updateUnitLabels(unitSystem);
+        }
+        
+        function updateUnitLabels(unitSystem) {
+            const distanceLabel = document.getElementById('filter-distance-label');
+            const elevationLabel = document.getElementById('filter-elevation-label');
+            
+            if (unitSystem === 'metric') {
+                if (distanceLabel) distanceLabel.textContent = 'Max Distance (km)';
+                if (elevationLabel) elevationLabel.textContent = 'Max Elevation (m)';
+            } else {
+                if (distanceLabel) distanceLabel.textContent = 'Max Distance (mi)';
+                if (elevationLabel) elevationLabel.textContent = 'Max Elevation (ft)';
+            }
         }
         
         function setupEventListeners() {
+            // Unit system change listener
+            const unitSystemSelect = document.getElementById('unit-system');
+            if (unitSystemSelect) {
+                unitSystemSelect.addEventListener('change', function() {
+                    updateUnitLabels(this.value);
+                });
+            }
+            
             // Settings save button
             document.getElementById('save-settings').addEventListener('click', saveSettings);
             
