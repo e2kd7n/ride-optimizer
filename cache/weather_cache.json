@@ -30,5 +30,95 @@
       "lon": -87.63480901477833
     },
     "timestamp": "2026-05-09T20:33:03.451248"
+  },
+  "41.93416,-87.63184": {
+    "data": {
+      "timestamp": "2026-05-09T21:00",
+      "temp_c": 12.6,
+      "wind_speed_kph": 6.6,
+      "wind_gust_kph": 24.5,
+      "wind_direction_deg": 9,
+      "wind_direction_cardinal": "N",
+      "humidity": 67,
+      "precipitation_mm": 0.0,
+      "lat": 41.93416,
+      "lon": -87.63184
+    },
+    "timestamp": "2026-05-09T21:09:37.310590"
+  },
+  "41.91327,-87.62775": {
+    "data": {
+      "timestamp": "2026-05-09T21:00",
+      "temp_c": 12.6,
+      "wind_speed_kph": 6.6,
+      "wind_gust_kph": 24.5,
+      "wind_direction_deg": 9,
+      "wind_direction_cardinal": "N",
+      "humidity": 67,
+      "precipitation_mm": 0.0,
+      "lat": 41.91327,
+      "lon": -87.62775
+    },
+    "timestamp": "2026-05-09T21:09:37.474957"
+  },
+  "41.95416,-87.64101": {
+    "data": {
+      "timestamp": "2026-05-09T21:00",
+      "temp_c": 12.2,
+      "wind_speed_kph": 7.7,
+      "wind_gust_kph": 25.2,
+      "wind_direction_deg": 11,
+      "wind_direction_cardinal": "N",
+      "humidity": 65,
+      "precipitation_mm": 0.0,
+      "lat": 41.95416,
+      "lon": -87.64101
+    },
+    "timestamp": "2026-05-09T21:09:37.651066"
+  },
+  "41.92035,-87.65829": {
+    "data": {
+      "timestamp": "2026-05-09T21:00",
+      "temp_c": 12.5,
+      "wind_speed_kph": 6.6,
+      "wind_gust_kph": 24.5,
+      "wind_direction_deg": 9,
+      "wind_direction_cardinal": "N",
+      "humidity": 67,
+      "precipitation_mm": 0.0,
+      "lat": 41.92035,
+      "lon": -87.65829
+    },
+    "timestamp": "2026-05-09T21:09:37.969395"
+  },
+  "41.9429,-87.69578": {
+    "data": {
+      "timestamp": "2026-05-09T21:00",
+      "temp_c": 12.8,
+      "wind_speed_kph": 4.7,
+      "wind_gust_kph": 17.3,
+      "wind_direction_deg": 4,
+      "wind_direction_cardinal": "N",
+      "humidity": 60,
+      "precipitation_mm": 0.0,
+      "lat": 41.9429,
+      "lon": -87.69578
+    },
+    "timestamp": "2026-05-09T21:09:38.129392"
+  },
+  "41.9415,-87.67111": {
+    "data": {
+      "timestamp": "2026-05-09T21:00",
+      "temp_c": 12.4,
+      "wind_speed_kph": 5.8,
+      "wind_gust_kph": 22.3,
+      "wind_direction_deg": 360,
+      "wind_direction_cardinal": "N",
+      "humidity": 63,
+      "precipitation_mm": 0.0,
+      "lat": 41.9415,
+      "lon": -87.67111
+    },
+    "timestamp": "2026-05-09T21:09:38.292664"
   }
 }
