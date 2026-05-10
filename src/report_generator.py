@@ -57,7 +57,7 @@ class ReportGenerator:
             analysis_results: Dictionary containing all analysis results
         """
         self.results = analysis_results
-        self.template_dir = Path("templates")
+        self.template_dir = Path("archive/deprecated_cli_system/templates")
         
         # Initialize unit converter
         config = analysis_results.get('config')
