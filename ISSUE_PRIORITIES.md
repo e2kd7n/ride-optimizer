@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-05-10 18:21:57 UTC / 2026-05-10 13:21:57 CDT
+**Last Updated:** 2026-05-11 15:59:32 UTC / 2026-05-11 10:59:32 CDT
 
 This file reflects the current state of GitHub issues by priority. Issues are managed via GitHub labels (P0-critical, P1-high, P2-medium, P3-low, P4-future).
 
