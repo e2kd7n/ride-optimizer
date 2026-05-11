@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Function to sanitize comments for gh issue close
+# Escapes backticks to prevent shell command substitution
+sanitize_comment() {
+  echo "$1" | sed 's/`/\\`/g'
+}
+
 # verify-issue-closures.sh
 # Verify all issues referenced in recent commits are properly closed
 # This script helps prevent the issue closure breakdown that occurred with #228-234
@@ -178,7 +184,7 @@ for issue in $ALL_ISSUES; do
           close_comment="$close_comment in recent commits"
         fi
         
-        gh issue close "$issue_num" --comment "$close_comment" 2>/dev/null
+        gh issue close "$issue_num" --comment "$(sanitize_comment "$close_comment")" 2>/dev/null
         if [ $? -eq 0 ]; then
           log_success "Closed issue #$issue_num"
         else
