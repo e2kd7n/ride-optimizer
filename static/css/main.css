@@ -261,6 +261,18 @@ footer {
     font-size: 1.1rem;
     color: var(--dark-gray);
     margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+}
+
+/* Route name in library cards - proper truncation */
+.route-library-card .h5 {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
 }
 
 .route-card-stats {
