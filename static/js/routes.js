@@ -177,8 +177,14 @@
                 color: color
             });
 
-            // Fit bounds to show all routes
-            fitAllRoutes();
+            // Zoom to show the entire selected route with smooth animation (Issue #117)
+            const bounds = polyline.getBounds();
+            state.mapInstance.fitBounds(bounds, {
+                padding: [50, 50],
+                animate: true,
+                duration: 0.5
+            });
+            
             updateMapStatus();
 
             // Update card styling to show it's on the map
@@ -269,8 +275,8 @@
             
             row.innerHTML = `
                 <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                        <h6 class="mb-1">
+                    <div class="flex-grow-1 me-2" style="min-width: 0;">
+                        <h6 class="mb-1 text-truncate" title="${route.name}">
                             ${route.is_favorite ? '<i class="bi bi-star-fill text-warning"></i> ' : ''}
                             ${route.name}
                         </h6>
@@ -278,7 +284,7 @@
                             ${window.formatDistance(route.distance)} • ${window.formatElevation(route.elevation_gain || route.elevation || 0)} • ${route.uses || 0} uses
                         </small>
                     </div>
-                    <span class="badge bg-secondary">${route.sport_type || 'commute'}</span>
+                    <span class="badge bg-secondary flex-shrink-0">${route.sport_type || 'commute'}</span>
                 </div>
             `;
             
@@ -356,7 +362,7 @@
                     </div>
                 </div>
                 <div class="mb-3" style="cursor: pointer;" data-route-link>
-                    <h3 class="h5 mb-1">${route.name}</h3>
+                    <h3 class="h5 mb-1 text-truncate" title="${route.name}">${route.name}</h3>
                     <p class="text-muted mb-0 text-capitalize">${route.type || 'route'}</p>
                 </div>
 

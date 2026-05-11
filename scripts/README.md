@@ -29,9 +29,12 @@ Simply select a category, then choose a script to run. The menu handles all the 
 - **run_with_weasyprint.sh** - Run application with WeasyPrint for PDF generation
 
 ### GitHub Integration
+- **close-issue.sh** - Close GitHub issues with properly formatted comments (handles special characters)
 - **create_issues.sh** - Create GitHub issues from templates
 - **create_uiux_epic_issues_temp.sh** - Create UI/UX epic issues (temporary)
 - **sync_todos_to_issues.sh** - Sync TODO items to GitHub issues
+- **update-issue-priorities.sh** - Update ISSUE_PRIORITIES.md from GitHub
+- **verify-issue-closures.sh** - Verify issues are properly closed
 
 ### Maintenance
 - **rewrite_git_history.sh** - Git history rewriting utility (use with caution)
