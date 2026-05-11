@@ -2,9 +2,10 @@
 **Date:** May 10, 2026  
 **Status:** Ready for Implementation  
 **Source Documents:**
-- [`docs/UAT_COMMUTER_FINDINGS.md`](../UAT_COMMUTER_FINDINGS.md) - User acceptance testing results
-- [`docs/reviews/DESIGN_REVIEW_UAT_FINDINGS.md`](../reviews/DESIGN_REVIEW_UAT_FINDINGS.md) - UX/design analysis
-- [`docs/reviews/ENGINEERING_REVIEW_UAT_FINDINGS.md`](../reviews/ENGINEERING_REVIEW_UAT_FINDINGS.md) - Technical feasibility assessment
+- [UAT_COMMUTER_FINDINGS.md](../UAT_COMMUTER_FINDINGS.md) - User acceptance testing results
+- [DESIGN_REVIEW_UAT_FINDINGS.md](../reviews/DESIGN_REVIEW_UAT_FINDINGS.md) - UX/design analysis
+- [ENGINEERING_REVIEW_UAT_FINDINGS.md](../reviews/ENGINEERING_REVIEW_UAT_FINDINGS.md) - Technical feasibility assessment
+- [ISSUE_COORDINATION_ANALYSIS.md](ISSUE_COORDINATION_ANALYSIS.md) - Overlap analysis with existing issues
 
 ---
 
@@ -719,6 +720,96 @@ Restore core functionality and improve UX based on real-world user testing with 
 3. Difficulty ratings (blocks filter UX improvements)
 
 ---
+## Issue Coordination & Overlap Analysis
+
+**Date Added:** May 11, 2026  
+**Analysis Document:** [`docs/plans/ISSUE_COORDINATION_ANALYSIS.md`](ISSUE_COORDINATION_ANALYSIS.md)
+
+### Related Issues Outside This Epic
+
+This UAT Findings EPIC (#265) has significant overlap with several existing issues that were created before UAT testing. To avoid duplicate work and ensure proper sequencing, the following coordination is required:
+
+#### Direct Overlaps (Same Work)
+- **Issue #256** (P1-high) - UI/UX Refinements
+  - **Overlaps:** Route card names, mobile UX improvements, visual hierarchy
+  - **Coordination:** Complete #265 Phase 1 BEFORE starting #256 to avoid duplication
+  - **Estimated Reduction:** 2-4 hours of #256 work may already be covered by #265
+
+- **Issue #68** (P4-future) - Visual Hierarchy & Polish
+  - **Overlaps:** Route card redesign, typography, semantic colors
+  - **Recommendation:** Review for closure after #256 completion (may be fully covered)
+
+- **Issue #64** (P4-future) - Progressive Disclosure for Metrics
+  - **Overlaps:** Metric display, collapsible sections
+  - **Recommendation:** Review for closure after #256 completion (may be fully covered)
+
+#### Complementary Issues (Related Work)
+- **Issue #62** (P4-future) - EPIC: Mobile-First UI/UX Redesign
+  - **Status:** Parent epic of #64, #66, #68
+  - **Recommendation:** Audit child issues after #265 and #256 complete, update scope
+
+- **Issue #66** (P4-future) - Feature Discovery & Onboarding
+  - **Status:** Independent work (welcome modal, guided tour)
+  - **Recommendation:** Keep open, implement after #265 Phase 3
+
+- **Issue #47** (P4-future) - Side-by-Side Route Comparison
+  - **Overlaps:** May be covered by #265 Workstream 2.3 (Route Comparison)
+  - **Recommendation:** Review for closure after #265 Phase 2 completion
+
+### Critical Priority Conflict
+
+**Problem:** Multiple issues targeting the same work with conflicting priorities:
+- Route card improvements: #265 (P0) vs #256 (P1) vs #68 (P4)
+- Mobile UX: #265 (P0) vs #256 (P1)
+- Visual hierarchy: #256 (P1) vs #68 (P4)
+
+**Resolution:** All P4-future issues (#62, #64, #66, #68, #47) should be reviewed after #265 and #256 completion. Some work overlaps with P0/P1 priorities and may already be complete.
+
+### Recommended Implementation Sequence
+
+1. **Phase 1 (Week 5):** Complete #265 Phase 1 (Critical Blockers)
+   - Fix navigation bugs
+   - Fix data accuracy issues
+   - Restore core functionality
+
+2. **Phase 2 (Week 6):** Implement #256 (Polish Working Features)
+   - Coordinate with #265 to avoid duplication
+   - Route card names (check if done in #265)
+   - Mobile UX improvements (check if done in #265)
+   - Visual hierarchy (will cover #68)
+   - Loading states, error messaging, accessibility
+
+3. **Phase 3 (Week 7):** Complete #265 Phase 2-3 (Enhancements)
+   - Route comparison (coordinate with #47)
+   - Advanced filtering
+   - Performance optimizations
+
+4. **Phase 4 (Week 8+):** Review P4-future Issues
+   - Close #68 if covered by #256
+   - Close #64 if covered by #256
+   - Close #47 if covered by #265
+   - Keep #66 (onboarding still needed)
+   - Update #62 scope or close if children complete
+
+### Coordination Checklist
+
+Before starting each phase:
+- [ ] **Before #265 Phase 1:** No dependencies
+- [ ] **Before #256:** Verify #265 Phase 1 complete, check for duplicate work
+- [ ] **Before #265 Phase 2:** Verify #256 complete to avoid re-polishing
+- [ ] **After #265 Phase 3:** Review #68, #64, #47 for closure
+- [ ] **After #256 complete:** Update #62 EPIC scope
+
+### Effort Impact
+
+- **Original #265 estimate:** 117-121 hours
+- **Original #256 estimate:** 6-8 hours
+- **Potential reduction:** 2-4 hours if work overlaps
+- **Net total:** 121-125 hours (with coordination)
+- **Savings:** Avoids 2-4 hours of duplicate work
+
+---
+
 
 ## Dependencies & Risks
 
@@ -1059,6 +1150,7 @@ This epic addresses findings from user acceptance testing with 4 commuter person
 - [Design Review](docs/reviews/DESIGN_REVIEW_UAT_FINDINGS.md)
 - [Engineering Review](docs/reviews/ENGINEERING_REVIEW_UAT_FINDINGS.md)
 - [Implementation Plan](docs/plans/UAT_FINDINGS_IMPLEMENTATION_PLAN.md)
+- [Issue Coordination Analysis](docs/plans/ISSUE_COORDINATION_ANALYSIS.md)
 
 ## Critical Issues (P0)
 - [ ] #XXX - Mobile bottom navigation non-functional (8h)
