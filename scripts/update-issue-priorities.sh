@@ -35,6 +35,12 @@ log_error() {
   echo -e "${RED}[$(date +%H:%M:%S)]${NC} ❌ $1" >&2
 }
 
+# Function to sanitize comments for gh issue close
+# Escapes backticks to prevent shell command substitution
+sanitize_comment() {
+  echo "$1" | sed 's/`/\\`/g'
+}
+
 # Function to detect duplicate issues
 detect_duplicate_issues() {
   log_action "Checking for duplicate issues..."
@@ -77,7 +83,7 @@ auto_close_completed_issues() {
       
       if [ "$is_open" = "OPEN" ]; then
         log_action "Closing completed issue #$issue_num..."
-        gh issue close "$issue_num" --comment "Auto-closed: Marked as completed in P1_ISSUES_COMPLETED.md" 2>/dev/null
+        gh issue close "$issue_num" --comment "$(sanitize_comment "Auto-closed: Marked as completed in P1_ISSUES_COMPLETED.md")" 2>/dev/null
         if [ $? -eq 0 ]; then
           ((closed_count++))
           log_success "Closed issue #$issue_num"
@@ -239,7 +245,7 @@ check_commits_for_completed_work() {
           fi
           
           log_action "Auto-closing issue #$issue_num based on analysis"
-          gh issue close "$issue_num" --comment "$close_comment" 2>/dev/null
+          gh issue close "$issue_num" --comment "$(sanitize_comment "$close_comment")" 2>/dev/null
           if [ $? -eq 0 ]; then
             ((closed_count++))
             log_success "Closed issue #$issue_num"
