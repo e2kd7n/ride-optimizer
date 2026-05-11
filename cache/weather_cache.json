@@ -1,17 +1,17 @@
 {
   "41.98736,-87.65454": {
     "data": {
-      "timestamp": "2026-05-10T07:30",
-      "temp_c": 8.5,
-      "wind_speed_kph": 6.0,
-      "wind_gust_kph": 9.0,
-      "wind_direction_deg": 327,
-      "wind_direction_cardinal": "NNW",
-      "humidity": 70,
+      "timestamp": "2026-05-11T11:15",
+      "temp_c": 10.6,
+      "wind_speed_kph": 22.6,
+      "wind_gust_kph": 30.6,
+      "wind_direction_deg": 25,
+      "wind_direction_cardinal": "NNE",
+      "humidity": 64,
       "precipitation_mm": 0.0,
       "lat": 41.98736,
       "lon": -87.65454
     },
-    "timestamp": "2026-05-10T07:38:06.786604"
+    "timestamp": "2026-05-11T11:15:00.654550"
   }
 }
