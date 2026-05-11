@@ -239,7 +239,30 @@ gh issue close 228 229 230 --comment "Completed as part of Epic #235"
 - **Release notes**: `docs/releases/v*.*/` by version
 - **User guides**: `docs/guides/` for setup and features
 - **Archive**: `docs/archive/` for completed analysis
-- **Plans**: `plans/v*.*/` for version-specific implementation plans
+- **Implementation plans**: `plans/` directory - ALL plans MUST be organized by version subdirectory
+
+### Plans Directory Structure (MANDATORY)
+All implementation plans, epics, and technical planning documents MUST be stored in `/plans/` organized by version:
+
+```
+plans/
+├── README.md                           # Index of all plans
+├── v0.11.0/                           # Current version plans
+│   ├── README.md                      # Version overview
+│   ├── INTERACTIVE_MAPS_RESTORATION_EPIC.md
+│   └── ARCHITECTURE_SIMPLIFICATION_PROPOSAL.md
+├── v0.12.0/                           # Future version plans
+│   └── README.md
+└── current/                           # Symlink to current version (optional)
+    → v0.11.0/
+```
+
+**Rules:**
+- **NEVER** store plans in `docs/plans/` - this location is deprecated
+- **ALWAYS** determine the target version from RELEASE_ROADMAP.md before creating plans
+- **ALWAYS** place plans in the appropriate `/plans/vX.X.X/` subdirectory
+- **ALWAYS** update `/plans/README.md` when adding new plans
+- Version-agnostic or cross-version plans go in the version where work begins
 
 ## Design Principles (Non-Negotiable)
 
