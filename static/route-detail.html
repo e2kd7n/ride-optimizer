@@ -139,7 +139,12 @@
                     opacity: 0.85
                 }).addTo(mapInstance);
 
-                mapInstance.fitBounds(polyline.getBounds(), { padding: [20, 20] });
+                // Zoom to show entire route with smooth animation (Issue #117)
+                mapInstance.fitBounds(polyline.getBounds(), {
+                    padding: [50, 50],
+                    animate: true,
+                    duration: 0.5
+                });
 
                 const start = coordinates[0];
                 const end = coordinates[coordinates.length - 1];

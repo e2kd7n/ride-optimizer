@@ -185,7 +185,7 @@ This architecture is over-engineered for single-user deployment (250-300MB memor
 
 ## Release v0.11.0 - Architecture Simplification (PLANNED)
 
-**Target Date:** June 2026 (5 weeks)  
+**Target Date:** June 2026 (5 weeks)
 **Status:** 🔵 PLANNED
 
 ### Planning Documents
@@ -193,6 +193,12 @@ This architecture is over-engineered for single-user deployment (250-300MB memor
 - **ARCHITECTURE_SIMPLIFICATION_SUMMARY.md** - Executive summary
 - **BETA_READINESS_REVISED_ASSESSMENT.md** - Readiness assessment
 - **BETA_RELEASE_READINESS_ASSESSMENT.md** - Release criteria
+- **EPIC_001_GITHUB_ISSUES.md** - Epic #001 GitHub issue breakdown
+- **EPIC_237_IMPLEMENTATION_PLAN.md** - Epic #237 UI/UX redesign implementation plan
+- **INTERACTIVE_MAPS_RESTORATION_EPIC.md** - Interactive maps restoration plan
+- **ISSUE_COORDINATION_ANALYSIS.md** - Issue overlap and coordination analysis
+- **MAP_API_ENDPOINTS_IMPLEMENTATION_PLAN.md** - Map API endpoints technical plan
+- **UAT_FINDINGS_IMPLEMENTATION_PLAN.md** - UAT findings implementation roadmap
 - **README.md** - Version overview
 
 ### Planned Features
@@ -260,9 +266,9 @@ This architecture is over-engineered for single-user deployment (250-300MB memor
 | v0.8.0 | Mar 26 | Minor | 3 docs | Route Naming & Organization (formerly v2.3.0) |
 | v0.9.0 | Mar 30 | Minor | 7 docs | Long Rides Enhancement (formerly v2.4.0) |
 | v0.10.0 | Mar 30 | Minor | 6 docs | APScheduler + Docker (formerly v2.5.0) - CURRENT |
-| v0.11.0 | Jun 2026 | Minor | 5 docs | Architecture Simplification - PLANNED |
+| v0.11.0 | Jun 2026 | Minor | 11 docs | Architecture Simplification - PLANNED |
 
-**Total Planning Documents:** 41 documents across 8 releases
+**Total Planning Documents:** 47 documents across 8 releases
 
 ---
 
