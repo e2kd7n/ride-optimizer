@@ -1,51 +1,34 @@
 {
   "41.88374,-87.6339": {
     "data": {
-      "timestamp": "2026-05-14T14:15",
-      "temp_c": 15.0,
-      "wind_speed_kph": 15.9,
-      "wind_gust_kph": 18.0,
-      "wind_direction_deg": 72,
-      "wind_direction_cardinal": "ENE",
-      "humidity": 42,
+      "timestamp": "2026-05-14T16:15",
+      "temp_c": 14.8,
+      "wind_speed_kph": 15.3,
+      "wind_gust_kph": 17.6,
+      "wind_direction_deg": 98,
+      "wind_direction_cardinal": "E",
+      "humidity": 35,
       "precipitation_mm": 0.0,
       "lat": 41.88374,
       "lon": -87.6339,
       "comfort_score": 1.0,
       "cycling_favorability": "favorable"
     },
-    "timestamp": "2026-05-14T14:19:00.002333"
+    "timestamp": "2026-05-14T16:19:18.465394"
   },
   "41.93416,-87.63184": {
     "data": {
-      "timestamp": "2026-05-14T14:15",
-      "temp_c": 14.8,
-      "wind_speed_kph": 16.3,
-      "wind_gust_kph": 18.0,
-      "wind_direction_deg": 68,
-      "wind_direction_cardinal": "ENE",
-      "humidity": 46,
+      "timestamp": "2026-05-14T16:15",
+      "temp_c": 15.0,
+      "wind_speed_kph": 15.0,
+      "wind_gust_kph": 17.3,
+      "wind_direction_deg": 100,
+      "wind_direction_cardinal": "E",
+      "humidity": 35,
       "precipitation_mm": 0.0,
       "lat": 41.93416,
-      "lon": -87.63184,
-      "comfort_score": 1.0,
-      "cycling_favorability": "favorable"
+      "lon": -87.63184
     },
-    "timestamp": "2026-05-14T14:19:00.138967"
-  },
-  "41.98736,-87.65454": {
-    "data": {
-      "timestamp": "2026-05-14T14:15",
-      "temp_c": 15.0,
-      "wind_speed_kph": 16.6,
-      "wind_gust_kph": 18.0,
-      "wind_direction_deg": 72,
-      "wind_direction_cardinal": "ENE",
-      "humidity": 46,
-      "precipitation_mm": 0.0,
-      "lat": 41.98736,
-      "lon": -87.65454
-    },
-    "timestamp": "2026-05-14T14:20:49.695218"
+    "timestamp": "2026-05-14T16:19:18.607256"
   }
 }

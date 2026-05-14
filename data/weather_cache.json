@@ -92,38 +92,38 @@
     },
     "41.8837_-87.6339": {
       "weather_data": {
-        "timestamp": "2026-05-14T14:15",
-        "temp_c": 15.0,
-        "wind_speed_kph": 15.9,
-        "wind_gust_kph": 18.0,
-        "wind_direction_deg": 72,
-        "wind_direction_cardinal": "ENE",
-        "humidity": 42,
+        "timestamp": "2026-05-14T16:15",
+        "temp_c": 14.8,
+        "wind_speed_kph": 15.3,
+        "wind_gust_kph": 17.6,
+        "wind_direction_deg": 98,
+        "wind_direction_cardinal": "E",
+        "humidity": 35,
         "precipitation_mm": 0.0,
         "lat": 41.88374,
         "lon": -87.6339,
         "comfort_score": 1.0,
         "cycling_favorability": "favorable"
       },
-      "timestamp": "2026-05-14T14:19:00.003723",
+      "timestamp": "2026-05-14T16:19:18.466459",
       "location_name": "Work"
     },
     "41.9342_-87.6318": {
       "weather_data": {
-        "timestamp": "2026-05-14T14:15",
-        "temp_c": 14.8,
-        "wind_speed_kph": 16.3,
-        "wind_gust_kph": 18.0,
-        "wind_direction_deg": 68,
-        "wind_direction_cardinal": "ENE",
-        "humidity": 46,
+        "timestamp": "2026-05-14T16:15",
+        "temp_c": 15.0,
+        "wind_speed_kph": 15.0,
+        "wind_gust_kph": 17.3,
+        "wind_direction_deg": 100,
+        "wind_direction_cardinal": "E",
+        "humidity": 35,
         "precipitation_mm": 0.0,
         "lat": 41.93416,
         "lon": -87.63184,
         "comfort_score": 1.0,
         "cycling_favorability": "favorable"
       },
-      "timestamp": "2026-05-14T14:19:00.139283",
+      "timestamp": "2026-05-14T16:19:18.607798",
       "location_name": "Lakefront Trail \u2192 North Lake Shore Drive \u2192 North Wells Street midpoint"
     }
   }
