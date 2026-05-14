@@ -520,112 +520,359 @@ TIMESTAMP_UTC=$(date -u +"%Y-%m-%d %H:%M:%S UTC" 2>/dev/null || date +"%Y-%m-%d 
 TIMESTAMP_CENTRAL=$(TZ="America/Chicago" date +"%Y-%m-%d %H:%M:%S %Z" 2>/dev/null || date +"%Y-%m-%d %H:%M:%S")
 echo "**Last Updated:** ${TIMESTAMP_UTC} / ${TIMESTAMP_CENTRAL}"
 echo ""
-echo "This file reflects the current state of GitHub issues by priority. Issues are managed via GitHub labels (P0-critical, P1-high, P2-medium, P3-low, P4-future)."
+echo "This file reflects the current state of GitHub issues organized by release milestone and priority within each release."
+echo ""
+echo "**Priority is now WITHIN a release** - P0/P1 issues in the current release take precedence over all issues in future releases."
 echo ""
 
-echo "## 🔴 P0 - CRITICAL (Drop Everything)"
-echo "Issues that make the application unusable or cause data loss."
-echo ""
-gh issue list --state open --label "P0-critical" --json number,title | jq -r '.[] | "- #\(.number) - \(.title)"'
-if [ $(gh issue list --state open --label "P0-critical" --json number | jq '. | length') -eq 0 ]; then
-  echo "**No P0 issues currently open** ✅"
+# Get current release from RELEASE_ROADMAP.md
+CURRENT_RELEASE=$(grep -A 1 "^\*\*Current Release:\*\*" RELEASE_ROADMAP.md 2>/dev/null | tail -1 | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+NEXT_RELEASE=$(grep -A 1 "^\*\*Next Release:\*\*" RELEASE_ROADMAP.md 2>/dev/null | tail -1 | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+
+if [ -z "$CURRENT_RELEASE" ]; then
+  CURRENT_RELEASE="v0.10.0"
 fi
+if [ -z "$NEXT_RELEASE" ]; then
+  NEXT_RELEASE="v0.11.0"
+fi
+
+log_action "Current Release: $CURRENT_RELEASE, Next Release: $NEXT_RELEASE" >&2
+
+# Function to display issues for a milestone and priority
+display_milestone_priority() {
+  local milestone="$1"
+  local priority_label="$2"
+  local priority_name="$3"
+  
+  local issues=$(gh issue list --state open --milestone "$milestone" --label "$priority_label" --json number,title 2>/dev/null | jq -r '.[] | "- #\(.number) - \(.title)"')
+  
+  if [ -n "$issues" ]; then
+    echo "$issues"
+  fi
+}
+
+# Function to get issue count for milestone and priority
+get_issue_count() {
+  local milestone="$1"
+  local priority_label="$2"
+  
+  gh issue list --state open --milestone "$milestone" --label "$priority_label" --json number 2>/dev/null | jq '. | length'
+}
+
+# Get all unique milestones, sorted by version number
+MILESTONES=$(gh issue list --state open --json milestone --limit 200 2>/dev/null | jq -r '.[].milestone.title // empty' | sort -u -V)
+
+# Separate milestones into next and future
+# The FIRST milestone (lowest version) is the "next release"
+# All others are "future releases"
+NEXT_MILESTONE=""
+FUTURE_MILESTONES=""
+
+first_milestone=true
+for milestone in $MILESTONES; do
+  if [ "$first_milestone" = true ]; then
+    NEXT_MILESTONE="$milestone"
+    first_milestone=false
+  else
+    FUTURE_MILESTONES="$FUTURE_MILESTONES $milestone"
+  fi
+done
+
+# Update NEXT_RELEASE to match actual next milestone
+if [ -n "$NEXT_MILESTONE" ]; then
+  NEXT_RELEASE="$NEXT_MILESTONE"
+fi
+
+echo "## 📍 Release Context"
+echo ""
+echo "- **Current Release:** $CURRENT_RELEASE (deployed)"
+echo "- **Next Release:** $NEXT_RELEASE (in development)"
+echo "- **Future Releases:** $(echo $FUTURE_MILESTONES | tr ' ' ', ' | sed 's/,$//')"
+echo ""
+echo "---"
 echo ""
 
-echo "## 🔴 P1 - HIGH (Current Sprint)"
-echo "Issues that significantly impact core functionality or user experience."
-echo ""
-gh issue list --state open --label "P1-high" --json number,title | jq -r '.[] | "- #\(.number) - \(.title)"'
-if [ $(gh issue list --state open --label "P1-high" --json number | jq '. | length') -eq 0 ]; then
-  echo "**No P1 issues currently open** ✅"
+# Display issues for NEXT RELEASE (highest priority)
+if [ -n "$NEXT_MILESTONE" ]; then
+  echo "## 🎯 $NEXT_MILESTONE (Next Release - IN DEVELOPMENT)"
+  echo ""
+  echo "**Priority within this release determines work order. Complete P0/P1 issues before moving to future releases.**"
+  echo ""
+  
+  # P0 for next release
+  echo "### 🔴 P0 - CRITICAL"
+  p0_count=$(get_issue_count "$NEXT_MILESTONE" "P0-critical")
+  if [ "$p0_count" -gt 0 ]; then
+    display_milestone_priority "$NEXT_MILESTONE" "P0-critical" "P0"
+  else
+    echo "**No P0 issues** ✅"
+  fi
+  echo ""
+  
+  # P1 for next release
+  echo "### 🔴 P1 - HIGH"
+  p1_count=$(get_issue_count "$NEXT_MILESTONE" "P1-high")
+  if [ "$p1_count" -gt 0 ]; then
+    display_milestone_priority "$NEXT_MILESTONE" "P1-high" "P1"
+  else
+    echo "**No P1 issues** ✅"
+  fi
+  echo ""
+  
+  # P2 for next release
+  echo "### 🟡 P2 - MEDIUM"
+  p2_count=$(get_issue_count "$NEXT_MILESTONE" "P2-medium")
+  if [ "$p2_count" -gt 0 ]; then
+    display_milestone_priority "$NEXT_MILESTONE" "P2-medium" "P2"
+  else
+    echo "**No P2 issues** ✅"
+  fi
+  echo ""
+  
+  # P3 for next release
+  echo "### 🟢 P3 - LOW"
+  p3_count=$(get_issue_count "$NEXT_MILESTONE" "P3-low")
+  if [ "$p3_count" -gt 0 ]; then
+    display_milestone_priority "$NEXT_MILESTONE" "P3-low" "P3"
+  else
+    echo "**No P3 issues** ✅"
+  fi
+  echo ""
+  
+  # P4 for next release
+  echo "### 📋 P4 - FUTURE"
+  p4_count=$(get_issue_count "$NEXT_MILESTONE" "P4-future")
+  if [ "$p4_count" -gt 0 ]; then
+    display_milestone_priority "$NEXT_MILESTONE" "P4-future" "P4"
+  else
+    echo "**No P4 issues** ✅"
+  fi
+  echo ""
+  
+  echo "---"
+  echo ""
 fi
+
+# Display issues for FUTURE RELEASES
+for milestone in $FUTURE_MILESTONES; do
+  echo "## 📅 $milestone (Future Release)"
+  echo ""
+  
+  # Get all issues for this milestone grouped by priority
+  all_issues=$(gh issue list --state open --milestone "$milestone" --json number,title,labels 2>/dev/null)
+  
+  if [ -z "$all_issues" ] || [ "$all_issues" = "[]" ]; then
+    echo "**No issues planned for this release yet**"
+    echo ""
+    echo "---"
+    echo ""
+    continue
+  fi
+  
+  # P0
+  p0_issues=$(echo "$all_issues" | jq -r '.[] | select(.labels | map(.name) | index("P0-critical")) | "- #\(.number) - \(.title)"')
+  if [ -n "$p0_issues" ]; then
+    echo "### 🔴 P0 - CRITICAL"
+    echo "$p0_issues"
+    echo ""
+  fi
+  
+  # P1
+  p1_issues=$(echo "$all_issues" | jq -r '.[] | select(.labels | map(.name) | index("P1-high")) | "- #\(.number) - \(.title)"')
+  if [ -n "$p1_issues" ]; then
+    echo "### 🔴 P1 - HIGH"
+    echo "$p1_issues"
+    echo ""
+  fi
+  
+  # P2
+  p2_issues=$(echo "$all_issues" | jq -r '.[] | select(.labels | map(.name) | index("P2-medium")) | "- #\(.number) - \(.title)"')
+  if [ -n "$p2_issues" ]; then
+    echo "### 🟡 P2 - MEDIUM"
+    echo "$p2_issues"
+    echo ""
+  fi
+  
+  # P3
+  p3_issues=$(echo "$all_issues" | jq -r '.[] | select(.labels | map(.name) | index("P3-low")) | "- #\(.number) - \(.title)"')
+  if [ -n "$p3_issues" ]; then
+    echo "### 🟢 P3 - LOW"
+    echo "$p3_issues"
+    echo ""
+  fi
+  
+  # P4
+  p4_issues=$(echo "$all_issues" | jq -r '.[] | select(.labels | map(.name) | index("P4-future")) | "- #\(.number) - \(.title)"')
+  if [ -n "$p4_issues" ]; then
+    echo "### 📋 P4 - FUTURE"
+    echo "$p4_issues"
+    echo ""
+  fi
+  
+  echo "---"
+  echo ""
+done
+
+# Display issues WITHOUT milestone (need triage)
+echo "## ⚠️ Issues Without Release Assignment"
+echo ""
+echo "These issues need to be assigned to a release milestone and prioritized."
 echo ""
 
-echo "## 🟡 P2 - MEDIUM (Next Sprint)"
-echo "Important improvements that enhance functionality but don't block core workflows."
-echo ""
-gh issue list --state open --label "P2-medium" --json number,title | jq -r '.[] | "- #\(.number) - \(.title)"'
-if [ $(gh issue list --state open --label "P2-medium" --json number | jq '. | length') -eq 0 ]; then
-  echo "**No P2 issues currently open** ✅"
-fi
-echo ""
+no_milestone_issues=$(gh issue list --state open --json number,title,labels,milestone --limit 200 2>/dev/null | jq -r '.[] | select(.milestone == null)')
 
-echo "## 🟢 P3 - LOW (Backlog)"
-echo "Nice-to-have improvements and minor UX enhancements."
-echo ""
-gh issue list --state open --label "P3-low" --json number,title | jq -r '.[] | "- #\(.number) - \(.title)"'
-if [ $(gh issue list --state open --label "P3-low" --json number | jq '. | length') -eq 0 ]; then
-  echo "**No P3 issues currently open** ✅"
+if [ -z "$no_milestone_issues" ] || [ "$no_milestone_issues" = "" ]; then
+  echo "**All issues are assigned to releases** ✅"
+  echo ""
+else
+  # Group by priority
+  echo "### 🔴 P0 - CRITICAL"
+  p0_no_milestone=$(echo "$no_milestone_issues" | jq -r 'select(.labels | map(.name) | index("P0-critical")) | "- #\(.number) - \(.title)"')
+  if [ -n "$p0_no_milestone" ]; then
+    echo "$p0_no_milestone"
+  else
+    echo "None"
+  fi
+  echo ""
+  
+  echo "### 🔴 P1 - HIGH"
+  p1_no_milestone=$(echo "$no_milestone_issues" | jq -r 'select(.labels | map(.name) | index("P1-high")) | "- #\(.number) - \(.title)"')
+  if [ -n "$p1_no_milestone" ]; then
+    echo "$p1_no_milestone"
+  else
+    echo "None"
+  fi
+  echo ""
+  
+  echo "### 🟡 P2 - MEDIUM"
+  p2_no_milestone=$(echo "$no_milestone_issues" | jq -r 'select(.labels | map(.name) | index("P2-medium")) | "- #\(.number) - \(.title)"')
+  if [ -n "$p2_no_milestone" ]; then
+    echo "$p2_no_milestone"
+  else
+    echo "None"
+  fi
+  echo ""
+  
+  echo "### 🟢 P3 - LOW"
+  p3_no_milestone=$(echo "$no_milestone_issues" | jq -r 'select(.labels | map(.name) | index("P3-low")) | "- #\(.number) - \(.title)"')
+  if [ -n "$p3_no_milestone" ]; then
+    echo "$p3_no_milestone"
+  else
+    echo "None"
+  fi
+  echo ""
+  
+  echo "### 📋 P4 - FUTURE"
+  p4_no_milestone=$(echo "$no_milestone_issues" | jq -r 'select(.labels | map(.name) | index("P4-future")) | "- #\(.number) - \(.title)"')
+  if [ -n "$p4_no_milestone" ]; then
+    echo "$p4_no_milestone"
+  else
+    echo "None"
+  fi
+  echo ""
+  
+  echo "### ⚠️ Unprioritized (No P-label)"
+  unprioritized=$(echo "$no_milestone_issues" | jq -r 'select(.labels | map(.name | startswith("P")) | any | not) | "- #\(.number) - \(.title)"')
+  if [ -n "$unprioritized" ]; then
+    echo "$unprioritized"
+  else
+    echo "None"
+  fi
+  echo ""
 fi
-echo ""
 
-echo "## 📋 P4 - FUTURE ENHANCEMENTS"
-echo "Feature requests and enhancements for future releases."
-echo ""
-gh issue list --state open --label "P4-future" --json number,title | jq -r '.[] | "- #\(.number) - \(.title)"'
-if [ $(gh issue list --state open --label "P4-future" --json number | jq '. | length') -eq 0 ]; then
-  echo "**No P4 issues currently open** ✅"
-fi
-echo ""
-
-echo "## ⚠️ Unprioritized Issues"
-echo "Issues without priority labels that need to be triaged."
-echo ""
-gh issue list --state open --json number,title,labels --limit 100 | jq -r '.[] | select(.labels | map(.name | startswith("P")) | any | not) | "- #\(.number) - \(.title)"'
-unprioritized_count=$(gh issue list --state open --json number,labels --limit 100 | jq '[.[] | select(.labels | map(.name | startswith("P")) | any | not)] | length')
-if [ "$unprioritized_count" -eq 0 ]; then
-  echo "**No unprioritized issues** ✅"
-fi
+echo "---"
 echo ""
 
 # Scan workspace for TODOs
 scan_workspace_todos
 
-echo "## Priority Guidelines"
+echo "## 📖 Priority System (Release-Aware)"
 echo ""
-echo "### P0 - CRITICAL"
+echo "**Key Principle:** Priority is now WITHIN a release. A P1 issue in the next release takes precedence over a P0 issue in a future release."
+echo ""
+echo "### Work Order Priority"
+echo ""
+echo "1. **Next Release P0** - Drop everything"
+echo "2. **Next Release P1** - Current sprint focus"
+echo "3. **Next Release P2** - Next sprint planning"
+echo "4. **Next Release P3** - Backlog for this release"
+echo "5. **Future Release P0** - Plan for future critical work"
+echo "6. **Future Release P1+** - Long-term planning"
+echo ""
+echo "### Priority Definitions (Within a Release)"
+echo ""
+echo "#### 🔴 P0 - CRITICAL"
 echo "- Application is down or unusable"
 echo "- Data loss or corruption"
 echo "- Security vulnerabilities"
+echo "- Blocks release deployment"
 echo "- **Action:** Drop everything and fix immediately"
 echo ""
-echo "### P1 - HIGH"
+echo "#### 🔴 P1 - HIGH"
 echo "- Core features broken or severely degraded"
 echo "- Significant user pain points"
 echo "- Blocks important workflows"
+echo "- Must complete before release"
 echo "- **Action:** Fix in current sprint (1-2 weeks)"
 echo ""
-echo "### P2 - MEDIUM"
+echo "#### 🟡 P2 - MEDIUM"
 echo "- Feature improvements"
 echo "- Moderate user pain points"
 echo "- Quality of life enhancements"
+echo "- Should complete for release"
 echo "- **Action:** Plan for next sprint (2-4 weeks)"
 echo ""
-echo "### P3 - LOW"
+echo "#### 🟢 P3 - LOW"
 echo "- Minor UX improvements"
 echo "- Edge cases"
 echo "- Nice-to-have features"
+echo "- Can defer to next release if needed"
 echo "- **Action:** Backlog, address when time permits"
 echo ""
-echo "### P4 - FUTURE"
-echo "- New features"
+echo "#### 📋 P4 - FUTURE"
+echo "- New features for later releases"
 echo "- Major enhancements"
 echo "- Long-term improvements"
+echo "- Explicitly deferred"
 echo "- **Action:** Plan for future releases"
 echo ""
-echo "## How to Update Priorities"
+echo "## 🔄 How to Update Priorities"
 echo ""
-echo "1. Use GitHub labels to set priority (P0-critical, P1-high, P2-medium, P3-low, P4-future)"
-echo "2. Run \`./scripts/update-issue-priorities.sh\` to regenerate this file"
-echo "3. Commit changes with descriptive message"
-echo "4. Communicate priority changes to team"
+echo "### 1. Assign to Release Milestone"
+echo "\`\`\`bash"
+echo "gh issue edit <issue_num> --milestone \"v0.13.0\""
+echo "\`\`\`"
 echo ""
-echo "## Managing Workspace TODOs"
+echo "### 2. Set Priority Within Release"
+echo "\`\`\`bash"
+echo "gh issue edit <issue_num> --add-label \"P1-high\""
+echo "\`\`\`"
+echo ""
+echo "### 3. Regenerate This File"
+echo "\`\`\`bash"
+echo "./scripts/update-issue-priorities.sh"
+echo "\`\`\`"
+echo ""
+echo "### 4. Commit and Communicate"
+echo "\`\`\`bash"
+echo "git add ISSUE_PRIORITIES.md"
+echo "git commit -m \"Update issue priorities for <release>\""
+echo "\`\`\`"
+echo ""
+echo "## 📝 Managing Workspace TODOs"
 echo ""
 echo "- Review code comments regularly and convert important ones to GitHub issues"
 echo "- Use \`TODO:\` for tasks that should become issues"
 echo "- Use \`FIXME:\` for bugs that need attention"
 echo "- Use \`HACK:\` for temporary solutions that need proper fixes"
 echo "- Use \`NOTE:\` for important information or context"
+echo ""
+echo "## 🎯 Release Planning Guidelines"
+echo ""
+echo "- **Assign milestones early** - Every issue should have a target release"
+echo "- **Prioritize within release** - Focus on P0/P1 issues for next release first"
+echo "- **Defer strategically** - Move P3/P4 issues to future releases if needed"
+echo "- **Review regularly** - Run this script weekly to track progress"
 
 # Made with Bob
