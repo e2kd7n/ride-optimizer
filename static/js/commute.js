@@ -15,6 +15,61 @@
     let activeCard = null;
     
     /**
+     * Get weather severity level based on conditions
+     * Issue #112 - Weather severity indicators
+     */
+    function getWeatherSeverity(weather) {
+        if (!weather) return { level: 'unknown', icon: '❓', color: 'secondary', label: 'Unknown' };
+        
+        const temp = weather.temperature || 70;
+        const windSpeed = weather.wind_speed || 0;
+        const condition = (weather.conditions || '').toLowerCase();
+        const precipProb = weather.precipitation_probability || weather.precipitation || 0;
+        
+        // Miserable conditions
+        if (condition.includes('thunder') || condition.includes('storm')) {
+            return { level: 'miserable', icon: '⛈️', color: 'danger', label: 'Miserable' };
+        }
+        if (temp >= 95 || temp <= 25) {
+            return { level: 'miserable', icon: '🥵', color: 'danger', label: 'Extreme' };
+        }
+        if (windSpeed >= 25) {
+            return { level: 'miserable', icon: '💨', color: 'danger', label: 'Very Windy' };
+        }
+        if (condition.includes('heavy rain') || precipProb >= 80) {
+            return { level: 'miserable', icon: '🌧️', color: 'danger', label: 'Heavy Rain' };
+        }
+        
+        // Poor conditions
+        if (condition.includes('rain') || condition.includes('drizzle') || precipProb >= 50) {
+            return { level: 'poor', icon: '🌧️', color: 'warning', label: 'Rainy' };
+        }
+        if (temp >= 85 || temp <= 35) {
+            return { level: 'poor', icon: temp >= 85 ? '🌡️' : '🥶', color: 'warning', label: temp >= 85 ? 'Hot' : 'Cold' };
+        }
+        if (windSpeed >= 15) {
+            return { level: 'poor', icon: '💨', color: 'warning', label: 'Windy' };
+        }
+        if (condition.includes('snow')) {
+            return { level: 'poor', icon: '❄️', color: 'info', label: 'Snowy' };
+        }
+        
+        // Fair conditions
+        if (condition.includes('cloud') || condition.includes('overcast')) {
+            return { level: 'fair', icon: '⛅', color: 'secondary', label: 'Cloudy' };
+        }
+        if (windSpeed >= 8) {
+            return { level: 'fair', icon: '🍃', color: 'info', label: 'Breezy' };
+        }
+        if (temp >= 75 || temp <= 45) {
+            return { level: 'fair', icon: '⛅', color: 'secondary', label: 'Fair' };
+        }
+        
+        // Good conditions
+        return { level: 'good', icon: '☀️', color: 'success', label: 'Excellent' };
+    }
+    
+    /**
      * Initialize the commute view
      */
     function init() {
@@ -120,6 +175,7 @@
         const temp = weather.temperature ? `${Math.round(weather.temperature)}°F` : 'N/A';
         const wind = weather.wind_speed ? `${Math.round(weather.wind_speed)} mph` : 'N/A';
         const precip = weather.precipitation !== undefined ? `${Math.round(weather.precipitation)}%` : 'N/A';
+        const severity = getWeatherSeverity(weather); // Issue #112
         
         // Time window
         const timeWindow = recommendation.time_window || 'Today';
@@ -134,6 +190,11 @@
             <div class="commute-time-window">
                 <i class="bi bi-clock"></i> ${escapeHtml(timeWindow)}
                 ${isToday ? '<span class="badge bg-success ms-2">Today</span>' : '<span class="badge bg-info ms-2">Tomorrow</span>'}
+            </div>
+            <div class="mb-2">
+                <span class="badge bg-${severity.color}" style="font-size: 0.9rem; padding: 0.4rem 0.6rem;" title="Weather conditions: ${severity.label}">
+                    ${severity.icon} ${severity.label}
+                </span>
             </div>
             <div class="commute-metrics">
                 <div class="commute-metric">

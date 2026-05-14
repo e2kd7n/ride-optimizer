@@ -87,6 +87,61 @@ async function loadSystemStatus() {
 }
 
 /**
+ * Get weather severity level based on conditions
+ * Issue #112 - Weather severity indicators
+ *
+ * Returns: { level: 'good'|'fair'|'poor'|'miserable', icon: string, color: string, label: string }
+ */
+function getWeatherSeverity(weather) {
+    const temp = weather.temperature || 70;
+    const windSpeed = weather.wind_speed || 0;
+    const condition = (weather.conditions || '').toLowerCase();
+    const precipProb = weather.precipitation_probability || 0;
+    
+    // Miserable conditions (score 0-25)
+    if (condition.includes('thunder') || condition.includes('storm')) {
+        return { level: 'miserable', icon: '⛈️', color: 'danger', label: 'Miserable' };
+    }
+    if (temp >= 95 || temp <= 25) {
+        return { level: 'miserable', icon: '🥵', color: 'danger', label: 'Extreme Temp' };
+    }
+    if (windSpeed >= 25) {
+        return { level: 'miserable', icon: '💨', color: 'danger', label: 'Very Windy' };
+    }
+    if (condition.includes('heavy rain') || precipProb >= 80) {
+        return { level: 'miserable', icon: '🌧️', color: 'danger', label: 'Heavy Rain' };
+    }
+    
+    // Poor conditions (score 26-50)
+    if (condition.includes('rain') || condition.includes('drizzle') || precipProb >= 50) {
+        return { level: 'poor', icon: '🌧️', color: 'warning', label: 'Rainy' };
+    }
+    if (temp >= 85 || temp <= 35) {
+        return { level: 'poor', icon: temp >= 85 ? '🌡️' : '🥶', color: 'warning', label: temp >= 85 ? 'Hot' : 'Cold' };
+    }
+    if (windSpeed >= 15) {
+        return { level: 'poor', icon: '💨', color: 'warning', label: 'Windy' };
+    }
+    if (condition.includes('snow')) {
+        return { level: 'poor', icon: '❄️', color: 'info', label: 'Snowy' };
+    }
+    
+    // Fair conditions (score 51-75)
+    if (condition.includes('cloud') || condition.includes('overcast')) {
+        return { level: 'fair', icon: '⛅', color: 'secondary', label: 'Cloudy' };
+    }
+    if (windSpeed >= 8) {
+        return { level: 'fair', icon: '🍃', color: 'info', label: 'Breezy' };
+    }
+    if (temp >= 75 || temp <= 45) {
+        return { level: 'fair', icon: '⛅', color: 'secondary', label: 'Fair' };
+    }
+    
+    // Good conditions (score 76-100)
+    return { level: 'good', icon: '☀️', color: 'success', label: 'Excellent' };
+}
+
+/**
  * Get weather icon based on conditions
  * Issue #116 - Visual weather icons
  */
@@ -165,6 +220,7 @@ async function loadWeather() {
         const weatherIcon = getWeatherIcon(current.conditions, current.temperature);
         const windArrow = getWindArrow(current.wind_direction);
         const windInfo = getWindInfo(current.wind_speed);
+        const severity = getWeatherSeverity(current); // Issue #112 - Weather severity
         
         const html = `
             <div class="weather-icon">
@@ -175,6 +231,11 @@ async function loadWeather() {
                 <small style="opacity: 0.9;">Feels like ${current.feels_like}°F</small>
             </div>
             <div class="weather-details flex-grow-1">
+                <div class="weather-detail-item">
+                    <span class="badge bg-${severity.color}" style="font-size: 1rem; padding: 0.5rem 0.75rem;" title="Weather severity: ${severity.label}">
+                        ${severity.icon} ${severity.label}
+                    </span>
+                </div>
                 <div class="weather-detail-item">
                     <i class="bi bi-wind"></i>
                     <span>${current.wind_speed} mph ${windArrow} ${current.wind_direction}</span>
