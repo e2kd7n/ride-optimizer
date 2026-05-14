@@ -87,59 +87,118 @@ async function loadSystemStatus() {
 }
 
 /**
- * Load and display weather data
+ * Get weather icon based on conditions
+ * Issue #116 - Visual weather icons
+ */
+function getWeatherIcon(conditions, temp) {
+    const condition = (conditions || '').toLowerCase();
+    
+    // Temperature-based icons
+    if (temp >= 85) return 'bi-thermometer-sun text-danger';
+    if (temp <= 32) return 'bi-thermometer-snow text-primary';
+    
+    // Condition-based icons
+    if (condition.includes('rain') || condition.includes('drizzle')) return 'bi-cloud-rain text-primary';
+    if (condition.includes('snow')) return 'bi-cloud-snow text-info';
+    if (condition.includes('thunder') || condition.includes('storm')) return 'bi-cloud-lightning text-warning';
+    if (condition.includes('cloud') || condition.includes('overcast')) return 'bi-cloud text-secondary';
+    if (condition.includes('clear') || condition.includes('sunny')) return 'bi-sun text-warning';
+    if (condition.includes('fog') || condition.includes('mist')) return 'bi-cloud-fog text-muted';
+    if (condition.includes('wind')) return 'bi-wind text-info';
+    
+    // Default
+    return 'bi-cloud-sun text-primary';
+}
+
+/**
+ * Get temperature color class
+ * Issue #116 - Color-coded temperature ranges
+ */
+function getTempColorClass(temp) {
+    if (temp >= 85) return 'text-danger';  // Hot (red)
+    if (temp >= 75) return 'text-warning'; // Warm (orange)
+    if (temp >= 60) return 'text-success'; // Comfortable (green)
+    if (temp >= 45) return 'text-info';    // Cool (blue)
+    return 'text-primary';                  // Cold (dark blue)
+}
+
+/**
+ * Get wind direction arrow
+ * Issue #116 - Wind direction visualization
+ */
+function getWindArrow(direction) {
+    const arrows = {
+        'N': '↓', 'NNE': '↓', 'NE': '↙', 'ENE': '↙',
+        'E': '←', 'ESE': '←', 'SE': '↖', 'SSE': '↖',
+        'S': '↑', 'SSW': '↑', 'SW': '↗', 'WSW': '↗',
+        'W': '→', 'WNW': '→', 'NW': '↘', 'NNW': '↘'
+    };
+    return arrows[direction] || '•';
+}
+
+/**
+ * Get wind speed color and description
+ * Issue #116 - Wind visualization
+ */
+function getWindInfo(speed) {
+    if (speed >= 25) return { color: 'text-danger', desc: 'Very Windy' };
+    if (speed >= 15) return { color: 'text-warning', desc: 'Windy' };
+    if (speed >= 8) return { color: 'text-info', desc: 'Breezy' };
+    return { color: 'text-success', desc: 'Calm' };
+}
+
+/**
+ * Load and display weather data in banner format
  */
 async function loadWeather() {
-    const container = document.getElementById('weather-data');
+    const container = document.getElementById('weather-banner');
     
     try {
         const weather = await window.apiClient.getWeather();
         
         if (!weather || !weather.current) {
-            container.innerHTML = '<p class="text-muted">No weather data available</p>';
+            container.innerHTML = '<p class="text-white mb-0">Weather data unavailable</p>';
             return;
         }
         
         const current = weather.current;
-        const comfortClass = getComfortClass(current.comfort_score);
+        const weatherIcon = getWeatherIcon(current.conditions, current.temperature);
+        const windArrow = getWindArrow(current.wind_direction);
+        const windInfo = getWindInfo(current.wind_speed);
         
         const html = `
-            <div class="row">
-                <div class="col-md-6">
-                    <div class="d-flex align-items-center mb-3">
-                        <i class="bi bi-thermometer-half fs-1 me-3"></i>
-                        <div>
-                            <h3 class="mb-0">${current.temperature}°F</h3>
-                            <small class="text-muted">Feels like ${current.feels_like}°F</small>
-                        </div>
-                    </div>
+            <div class="weather-icon">
+                <i class="bi ${weatherIcon}"></i>
+            </div>
+            <div>
+                <div class="weather-temp">${current.temperature}°F</div>
+                <small style="opacity: 0.9;">Feels like ${current.feels_like}°F</small>
+            </div>
+            <div class="weather-details flex-grow-1">
+                <div class="weather-detail-item">
+                    <i class="bi bi-wind"></i>
+                    <span>${current.wind_speed} mph ${windArrow} ${current.wind_direction}</span>
                 </div>
-                <div class="col-md-6">
-                    <div class="mb-2">
-                        <strong>Comfort Score:</strong>
-                        <span class="badge ${comfortClass} ms-2">${current.comfort_score}/100</span>
+                <div class="weather-detail-item">
+                    <i class="bi bi-droplet"></i>
+                    <span>${current.humidity}%</span>
+                </div>
+                ${current.precipitation_probability ? `
+                    <div class="weather-detail-item">
+                        <i class="bi bi-cloud-rain"></i>
+                        <span>${current.precipitation_probability}%</span>
                     </div>
-                    <div class="mb-2">
-                        <i class="bi bi-wind"></i> Wind: ${current.wind_speed} mph ${current.wind_direction}
-                    </div>
-                    <div class="mb-2">
-                        <i class="bi bi-droplet"></i> Humidity: ${current.humidity}%
-                    </div>
-                    ${current.precipitation_probability ? `
-                        <div class="mb-2">
-                            <i class="bi bi-cloud-rain"></i> Rain: ${current.precipitation_probability}%
-                        </div>
-                    ` : ''}
+                ` : ''}
+                <div class="weather-detail-item">
+                    <span class="comfort-badge">Score: ${current.comfort_score}/100</span>
                 </div>
             </div>
-            <div class="mt-3 d-flex justify-content-between align-items-center">
-                <small class="text-muted">
-                    <i class="bi bi-info-circle"></i> ${current.description}
-                </small>
-                ${weather.timestamp ? `<small class="text-muted timestamp-display" data-timestamp="${weather.timestamp}" title="${formatAbsoluteTime(weather.timestamp)}">
-                    <i class="bi bi-clock"></i> Updated ${formatRelativeTime(weather.timestamp)}
-                </small>` : ''}
-            </div>
+            ${weather.timestamp ? `
+                <div class="weather-detail-item timestamp-display" data-timestamp="${weather.timestamp}" title="${formatAbsoluteTime(weather.timestamp)}" style="opacity: 0.8;">
+                    <i class="bi bi-clock"></i>
+                    <span>${formatRelativeTime(weather.timestamp)}</span>
+                </div>
+            ` : ''}
         `;
         
         container.innerHTML = html;
