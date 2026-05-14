@@ -1674,8 +1674,292 @@ python main.py --fetch --analyze
 - Run security audit: `pip-audit`
 
 ---
+## 18. Frontend Architecture & Interactive Features
 
-## 18. Future Enhancements
+### Overview
+
+The web application uses a modern, mobile-first architecture with vanilla JavaScript and Bootstrap 5. All UI features are implemented in `static/` directory with client-side rendering.
+
+### JavaScript Modules (`static/js/`)
+
+#### Core Modules
+
+**`api-client.js`** - API Communication Layer
+```javascript
+// Centralized API client with retry logic and error handling
+class APIClient {
+    async fetchWeather(params) { /* ... */ }
+    async fetchRecommendation(direction) { /* ... */ }
+    async fetchRoutes(filters) { /* ... */ }
+    async fetchStatus() { /* ... */ }
+}
+
+// Features:
+// - Automatic retry (3 attempts with exponential backoff)
+// - Request timeout handling (30 seconds)
+// - Error normalization and user-friendly messages
+// - Loading state management
+```
+
+**`common.js`** - Shared Utilities
+```javascript
+// Toast notifications (Bootstrap 5)
+function showToast(message, type = 'info', duration = 5000)
+
+// Auto-save functionality with debouncing
+function enableAutoSave(formId, saveCallback, debounceMs = 1000)
+
+// Undo/redo system with 7-second timeout
+function registerUndoAction(action, undoCallback)
+
+// Unit conversion (metric ↔ imperial)
+function convertDistance(value, fromUnit, toUnit)
+function convertTemperature(value, fromUnit, toUnit)
+```
+
+**`accessibility.js`** - WCAG 2.1 AA Compliance
+```javascript
+// Features:
+// - Skip links for keyboard navigation
+// - ARIA live regions for dynamic content
+// - Focus management for modals and dialogs
+// - Screen reader announcements
+// - Keyboard shortcuts (documented in help modal)
+
+// Key Functions:
+function initializeAccessibility()
+function announceToScreenReader(message, priority = 'polite')
+function trapFocus(element)
+function restoreFocus(previousElement)
+```
+
+**`mobile.js`** - Mobile Optimizations
+```javascript
+// Bottom navigation bar (iOS/Android style)
+function initializeBottomNav()
+
+// Swipe gestures for route cards
+function enableSwipeGestures(container, callbacks)
+
+// Touch-optimized interactions
+// - 44x44px minimum touch targets
+// - Haptic feedback simulation
+// - Pull-to-refresh (where applicable)
+
+// Responsive breakpoints:
+// - Mobile: < 768px
+// - Tablet: 768px - 1024px
+// - Desktop: > 1024px
+```
+
+#### Page-Specific Modules
+
+**`dashboard.js`** - Home Page Logic
+```javascript
+// Features:
+// - Real-time weather updates (90-minute cache)
+// - Next commute recommendation
+// - Route statistics summary
+// - Interactive map with route overlay
+
+// Key Functions:
+async function loadWeather()
+async function loadRecommendation()
+async function loadRouteStats()
+function initializeDashboardMap()
+```
+
+**`commute.js`** - Commute Page Logic
+```javascript
+// Features:
+// - Side-by-side route cards + map layout
+// - Time-aware recommendations (morning/evening)
+// - Weather-integrated scoring
+// - Route comparison with visual diff
+
+// Key Functions:
+async function loadCommuteRecommendations(direction)
+function renderRouteCard(route, isActive)
+function updateMapWithRoute(routeId)
+function compareRoutes(route1, route2)
+```
+
+**`routes.js`** - Route Library Logic
+```javascript
+// Features:
+// - Advanced filtering (distance, date, type)
+// - Search with fuzzy matching
+// - Sort by multiple criteria
+// - Favorite routes management
+// - Bulk operations (select multiple)
+
+// Key Functions:
+async function loadRoutes(filters)
+function applyFilters(routes, filterCriteria)
+function searchRoutes(query)
+function toggleFavorite(routeId)
+```
+
+**`map-renderer.js`** - Map Visualization
+```javascript
+// Uses Leaflet.js for interactive maps
+
+// Features:
+// - Route polyline rendering with color coding
+// - Marker clustering for multiple routes
+// - Heatmap overlay for frequency analysis
+// - Layer control (routes, markers, heatmap)
+// - Responsive zoom and center
+
+// Color Coding:
+// - Green: Optimal/recommended routes
+// - Blue: Alternative routes
+// - Red: Unfavorable conditions
+// - Yellow: Neutral/caution
+
+// Key Functions:
+function initializeMap(containerId, options)
+function addRouteLayer(map, route, style)
+function addMarkers(map, locations)
+function enableHeatmap(map, activityData)
+```
+
+### UI Components & Patterns
+
+#### Bootstrap 5 Integration
+
+**Tooltips** - Contextual Help
+```javascript
+// Initialized on all elements with data-bs-toggle="tooltip"
+const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]')
+const tooltipList = [...tooltipTriggerList].map(el => new bootstrap.Tooltip(el))
+
+// Usage:
+<button data-bs-toggle="tooltip" 
+        data-bs-placement="top" 
+        title="Click to view route details">
+    View Details
+</button>
+```
+
+**Toasts** - Notifications
+```javascript
+// Success, error, warning, info notifications
+showToast('Route saved successfully!', 'success')
+showToast('Failed to load weather data', 'error')
+
+// Auto-dismiss after 5 seconds (configurable)
+// Stacks multiple toasts vertically
+// Positioned top-right on desktop, top-center on mobile
+```
+
+#### Loading States
+
+**Skeleton Loaders** - Content Placeholders
+```html
+<!-- Animated skeleton for route cards -->
+<div class="skeleton-route-card">
+    <div class="skeleton-header"></div>
+    <div class="skeleton-body">
+        <div class="skeleton-line"></div>
+        <div class="skeleton-line short"></div>
+    </div>
+</div>
+```
+
+#### Error States
+
+**Empty States** - No Data Available
+```html
+<div class="empty-state">
+    <i class="bi bi-inbox" style="font-size: 3rem;"></i>
+    <h3>No routes found</h3>
+    <p>Try adjusting your filters or fetch new activities</p>
+    <button class="btn btn-primary">Fetch Activities</button>
+</div>
+```
+
+### Responsive Design
+
+#### Mobile-First Approach
+
+**Touch Targets:**
+- Minimum 44x44px for all interactive elements
+- 8px spacing between adjacent targets
+- Larger tap areas on mobile (56x56px for primary actions)
+
+**Navigation:**
+- Desktop: Top horizontal navbar
+- Mobile: Bottom navigation bar (iOS/Android style)
+- Hamburger menu for overflow items
+
+#### Progressive Disclosure
+
+**Show More/Less Pattern:**
+- Always visible: 3 primary metrics (distance, duration, score)
+- Hidden by default: Secondary metrics (elevation, speed, uses)
+- Revealed on click: "Show More" button with chevron icon
+
+### Performance Optimizations
+
+#### Caching Strategy
+
+**Weather Data:**
+- Cache duration: 90 minutes
+- Stored in: `data/weather_cache.json`
+- Automatic refresh on expiry
+
+**Route Data:**
+- Cache duration: 24 hours
+- Stored in: `data/route_groups.json`
+- Manual refresh via "Fetch Activities" button
+
+#### Lazy Loading
+
+**Maps:**
+- Intersection Observer for lazy loading
+- Load only when scrolled into view
+- Reduces initial page load time
+
+### Accessibility Features (WCAG 2.1 AA)
+
+#### Keyboard Navigation
+
+**Shortcuts:**
+- `?` - Show help modal
+- `Esc` - Close modals/dialogs
+- `Tab` - Navigate between interactive elements
+- `Enter/Space` - Activate buttons/links
+
+**Focus Management:**
+- Visible focus indicators (2px blue outline)
+- Focus trap in modals
+- Skip links for main content
+
+#### Screen Reader Support
+
+**ARIA Labels:**
+- All interactive elements have descriptive labels
+- Dynamic content updates announced via live regions
+- Hidden decorative icons (aria-hidden="true")
+
+#### Color Contrast
+
+**WCAG AA Compliance:**
+- Text: 4.5:1 minimum contrast ratio
+- Large text (18pt+): 3:1 minimum
+- Interactive elements: 3:1 minimum
+
+**Semantic Colors:**
+- Green (#28a745): Success, optimal conditions
+- Red (#dc3545): Error, unfavorable conditions
+- Yellow (#ffc107): Warning, caution
+- Blue (#007bff): Info, neutral
+
+---
+
+
+## 19. Future Enhancements
 
 ### Planned Features
 
@@ -1705,5 +1989,5 @@ python main.py --fetch --analyze
 
 ---
 
-*Last Updated: 2026-05-07*
+*Last Updated: 2026-05-14*
 *Version: 2.5.0+*

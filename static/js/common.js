@@ -648,6 +648,119 @@ window.getElevationUnit = function() {
     return getUnitSystem() === 'imperial' ? 'ft' : 'm';
 };
 
-console.log('✓ common.js loaded - Toast, auto-save, undo, and unit conversion utilities ready');
+/**
+ * Format timestamp as relative time (e.g., "5 minutes ago")
+ * @param {string|Date} timestamp - ISO 8601 timestamp or Date object
+ * @returns {string} Formatted relative time
+ */
+window.formatRelativeTime = function(timestamp) {
+    if (!timestamp) return 'Unknown';
+    
+    try {
+        const date = typeof timestamp === 'string' ? new Date(timestamp) : timestamp;
+        const now = new Date();
+        const diffMs = now - date;
+        const diffSec = Math.floor(diffMs / 1000);
+        const diffMin = Math.floor(diffSec / 60);
+        const diffHour = Math.floor(diffMin / 60);
+        const diffDay = Math.floor(diffHour / 24);
+        
+        // Less than 1 minute
+        if (diffSec < 60) {
+            return 'Just now';
+        }
+        
+        // Less than 60 minutes
+        if (diffMin < 60) {
+            return diffMin === 1 ? '1 minute ago' : `${diffMin} minutes ago`;
+        }
+        
+        // Less than 24 hours
+        if (diffHour < 24) {
+            return diffHour === 1 ? '1 hour ago' : `${diffHour} hours ago`;
+        }
+        
+        // Less than 7 days
+        if (diffDay < 7) {
+            return diffDay === 1 ? '1 day ago' : `${diffDay} days ago`;
+        }
+        
+        // 7 days or more - show formatted date
+        const options = { month: 'short', day: 'numeric', year: 'numeric' };
+        return date.toLocaleDateString('en-US', options);
+        
+    } catch (error) {
+        console.error('Error formatting relative time:', error);
+        return 'Unknown';
+    }
+};
+
+/**
+ * Format timestamp as absolute time (e.g., "May 14, 2026 3:45 PM")
+ * @param {string|Date} timestamp - ISO 8601 timestamp or Date object
+ * @returns {string} Formatted absolute time
+ */
+window.formatAbsoluteTime = function(timestamp) {
+    if (!timestamp) return 'Unknown';
+    
+    try {
+        const date = typeof timestamp === 'string' ? new Date(timestamp) : timestamp;
+        const options = {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true
+        };
+        return date.toLocaleDateString('en-US', options);
+        
+    } catch (error) {
+        console.error('Error formatting absolute time:', error);
+        return 'Unknown';
+    }
+};
+
+/**
+ * Create a timestamp display element with tooltip
+ * @param {string} timestamp - ISO 8601 timestamp
+ * @param {Object} options - Display options
+ * @param {string} options.prefix - Text before timestamp (e.g., "Updated")
+ * @param {string} options.className - Additional CSS classes
+ * @returns {HTMLElement} Timestamp element
+ */
+window.createTimestampElement = function(timestamp, options = {}) {
+    const {
+        prefix = 'Updated',
+        className = ''
+    } = options;
+    
+    const container = document.createElement('small');
+    container.className = `text-muted timestamp-display ${className}`;
+    container.setAttribute('data-timestamp', timestamp);
+    container.setAttribute('title', formatAbsoluteTime(timestamp));
+    container.textContent = `${prefix} ${formatRelativeTime(timestamp)}`;
+    
+    return container;
+};
+
+/**
+ * Update all timestamp displays on the page
+ * Call this periodically to keep relative times fresh
+ */
+window.updateAllTimestamps = function() {
+    const timestamps = document.querySelectorAll('.timestamp-display[data-timestamp]');
+    timestamps.forEach(element => {
+        const timestamp = element.getAttribute('data-timestamp');
+        const prefix = element.textContent.split(' ')[0]; // Extract prefix (e.g., "Updated")
+        element.textContent = `${prefix} ${formatRelativeTime(timestamp)}`;
+        element.setAttribute('title', formatAbsoluteTime(timestamp));
+    });
+};
+
+// Auto-update timestamps every minute
+setInterval(updateAllTimestamps, 60000);
+
+console.log('✓ common.js loaded - Toast, auto-save, undo, unit conversion, and timestamp utilities ready');
 
 // Made with Bob

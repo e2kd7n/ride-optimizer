@@ -1,307 +1,333 @@
 /**
- * Commute page logic
- * Displays current conditions and route recommendations
+ * Commute View - Client-side logic for commute recommendations
+ * 
+ * Handles:
+ * - Loading commute data from /api/commute
+ * - Rendering route cards with metrics
+ * - Loading interactive map from /api/commute/map
+ * - Card/map interaction (click to highlight and zoom)
  */
 
-// Initialize on page load
-document.addEventListener('DOMContentLoaded', async () => {
-    await loadCommutePage();
+(function() {
+    'use strict';
     
-    // Refresh every 10 minutes
-    setInterval(loadCommutePage, 10 * 60 * 1000);
-});
-
-/**
- * Load all commute page data
- */
-async function loadCommutePage() {
-    await Promise.all([
-        loadCurrentConditions(),
-        loadRecommendation()
-    ]);
-}
-
-/**
- * Load and display current weather conditions
- */
-async function loadCurrentConditions() {
-    const container = document.getElementById('current-conditions');
+    let commuteData = null;
+    let activeCard = null;
     
-    try {
-        const weather = await window.apiClient.getWeather();
+    /**
+     * Initialize the commute view
+     */
+    function init() {
+        console.log('Initializing commute view...');
+        loadCommuteData();
+        setupMessageListener();
+    }
+    
+    /**
+     * Setup listener for messages from map iframe
+     */
+    function setupMessageListener() {
+        window.addEventListener('message', (event) => {
+            if (event.data && event.data.type === 'routeClicked') {
+                // Update card selection when polyline is clicked in map
+                const direction = event.data.direction;
+                const card = document.querySelector(`.commute-card.${direction}`);
+                if (card) {
+                    handleCardClick(card, direction);
+                }
+            }
+        });
+    }
+    
+    /**
+     * Load commute data from API
+     */
+    async function loadCommuteData() {
+        const cardsContainer = document.getElementById('commute-cards');
         
-        if (!weather || !weather.current) {
-            container.innerHTML = '<p class="text-muted">Weather data unavailable</p>';
+        try {
+            const response = await fetch('/api/commute');
+            const data = await response.json();
+            
+            if (data.status === 'success') {
+                commuteData = data;
+                renderCommuteCards(data);
+                loadCommuteMap();
+            } else {
+                showError(cardsContainer, data.message || 'Failed to load commute data');
+            }
+        } catch (error) {
+            console.error('Error loading commute data:', error);
+            showError(cardsContainer, 'Unable to load commute recommendations');
+        }
+    }
+    
+    /**
+     * Render commute route cards
+     */
+    function renderCommuteCards(data) {
+        const cardsContainer = document.getElementById('commute-cards');
+        cardsContainer.innerHTML = '';
+        
+        // Render To Work card
+        if (data.to_work && data.to_work.status === 'success') {
+            const toWorkCard = createCommuteCard(data.to_work, 'to-work', '🚴 To Work');
+            cardsContainer.appendChild(toWorkCard);
+        }
+        
+        // Render To Home card
+        if (data.to_home && data.to_home.status === 'success') {
+            const toHomeCard = createCommuteCard(data.to_home, 'to-home', '🏠 To Home');
+            cardsContainer.appendChild(toHomeCard);
+        }
+        
+        // If no routes available
+        if (cardsContainer.children.length === 0) {
+            showError(cardsContainer, 'No commute routes available');
+        }
+    }
+    
+    /**
+     * Create a commute card element
+     */
+    function createCommuteCard(recommendation, direction, label) {
+        const card = document.createElement('div');
+        card.className = `commute-card ${direction}`;
+        card.setAttribute('data-direction', direction);
+        card.setAttribute('role', 'button');
+        card.setAttribute('tabindex', '0');
+        card.setAttribute('aria-label', `${label} route recommendation`);
+        
+        const route = recommendation.route;
+        const score = recommendation.score;
+        const scorePercent = typeof score === 'number' ? (score <= 1 ? score * 100 : score) : 0;
+        const scoreClass = scorePercent >= 70 ? '' : scorePercent >= 50 ? 'medium' : 'low';
+        
+        // Format metrics
+        const distanceKm = (route.distance / 1000).toFixed(1);
+        const distanceMi = (distanceKm * 0.621371).toFixed(1);
+        const durationMin = Math.round(route.duration / 60);
+        const elevationM = Math.round(route.elevation);
+        const elevationFt = Math.round(elevationM * 3.28084);
+        
+        // Get unit system preference
+        const unitSystem = window.getUnitSystem ? window.getUnitSystem() : 'imperial';
+        const distance = unitSystem === 'metric' ? `${distanceKm} km` : `${distanceMi} mi`;
+        const elevation = unitSystem === 'metric' ? `${elevationM} m` : `${elevationFt} ft`;
+        
+        // Weather data
+        const weather = recommendation.weather || {};
+        const temp = weather.temperature ? `${Math.round(weather.temperature)}°F` : 'N/A';
+        const wind = weather.wind_speed ? `${Math.round(weather.wind_speed)} mph` : 'N/A';
+        const precip = weather.precipitation !== undefined ? `${Math.round(weather.precipitation)}%` : 'N/A';
+        
+        // Time window
+        const timeWindow = recommendation.time_window || 'Today';
+        const isToday = recommendation.is_today !== false;
+        
+        card.innerHTML = `
+            <div class="commute-card-header">
+                <div class="commute-direction">${label}</div>
+                <div class="commute-score ${scoreClass}">${Math.round(scorePercent)}</div>
+            </div>
+            <div class="commute-route-name">${escapeHtml(route.name)}</div>
+            <div class="commute-time-window">
+                <i class="bi bi-clock"></i> ${escapeHtml(timeWindow)}
+                ${isToday ? '<span class="badge bg-success ms-2">Today</span>' : '<span class="badge bg-info ms-2">Tomorrow</span>'}
+            </div>
+            <div class="commute-metrics">
+                <div class="commute-metric">
+                    <i class="bi bi-clock-fill"></i>
+                    <span>${durationMin} min</span>
+                </div>
+                <div class="commute-metric">
+                    <i class="bi bi-signpost-fill"></i>
+                    <span>${distance}</span>
+                </div>
+                <div class="commute-metric">
+                    <i class="bi bi-thermometer-half"></i>
+                    <span>${temp}</span>
+                </div>
+                <div class="commute-metric">
+                    <i class="bi bi-wind"></i>
+                    <span>${wind}</span>
+                </div>
+                <div class="commute-metric">
+                    <i class="bi bi-droplet-fill"></i>
+                    <span>${precip}</span>
+                </div>
+                <div class="commute-metric">
+                    <i class="bi bi-graph-up"></i>
+                    <span>${elevation}</span>
+                </div>
+            </div>
+        `;
+        
+        // Add click handler
+        card.addEventListener('click', () => handleCardClick(card, direction));
+        card.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleCardClick(card, direction);
+            }
+        });
+        
+        return card;
+    }
+    
+    /**
+     * Handle card click - highlight card and zoom map
+     */
+    function handleCardClick(card, direction) {
+        // Remove active class from all cards
+        document.querySelectorAll('.commute-card').forEach(c => {
+            c.classList.remove('active');
+        });
+        
+        // Add active class to clicked card
+        card.classList.add('active');
+        activeCard = direction;
+        
+        // Highlight the selected route's polyline in the map
+        highlightRouteOnMap(direction);
+        
+        // Scroll to card on mobile
+        if (window.innerWidth < 768) {
+            card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
+    
+    /**
+     * Highlight a route on the map by manipulating polylines via iframe
+     */
+    function highlightRouteOnMap(direction) {
+        const mapIframe = document.getElementById('commute-map-container');
+        if (!mapIframe || !mapIframe.contentWindow) {
+            console.warn('Map iframe not accessible');
             return;
         }
         
-        const current = weather.current;
-        const comfortClass = getComfortClass(current.comfort_score);
-        const comfortText = getComfortText(current.comfort_score);
+        try {
+            // Send message to iframe to highlight the route
+            // The iframe will need to listen for this message and update polyline styles
+            const message = {
+                type: 'highlightRoute',
+                direction: direction
+            };
+            mapIframe.contentWindow.postMessage(message, '*');
+        } catch (error) {
+            console.error('Failed to communicate with map iframe:', error);
+        }
+    }
+    
+    /**
+     * Load commute map
+     */
+    async function loadCommuteMap() {
+        const mapContainer = document.getElementById('commute-map-container');
         
-        const html = `
-            <div class="row">
-                <div class="col-md-4">
-                    <div class="text-center mb-3">
-                        <i class="bi bi-thermometer-half weather-icon"></i>
-                        <div class="temperature-display">${current.temperature}°F</div>
-                        <small class="text-muted">Feels like ${current.feels_like}°F</small>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="mb-3">
-                        <h6>Comfort Score</h6>
-                        <div class="progress" style="height: 30px;">
-                            <div class="progress-bar ${comfortClass}" role="progressbar" 
-                                 style="width: ${current.comfort_score}%;" 
-                                 aria-valuenow="${current.comfort_score}" 
-                                 aria-valuemin="0" 
-                                 aria-valuemax="100">
-                                ${current.comfort_score}/100
-                            </div>
-                        </div>
-                        <small class="text-muted">${comfortText}</small>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="mb-2">
-                        <i class="bi bi-wind"></i> <strong>Wind:</strong> ${current.wind_speed} mph ${current.wind_direction}
-                    </div>
-                    <div class="mb-2">
-                        <i class="bi bi-droplet"></i> <strong>Humidity:</strong> ${current.humidity}%
-                    </div>
-                    ${current.precipitation_probability ? `
-                        <div class="mb-2">
-                            <i class="bi bi-cloud-rain"></i> <strong>Rain:</strong> ${current.precipitation_probability}%
-                        </div>
-                    ` : ''}
-                    <div class="mb-2">
-                        <i class="bi bi-info-circle"></i> <strong>Conditions:</strong> ${current.description}
-                    </div>
-                </div>
-            </div>
-            ${weather.forecast && weather.forecast.length > 0 ? renderForecast(weather.forecast) : ''}
-        `;
-        
-        container.innerHTML = html;
-    } catch (error) {
-        console.error('Failed to load conditions:', error);
+        try {
+            const response = await fetch('/api/commute/map');
+            
+            if (response.ok) {
+                const mapHtml = await response.text();
+                
+                // Create a blob URL for the map HTML
+                const blob = new Blob([mapHtml], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+                
+                mapContainer.src = url;
+                
+                // Clean up blob URL after load
+                mapContainer.onload = () => {
+                    URL.revokeObjectURL(url);
+                };
+            } else {
+                showMapError(mapContainer, 'Failed to load map');
+            }
+        } catch (error) {
+            console.error('Error loading commute map:', error);
+            showMapError(mapContainer, 'Unable to load map');
+        }
+    }
+    
+    /**
+     * Show error message in cards container
+     */
+    function showError(container, message) {
         container.innerHTML = `
             <div class="alert alert-warning" role="alert">
-                <i class="bi bi-exclamation-triangle"></i>
-                Unable to load current conditions. Please try again later.
+                <div class="d-flex align-items-center mb-2">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <strong>Commute Unavailable</strong>
+                </div>
+                <p class="mb-2 small">${escapeHtml(message)}</p>
+                <button class="btn btn-sm btn-outline-primary" onclick="location.reload()">
+                    <i class="bi bi-arrow-clockwise"></i> Retry
+                </button>
             </div>
         `;
     }
-}
-
-/**
- * Render forecast section
- */
-function renderForecast(forecast) {
-    const next3Hours = forecast.slice(0, 3);
     
-    return `
-        <div class="mt-4">
-            <h6>Next 3 Hours</h6>
-            <div class="row">
-                ${next3Hours.map(hour => `
-                    <div class="col-4">
-                        <div class="text-center p-2 border rounded">
-                            <small class="text-muted">${formatHour(hour.time)}</small>
-                            <div class="fs-5">${hour.temperature}°F</div>
-                            <small>${hour.description}</small>
-                        </div>
-                    </div>
-                `).join('')}
-            </div>
-        </div>
-    `;
-}
-
-/**
- * Load and display route recommendation
- */
-async function loadRecommendation() {
-    const recContainer = document.getElementById('recommendation');
-    const altContainer = document.getElementById('alternatives');
-    
-    try {
-        const data = await window.apiClient.getRecommendation();
-        
-        if (!data || !data.recommended_route) {
-            recContainer.innerHTML = '<p class="text-muted">No recommendation available at this time</p>';
-            altContainer.innerHTML = '<p class="text-muted">No alternative routes available</p>';
-            return;
-        }
-        
-        // Render recommended route
-        const route = data.recommended_route;
-        const scoreClass = getScoreClass(data.score);
-        const scoreText = getScoreText(data.score);
-        
-        const recHtml = `
-            <div class="row">
-                <div class="col-md-8">
-                    <h4 class="mb-3">${escapeHtml(route.name)}</h4>
-                    <div class="mb-3">
-                        <span class="badge ${scoreClass} fs-5">${data.score}/100</span>
-                        <span class="ms-2 fs-6">${scoreText}</span>
-                    </div>
-                    <p class="text-muted">${data.recommendation}</p>
-                    
-                    ${data.factors && data.factors.length > 0 ? `
-                        <div class="mt-3">
-                            <h6>Key Factors:</h6>
-                            <ul>
-                                ${data.factors.map(f => `<li>${f}</li>`).join('')}
-                            </ul>
-                        </div>
-                    ` : ''}
+    /**
+     * Show error message in map container
+     */
+    function showMapError(container, message) {
+        const errorHtml = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body {
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        height: 100vh;
+                        margin: 0;
+                        font-family: Arial, sans-serif;
+                        background: #f8f9fa;
+                    }
+                    .error-message {
+                        text-align: center;
+                        padding: 2rem;
+                    }
+                    .error-icon {
+                        font-size: 3rem;
+                        color: #ffc107;
+                        margin-bottom: 1rem;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="error-message">
+                    <div class="error-icon">⚠️</div>
+                    <h3>Map Unavailable</h3>
+                    <p>${escapeHtml(message)}</p>
                 </div>
-                <div class="col-md-4">
-                    <div class="card bg-light">
-                        <div class="card-body">
-                            <h6 class="card-title">Route Details</h6>
-                            <div class="mb-2">
-                                <i class="bi bi-arrow-left-right"></i> 
-                                <strong>Distance:</strong> ${route.distance} mi
-                            </div>
-                            <div class="mb-2">
-                                <i class="bi bi-graph-up"></i> 
-                                <strong>Elevation:</strong> ${route.elevation_gain} ft
-                            </div>
-                            ${route.sport_type ? `
-                                <div class="mb-2">
-                                    <i class="bi bi-bicycle"></i> 
-                                    <strong>Type:</strong> ${route.sport_type}
-                                </div>
-                            ` : ''}
-                            ${route.uses ? `
-                                <div class="mb-2">
-                                    <i class="bi bi-clock-history"></i> 
-                                    <strong>Times Used:</strong> ${route.uses}
-                                </div>
-                            ` : ''}
-                        </div>
-                    </div>
-                    <div class="d-grid gap-2 mt-3">
-                        <a href="/routes.html?id=${route.id}" class="btn btn-primary">
-                            <i class="bi bi-eye"></i> View Full Details
-                        </a>
-                    </div>
-                </div>
-            </div>
+            </body>
+            </html>
         `;
         
-        recContainer.innerHTML = recHtml;
-        
-        // Render alternative routes
-        if (data.alternatives && data.alternatives.length > 0) {
-            const altHtml = `
-                <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead>
-                            <tr>
-                                <th>Route</th>
-                                <th>Score</th>
-                                <th>Distance</th>
-                                <th>Elevation</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${data.alternatives.map(alt => `
-                                <tr>
-                                    <td>${escapeHtml(alt.route.name)}</td>
-                                    <td>
-                                        <span class="badge ${getScoreClass(alt.score)}">${alt.score}/100</span>
-                                    </td>
-                                    <td>${alt.route.distance} mi</td>
-                                    <td>${alt.route.elevation_gain} ft</td>
-                                    <td>
-                                        <a href="/routes.html?id=${alt.route.id}" class="btn btn-sm btn-outline-primary">
-                                            View
-                                        </a>
-                                    </td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                </div>
-            `;
-            altContainer.innerHTML = altHtml;
-        } else {
-            altContainer.innerHTML = '<p class="text-muted">No alternative routes available</p>';
-        }
-        
-    } catch (error) {
-        console.error('Failed to load recommendation:', error);
-        recContainer.innerHTML = `
-            <div class="alert alert-info" role="alert">
-                <i class="bi bi-info-circle"></i>
-                Unable to generate recommendation. Please check back later.
-            </div>
-        `;
-        altContainer.innerHTML = '';
+        const blob = new Blob([errorHtml], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        container.src = url;
     }
-}
-
-/**
- * Get comfort score class
- */
-function getComfortClass(score) {
-    if (score >= 80) return 'bg-success';
-    if (score >= 60) return 'bg-info';
-    if (score >= 40) return 'bg-warning';
-    return 'bg-danger';
-}
-
-/**
- * Get comfort score text
- */
-function getComfortText(score) {
-    if (score >= 80) return 'Excellent riding conditions';
-    if (score >= 60) return 'Good riding conditions';
-    if (score >= 40) return 'Fair riding conditions';
-    return 'Challenging riding conditions';
-}
-
-/**
- * Get recommendation score class
- */
-function getScoreClass(score) {
-    if (score >= 80) return 'bg-success';
-    if (score >= 60) return 'bg-primary';
-    if (score >= 40) return 'bg-warning';
-    return 'bg-danger';
-}
-
-/**
- * Get recommendation score text
- */
-function getScoreText(score) {
-    if (score >= 80) return 'Highly Recommended';
-    if (score >= 60) return 'Recommended';
-    if (score >= 40) return 'Acceptable';
-    return 'Not Recommended';
-}
-
-/**
- * Format hour from ISO timestamp
- */
-function formatHour(isoString) {
-    const date = new Date(isoString);
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', hour12: true });
-}
-
-/**
- * Escape HTML to prevent XSS
- */
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
+    
+    /**
+     * Escape HTML to prevent XSS
+     */
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    // Initialize on DOM ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+})();
 
 // Made with Bob
