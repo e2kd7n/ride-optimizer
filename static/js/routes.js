@@ -209,20 +209,29 @@
     /**
      * Select a route on the map (bring to front with enhanced styling)
      * Issue #74: Ensure selected polylines and tooltips appear on top
+     * Issue #122: Grey out unselected routes
      */
     function selectRoute(routeId) {
-        // Deselect previous route if any
-        if (state.selectedRouteId && state.selectedRouteId !== routeId) {
-            const prevMapObjects = state.displayedRoutes.get(state.selectedRouteId);
-            if (prevMapObjects && prevMapObjects.polyline) {
-                // Reset to default styling
-                prevMapObjects.polyline.setStyle({
-                    weight: prevMapObjects.defaultWeight || 4,
-                    opacity: prevMapObjects.defaultOpacity || 0.8
+        // Grey out ALL routes first
+        state.displayedRoutes.forEach((mapObjects, id) => {
+            if (mapObjects && mapObjects.polyline) {
+                // Grey out unselected routes
+                mapObjects.polyline.setStyle({
+                    weight: mapObjects.defaultWeight || 4,
+                    opacity: 0.3, // Greyed out
+                    color: '#999999' // Grey color
                 });
                 
+                // Grey out markers
+                if (mapObjects.startMarker) {
+                    mapObjects.startMarker.setOpacity(0.3);
+                }
+                if (mapObjects.endMarker) {
+                    mapObjects.endMarker.setOpacity(0.3);
+                }
+                
                 // Remove selected class from tooltip
-                const tooltip = prevMapObjects.polyline.getTooltip();
+                const tooltip = mapObjects.polyline.getTooltip();
                 if (tooltip) {
                     const tooltipElement = tooltip.getElement();
                     if (tooltipElement) {
@@ -230,9 +239,9 @@
                     }
                 }
             }
-        }
+        });
 
-        // Select new route
+        // Highlight the selected route
         const mapObjects = state.displayedRoutes.get(routeId);
         if (mapObjects && mapObjects.polyline) {
             // Bring polyline to front (z-index)
@@ -241,15 +250,18 @@
             // Bring markers to front
             if (mapObjects.startMarker) {
                 mapObjects.startMarker.bringToFront();
+                mapObjects.startMarker.setOpacity(1.0);
             }
             if (mapObjects.endMarker) {
                 mapObjects.endMarker.bringToFront();
+                mapObjects.endMarker.setOpacity(1.0);
             }
             
-            // Enhance visual styling
+            // Enhance visual styling with original color
             mapObjects.polyline.setStyle({
                 weight: 6, // Thicker line
-                opacity: 1.0 // Full opacity
+                opacity: 1.0, // Full opacity
+                color: mapObjects.color // Restore original color
             });
             
             // Add selected class to tooltip for higher z-index
@@ -262,7 +274,7 @@
             }
             
             state.selectedRouteId = routeId;
-            console.log(`✓ Route ${routeId} selected and brought to front`);
+            console.log(`✓ Route ${routeId} selected and brought to front, others greyed out`);
         }
     }
 
