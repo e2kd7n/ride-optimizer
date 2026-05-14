@@ -14,8 +14,9 @@ from sklearn.cluster import DBSCAN
 from geopy.distance import geodesic
 
 from .data_fetcher import Activity
+from .secure_logger import SecureLogger
 
-logger = logging.getLogger(__name__)
+logger = SecureLogger(__name__)
 
 
 @dataclass

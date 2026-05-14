@@ -17,7 +17,9 @@ from pathlib import Path
 import hashlib
 from functools import lru_cache
 
-logger = logging.getLogger(__name__)
+from src.secure_logger import SecureLogger
+
+logger = SecureLogger(__name__)
 
 
 class WeatherFetcher:

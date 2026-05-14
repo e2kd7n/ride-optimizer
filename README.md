@@ -14,9 +14,11 @@ This application uses a **Smart Static architecture**:
 
 This design is optimized for single-user deployment on Raspberry Pi with minimal resource usage.
 
-## 🔒 Security Notice
+## 🔒 Security & Privacy
 
 **This application requires valid Strava API credentials to run.** The program will not execute without proper authentication credentials configured in your `.env` file. This protects against unauthorized use and ensures the application only runs for legitimate users with their own Strava API access.
+
+**Privacy Protection:** All logging automatically sanitizes PII (GPS coordinates, addresses, user IDs, tokens) to protect your privacy. See [Privacy Documentation](docs/PRIVACY.md) for details.
 
 If you encounter this project hosted elsewhere without proper attribution or with modifications that bypass authentication, please report it as it violates the terms of use.
 

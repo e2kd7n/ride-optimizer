@@ -62,7 +62,7 @@ class RouteGroup:
     frequency: int
     name: Optional[str] = None
     is_plus_route: bool = False  # True if this is a "plus route" group
-    difficulty: str = 'easy'  # Difficulty rating: 'easy', 'moderate', or 'hard'
+    difficulty: str = 'Easy'  # Difficulty rating: 'Easy', 'Moderate', 'Hard', or 'Very Hard'
     
     
 @dataclass

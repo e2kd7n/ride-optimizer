@@ -9,6 +9,7 @@
         selectedForComparison: [],
         mapInstance: null,
         displayedRoutes: new Map(), // Map of routeId -> {polyline, markers}
+        selectedRouteId: null, // Track currently selected route for z-index management
         routeColors: ['#007bff', '#28a745', '#dc3545', '#ffc107', '#17a2b8', '#6f42c1', '#fd7e14']
     };
 
@@ -115,6 +116,12 @@
                 state.mapInstance.removeLayer(mapObjects.endMarker);
             }
             state.displayedRoutes.delete(routeId);
+            
+            // Clear selection if this was the selected route
+            if (state.selectedRouteId === routeId) {
+                state.selectedRouteId = null;
+            }
+            
             updateMapStatus();
             
             // Update card styling
@@ -131,6 +138,7 @@
             const response = await window.apiClient.getRouteDetails(routeId, route.type);
             if (!response || !response.route || !response.route.coordinates || !response.route.coordinates.length) {
                 console.warn('No coordinates available for route:', routeId);
+                announce(`Unable to display ${route.name} - no coordinates available`);
                 return;
             }
 
@@ -138,14 +146,23 @@
             const colorIndex = state.displayedRoutes.size;
             const color = getRouteColor(colorIndex);
 
-            // Create polyline
+            // Create polyline with default styling
             const polyline = L.polyline(coordinates, {
                 color: color,
                 weight: 4,
                 opacity: 0.8
             }).addTo(state.mapInstance);
 
+            // Bind popup
             polyline.bindPopup(`<strong>${route.name}</strong><br>${window.formatDistance(route.distance)}`);
+            
+            // Bind tooltip with custom class for z-index control
+            polyline.bindTooltip(route.name, {
+                permanent: false,
+                direction: 'top',
+                className: 'route-tooltip',
+                opacity: 0.9
+            });
 
             // Add start and end markers
             const start = coordinates[0];
@@ -174,8 +191,13 @@
                 polyline: polyline,
                 startMarker: startMarker,
                 endMarker: endMarker,
-                color: color
+                color: color,
+                defaultWeight: 4,
+                defaultOpacity: 0.8
             });
+
+            // Select this route (bring to front with enhanced styling)
+            selectRoute(routeId);
 
             // Zoom to show the entire selected route with smooth animation (Issue #117)
             const bounds = polyline.getBounds();
@@ -184,6 +206,66 @@
                 animate: true,
                 duration: 0.5
             });
+    /**
+     * Select a route on the map (bring to front with enhanced styling)
+     * Issue #74: Ensure selected polylines and tooltips appear on top
+     */
+    function selectRoute(routeId) {
+        // Deselect previous route if any
+        if (state.selectedRouteId && state.selectedRouteId !== routeId) {
+            const prevMapObjects = state.displayedRoutes.get(state.selectedRouteId);
+            if (prevMapObjects && prevMapObjects.polyline) {
+                // Reset to default styling
+                prevMapObjects.polyline.setStyle({
+                    weight: prevMapObjects.defaultWeight || 4,
+                    opacity: prevMapObjects.defaultOpacity || 0.8
+                });
+                
+                // Remove selected class from tooltip
+                const tooltip = prevMapObjects.polyline.getTooltip();
+                if (tooltip) {
+                    const tooltipElement = tooltip.getElement();
+                    if (tooltipElement) {
+                        tooltipElement.classList.remove('selected-route-tooltip');
+                    }
+                }
+            }
+        }
+
+        // Select new route
+        const mapObjects = state.displayedRoutes.get(routeId);
+        if (mapObjects && mapObjects.polyline) {
+            // Bring polyline to front (z-index)
+            mapObjects.polyline.bringToFront();
+            
+            // Bring markers to front
+            if (mapObjects.startMarker) {
+                mapObjects.startMarker.bringToFront();
+            }
+            if (mapObjects.endMarker) {
+                mapObjects.endMarker.bringToFront();
+            }
+            
+            // Enhance visual styling
+            mapObjects.polyline.setStyle({
+                weight: 6, // Thicker line
+                opacity: 1.0 // Full opacity
+            });
+            
+            // Add selected class to tooltip for higher z-index
+            const tooltip = mapObjects.polyline.getTooltip();
+            if (tooltip) {
+                const tooltipElement = tooltip.getElement();
+                if (tooltipElement) {
+                    tooltipElement.classList.add('selected-route-tooltip');
+                }
+            }
+            
+            state.selectedRouteId = routeId;
+            console.log(`✓ Route ${routeId} selected and brought to front`);
+        }
+    }
+
             
             updateMapStatus();
 
@@ -196,6 +278,13 @@
 
         } catch (error) {
             console.error('Failed to load route coordinates:', error);
+            const errorMessage = error.message || 'Unable to load route details';
+            announce(`Error displaying ${route.name}: ${errorMessage}`);
+            
+            // Show temporary error notification
+            if (window.showToast) {
+                window.showToast(`Failed to display route: ${errorMessage}`, 'error');
+            }
         }
     }
 
@@ -326,20 +415,24 @@
             ? '<span class="badge bg-success-subtle text-success-emphasis">PLUS</span>'
             : '';
 
-        // Difficulty badge with semantic colors
+        // Difficulty badge with semantic colors (4 levels)
+        // Normalize difficulty to title case for consistency
+        const rawDifficulty = route.difficulty || 'Easy';
+        const difficulty = rawDifficulty.charAt(0).toUpperCase() + rawDifficulty.slice(1).toLowerCase();
         const difficultyColors = {
-            'easy': 'bg-success',
-            'moderate': 'bg-warning text-dark',
-            'hard': 'bg-danger'
+            'Easy': 'bg-success',
+            'Moderate': 'bg-primary',
+            'Hard': 'bg-warning text-dark',
+            'Very hard': 'bg-danger'
         };
         const difficultyIcons = {
-            'easy': 'bi-check-circle',
-            'moderate': 'bi-dash-circle',
-            'hard': 'bi-exclamation-triangle'
+            'Easy': 'bi-check-circle',
+            'Moderate': 'bi-dash-circle',
+            'Hard': 'bi-exclamation-circle',
+            'Very hard': 'bi-exclamation-triangle-fill'
         };
-        const difficulty = route.difficulty || 'easy';
-        const difficultyBadge = `<span class="badge ${difficultyColors[difficulty]}">
-            <i class="bi ${difficultyIcons[difficulty]}"></i> ${difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}
+        const difficultyBadge = `<span class="badge ${difficultyColors[difficulty]}" aria-label="Difficulty: ${difficulty}">
+            <i class="bi ${difficultyIcons[difficulty]}" aria-hidden="true"></i> ${difficulty}
         </span>`;
 
         card.innerHTML = `
@@ -499,7 +592,11 @@
         }
 
         if (filters.difficulty) {
-            filtered = filtered.filter(route => (route.difficulty || 'easy') === filters.difficulty);
+            const filterDiff = filters.difficulty.toLowerCase();
+            filtered = filtered.filter(route => {
+                const routeDiff = (route.difficulty || 'Easy').toLowerCase();
+                return routeDiff === filterDiff;
+            });
         }
 
         if (filters.min_distance) {
@@ -603,9 +700,17 @@
         } catch (error) {
             console.error('Failed to load routes:', error);
             if (container) {
+                const errorMessage = error.message || 'Failed to load routes. Please try again.';
                 container.innerHTML = `
-                    <div class="alert alert-danger">
-                        <i class="bi bi-exclamation-triangle"></i> Failed to load routes.
+                    <div class="alert alert-warning" role="alert">
+                        <div class="d-flex align-items-center mb-2">
+                            <i class="bi bi-exclamation-triangle fs-4 me-2"></i>
+                            <strong>Unable to Load Routes</strong>
+                        </div>
+                        <p class="mb-2">${errorMessage}</p>
+                        <button class="btn btn-primary btn-sm" onclick="window.location.reload()">
+                            <i class="bi bi-arrow-clockwise"></i> Retry
+                        </button>
                     </div>
                 `;
             }

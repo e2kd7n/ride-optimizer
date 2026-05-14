@@ -429,10 +429,15 @@ class RouteLibraryService:
         # Handle both RouteGroup objects and dict from cache
         if isinstance(group, dict):
             rep_route = group['representative_route']
+            # Ensure name is never empty or "Unnamed Activity"
+            name = group.get('name') or f"Commute Route {group['id']}"
+            if name == "Unnamed Activity":
+                name = f"Commute Route {group['id']}"
+            
             return {
                 'id': group['id'],
                 'type': 'commute',
-                'name': group.get('name') or f"Route {group['id']}",
+                'name': name,
                 'direction': group['direction'],
                 'distance': rep_route['distance'] / 1000,  # km
                 'duration': rep_route['duration'] / 60,  # minutes
@@ -440,15 +445,21 @@ class RouteLibraryService:
                 'uses': group['frequency'],
                 'is_plus_route': group.get('is_plus_route', False),
                 'is_favorite': group['id'] in self._favorites,
-                'difficulty': group.get('difficulty', 'easy')
+                'difficulty': group.get('difficulty', 'Easy'),
+                'sport_type': rep_route.get('sport_type', 'Ride')
             }
         else:
             # RouteGroup object
             rep_route = group.representative_route
+            # Ensure name is never empty or "Unnamed Activity"
+            name = group.name or f"Commute Route {group.id}"
+            if name == "Unnamed Activity":
+                name = f"Commute Route {group.id}"
+            
             return {
                 'id': group.id,
                 'type': 'commute',
-                'name': group.name or f"Route {group.id}",
+                'name': name,
                 'direction': group.direction,
                 'distance': rep_route.distance / 1000,  # km
                 'duration': rep_route.duration / 60,  # minutes
@@ -456,8 +467,41 @@ class RouteLibraryService:
                 'uses': group.frequency,
                 'is_plus_route': group.is_plus_route,
                 'is_favorite': group.id in self._favorites,
-                'difficulty': getattr(group, 'difficulty', 'easy')
+                'difficulty': getattr(group, 'difficulty', 'Easy'),
+                'sport_type': getattr(rep_route, 'sport_type', 'Ride')
             }
+    
+    def _get_meaningful_route_name(self, name: str, distance_km: float, timestamp: str, is_loop: bool = False) -> str:
+        """
+        Generate a meaningful route name with fallback logic.
+        
+        Priority:
+        1. Use provided name if not "Unnamed Activity"
+        2. Generate descriptive name based on route characteristics
+        
+        Args:
+            name: Original route name
+            distance_km: Distance in kilometers
+            timestamp: ISO format timestamp
+            is_loop: Whether the route is a loop
+            
+        Returns:
+            Meaningful route name
+        """
+        # If name exists and is not "Unnamed Activity", use it
+        if name and name.strip() and name != "Unnamed Activity":
+            return name
+        
+        # Generate fallback name
+        try:
+            from datetime import datetime
+            date_obj = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+            date_str = date_obj.strftime('%b %d, %Y')
+        except:
+            date_str = timestamp[:10] if timestamp else 'Unknown Date'
+        
+        route_type = "Loop" if is_loop else "Route"
+        return f"{route_type} {distance_km:.1f}km on {date_str}"
     
     def _format_long_ride(self, ride) -> Dict[str, Any]:
         """
@@ -468,31 +512,49 @@ class RouteLibraryService:
         """
         # Handle both LongRide objects and dict from cache
         if isinstance(ride, dict):
+            # Generate meaningful name with fallback
+            meaningful_name = self._get_meaningful_route_name(
+                ride['name'],
+                ride['distance_km'],
+                ride.get('timestamp', ''),
+                ride.get('is_loop', False)
+            )
+            
             return {
                 'id': str(ride['activity_id']),
                 'type': 'long_ride',
-                'name': ride['name'],
+                'name': meaningful_name,
                 'distance': ride['distance_km'],
                 'duration': ride['duration_hours'] * 60,  # minutes
                 'elevation': ride.get('elevation_gain', 0),
                 'uses': ride.get('uses', 1),
                 'is_loop': ride.get('is_loop', False),
                 'is_favorite': str(ride['activity_id']) in self._favorites,
-                'difficulty': ride.get('difficulty', 'easy')
+                'difficulty': ride.get('difficulty', 'Easy'),
+                'sport_type': ride.get('type', 'Ride')
             }
         else:
             # LongRide object
+            # Generate meaningful name with fallback
+            meaningful_name = self._get_meaningful_route_name(
+                ride.name,
+                ride.distance_km,
+                ride.timestamp,
+                ride.is_loop
+            )
+            
             return {
                 'id': str(ride.activity_id),
                 'type': 'long_ride',
-                'name': ride.name,
+                'name': meaningful_name,
                 'distance': ride.distance_km,
                 'duration': ride.duration_hours * 60,  # minutes
                 'elevation': ride.elevation_gain,
                 'uses': ride.uses,
                 'is_loop': ride.is_loop,
                 'is_favorite': str(ride.activity_id) in self._favorites,
-                'difficulty': getattr(ride, 'difficulty', 'easy')
+                'difficulty': getattr(ride, 'difficulty', 'Easy'),
+                'sport_type': ride.type
             }
     
     def _format_commute_route_detailed(self, group) -> Dict[str, Any]:
