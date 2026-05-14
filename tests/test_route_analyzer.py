@@ -216,5 +216,115 @@ class TestRouteAnalyzer:
         assert metrics.avg_distance > 0
         assert metrics.usage_frequency == 5
         assert 0 <= metrics.consistency_score <= 1
+    
+    def test_calculate_route_similarity_uses_frechet_when_available(
+        self, home_location, work_location, mock_config
+    ):
+        """Test Fréchet similarity is used as the primary metric."""
+        route1 = Route(
+            activity_id=1,
+            direction="home_to_work",
+            coordinates=[(41.8781, -87.6298), (41.8800, -87.6288), (41.8819, -87.6278)],
+            distance=5000.0,
+            duration=1200,
+            elevation_gain=50.0,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            average_speed=4.17,
+            is_plus_route=False
+        )
+        route2 = Route(
+            activity_id=2,
+            direction="home_to_work",
+            coordinates=[(41.8781, -87.6298), (41.8801, -87.6289), (41.8819, -87.6278)],
+            distance=5050.0,
+            duration=1210,
+            elevation_gain=52.0,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            average_speed=4.15,
+            is_plus_route=False
+        )
+        
+        analyzer = RouteAnalyzer([], home_location, work_location, mock_config, n_workers=1)
+        
+        with patch('src.route_analyzer.FRECHET_AVAILABLE', True), \
+             patch.object(analyzer, '_calculate_frechet_similarity', return_value=0.81) as mock_frechet, \
+             patch.object(analyzer, '_calculate_hausdorff_similarity', return_value=0.73) as mock_hausdorff:
+            similarity = analyzer.calculate_route_similarity(route1, route2)
+        
+        assert similarity == 0.81
+        mock_frechet.assert_called_once()
+        mock_hausdorff.assert_called_once()
+    
+    def test_calculate_route_similarity_penalizes_spatial_disagreement(
+        self, home_location, work_location, mock_config
+    ):
+        """Test Hausdorff validation penalizes low spatial agreement."""
+        route1 = Route(
+            activity_id=3,
+            direction="home_to_work",
+            coordinates=[(41.8781, -87.6298), (41.8819, -87.6278)],
+            distance=5000.0,
+            duration=1200,
+            elevation_gain=50.0,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            average_speed=4.17,
+            is_plus_route=False
+        )
+        route2 = Route(
+            activity_id=4,
+            direction="home_to_work",
+            coordinates=[(41.8782, -87.6299), (41.8820, -87.6277)],
+            distance=5100.0,
+            duration=1215,
+            elevation_gain=51.0,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            average_speed=4.16,
+            is_plus_route=False
+        )
+        
+        analyzer = RouteAnalyzer([], home_location, work_location, mock_config, n_workers=1)
+        
+        with patch('src.route_analyzer.FRECHET_AVAILABLE', True), \
+             patch.object(analyzer, '_calculate_frechet_similarity', return_value=0.80), \
+             patch.object(analyzer, '_calculate_hausdorff_similarity', return_value=0.40):
+            similarity = analyzer.calculate_route_similarity(route1, route2)
+        
+        assert similarity == pytest.approx(0.56)
+    
+    def test_calculate_route_similarity_falls_back_to_hausdorff(
+        self, home_location, work_location, mock_config
+    ):
+        """Test Hausdorff fallback when Fréchet is unavailable."""
+        route1 = Route(
+            activity_id=5,
+            direction="home_to_work",
+            coordinates=[(41.8781, -87.6298), (41.8819, -87.6278)],
+            distance=5000.0,
+            duration=1200,
+            elevation_gain=50.0,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            average_speed=4.17,
+            is_plus_route=False
+        )
+        route2 = Route(
+            activity_id=6,
+            direction="home_to_work",
+            coordinates=[(41.8782, -87.6297), (41.8820, -87.6279)],
+            distance=5100.0,
+            duration=1220,
+            elevation_gain=55.0,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            average_speed=4.10,
+            is_plus_route=False
+        )
+        
+        analyzer = RouteAnalyzer([], home_location, work_location, mock_config, n_workers=1)
+        
+        with patch('src.route_analyzer.FRECHET_AVAILABLE', False), \
+             patch.object(analyzer, '_calculate_hausdorff_similarity', return_value=0.67) as mock_hausdorff:
+            similarity = analyzer.calculate_route_similarity(route1, route2)
+        
+        assert similarity == 0.67
+        mock_hausdorff.assert_called_once()
 
 # Made with Bob
