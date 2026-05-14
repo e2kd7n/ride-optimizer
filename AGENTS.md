@@ -171,12 +171,23 @@ After marking any task complete:
 
 ## Issue Management (Project-Specific)
 
-### Priority System
-- **P0-critical**: Drop everything (app down, data loss, security)
-- **P1-high**: Current sprint (1-2 weeks) - core features broken
-- **P2-medium**: Next sprint (2-4 weeks) - enhancements
-- **P3-low**: Backlog - nice-to-haves
-- **P4-future**: Long-term planning
+### Priority System (Release-Aware)
+**CRITICAL CHANGE:** Priority is now WITHIN a release. A P1 issue in the next release takes precedence over a P0 issue in a future release.
+
+**Work Order Priority:**
+1. **Next Release P0** - Drop everything
+2. **Next Release P1** - Current sprint focus
+3. **Next Release P2** - Next sprint planning
+4. **Next Release P3** - Backlog for this release
+5. **Future Release P0** - Plan for future critical work
+6. **Future Release P1+** - Long-term planning
+
+**Priority Definitions (Within a Release):**
+- **P0-critical**: Blocks release deployment, app down, data loss, security vulnerabilities
+- **P1-high**: Must complete before release - core features broken, significant pain points
+- **P2-medium**: Should complete for release - enhancements, moderate pain points
+- **P3-low**: Can defer to next release if needed - minor improvements, edge cases
+- **P4-future**: Explicitly deferred to later releases - new features, major enhancements
 
 ### GitHub Labels Cache
 **IMPORTANT:** Use `.bob/github_labels.md` for available labels - updated weekly during maintenance.
@@ -190,11 +201,13 @@ Common label combinations:
 
 **Do NOT query GitHub for labels** - use the cache to avoid failed issue creation.
 
-### Issue Workflow
-- **Create issues via**: `gh issue create --label "P1-high,bug"` (use labels from `.bob/github_labels.md`)
+### Issue Workflow (Release-Aware)
+- **Assign to milestone FIRST**: `gh issue edit <num> --milestone "v0.13.0"` - every issue needs a target release
+- **Then set priority**: `gh issue create --label "P1-high,bug"` (use labels from `.bob/github_labels.md`)
 - **Reference in commits**: `Fixes #123: Description` (auto-closes on merge)
 - **Update priorities**: Run `./scripts/update-issue-priorities.sh` to regenerate `ISSUE_PRIORITIES.md`
 - **Weekly maintenance**: Review open issues, close completed, update labels, refresh `.bob/github_labels.md`
+- **Focus on next release**: Always work on next release issues before future release issues, regardless of P-label
 
 ### Issue Closure Protocol (CRITICAL)
 After completing and testing any work:

@@ -1,17 +1,23 @@
 # Release Roadmap
 
 **Created:** 2026-05-06 16:23 CDT
-**Updated:** 2026-05-07 (Version Rebaseline - 0.x.x Scheme)
+**Updated:** 2026-05-14 (Release-Aware Priority System)
 **Based on:** Architecture Simplification (Issue #152)
+
+> **⚠️ IMPORTANT:** This file now inherits release numbers from GitHub milestones.
+> The "Next Release" and "Future Releases" are automatically determined from open GitHub milestones.
+> To update: Create/modify GitHub milestones, then run `./scripts/update-issue-priorities.sh`
 
 ---
 
 ## 🎯 Current Status
 
-**Current Release:** v0.10.0 (formerly v2.5.0)
-**Next Release:** v0.11.0 (Architecture Simplification)
-**Future Release:** v1.0.0 (Production-Ready, when truly stable)
+**Current Release:** v0.11.0 (deployed)
+**Next Release:** v0.12.0 (in development)
+**Future Releases:** v0.13.0, v0.14.0
 **Target:** Single-user Raspberry Pi deployment
+
+**Source of Truth:** GitHub Milestones (automatically detected)
 
 ---
 
@@ -50,8 +56,37 @@
 
 ## 📅 Planned Releases
 
-### v0.11.0 - Architecture Simplification (Target: 5 weeks)
-**Status:** In Planning (Issue #152)
+> **Note:** Release planning is now managed via GitHub milestones. Issues are assigned to milestones and prioritized within each release.
+
+### v0.12.0 - Next Release (In Development)
+**Status:** Active Development
+**GitHub Milestone:** [v0.12.0](https://github.com/user/repo/milestone/X)
+**Focus:** Backend infrastructure and code quality improvements
+
+**Key Issues:**
+- 2 P1-high issues (API endpoints)
+- 15 P2-medium issues (architecture, testing, code quality)
+
+### v0.13.0 - Future Release
+**Status:** Planning
+**GitHub Milestone:** [v0.13.0](https://github.com/user/repo/milestone/Y)
+**Focus:** UI/UX improvements and user experience
+
+**Key Issues:**
+- 9 P1-high issues (error handling, FTUE, mobile navigation)
+- Multiple P2-medium issues (design, weather features)
+
+### v0.14.0 - Future Release
+**Status:** Planning
+**GitHub Milestone:** [v0.14.0](https://github.com/user/repo/milestone/Z)
+**Focus:** Testing, performance, and production readiness
+
+**Key Issues:**
+- 13 P1-high issues (test coverage, performance, API features)
+- Multiple P2-medium issues (testing infrastructure)
+
+### v0.11.0 - Architecture Simplification (COMPLETED)
+**Status:** Deployed
 **Focus:** Return to simplified architecture like v0.5.0
 **Architecture:** Static HTML + Minimal API + JSON files + Cron
 
