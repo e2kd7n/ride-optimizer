@@ -209,10 +209,111 @@ The following directories are mounted as volumes for data persistence:
 
 - **`./data`** - Strava activity data and analysis results
 - **`./cache`** - Geocoding, weather, and route caches
-- **`./logs`** - Application logs
+- **`./logs`** - Application logs (with automatic rotation)
 - **`./config`** - Configuration files
 
 **Note**: The `:Z` suffix on volume mounts enables SELinux relabeling for proper access.
+
+### Log Rotation
+
+The application implements automatic log rotation to prevent disk space exhaustion, which is critical for long-running Raspberry Pi deployments.
+
+**Default Configuration:**
+- **Rotation size**: 10MB per log file
+- **Backup count**: 5 backup files kept
+- **Log files**: `ride_optimizer.log` and `security_audit.log`
+- **File permissions**: 0600 (owner read/write only)
+
+**How It Works:**
+When a log file reaches 10MB, it's automatically rotated:
+```
+logs/
+├── ride_optimizer.log       # Current log (active)
+├── ride_optimizer.log.1     # Most recent backup
+├── ride_optimizer.log.2     # Second most recent
+├── ride_optimizer.log.3
+├── ride_optimizer.log.4
+└── ride_optimizer.log.5     # Oldest backup (deleted when new rotation occurs)
+```
+
+**Disk Space Usage:**
+- Maximum per log type: 60MB (10MB × 6 files)
+- Total maximum: 120MB (main + security logs)
+
+**Customizing Log Rotation:**
+
+Edit `launch.py` to adjust rotation settings:
+
+```python
+from src.logging_config import setup_logging
+
+# Custom configuration
+setup_logging(
+    log_dir='logs',
+    log_level=logging.INFO,
+    max_bytes=5 * 1024 * 1024,  # 5MB per file (instead of 10MB)
+    backup_count=3,              # Keep 3 backups (instead of 5)
+    console_output=False         # Disable console output in production
+)
+```
+
+**Monitoring Log Files:**
+
+```bash
+# Check log file sizes
+ls -lh logs/
+
+# View current log
+tail -f logs/ride_optimizer.log
+
+# View security audit log
+tail -f logs/security_audit.log
+
+# Check total disk usage
+du -sh logs/
+
+# View all log files including backups
+ls -lh logs/*.log*
+```
+
+**Manual Log Cleanup:**
+
+If you need to manually clean up old logs:
+
+```bash
+# Remove all backup logs (keeps current logs only)
+rm logs/*.log.[0-9]*
+
+# Archive old logs before cleanup
+tar -czf logs-backup-$(date +%Y%m%d).tar.gz logs/*.log.[0-9]*
+rm logs/*.log.[0-9]*
+```
+
+**Production Recommendations:**
+
+For Raspberry Pi deployments with limited storage:
+
+1. **Monitor disk space regularly:**
+   ```bash
+   df -h
+   ```
+
+2. **Set up disk space alerts** (optional):
+   ```bash
+   # Add to crontab
+   0 */6 * * * df -h / | awk '$5 > 80 {print "Disk usage warning: " $5}' | mail -s "Disk Alert" user@example.com
+   ```
+
+3. **Consider smaller rotation sizes** for Pi with <16GB storage:
+   ```python
+   max_bytes=5 * 1024 * 1024,  # 5MB
+   backup_count=3               # 3 backups
+   ```
+
+4. **Disable console output** in production to reduce overhead:
+   ```python
+   console_output=False
+   ```
 
 ## Podman-Specific Features
 

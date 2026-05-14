@@ -23,8 +23,9 @@ from src.visualizer import RouteVisualizer
 from app.services.trainerroad_service import TrainerRoadService
 from app.services.weather_service import WeatherService
 from app.models.workouts import WorkoutMetadata
+from src.secure_logger import SecureLogger
 
-logger = logging.getLogger(__name__)
+logger = SecureLogger(__name__)
 
 
 class CommuteService:

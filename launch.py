@@ -30,13 +30,18 @@ from app.services.weather_service import WeatherService
 from app.services.planner_service import PlannerService
 from app.services.route_library_service import RouteLibraryService
 from app.api import maps_api
+from src.secure_logger import SecureLogger
+from src.logging_config import setup_logging
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+# Configure logging with rotation (10MB per file, 5 backups)
+setup_logging(
+    log_dir='logs',
+    log_level=logging.INFO,
+    max_bytes=10 * 1024 * 1024,  # 10MB
+    backup_count=5,
+    console_output=True  # Enable console output for development
 )
-logger = logging.getLogger(__name__)
+logger = SecureLogger(__name__)
 
 # Initialize Flask app
 app = Flask(__name__, static_folder='static', static_url_path='')
@@ -422,7 +427,7 @@ def get_routes():
                     'is_favorite': route.get('is_favorite', False),
                     'uses': route.get('uses', 0),
                     'type': route.get('type', 'commute'),
-                    'difficulty': route.get('difficulty', 'easy')
+                    'difficulty': route.get('difficulty', 'Easy')
                 }
                 formatted_routes.append(formatted_route)
             
