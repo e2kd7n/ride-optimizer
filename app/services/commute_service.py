@@ -164,20 +164,43 @@ class CommuteService:
             }
         
         try:
-            # Get recommendation
-            recommendation = self._recommender.get_next_commute_recommendation(
-                direction=direction
-            )
+            # Get recommendations for both directions
+            recommendations = self._recommender.get_next_commute_recommendations()
             
-            if not recommendation:
+            if not recommendations:
                 return {
                     'status': 'error',
-                    'message': 'No suitable commute route found',
+                    'message': 'No suitable commute routes found',
                     'direction': direction,
                     'route': None
                 }
             
-            # Convert to web-friendly format
+            # If direction specified, return that one
+            if direction and direction in recommendations:
+                recommendation = recommendations[direction]
+                return self._format_recommendation(recommendation)
+            
+            # Otherwise, determine which one to show based on time
+            from datetime import datetime
+            current_hour = datetime.now().hour
+            
+            # Morning (before 10 AM): show to_work
+            # Midday (10 AM - 6 PM): show to_home
+            # Evening (after 6 PM): show to_work for tomorrow
+            if current_hour < 10:
+                preferred_direction = 'to_work'
+            elif current_hour < 18:
+                preferred_direction = 'to_home'
+            else:
+                preferred_direction = 'to_work'
+            
+            if preferred_direction in recommendations:
+                recommendation = recommendations[preferred_direction]
+                return self._format_recommendation(recommendation)
+            
+            # Fallback: return first available
+            first_direction = list(recommendations.keys())[0]
+            recommendation = recommendations[first_direction]
             return self._format_recommendation(recommendation)
             
         except Exception as e:

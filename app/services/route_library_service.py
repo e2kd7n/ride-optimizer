@@ -439,7 +439,8 @@ class RouteLibraryService:
                 'elevation': rep_route.get('elevation_gain', 0),
                 'uses': group['frequency'],
                 'is_plus_route': group.get('is_plus_route', False),
-                'is_favorite': group['id'] in self._favorites
+                'is_favorite': group['id'] in self._favorites,
+                'difficulty': group.get('difficulty', 'easy')
             }
         else:
             # RouteGroup object
@@ -454,7 +455,8 @@ class RouteLibraryService:
                 'elevation': rep_route.elevation_gain,
                 'uses': group.frequency,
                 'is_plus_route': group.is_plus_route,
-                'is_favorite': group.id in self._favorites
+                'is_favorite': group.id in self._favorites,
+                'difficulty': getattr(group, 'difficulty', 'easy')
             }
     
     def _format_long_ride(self, ride) -> Dict[str, Any]:
@@ -475,7 +477,8 @@ class RouteLibraryService:
                 'elevation': ride.get('elevation_gain', 0),
                 'uses': ride.get('uses', 1),
                 'is_loop': ride.get('is_loop', False),
-                'is_favorite': str(ride['activity_id']) in self._favorites
+                'is_favorite': str(ride['activity_id']) in self._favorites,
+                'difficulty': ride.get('difficulty', 'easy')
             }
         else:
             # LongRide object
@@ -488,7 +491,8 @@ class RouteLibraryService:
                 'elevation': ride.elevation_gain,
                 'uses': ride.uses,
                 'is_loop': ride.is_loop,
-                'is_favorite': str(ride.activity_id) in self._favorites
+                'is_favorite': str(ride.activity_id) in self._favorites,
+                'difficulty': getattr(ride, 'difficulty', 'easy')
             }
     
     def _format_commute_route_detailed(self, group) -> Dict[str, Any]:

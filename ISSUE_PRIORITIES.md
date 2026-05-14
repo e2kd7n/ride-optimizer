@@ -1,26 +1,28 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-05-11 15:59:32 UTC / 2026-05-11 10:59:32 CDT
+**Last Updated:** 2026-05-14 14:41:22 UTC / 2026-05-14 09:41:22 CDT
 
 This file reflects the current state of GitHub issues by priority. Issues are managed via GitHub labels (P0-critical, P1-high, P2-medium, P3-low, P4-future).
 
 ## 🔴 P0 - CRITICAL (Drop Everything)
 Issues that make the application unusable or cause data loss.
 
+- #277 - P0-CRITICAL: Add Missing Bottom Navigation to routes.html
+- #276 - P0-CRITICAL: Fix Next Commute Service Initialization - Core Feature Non-Functional
 - #265 - 🎯 EPIC: UAT Findings - Critical Navigation & Interaction Fixes + UX Enhancements
 - #264 - Dashboard and Route Library UX Review
 - #204 - UI/UX: Update polyline colors
 - #177 - UI/UX: Add clickable 'Uses' column with modal
 - #176 - UI/UX: Add table sorting functionality
 - #175 - UI/UX: Simplify route counter
-- #174 - UI/UX: Fix route name display
 - #173 - UI/UX: Fix page counter display
 - #144 - 🌐 EPIC: Personal Web Platform Migration (v3.0.0)
-- #117 - Fix map zoom to show start and finish when route is selected
 
 ## 🔴 P1 - HIGH (Current Sprint)
 Issues that significantly impact core functionality or user experience.
 
+- #279 - P1-HIGH: Improve Error Handling and User Feedback for API Failures
+- #278 - P1-HIGH: Implement Difficulty Ratings for All Routes
 - #260 - Implement guided FTUE for Strava API key setup with in-app configuration
 - #256 - UI/UX Refinements: Design Critique Follow-up
 - #255 - Add Comprehensive E2E Testing for UI/UX Features
@@ -52,6 +54,7 @@ Issues that significantly impact core functionality or user experience.
 ## 🟡 P2 - MEDIUM (Next Sprint)
 Important improvements that enhance functionality but don't block core workflows.
 
+- #280 - P2-MEDIUM: 🎨 EPIC: Design Alignment with CLI Prototype (v0.12.0)
 - #274 - Add Last Updated Timestamps
 - #273 - Implement Route Sorting Options
 - #272 - Add Hourly Weather Forecast
@@ -81,12 +84,10 @@ Important improvements that enhance functionality but don't block core workflows
 - #136 - Implement settings and preferences page for home/work locations, units, time windows, and planner defaults
 - #128 - Fix "Unnamed Activity" display in Route Comparison uses modal
 - #122 - [LOW PRIORITY] Grey out unselected routes on map when route is clicked
-- #121 - [LOW PRIORITY] Color code route names to match map line colors
 
 ## 🟢 P3 - LOW (Backlog)
 Nice-to-have improvements and minor UX enhancements.
 
-- #202 - Setup weekly maintenance routine
 - #201 - Reduce P1 issue count to <25
 - #200 - Route naming improvements (Start → Main → End format)
 - #199 - Design: Test on real iOS/Android devices
@@ -119,6 +120,7 @@ Feature requests and enhancements for future releases.
 ## ⚠️ Unprioritized Issues
 Issues without priority labels that need to be triaged.
 
+- #275 - Major refactor: Centralize configuration and extract monolithic services for maintainability
 - #261 - Senior Engineer Code Review Request
 - #166 - Complete and review full analysis with Fréchet algorithm
 
