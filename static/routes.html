@@ -257,6 +257,40 @@
                 }
             });
         });
+    <!-- Bottom Navigation (Mobile) - Issue #277 -->
+    <nav id="bottom-nav" class="bottom-nav d-md-none" role="navigation" aria-label="Mobile navigation">
+        <button
+            class="bottom-nav-item"
+            data-target="home"
+            aria-label="Navigate to Home"
+            type="button"
+            tabindex="0"
+            onclick="window.location.href='/'">
+            <i class="bi bi-house-door" aria-hidden="true"></i>
+            <span>Home</span>
+        </button>
+        <button
+            class="bottom-nav-item active"
+            data-target="routes"
+            aria-label="Navigate to Routes"
+            aria-current="page"
+            type="button"
+            tabindex="0">
+            <i class="bi bi-map" aria-hidden="true"></i>
+            <span>Routes</span>
+        </button>
+        <button
+            class="bottom-nav-item"
+            data-target="settings"
+            aria-label="Navigate to Settings"
+            type="button"
+            tabindex="0"
+            onclick="window.location.href='/settings.html'">
+            <i class="bi bi-gear" aria-hidden="true"></i>
+            <span>Settings</span>
+        </button>
+    </nav>
+    
     </script>
 </body>
 </html>

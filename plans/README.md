@@ -24,8 +24,9 @@ plans/
 ├── v0.7.0/          # Test Infrastructure (March 26, 2026) [formerly v2.2.0]
 ├── v0.8.0/          # Route Naming (March 26, 2026) [formerly v2.3.0]
 ├── v0.9.0/          # Long Rides (March 30, 2026) [formerly v2.4.0]
-├── v0.10.0/         # APScheduler + Docker (March 30, 2026) [formerly v2.5.0] - CURRENT
-├── v0.11.0/         # Architecture Simplification (Planned - June 2026)
+├── v0.10.0/         # APScheduler + Docker (March 30, 2026) [formerly v2.5.0]
+├── v0.11.0/         # Architecture Simplification (Superseded by v0.12.0)
+├── v0.12.0/         # Production Readiness (May 2026) - CURRENT
 └── README.md        # This file
 ```
 
@@ -183,10 +184,10 @@ This architecture is over-engineered for single-user deployment (250-300MB memor
 
 ---
 
-## Release v0.11.0 - Architecture Simplification (PLANNED)
+## Release v0.11.0 - Architecture Simplification (SUPERSEDED)
 
 **Target Date:** June 2026 (5 weeks)
-**Status:** 🔵 PLANNED
+**Status:** ⚠️ SUPERSEDED BY v0.12.0
 
 ### Planning Documents
 - **ARCHITECTURE_SIMPLIFICATION_PROPOSAL.md** - Detailed simplification proposal
@@ -196,17 +197,48 @@ This architecture is over-engineered for single-user deployment (250-300MB memor
 - **EPIC_001_GITHUB_ISSUES.md** - Epic #001 GitHub issue breakdown
 - **EPIC_237_IMPLEMENTATION_PLAN.md** - Epic #237 UI/UX redesign implementation plan
 - **INTERACTIVE_MAPS_RESTORATION_EPIC.md** - Interactive maps restoration plan
-- **ISSUE_COORDINATION_ANALYSIS.md** - Issue overlap and coordination analysis
 - **MAP_API_ENDPOINTS_IMPLEMENTATION_PLAN.md** - Map API endpoints technical plan
-- **UAT_FINDINGS_IMPLEMENTATION_PLAN.md** - UAT findings implementation roadmap
 - **README.md** - Version overview
 
-### Planned Features
-- Simplified architecture (Static + API)
-- 80% memory reduction (250MB → 50MB)
-- Faster startup (<1 second vs 5-8 seconds)
-- Fewer dependencies (27 → 12)
-- 100% feature preservation
+### Note
+This release was superseded by v0.12.0 which focuses on production readiness with core functionality fixes. Architecture simplification and design work have been deferred to v0.13.0.
+
+### Archived Documents
+- **ISSUE_COORDINATION_ANALYSIS.md** → `archive/completed_analysis/`
+- **UAT_FINDINGS_IMPLEMENTATION_PLAN.md** → Moved to v0.12.0
+
+---
+
+## Release v0.12.0 - Production Readiness (CURRENT)
+
+**Target Date:** May 2026 (2.5 weeks)
+**Status:** 🟢 CURRENT RELEASE - ACTIVE DEVELOPMENT
+
+### Planning Documents
+- **PRODUCTION_READINESS_ROADMAP.md** - Comprehensive production readiness roadmap
+- **UAT_FINDINGS_IMPLEMENTATION_PLAN.md** - UAT findings implementation plan
+- **README.md** - Version overview
+
+### GitHub Issues
+- [#276](https://github.com/ejfox/ride-optimizer/issues/276) - Fix Next Commute Initialization (P0-critical)
+- [#277](https://github.com/ejfox/ride-optimizer/issues/277) - Add Bottom Navigation to routes.html (P0-critical)
+- [#278](https://github.com/ejfox/ride-optimizer/issues/278) - Implement Difficulty Ratings (P1-high)
+- [#279](https://github.com/ejfox/ride-optimizer/issues/279) - Improve Error Handling (P1-high)
+
+### Key Features
+- Fix Next Commute service initialization (core feature restoration)
+- Add bottom navigation to routes.html (mobile UX consistency)
+- Implement difficulty ratings for all routes
+- Improve error handling and user feedback
+- Production deployment readiness
+
+### Timeline
+- **Week 1 (48-52h):** Critical blockers + difficulty ratings
+- **Week 2 (40h):** Polish, testing, and production deployment
+- **Total Effort:** 92-100 hours
+
+### Deferred to v0.13.0
+- Design alignment with CLI prototype (Epic #280)
 
 ---
 
@@ -265,10 +297,11 @@ This architecture is over-engineered for single-user deployment (250-300MB memor
 | v0.7.0 | Mar 26 | Minor | 6 docs | Testing & Architecture (formerly v2.2.0) |
 | v0.8.0 | Mar 26 | Minor | 3 docs | Route Naming & Organization (formerly v2.3.0) |
 | v0.9.0 | Mar 30 | Minor | 7 docs | Long Rides Enhancement (formerly v2.4.0) |
-| v0.10.0 | Mar 30 | Minor | 6 docs | APScheduler + Docker (formerly v2.5.0) - CURRENT |
-| v0.11.0 | Jun 2026 | Minor | 11 docs | Architecture Simplification - PLANNED |
+| v0.10.0 | Mar 30 | Minor | 6 docs | APScheduler + Docker (formerly v2.5.0) |
+| v0.11.0 | Jun 2026 | Minor | 9 docs | Architecture Simplification - SUPERSEDED |
+| v0.12.0 | May 2026 | Minor | 3 docs | Production Readiness - CURRENT |
 
-**Total Planning Documents:** 47 documents across 8 releases
+**Total Planning Documents:** 50 documents across 9 releases
 
 ---
 
@@ -281,6 +314,16 @@ This architecture is over-engineered for single-user deployment (250-300MB memor
 
 ---
 
-*Last Updated: May 7, 2026*  
-*Organization Structure: Release-based planning document archive*  
+---
+
+## Archived Analysis Documents
+
+The following analysis documents have been archived after completion:
+
+- **[v0.12.0_RESCUE_ANALYSIS_2026-05-14.md](../archive/completed_analysis/v0.12.0_RESCUE_ANALYSIS_2026-05-14.md)** - Production readiness planning consolidation
+
+---
+
+*Last Updated: May 14, 2026*
+*Organization Structure: Release-based planning document archive*
 *Version Numbering: Aligned with semantic versioning (0.x.x for pre-production)*
