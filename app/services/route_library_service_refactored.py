@@ -1,9 +1,9 @@
 """
-Route Library Service - Refactored
+Refactored Route Library Service
 
-Orchestrates route loading, filtering, sorting, caching, and formatting.
-Uses extracted helper services (RouteLoader, RouteFilter, RouteSorter, etc.)
-for clean separation of concerns.
+Orchestrates route loading, filtering, sorting, and formatting.
+This service now acts as an orchestrator using extracted helper classes
+instead of handling all concerns itself.
 
 Copyright (c) 2024-2026 e2kd7n
 Licensed under the MIT License - see LICENSE file for details.
@@ -13,234 +13,224 @@ import logging
 from typing import List, Dict, Any, Optional
 
 from src.config_manager import ConfigManager
-from .route_loader import RouteLoader
-from .route_filter import RouteFilter
-from .route_sorter import RouteSorter
-from .route_formatter import RouteFormatter
-from .route_cache import RouteCache
+from app.services.route_loader import RouteLoader
+from app.services.route_filter import RouteFilter
+from app.services.route_sorter import RouteSorter
+from app.services.route_formatter import RouteFormatter
+from app.services.route_cache import RouteCache
 
 logger = logging.getLogger(__name__)
 
 
 class RouteLibraryService:
     """
-    Orchestrates route library operations using extracted helper services.
+    Service for managing route library operations.
     
-    Responsibilities:
-    - Coordinate loading, filtering, sorting, and formatting of routes
-    - Manage caching to avoid repeated operations
-    - Provide clean API for route library operations
+    This service orchestrates the following extracted components:
+    - RouteLoader: Loads routes from JSON files
+    - RouteFilter: Filters routes by type, direction, etc.
+    - RouteSorter: Sorts routes by various criteria
+    - RouteFormatter: Formats routes for API responses
+    - RouteCache: Caches route data in memory
     
-    Does NOT do:
-    - File I/O (delegated to RouteLoader)
-    - Filtering logic (delegated to RouteFilter)
-    - Sorting logic (delegated to RouteSorter)
-    - Formatting logic (delegated to RouteFormatter)
-    - Caching implementation (delegated to RouteCache)
+    BEFORE (monolithic):
+        - Single class doing loading, filtering, sorting, formatting, caching
+        - 500+ line methods mixing concerns
+        - Hard to test individual aspects
+        - Hard to reuse components
+    
+    AFTER (refactored):
+        - Each concern is a separate, focused class
+        - Service orchestrates the flow
+        - Each component is independently testable
+        - Components are easily reusable
     """
     
-    def __init__(self):
+    def __init__(self, data_dir: str = 'data'):
         """
-        Initialize RouteLibraryService with extracted helper services.
-        """
-        self.config = ConfigManager.get_instance()
+        Initialize RouteLibraryService.
         
-        # Initialize helper services
-        data_dir = self.config.get('data_dir', 'data')
+        Args:
+            data_dir: Directory containing route data files
+        """
+        self.config_mgr = ConfigManager.get_instance()
         self.loader = RouteLoader(data_dir)
         self.filter = RouteFilter()
         self.sorter = RouteSorter()
         self.formatter = RouteFormatter()
         
-        # Initialize cache with TTL from config
-        cache_ttl = self.config.get('cache.ttl_seconds', 3600)
+        # Cache with TTL from config (default 1 hour)
+        cache_ttl = self.config_mgr.get('services.route_library.cache_ttl_seconds', 3600)
         self.cache = RouteCache(ttl_seconds=cache_ttl)
         
-        logger.info("RouteLibraryService initialized with extracted helper services")
+        logger.info("RouteLibraryService initialized")
     
-    def get_all_routes(
-        self,
-        route_type: str = 'all',
-        sort_by: str = 'uses',
-        limit: Optional[int] = None,
-        use_cache: bool = True
-    ) -> Dict[str, Any]:
+    def get_all_routes(self, route_type: str = 'all', sort_by: str = 'uses',
+                      limit: Optional[int] = None) -> Dict[str, Any]:
         """
-        Get all routes with optional filtering, sorting, and pagination.
+        Get all routes with filtering, sorting, and formatting.
         
-        This method orchestrates the full pipeline:
-        1. Check cache
-        2. Load from disk (if not cached)
-        3. Filter by type
-        4. Sort by specified field
-        5. Apply limit (pagination)
-        6. Format for API response
-        7. Cache for future calls
+        This method demonstrates the orchestration pattern:
+        1. Load routes from disk
+        2. Filter by type
+        3. Sort by specified criterion
+        4. Format for API response
+        5. Apply limit if specified
         
         Args:
             route_type: 'all', 'commute', or 'long_ride'
             sort_by: 'uses', 'distance', 'name', 'duration', 'elevation', 'recent'
             limit: Maximum number of routes to return
-            use_cache: Whether to use cached results
             
         Returns:
-            API response dictionary with formatted routes
+            API response with routes and metadata
         """
-        # Generate cache key
-        cache_key = f"routes_{route_type}_{sort_by}_{limit}"
+        # Check cache first
+        cache_key = f"all_routes_{route_type}_{sort_by}"
+        cached_result = self.cache.get(cache_key)
+        if cached_result is not None:
+            logger.debug(f"Returning cached routes for {cache_key}")
+            return self.formatter.format_api_response(cached_result, len(cached_result))
         
-        # Check cache
-        if use_cache:
-            cached = self.cache.get(cache_key)
-            if cached is not None:
-                logger.debug(f"Returning {len(cached)} routes from cache")
-                return self.formatter.format_api_response(cached, len(cached))
+        # Load from disk
+        all_routes = self._load_all_routes()
         
-        try:
-            # Load routes from disk
-            logger.debug("Loading routes from disk...")
-            commute_routes = self.loader.load_commute_routes()
-            long_rides = self.loader.load_long_rides()
-            all_routes = commute_routes + long_rides
+        # Filter
+        filtered = self.filter.by_type(all_routes, route_type)
+        
+        # Sort
+        sorted_routes = self.sorter.sort(filtered, sort_by)
+        
+        # Cache the result
+        self.cache.set(cache_key, sorted_routes)
+        
+        # Apply limit
+        if limit:
+            sorted_routes = sorted_routes[:limit]
+        
+        # Format and return
+        return self.formatter.format_api_response(sorted_routes, len(filtered))
+    
+    def get_routes_by_type(self, route_type: str, sort_by: str = 'uses') -> Dict[str, Any]:
+        """
+        Get routes filtered by type.
+        
+        Args:
+            route_type: 'commute' or 'long_ride'
+            sort_by: Sort criterion
             
-            if not all_routes:
-                logger.warning("No routes found in data directory")
-                return self.formatter.format_error_response("No routes available", 404)
-            
-            # Filter by type
-            logger.debug(f"Filtering {len(all_routes)} routes by type={route_type}...")
-            filtered = self.filter.by_type(all_routes, route_type)
-            
-            if not filtered:
-                return self.formatter.format_api_response([], 0)
-            
-            # Sort
-            logger.debug(f"Sorting {len(filtered)} routes by {sort_by}...")
-            sorted_routes = self.sorter.sort(filtered, sort_by)
-            
-            # Apply limit
-            total_count = len(sorted_routes)
-            if limit:
-                sorted_routes = sorted_routes[:limit]
-            
-            # Cache the result
-            self.cache.set(cache_key, sorted_routes)
-            
-            # Format response
-            return self.formatter.format_api_response(sorted_routes, total_count)
-            
-        except Exception as e:
-            logger.error(f"Error getting routes: {e}", exc_info=True)
-            return self.formatter.format_error_response(str(e), 500)
+        Returns:
+            API response with filtered and sorted routes
+        """
+        return self.get_all_routes(route_type=route_type, sort_by=sort_by)
     
     def get_route_by_id(self, route_id: str, route_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
         Get a single route by ID.
         
         Args:
-            route_id: Route ID to retrieve
-            route_type: Optional filter by type ('commute' or 'long_ride')
+            route_id: Route ID
+            route_type: Optional filter by route type
             
         Returns:
-            Formatted route dictionary or None if not found
+            Formatted route or None if not found
         """
-        try:
-            # Load all routes
-            commute_routes = self.loader.load_commute_routes()
-            long_rides = self.loader.load_long_rides()
-            all_routes = commute_routes + long_rides
-            
-            # Filter by type if specified
-            if route_type:
-                all_routes = self.filter.by_type(all_routes, route_type)
-            
-            # Find route by ID
-            for route in all_routes:
-                if route.get('id') == route_id:
-                    return self.formatter.format_single_route(route)
-            
-            logger.warning(f"Route not found: {route_id}")
-            return None
-            
-        except Exception as e:
-            logger.error(f"Error getting route {route_id}: {e}", exc_info=True)
-            return None
-    
-    def get_commute_routes(
-        self,
-        sort_by: str = 'uses',
-        limit: Optional[int] = None
-    ) -> Dict[str, Any]:
-        """
-        Get commute routes (convenience method).
+        all_routes = self._load_all_routes()
         
-        Args:
-            sort_by: Field to sort by
-            limit: Maximum routes to return
-            
-        Returns:
-            API response with commute routes
-        """
-        return self.get_all_routes(route_type='commute', sort_by=sort_by, limit=limit)
-    
-    def get_long_rides(
-        self,
-        sort_by: str = 'uses',
-        limit: Optional[int] = None
-    ) -> Dict[str, Any]:
-        """
-        Get long ride routes (convenience method).
+        for route in all_routes:
+            if route.get('id') == route_id:
+                if route_type and route.get('type') != route_type:
+                    continue
+                return self.formatter.format_single_route(route)
         
-        Args:
-            sort_by: Field to sort by
-            limit: Maximum routes to return
-            
-        Returns:
-            API response with long rides
-        """
-        return self.get_all_routes(route_type='long_ride', sort_by=sort_by, limit=limit)
+        logger.warning(f"Route {route_id} not found")
+        return None
     
-    def search_routes(self, query: str) -> Dict[str, Any]:
+    def search_routes(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
         """
         Search routes by name.
         
         Args:
             query: Search query
+            limit: Maximum results
             
         Returns:
-            API response with matching routes
+            List of matching routes
         """
-        try:
-            # Load routes
-            commute_routes = self.loader.load_commute_routes()
-            long_rides = self.loader.load_long_rides()
-            all_routes = commute_routes + long_rides
-            
-            # Search by name (case-insensitive)
-            query_lower = query.lower()
-            matching = [r for r in all_routes if query_lower in r.get('name', '').lower()]
-            
-            logger.debug(f"Found {len(matching)} routes matching '{query}'")
-            return self.formatter.format_api_response(matching, len(matching))
-            
-        except Exception as e:
-            logger.error(f"Error searching routes: {e}", exc_info=True)
-            return self.formatter.format_error_response(str(e), 500)
-    
-    def clear_cache(self) -> None:
-        """
-        Clear the route cache.
+        all_routes = self._load_all_routes()
+        query_lower = query.lower()
         
-        Useful after updating route data.
-        """
-        self.cache.clear()
-        logger.info("Route cache cleared")
+        matches = [
+            r for r in all_routes
+            if query_lower in r.get('name', '').lower()
+        ]
+        
+        return self.formatter.format_routes_list(matches[:limit])
     
-    def get_cache_info(self) -> Dict[str, Any]:
+    def get_routes_with_filters(self, route_type: str = 'all', direction: str = 'all',
+                               sort_by: str = 'uses', min_distance: Optional[float] = None,
+                               max_distance: Optional[float] = None,
+                               min_uses: int = 1) -> Dict[str, Any]:
         """
-        Get information about the cache.
+        Get routes with advanced filtering.
+        
+        Demonstrates chaining multiple filters:
+        
+        Args:
+            route_type: Route type filter
+            direction: Route direction filter ('home_to_work', 'work_to_home', 'all')
+            sort_by: Sort criterion
+            min_distance: Minimum distance in km
+            max_distance: Maximum distance in km
+            min_uses: Minimum number of uses
+            
+        Returns:
+            API response with filtered routes
+        """
+        # Load
+        all_routes = self._load_all_routes()
+        
+        # Apply filters in sequence
+        filtered = self.filter.by_type(all_routes, route_type)
+        filtered = self.filter.by_direction(filtered, direction)
+        filtered = self.filter.by_min_uses(filtered, min_uses)
+        
+        if min_distance is not None:
+            filtered = self.filter.by_min_distance(filtered, min_distance)
+        if max_distance is not None:
+            filtered = self.filter.by_max_distance(filtered, max_distance)
+        
+        # Sort
+        sorted_routes = self.sorter.sort(filtered, sort_by)
+        
+        # Format
+        return self.formatter.format_api_response(sorted_routes, len(filtered))
+    
+    def invalidate_cache(self, route_type: Optional[str] = None) -> None:
+        """
+        Invalidate the route cache.
+        
+        Args:
+            route_type: If specified, only invalidate cache for this type
+        """
+        if route_type:
+            cache_key = f"all_routes_{route_type}"
+            self.cache.invalidate(cache_key)
+            logger.info(f"Invalidated cache for {route_type}")
+        else:
+            self.cache.clear()
+            logger.info("Cleared entire route cache")
+    
+    def _load_all_routes(self) -> List[Dict[str, Any]]:
+        """
+        Load all routes (commute and long rides) from disk.
+        
+        Internal helper method.
         
         Returns:
-            Dictionary with cache statistics
+            Combined list of all routes
         """
-        return self.cache.get_cache_info()
+        commute_routes = self.loader.load_commute_routes()
+        long_rides = self.loader.load_long_rides()
+        
+        return commute_routes + long_rides
