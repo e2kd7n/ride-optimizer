@@ -124,11 +124,18 @@
             
             updateMapStatus();
             
-            // Update card styling
+            // Reset card styling (Issue #121)
             const card = document.querySelector(`[data-route-id="${routeId}"]`);
             if (card) {
                 card.style.borderColor = '';
                 card.style.borderWidth = '';
+                
+                // Reset route name color
+                const routeNameElement = card.querySelector('.route-name, h5, .card-title');
+                if (routeNameElement) {
+                    routeNameElement.style.color = '';
+                    routeNameElement.style.fontWeight = '';
+                }
             }
             return;
         }
@@ -282,10 +289,18 @@
             updateMapStatus();
 
             // Update card styling to show it's on the map
+            // Issue #121: Color code route names to match map lines
             const card = document.querySelector(`[data-route-id="${routeId}"]`);
             if (card) {
                 card.style.borderColor = color;
                 card.style.borderWidth = '3px';
+                
+                // Color the route name to match the map line
+                const routeNameElement = card.querySelector('.route-name, h5, .card-title');
+                if (routeNameElement) {
+                    routeNameElement.style.color = color;
+                    routeNameElement.style.fontWeight = '700';
+                }
             }
 
         } catch (error) {
@@ -333,11 +348,18 @@
                 state.mapInstance.removeLayer(mapObjects.endMarker);
             }
 
-            // Reset card styling
+            // Reset card styling (Issue #121)
             const card = document.querySelector(`[data-route-id="${routeId}"]`);
             if (card) {
                 card.style.borderColor = '';
                 card.style.borderWidth = '';
+                
+                // Reset route name color
+                const routeNameElement = card.querySelector('.route-name, h5, .card-title');
+                if (routeNameElement) {
+                    routeNameElement.style.color = '';
+                    routeNameElement.style.fontWeight = '';
+                }
             }
         });
 
