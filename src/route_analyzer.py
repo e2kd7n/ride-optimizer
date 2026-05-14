@@ -938,29 +938,34 @@ class RouteAnalyzer:
             if cache_key in similarity_cache:
                 return similarity_cache[cache_key]
             
-            # Calculate Fréchet distance if available
+            # Calculate similarity using the same thresholds/logic as the instance path
             coords1 = np.array(route1.coordinates)
             coords2 = np.array(route2.coordinates)
+            
+            def calc_hausdorff_similarity() -> float:
+                from scipy.spatial.distance import cdist
+                distances_1_to_2 = cdist(coords1, coords2).min(axis=1)
+                distances_2_to_1 = cdist(coords2, coords1).min(axis=1)
+                percentile_dist_1 = np.percentile(distances_1_to_2, 95.0)
+                percentile_dist_2 = np.percentile(distances_2_to_1, 95.0)
+                percentile_dist = max(percentile_dist_1, percentile_dist_2)
+                normalized_dist = percentile_dist * 111000
+                distance_threshold = 200
+                return 1 / (1 + normalized_dist / distance_threshold)
             
             if FRECHET_AVAILABLE:
                 try:
                     frechet_dist = similaritymeasures.frechet_dist(coords1, coords2)
                     normalized_dist = frechet_dist * 111000
-                    distance_threshold = 200
-                    similarity = 1 / (1 + normalized_dist / distance_threshold)
-                    return similarity
+                    frechet_similarity = 1 / (1 + normalized_dist / 300)
+                    hausdorff_similarity = calc_hausdorff_similarity()
+                    if hausdorff_similarity < 0.50:
+                        return frechet_similarity * 0.7
+                    return frechet_similarity
                 except (ValueError, IndexError, TypeError) as e:
                     logger.debug(f"Fréchet distance calculation failed, falling back to Hausdorff: {e}")
-                    pass
             
-            # Fallback to Hausdorff
-            dist_forward = directed_hausdorff(coords1, coords2)[0]
-            dist_backward = directed_hausdorff(coords2, coords1)[0]
-            max_dist = max(dist_forward, dist_backward)
-            normalized_dist = max_dist * 111000
-            distance_threshold = 200
-            similarity = 1 / (1 + normalized_dist / distance_threshold)
-            return similarity
+            return calc_hausdorff_similarity()
         
         while ungrouped:
             # Start new group with first ungrouped route

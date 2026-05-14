@@ -12,6 +12,8 @@ from geopy.exc import GeocoderTimedOut, GeocoderServiceError
 import json
 from pathlib import Path
 
+from src.secure_cache import SecureCacheStorage
+
 logger = logging.getLogger(__name__)
 
 bp = Blueprint('map_api', __name__, url_prefix='/api/map')
@@ -248,16 +250,11 @@ def reverse_geocode():
         lat = float(request.args.get('lat'))
         lng = float(request.args.get('lng'))
         
-        # Check cache first
-        cache_file = Path('cache/geocoding_cache.json')
-        if cache_file.exists():
-            with open(cache_file, 'r') as f:
-                geocoding_cache = json.load(f)
-            cache_key = f"{lat:.6f},{lng:.6f}"
-            if cache_key in geocoding_cache:
-                return jsonify({'status': 'success', **geocoding_cache[cache_key], 'cached': True})
-        else:
-            geocoding_cache = {}
+        cache_key = f"{lat:.6f},{lng:.6f}"
+        cache = SecureCacheStorage('cache/geocoding_cache.json')
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return jsonify({'status': 'success', **cached_data, 'cached': True})
         
         # Geocode
         location = geocoder.reverse(f"{lat}, {lng}", timeout=10)
@@ -271,11 +268,7 @@ def reverse_geocode():
             'display_name': location.address
         }
         
-        # Cache result
-        geocoding_cache[cache_key] = result
-        cache_file.parent.mkdir(parents=True, exist_ok=True)
-        with open(cache_file, 'w') as f:
-            json.dump(geocoding_cache, f, indent=2)
+        cache.set(cache_key, result)
         
         return jsonify({'status': 'success', **result, 'cached': False})
         

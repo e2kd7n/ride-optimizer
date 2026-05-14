@@ -347,33 +347,40 @@ def get_recommendation():
         # Get recommendation
         recommendation = _commute_service.get_next_commute(direction)
         
-        # Format for frontend (dashboard.js expects specific structure)
+        # Format for frontend while preserving service-level fields for API consumers
         if recommendation.get('status') == 'success' and recommendation.get('route'):
             route = recommendation['route']
+            score = recommendation.get('score', 0)
+            score_percent = int(score * 100) if isinstance(score, float) and score <= 1 else int(score)
             formatted = {
                 'status': 'success',
+                'direction': recommendation.get('direction'),
+                'time_window': recommendation.get('time_window'),
+                'is_today': recommendation.get('is_today'),
+                'departure_time': recommendation.get('departure_time'),
+                'confidence': recommendation.get('confidence'),
+                'route': route,
                 'recommended_route': {
+                    'id': route.get('id'),
                     'name': route.get('name', 'Unknown Route'),
-                    'distance': route.get('distance', 0) / 1000,  # Convert m to km, then to mi
-                    'elevation_gain': route.get('elevation', 0)
+                    'distance': route.get('distance', 0) / 1000,
+                    'duration': route.get('duration', 0),
+                    'elevation_gain': route.get('elevation', 0),
+                    'coordinates': route.get('coordinates', [])
                 },
-                'score': int(recommendation.get('score', 50)),
-                'recommendation': 'Recommended' if recommendation.get('score', 0) > 70 else 'Alternative available',
+                'score': score_percent,
+                'recommendation': 'Recommended' if score_percent >= 70 else 'Alternative available',
+                'breakdown': recommendation.get('breakdown', {}),
+                'weather': recommendation.get('weather'),
                 'factors': []
             }
             
-            # Add breakdown as factors
-            if 'breakdown' in recommendation:
-                breakdown = recommendation['breakdown']
-                for key, value in breakdown.items():
-                    # Handle both numeric values and nested dicts
-                    if isinstance(value, (int, float)):
-                        formatted['factors'].append(f"{key.title()}: {int(value * 100)}%")
-                    elif isinstance(value, dict):
-                        # Skip nested dicts for now
-                        continue
-                    else:
-                        formatted['factors'].append(f"{key.title()}: {value}")
+            for key, value in formatted['breakdown'].items():
+                if isinstance(value, (int, float)):
+                    factor_value = int(value * 100) if value <= 1 else int(value)
+                    formatted['factors'].append(f"{key.title()}: {factor_value}%")
+                elif not isinstance(value, dict):
+                    formatted['factors'].append(f"{key.title()}: {value}")
             
             return jsonify(formatted)
         else:
