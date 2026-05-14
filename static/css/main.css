@@ -1445,6 +1445,20 @@ input[type="radio"] {
 
 .leaflet-tooltip.route-tooltip::before {
     border-top-color: rgba(0, 0, 0, 0.85);
+
+/* Selected route tooltip - Issue #74 */
+.leaflet-tooltip.selected-route-tooltip {
+    z-index: 1000 !important;
+    background-color: rgba(0, 123, 255, 0.95);
+    border: 2px solid white;
+    font-weight: 600;
+    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.5);
+    transform: scale(1.05);
+}
+
+.leaflet-tooltip.selected-route-tooltip::before {
+    border-top-color: rgba(0, 123, 255, 0.95);
+}
 }
 
 /* Hide Leaflet layer control (not needed per design guidelines) */

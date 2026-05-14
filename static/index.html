@@ -695,10 +695,24 @@
                             <div class="mb-2"><strong>Comfort:</strong> <span class="badge bg-${w.comfort_score >= 70 ? 'success' : w.comfort_score >= 50 ? 'warning' : 'danger'}">${w.comfort_score}/100</span></div>
                         </div>
                     `;
+                } else {
+                    throw new Error('Invalid weather data format');
                 }
             } catch (error) {
                 console.error('Failed to load weather:', error);
-                container.innerHTML = '<p class="text-muted">Weather data unavailable</p>';
+                const errorMessage = error.message || 'Unable to load weather data';
+                container.innerHTML = `
+                    <div class="alert alert-warning mb-0" role="alert">
+                        <div class="d-flex align-items-center mb-2">
+                            <i class="bi bi-exclamation-triangle me-2"></i>
+                            <strong>Weather Unavailable</strong>
+                        </div>
+                        <p class="mb-2 small">${errorMessage}</p>
+                        <button class="btn btn-sm btn-outline-primary" onclick="loadWeatherData()">
+                            <i class="bi bi-arrow-clockwise"></i> Retry
+                        </button>
+                    </div>
+                `;
             }
         }
         
@@ -727,10 +741,24 @@
                             </div>
                         </div>
                     `;
+                } else {
+                    throw new Error('No route recommendation available');
                 }
             } catch (error) {
                 console.error('Failed to load recommendation:', error);
-                container.innerHTML = '<p class="text-muted">No recommendation available</p>';
+                const errorMessage = error.message || 'Unable to load commute recommendation';
+                container.innerHTML = `
+                    <div class="alert alert-warning mb-0" role="alert">
+                        <div class="d-flex align-items-center mb-2">
+                            <i class="bi bi-exclamation-triangle me-2"></i>
+                            <strong>Recommendation Unavailable</strong>
+                        </div>
+                        <p class="mb-2 small">${errorMessage}</p>
+                        <button class="btn btn-sm btn-outline-primary" onclick="loadCommuteRecommendation()">
+                            <i class="bi bi-arrow-clockwise"></i> Retry
+                        </button>
+                    </div>
+                `;
             }
         }
         
@@ -771,10 +799,23 @@
                             </div>
                         </div>
                     `;
+                } else {
+                    throw new Error('Invalid route data format');
                 }
             } catch (error) {
                 console.error('Failed to load route stats:', error);
-                container.innerHTML = '<p class="text-muted">Statistics unavailable</p>';
+                const errorMessage = error.message || 'Unable to load statistics';
+                container.innerHTML = `
+                    <div class="alert alert-warning mb-0" role="alert">
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-exclamation-triangle me-2"></i>
+                            <span>${errorMessage}</span>
+                            <button class="btn btn-sm btn-outline-primary ms-auto" onclick="loadRouteStatistics()">
+                                <i class="bi bi-arrow-clockwise"></i> Retry
+                            </button>
+                        </div>
+                    </div>
+                `;
             }
         }
         
@@ -844,14 +885,26 @@
                         container.appendChild(notice);
                     }
                 } else {
-                    container.innerHTML = '<p class="text-muted">No routes available</p>';
+                    container.innerHTML = '<p class="text-muted text-center py-3">No routes available</p>';
                     if (countBadge) {
                         countBadge.textContent = '0';
                     }
                 }
             } catch (error) {
                 console.error('Failed to load routes:', error);
-                container.innerHTML = '<p class="text-muted">Failed to load routes</p>';
+                const errorMessage = error.message || 'Unable to load routes';
+                container.innerHTML = `
+                    <div class="alert alert-warning m-2" role="alert">
+                        <div class="d-flex flex-column align-items-center text-center">
+                            <i class="bi bi-exclamation-triangle fs-3 mb-2"></i>
+                            <strong>Routes Unavailable</strong>
+                            <p class="mb-2 small">${errorMessage}</p>
+                            <button class="btn btn-sm btn-primary" onclick="loadRoutesList()">
+                                <i class="bi bi-arrow-clockwise"></i> Retry
+                            </button>
+                        </div>
+                    </div>
+                `;
                 if (countBadge) {
                     countBadge.textContent = '0';
                 }

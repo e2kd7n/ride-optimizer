@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-05-14 16:37:04 UTC / 2026-05-14 11:37:04 CDT
+**Last Updated:** 2026-05-14 18:10:33 UTC / 2026-05-14 13:10:33 CDT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -8,7 +8,7 @@ This file reflects the current state of GitHub issues organized by release miles
 
 ## 📍 Release Context
 
-- **Current Release:** v0.11.0 (deployed)
+- **Current Release:** v0.12.0 (deployed)
 - **Next Release:** v0.12.0 (in development)
 - **Future Releases:** v0.13.0,v0.14.0
 
@@ -54,7 +54,6 @@ This file reflects the current state of GitHub issues organized by release miles
 ## 📅 v0.13.0 (Future Release)
 
 ### 🔴 P1 - HIGH
-- #279 - P1-HIGH: Improve Error Handling and User Feedback for API Failures
 - #260 - Implement guided FTUE for Strava API key setup with in-app configuration
 - #256 - UI/UX Refinements: Design Critique Follow-up
 - #255 - Add Comprehensive E2E Testing for UI/UX Features
@@ -78,6 +77,7 @@ This file reflects the current state of GitHub issues organized by release miles
 - #116 - Add visual weather icons and color coding
 - #115 - Display optimal departure time suggestions
 - #114 - Add transit recommendations when conditions are poor
+- #113 - Show optimal route recommendations based on wind
 
 ### 🟢 P3 - LOW
 - #200 - Route naming improvements (Start → Main → End format)
