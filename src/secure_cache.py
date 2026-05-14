@@ -189,6 +189,37 @@ class SecureCacheStorage:
                 logger.info(f"✓ Cache deleted securely: {self.cache_path}")
             except Exception as e:
                 logger.error(f"Failed to delete cache: {e}")
+    
+    def load(self) -> Optional[Dict[str, Any]]:
+        """Compatibility alias for loading the full cache payload."""
+        return self.load_cache()
+    
+    def save(self, data: Dict[str, Any]) -> None:
+        """Compatibility alias for saving the full cache payload."""
+        self.save_cache(data)
+    
+    def get(self, key: str, default: Any = None) -> Any:
+        """
+        Retrieve a single value from the cached dictionary.
+        
+        Args:
+            key: Dictionary key to retrieve
+            default: Value to return if key is not present
+        """
+        data = self.load_cache() or {}
+        return data.get(key, default)
+    
+    def set(self, key: str, value: Any) -> None:
+        """
+        Store a single value in the cached dictionary.
+        
+        Args:
+            key: Dictionary key to update
+            value: Value to store
+        """
+        data = self.load_cache() or {}
+        data[key] = value
+        self.save_cache(data)
 
 
 def migrate_cache_to_encrypted(old_cache_path: str, new_cache_path: str) -> bool:
