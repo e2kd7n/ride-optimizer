@@ -20,6 +20,33 @@ body {
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+
+/* ===== Timestamp Display Styles (Issue #274) ===== */
+.timestamp-display {
+    display: inline-block;
+    font-size: 0.875rem;
+    color: #6c757d;
+    margin-top: 0.25rem;
+}
+
+.timestamp-display i {
+    margin-right: 0.25rem;
+}
+
+.card .timestamp-display {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    font-size: 0.75rem;
+}
+
+@media (max-width: 767px) {
+    .card .timestamp-display {
+        position: static;
+        display: block;
+        margin-top: 0.5rem;
+    }
+}
 }
 
 /* ===== Navigation ===== */

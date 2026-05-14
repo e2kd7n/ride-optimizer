@@ -48,29 +48,43 @@
     <a href="#main-content" class="skip-link">Skip to main content</a>
     <a href="#home-tab" class="skip-link">Skip to navigation</a>
     
-    <!-- Top Navigation (Desktop) -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary d-none d-md-block" role="navigation" aria-label="Main navigation">
+    <!-- Top Navigation (Mobile & Desktop) -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary" role="navigation" aria-label="Main navigation">
         <div class="container-fluid">
             <a class="navbar-brand" href="/" aria-label="Ride Optimizer Home">
                 <i class="bi bi-bicycle" aria-hidden="true"></i> Ride Optimizer
             </a>
-            <ul class="nav nav-tabs border-0 ms-auto" role="tablist">
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link active text-white bg-transparent border-0" id="home-tab" data-bs-toggle="tab" data-bs-target="#home" type="button" role="tab" aria-controls="home" aria-selected="true">
-                        <i class="bi bi-house-door" aria-hidden="true"></i> Home
-                    </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <a class="nav-link text-white bg-transparent border-0 d-flex align-items-center" id="routes-tab" href="/routes.html" role="link" aria-label="Go to Routes page">
-                        <i class="bi bi-map" aria-hidden="true"></i> Routes
-                    </a>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link text-white bg-transparent border-0" id="settings-tab" data-bs-toggle="tab" data-bs-target="#settings" type="button" role="tab" aria-controls="settings" aria-selected="false">
-                        <i class="bi bi-gear" aria-hidden="true"></i> Settings
-                    </button>
-                </li>
-            </ul>
+            
+            <!-- Mobile Menu Toggle Button -->
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            
+            <!-- Collapsible Navigation Menu -->
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/" aria-current="page">
+                            <i class="bi bi-house-door" aria-hidden="true"></i> Home
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/commute.html" aria-label="Go to Commute page">
+                            <i class="bi bi-signpost-2" aria-hidden="true"></i> Commute
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/routes.html" aria-label="Go to Routes page">
+                            <i class="bi bi-map" aria-hidden="true"></i> Routes
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/settings.html" aria-label="Go to Settings page">
+                            <i class="bi bi-gear" aria-hidden="true"></i> Settings
+                        </a>
+                    </li>
+                </ul>
+            </div>
         </div>
     </nav>
     
@@ -446,10 +460,21 @@
         </button>
         <button
             class="bottom-nav-item"
+            data-target="commute"
+            aria-label="Navigate to Commute"
+            type="button"
+            tabindex="0"
+            onclick="window.location.href='/commute.html'">
+            <i class="bi bi-signpost-2" aria-hidden="true"></i>
+            <span>Commute</span>
+        </button>
+        <button
+            class="bottom-nav-item"
             data-target="routes"
             aria-label="Navigate to Routes"
             type="button"
-            tabindex="0">
+            tabindex="0"
+            onclick="window.location.href='/routes.html'">
             <i class="bi bi-map" aria-hidden="true"></i>
             <span>Routes</span>
         </button>

@@ -242,6 +242,46 @@ This release was superseded by v0.12.0 which focuses on production readiness wit
 
 ---
 
+## Release v0.13.0 - E2E Testing & Quality (IN PLANNING)
+
+**Target Date:** June 2026 (1 week)
+**Status:** 📝 IN PLANNING
+
+### Planning Documents
+- **E2E_TESTING_IMPLEMENTATION_PLAN.md** - Comprehensive E2E testing implementation plan
+- **README.md** - Version overview
+
+### GitHub Issues
+- [#255](https://github.com/ejfox/ride-optimizer/issues/255) - Add Comprehensive E2E Testing for UI/UX Features (P1-high)
+
+### Key Features
+- Playwright-based E2E testing framework
+- 82+ tests covering all 18 UI/UX features
+- Accessibility testing (WCAG AA compliance)
+- Mobile responsive testing
+- Keyboard navigation testing
+- Error recovery testing
+- Performance testing with Lighthouse
+- CI/CD integration with GitHub Actions
+
+### Timeline
+- **Day 1 (8h):** Framework setup + navigation tests
+- **Day 2 (8h):** Dashboard + commute tests
+- **Day 3 (8h):** Routes + accessibility tests
+- **Day 4 (8h):** Mobile + keyboard + error tests
+- **Day 5 (8h):** Performance + CI/CD + documentation
+- **Total Effort:** 40 hours (5 days)
+
+### Success Metrics
+- ✅ 82+ E2E tests implemented
+- ✅ All tests passing
+- ✅ ≥80% combined test coverage
+- ✅ 0 accessibility violations
+- ✅ All pages load in <3 seconds
+- ✅ CI/CD pipeline green
+
+---
+
 ## Document Index by Type
 
 ### Architecture & Design
@@ -300,8 +340,9 @@ This release was superseded by v0.12.0 which focuses on production readiness wit
 | v0.10.0 | Mar 30 | Minor | 6 docs | APScheduler + Docker (formerly v2.5.0) |
 | v0.11.0 | Jun 2026 | Minor | 9 docs | Architecture Simplification - SUPERSEDED |
 | v0.12.0 | May 2026 | Minor | 3 docs | Production Readiness - CURRENT |
+| v0.13.0 | Jun 2026 | Minor | 1 doc | E2E Testing & Quality - IN PLANNING |
 
-**Total Planning Documents:** 50 documents across 9 releases
+**Total Planning Documents:** 51 documents across 10 releases
 
 ---
 

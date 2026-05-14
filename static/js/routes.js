@@ -648,6 +648,24 @@
         summary.innerHTML = count > 0
             ? `<i class="bi bi-info-circle"></i> Showing ${count} route${count === 1 ? '' : 's'}`
             : '<i class="bi bi-exclamation-triangle"></i> No routes match the current filters';
+
+    function displayRoutesTimestamp(timestamp) {
+        const summary = byId('results-summary');
+        if (!summary || !timestamp) return;
+        
+        // Check if timestamp element already exists
+        let timestampEl = summary.querySelector('.timestamp-display');
+        if (!timestampEl) {
+            timestampEl = document.createElement('small');
+            timestampEl.className = 'timestamp-display ms-2';
+            summary.appendChild(timestampEl);
+        }
+        
+        // Update timestamp content
+        timestampEl.setAttribute('data-timestamp', timestamp);
+        timestampEl.setAttribute('title', window.formatAbsoluteTime(timestamp));
+        timestampEl.innerHTML = `<i class="bi bi-clock"></i> Synced ${window.formatRelativeTime(timestamp)}`;
+    }
     }
 
     function renderRoutes(routes) {
@@ -696,7 +714,13 @@
             const response = await window.apiClient.getRoutes();
             state.routes = Array.isArray(response.routes) ? response.routes : [];
             state.filteredRoutes = applyClientFilters(state.routes, getFilters());
+            state.lastUpdated = response.timestamp; // Store timestamp for display
             renderRoutes(state.filteredRoutes);
+            
+            // Display timestamp if available
+            if (response.timestamp) {
+                displayRoutesTimestamp(response.timestamp);
+            }
         } catch (error) {
             console.error('Failed to load routes:', error);
             if (container) {

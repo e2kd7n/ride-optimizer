@@ -132,10 +132,13 @@ async function loadWeather() {
                     ` : ''}
                 </div>
             </div>
-            <div class="mt-3">
+            <div class="mt-3 d-flex justify-content-between align-items-center">
                 <small class="text-muted">
                     <i class="bi bi-info-circle"></i> ${current.description}
                 </small>
+                ${weather.timestamp ? `<small class="text-muted timestamp-display" data-timestamp="${weather.timestamp}" title="${formatAbsoluteTime(weather.timestamp)}">
+                    <i class="bi bi-clock"></i> Updated ${formatRelativeTime(weather.timestamp)}
+                </small>` : ''}
             </div>
         `;
         
@@ -158,56 +161,86 @@ async function loadRecommendation() {
     const container = document.getElementById('commute-recommendation');
     
     try {
-        const rec = await window.apiClient.getRecommendation();
+        // Fetch both commute directions
+        const response = await fetch('/api/commute');
+        const data = await response.json();
         
-        if (!rec || !rec.recommended_route) {
-            container.innerHTML = '<p class="text-muted">No recommendation available</p>';
+        if (data.status !== 'success' || (!data.to_work && !data.to_home)) {
+            container.innerHTML = '<p class="text-muted">No commute recommendations available</p>';
             return;
         }
         
-        const route = rec.recommended_route;
-        const scoreClass = getScoreClass(rec.score);
+        // Build HTML for both directions
+        let html = '<div class="row g-2">';
         
-        const html = `
-            <div class="mb-3">
-                <h5 class="mb-2">${route.name}</h5>
-                <div class="mb-2">
-                    <span class="badge ${scoreClass} fs-6">${rec.score}/100</span>
-                    <span class="ms-2 text-muted">${rec.recommendation}</span>
+        // To Work card
+        if (data.to_work && data.to_work.status === 'success') {
+            const toWork = data.to_work;
+            const route = toWork.route;
+            const scoreClass = getScoreClass(toWork.score * 100);
+            
+            html += `
+                <div class="col-md-6">
+                    <div class="border border-success rounded p-2" style="border-width: 2px !important;">
+                        <div class="d-flex align-items-center mb-2">
+                            <i class="bi bi-bicycle text-success me-2"></i>
+                            <strong class="text-success">To Work</strong>
+                            <span class="badge ${scoreClass} ms-auto">${Math.round(toWork.score * 100)}</span>
+                        </div>
+                        <div class="small mb-1"><strong>${route.name}</strong></div>
+                        <div class="small text-muted">${toWork.time_window}</div>
+                        <div class="d-flex justify-content-between mt-2 small">
+                            <span><i class="bi bi-clock"></i> ${Math.round(route.duration)}min</span>
+                            <span><i class="bi bi-signpost"></i> ${route.distance.toFixed(1)}mi</span>
+                        </div>
+                    </div>
                 </div>
-            </div>
-            <div class="row">
-                <div class="col-6">
-                    <small class="text-muted">Distance</small><br>
-                    <strong>${route.distance} mi</strong>
+            `;
+        }
+        
+        // To Home card
+        if (data.to_home && data.to_home.status === 'success') {
+            const toHome = data.to_home;
+            const route = toHome.route;
+            const scoreClass = getScoreClass(toHome.score * 100);
+            
+            html += `
+                <div class="col-md-6">
+                    <div class="border border-primary rounded p-2" style="border-width: 2px !important;">
+                        <div class="d-flex align-items-center mb-2">
+                            <i class="bi bi-house-door text-primary me-2"></i>
+                            <strong class="text-primary">To Home</strong>
+                            <span class="badge ${scoreClass} ms-auto">${Math.round(toHome.score * 100)}</span>
+                        </div>
+                        <div class="small mb-1"><strong>${route.name}</strong></div>
+                        <div class="small text-muted">${toHome.time_window}</div>
+                        <div class="d-flex justify-content-between mt-2 small">
+                            <span><i class="bi bi-clock"></i> ${Math.round(route.duration)}min</span>
+                            <span><i class="bi bi-signpost"></i> ${route.distance.toFixed(1)}mi</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="col-6">
-                    <small class="text-muted">Elevation</small><br>
-                    <strong>${route.elevation_gain} ft</strong>
-                </div>
-            </div>
-            ${rec.factors && rec.factors.length > 0 ? `
-                <div class="mt-3">
-                    <small class="text-muted">Factors:</small>
-                    <ul class="small mb-0">
-                        ${rec.factors.map(f => `<li>${f}</li>`).join('')}
-                    </ul>
-                </div>
-            ` : ''}
+            `;
+        }
+        
+        html += '</div>';
+        
+        // Add view details button
+        html += `
             <div class="mt-3">
-                <a href="/commute.html" class="btn btn-primary btn-sm">
-                    <i class="bi bi-arrow-right"></i> View Details
+                <a href="/commute.html" class="btn btn-primary btn-sm w-100">
+                    <i class="bi bi-arrow-right"></i> View Full Commute Details
                 </a>
             </div>
         `;
         
         container.innerHTML = html;
     } catch (error) {
-        console.error('Failed to load recommendation:', error);
+        console.error('Failed to load commute recommendations:', error);
         container.innerHTML = `
             <div class="alert alert-info" role="alert">
                 <i class="bi bi-info-circle"></i>
-                No commute recommendation available.
+                No commute recommendations available.
             </div>
         `;
     }

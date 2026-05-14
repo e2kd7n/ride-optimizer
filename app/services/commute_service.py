@@ -403,37 +403,31 @@ class CommuteService:
                     logger.warning(f"Skipping commute map route {route_id}: no coordinates")
                     continue
                 
-                color = self._get_route_color(route_option.get('score', 0))
+                # Use direction-based colors: green for to_work, blue for to_home
+                direction = route_option.get('direction', '')
+                if direction == 'to_work':
+                    color = '#28a745'  # Green
+                elif direction == 'to_home':
+                    color = '#007bff'  # Blue
+                else:
+                    # Fallback to score-based color if direction not specified
+                    color = self._get_route_color(route_option.get('score', 0))
+                
                 route_name = route_data.get('name') or route_group.name or f"Route {route_id}"
                 popup_html = self._create_comparison_popup(route_option)
-                is_optimal = route_option is routes[0]
-                feature_group = folium.FeatureGroup(
-                    name=f"{route_name} ({route_option.get('score', 0) * 100:.0f}%)",
-                    show=True
-                )
                 
-                visualizer.map = feature_group
-                visualizer.add_route_layer(
-                    route_group=route_group,
-                    color=color,
-                    weight=7 if is_optimal else 5,
-                    is_optimal=is_optimal,
-                    route_name=route_name
-                )
-                
-                # Replace default popup with commute-specific data by overlaying explicit route line.
+                # Add route directly to map (not in FeatureGroup) so it can't be toggled off
+                # Users control visibility by clicking cards or polylines
                 folium.PolyLine(
                     coordinates,
                     color=color,
-                    weight=9 if is_optimal else 6,
-                    opacity=0.95 if is_optimal else 0.75,
+                    weight=7,
+                    opacity=0.85,
                     popup=folium.Popup(popup_html, max_width=320),
                     tooltip=f"{route_name} • {route_option.get('score', 0) * 100:.0f}%",
-                    className=f"commute-route route-{route_id}",
-                ).add_to(feature_group)
+                    className=f"commute-route route-{route_id} direction-{direction}",
+                ).add_to(map_obj)
                 
-                feature_group.add_to(map_obj)
-                route_layers.append(feature_group)
                 all_bounds.extend([[lat, lon] for lat, lon in coordinates])
             
             visualizer.map = map_obj
@@ -467,8 +461,82 @@ class CommuteService:
             except Exception as weather_error:
                 logger.warning(f"Commute weather overlay unavailable: {weather_error}")
             
-            folium.LayerControl(collapsed=False).add_to(map_obj)
-            return map_obj._repr_html_()
+            # Add LayerControl collapsed by default, only for map type selection
+            # Route visibility is controlled by clicking cards/polylines, not layer control
+            folium.LayerControl(collapsed=True).add_to(map_obj)
+            
+            # Get the HTML and inject JavaScript for route highlighting
+            map_html = map_obj._repr_html_()
+            
+            # Inject JavaScript to handle postMessage for route highlighting
+            highlight_script = """
+            <script>
+            (function() {
+                // Listen for messages from parent window to highlight routes
+                window.addEventListener('message', function(event) {
+                    if (event.data && event.data.type === 'highlightRoute') {
+                        highlightRoute(event.data.direction);
+                    }
+                });
+                
+                function highlightRoute(direction) {
+                    // Find all polylines with direction class
+                    const allPolylines = document.querySelectorAll('path.leaflet-interactive');
+                    
+                    allPolylines.forEach(function(polyline) {
+                        const classes = polyline.getAttribute('class') || '';
+                        
+                        // Check if this polyline matches the selected direction
+                        if (classes.includes('direction-' + direction)) {
+                            // Highlight: full opacity, thicker stroke
+                            polyline.style.opacity = '1.0';
+                            polyline.style.strokeOpacity = '1.0';
+                            polyline.style.strokeWidth = '8';
+                            polyline.style.zIndex = '1000';
+                        } else if (classes.includes('direction-')) {
+                            // Subdue: reduced opacity, thinner stroke
+                            polyline.style.opacity = '0.3';
+                            polyline.style.strokeOpacity = '0.3';
+                            polyline.style.strokeWidth = '5';
+                            polyline.style.zIndex = '1';
+                        }
+                    });
+                }
+                
+                // Also add click handlers to polylines for direct interaction
+                document.addEventListener('DOMContentLoaded', function() {
+                    const allPolylines = document.querySelectorAll('path.leaflet-interactive');
+                    
+                    allPolylines.forEach(function(polyline) {
+                        polyline.style.cursor = 'pointer';
+                        
+                        polyline.addEventListener('click', function() {
+                            const classes = this.getAttribute('class') || '';
+                            
+                            // Extract direction from class
+                            const directionMatch = classes.match(/direction-(\\w+)/);
+                            if (directionMatch) {
+                                highlightRoute(directionMatch[1]);
+                                
+                                // Notify parent window
+                                if (window.parent !== window) {
+                                    window.parent.postMessage({
+                                        type: 'routeClicked',
+                                        direction: directionMatch[1]
+                                    }, '*');
+                                }
+                            }
+                        });
+                    });
+                });
+            })();
+            </script>
+            """
+            
+            # Insert the script before the closing body tag
+            map_html = map_html.replace('</body>', highlight_script + '</body>')
+            
+            return map_html
             
         except Exception as e:
             logger.error(f"Failed to generate commute comparison map: {e}", exc_info=True)

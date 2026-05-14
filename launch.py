@@ -32,6 +32,12 @@ from app.services.route_library_service import RouteLibraryService
 from app.api import maps_api
 from src.secure_logger import SecureLogger
 from src.logging_config import setup_logging
+from app.schemas import (
+    WeatherQuerySchema,
+    RecommendationQuerySchema,
+    RoutesQuerySchema,
+    validate_request_args
+)
 
 # Configure logging with rotation (10MB per file, 5 backups)
 setup_logging(
@@ -257,6 +263,7 @@ def serve_static(path):
 
 
 @app.route('/api/weather')
+@validate_request_args(WeatherQuerySchema)
 def get_weather():
     """
     Get current weather data.
@@ -329,6 +336,7 @@ def get_weather():
 
 
 @app.route('/api/recommendation')
+@validate_request_args(RecommendationQuerySchema)
 def get_recommendation():
     """
     Get next commute recommendation.
@@ -382,8 +390,12 @@ def get_recommendation():
                 elif not isinstance(value, dict):
                     formatted['factors'].append(f"{key.title()}: {value}")
             
+            # Add timestamp for data freshness
+            formatted['timestamp'] = datetime.now().isoformat()
             return jsonify(formatted)
         else:
+            # Add timestamp even for error responses
+            recommendation['timestamp'] = datetime.now().isoformat()
             return jsonify(recommendation)
         
     except Exception as e:
@@ -394,7 +406,102 @@ def get_recommendation():
         }), 500
 
 
+@app.route('/api/commute')
+def get_commute():
+    """
+    Get both commute directions (to_work and to_home) for the commute view.
+    
+    Returns:
+        JSON with both direction recommendations:
+        {
+            'status': 'success',
+            'to_work': {...},
+            'to_home': {...},
+            'timestamp': str
+        }
+    """
+    initialize_services()
+    
+    try:
+        # Get recommendations for both directions
+        to_work = _commute_service.get_next_commute(direction='to_work')
+        to_home = _commute_service.get_next_commute(direction='to_home')
+        
+        return jsonify({
+            'status': 'success',
+            'to_work': to_work,
+            'to_home': to_home,
+            'timestamp': datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting commute data: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
+@app.route('/api/commute/map')
+def get_commute_map():
+    """
+    Get interactive map HTML showing both commute routes.
+    
+    Returns:
+        HTML string with Folium map showing both routes
+    """
+    initialize_services()
+    
+    try:
+        # Get both commute recommendations
+        to_work = _commute_service.get_next_commute(direction='to_work')
+        to_home = _commute_service.get_next_commute(direction='to_home')
+        
+        # Collect routes for map with direction metadata
+        routes = []
+        if to_work.get('status') == 'success':
+            # Ensure direction is set for color coding
+            to_work['direction'] = 'to_work'
+            routes.append(to_work)
+        if to_home.get('status') == 'success':
+            # Ensure direction is set for color coding
+            to_home['direction'] = 'to_home'
+            routes.append(to_home)
+        
+        if not routes:
+            return jsonify({
+                'status': 'error',
+                'message': 'No commute routes available'
+            }), 404
+        
+        # Get locations from config
+        home_location, work_location = get_locations_from_config(config)
+        
+        # Generate comparison map
+        map_html = _commute_service.generate_comparison_map(
+            routes=routes,
+            home_location=home_location,
+            work_location=work_location
+        )
+        
+        if map_html:
+            return map_html, 200, {'Content-Type': 'text/html'}
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': 'Failed to generate map'
+            }), 500
+        
+    except Exception as e:
+        logger.error(f"Error generating commute map: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
 @app.route('/api/routes')
+@validate_request_args(RoutesQuerySchema)
 def get_routes():
     """
     Get all routes for library.
@@ -441,7 +548,8 @@ def get_routes():
             return jsonify({
                 'status': 'success',
                 'routes': formatted_routes,
-                'total_count': len(formatted_routes)
+                'total_count': len(formatted_routes),
+                'timestamp': datetime.now().isoformat()
             })
         else:
             return jsonify(routes_data)
