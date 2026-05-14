@@ -1,34 +1,17 @@
 {
-  "41.88374,-87.6339": {
+  "41.98736,-87.65454": {
     "data": {
       "timestamp": "2026-05-14T16:15",
       "temp_c": 14.8,
-      "wind_speed_kph": 15.3,
-      "wind_gust_kph": 17.6,
-      "wind_direction_deg": 98,
-      "wind_direction_cardinal": "E",
-      "humidity": 35,
-      "precipitation_mm": 0.0,
-      "lat": 41.88374,
-      "lon": -87.6339,
-      "comfort_score": 1.0,
-      "cycling_favorability": "favorable"
-    },
-    "timestamp": "2026-05-14T16:19:18.465394"
-  },
-  "41.93416,-87.63184": {
-    "data": {
-      "timestamp": "2026-05-14T16:15",
-      "temp_c": 15.0,
       "wind_speed_kph": 15.0,
-      "wind_gust_kph": 17.3,
-      "wind_direction_deg": 100,
-      "wind_direction_cardinal": "E",
-      "humidity": 35,
+      "wind_gust_kph": 17.6,
+      "wind_direction_deg": 107,
+      "wind_direction_cardinal": "ESE",
+      "humidity": 37,
       "precipitation_mm": 0.0,
-      "lat": 41.93416,
-      "lon": -87.63184
+      "lat": 41.98736,
+      "lon": -87.65454
     },
-    "timestamp": "2026-05-14T16:19:18.607256"
+    "timestamp": "2026-05-14T16:26:59.143880"
   }
 }

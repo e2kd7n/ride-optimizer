@@ -783,6 +783,141 @@ tr:focus-visible {
     width: 80px;
     height: 40px;
 }
+/* Additional skeleton loaders for statistics and tables */
+.skeleton-stat-card {
+    height: 120px;
+    border-radius: 0.5rem;
+    background: white;
+    border: 1px solid #e0e0e0;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.skeleton-stat-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    margin: 0 auto 0.5rem;
+}
+
+.skeleton-stat-value {
+    width: 80px;
+    height: 32px;
+    margin: 0 auto 0.5rem;
+}
+
+.skeleton-stat-label {
+    width: 100px;
+    height: 16px;
+    margin: 0 auto;
+}
+
+.skeleton-table {
+    background: white;
+    border-radius: 0.5rem;
+    padding: 1rem;
+}
+
+.skeleton-table-row {
+    display: flex;
+    gap: 1rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.skeleton-table-cell {
+    height: 20px;
+    border-radius: 4px;
+}
+
+.skeleton-table-cell:first-child {
+    flex: 0 0 40px;
+}
+
+.skeleton-table-cell:nth-child(2) {
+    flex: 2;
+}
+
+.skeleton-table-cell:nth-child(3),
+.skeleton-table-cell:nth-child(4) {
+    flex: 1;
+}
+
+/* Skeleton for recommendation cards */
+.skeleton-recommendation-card {
+    height: 200px;
+    border-radius: 0.5rem;
+    background: white;
+    border: 1px solid #e0e0e0;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.skeleton-recommendation-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+
+.skeleton-recommendation-title {
+    width: 150px;
+    height: 24px;
+}
+
+.skeleton-recommendation-score {
+    width: 60px;
+    height: 40px;
+    border-radius: 0.5rem;
+}
+
+.skeleton-recommendation-metrics {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.skeleton-recommendation-metric {
+/* Skeleton card components */
+.skeleton-card {
+    background: white;
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    border: 1px solid #e0e0e0;
+}
+
+.skeleton-card-header {
+    height: 24px;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+}
+
+.skeleton-card-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.skeleton-card-line {
+    height: 16px;
+    border-radius: 4px;
+}
+
+.skeleton-card-line.long {
+    width: 100%;
+}
+
+.skeleton-card-line.medium {
+    width: 75%;
+}
+
+.skeleton-card-line.short {
+    width: 50%;
+}
+
+    width: 80px;
+    height: 16px;
+}
+
 
 /* ===== Issue #249: Toast Notification System ===== */
 .toast-container {
