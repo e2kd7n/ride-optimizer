@@ -60,6 +60,33 @@ ls -t "$BACKUP_DIR"/docs-*.tar.gz 2>/dev/null | tail -n +11 | xargs rm -f 2>/dev
 ls -t "$BACKUP_DIR"/plans-*.tar.gz 2>/dev/null | tail -n +11 | xargs rm -f 2>/dev/null || true
 log "✓ Cleanup complete"
 
+# Push backups to GitHub
+log_section "Pushing Backups to GitHub"
+BACKUP_REPO="https://github.com/e2kd7n/backups.git"
+TEMP_BACKUP_CLONE=$(mktemp -d)
+log "Cloning backup repository..."
+if git clone "$BACKUP_REPO" "$TEMP_BACKUP_CLONE" 2>/dev/null; then
+    mkdir -p "$TEMP_BACKUP_CLONE/ride-optimizer"
+    cp "$BACKUP_DIR"/ISSUE_PRIORITIES-"$TIMESTAMP".md "$TEMP_BACKUP_CLONE/ride-optimizer/" 2>/dev/null || true
+    cp "$BACKUP_DIR"/docs-"$TIMESTAMP".tar.gz "$TEMP_BACKUP_CLONE/ride-optimizer/" 2>/dev/null || true
+    cp "$BACKUP_DIR"/plans-"$TIMESTAMP".tar.gz "$TEMP_BACKUP_CLONE/ride-optimizer/" 2>/dev/null || true
+    cd "$TEMP_BACKUP_CLONE"
+    git add -A
+    if git commit -m "ride-optimizer backup $TIMESTAMP" 2>/dev/null; then
+        if git push origin main 2>/dev/null || git push origin master 2>/dev/null; then
+            log "✓ Backups pushed to $BACKUP_REPO"
+        else
+            log "⚠️  Failed to push backups to GitHub"
+        fi
+    else
+        log "✓ No new backup files to push"
+    fi
+    cd - > /dev/null
+else
+    log "⚠️  Could not clone $BACKUP_REPO — skipping remote backup"
+fi
+rm -rf "$TEMP_BACKUP_CLONE"
+
 # 2. Git status check
 log_section "Git Status Check"
 log "Checking for uncommitted changes..."
@@ -151,7 +178,7 @@ fi
 # 8. Summary
 log_section "Maintenance Summary"
 echo "" | tee -a "$MAINTENANCE_LOG"
-echo -e "${GREEN}✓ Backups created in $BACKUP_DIR${NC}" | tee -a "$MAINTENANCE_LOG"
+echo -e "${GREEN}✓ Backups created in $BACKUP_DIR (and pushed to github.com/e2kd7n/backups)${NC}" | tee -a "$MAINTENANCE_LOG"
 echo -e "${GREEN}✓ Issue management running in background${NC}" | tee -a "$MAINTENANCE_LOG"
 echo -e "${GREEN}✓ Maintenance log: $MAINTENANCE_LOG${NC}" | tee -a "$MAINTENANCE_LOG"
 echo "" | tee -a "$MAINTENANCE_LOG"
