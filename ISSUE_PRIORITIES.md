@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-05-14 21:32:50 UTC / 2026-05-14 16:32:50 CDT
+**Last Updated:** 2026-05-18 23:35:50 UTC
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -10,7 +10,7 @@ This file reflects the current state of GitHub issues organized by release miles
 
 - **Current Release:** v0.12.0 (deployed)
 - **Next Release:** v0.13.0 (in development)
-- **Future Releases:** v0.14.0,v0.15.0
+- **Future Releases:** v0.14.0, v0.15.0
 
 ---
 
@@ -22,27 +22,30 @@ This file reflects the current state of GitHub issues organized by release miles
 **No P0 issues** ✅
 
 ### 🔴 P1 - HIGH
-**No P1 issues** ✅
+- #294 - docker-compose: bridge networking, APP_PORT variable, pull from GHCR
+- #293 - GitHub Actions: multi-arch GHCR image publish (linux/amd64 + linux/arm64)
+- #292 - Add gunicorn to requirements.txt and production environment config
+- #291 - Fix Dockerfile: correct port, entrypoint, and file layout for web architecture
+- #290 - 🚀 EPIC: GHCR Container Registry + Pi4 Deployment Pipeline
+- #287 - Time-aware dashboard: show to-work in morning, to-home in evening, long rides on weekends
+- #286 - Transform commute recommendation card into Hero Decision Card
+- #285 - 🎯 EPIC: Decision-First Dashboard - Transform Homepage to Action-Oriented Design
+- #280 - P2-MEDIUM: 🎨 EPIC: Design Alignment with CLI Prototype (v0.12.0)
 
 ### 🟡 P2 - MEDIUM
-- #227 - Improve Test Coverage for New Features
+- #295 - Add systemd user service for Pi4 auto-start on boot
+- #289 - Add Route Status panel to homepage: per-route condition summary
+- #288 - Add Today's Conditions overview card with traffic-light status indicators
 - #115 - Display optimal departure time suggestions
-- #114 - Add transit recommendations when conditions are poor
 - #113 - Show optimal route recommendations based on wind
-- #112 - Add weather severity indicators (good/fair/poor/miserable icons)
 - #111 - Add evening commute window (3-6 PM) weather display
 - #110 - Add morning commute window (7-9 AM) weather display
-- #108 - Integrate forecast generator into main.py workflow
-- #105 - Add monthly ride statistics breakdown
-- #94 - Implement Accessibility Improvements
 - #93 - Implement Comprehensive Error States
-- #92 - Add Loading States with Skeleton Loaders
 
 ### 🟢 P3 - LOW
 - #200 - Route naming improvements (Start → Main → End format)
 - #169 - Design: Verify WCAG AA contrast ratios (4.5:1)
 - #145 - 🌤️ EPIC: Weather Dashboard & Forecast Integration
-- #120 - [LOW PRIORITY] Debug and fix Bootstrap tab switching functionality
 - #54 - Weather Dashboard Implementation (Epic)
 
 ### 📋 P4 - FUTURE
@@ -74,6 +77,7 @@ This file reflects the current state of GitHub issues organized by release miles
 - #89 - Add Data Persistence Layer for API
 
 ### 🟡 P2 - MEDIUM
+- #227 - Improve Test Coverage for New Features
 - #209 - Implement graceful degradation for unavailable services
 - #207 - Implement dependency injection pattern for better testability
 - #192 - Establish PR review requirements
@@ -85,16 +89,22 @@ This file reflects the current state of GitHub issues organized by release miles
 - #182 - Code Quality: Replace 4 bare except statements with specific exceptions
 - #165 - Test Coverage: route_namer.py (15% → 50%)
 - #136 - Implement settings and preferences page for home/work locations, units, time windows, and planner defaults
+- #114 - Add transit recommendations when conditions are poor
+- #108 - Integrate forecast generator into main.py workflow
+- #105 - Add monthly ride statistics breakdown
+- #94 - Implement Accessibility Improvements
 
 ### 🟢 P3 - LOW
 - #199 - Design: Test on real iOS/Android devices
 - #196 - Design: Ensure touch targets ≥44x44px with 8px spacing
 - #195 - Design: Verify mobile-first responsive design (320px viewport)
 - #170 - Design: Test keyboard navigation and screen reader support
+- #120 - [LOW PRIORITY] Debug and fix Bootstrap tab switching functionality
 
 ### 📋 P4 - FUTURE
 - #203 - Implement GDPR-compliant data deletion endpoint
 - #144 - 🌐 EPIC: Personal Web Platform Migration (v3.0.0)
+- #79 - Add "How It Works" Modal
 
 ---
 
@@ -145,8 +155,8 @@ Code comments and inline tasks found in the workspace that may need attention.
 
 Found **2** code comments requiring attention:
 
-- `app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
-- `static/js/dashboard.js` - 7:// NOTE: Initialization is handled by inline script in index.html
+- `app/static/js/map-filters.js` - 100: `// TODO: Highlight route on map (requires map layer access)`
+- `static/js/dashboard.js` - 7: `// NOTE: Initialization is handled by inline script in index.html`
 
 ## 📖 Priority System (Release-Aware)
 
