@@ -1,5 +1,21 @@
 #!/bin/bash
 
+# Check required dependencies before doing anything
+MISSING_DEPS=()
+command -v gh  >/dev/null 2>&1 || MISSING_DEPS+=("gh (GitHub CLI)")
+command -v jq  >/dev/null 2>&1 || MISSING_DEPS+=("jq")
+
+if [ ${#MISSING_DEPS[@]} -gt 0 ]; then
+  echo "Error: required tools not found: ${MISSING_DEPS[*]}" >&2
+  echo "" >&2
+  echo "This script must be run from a machine with the GitHub CLI and jq installed." >&2
+  echo "" >&2
+  echo "Install on Debian/Ubuntu:  sudo apt install gh jq" >&2
+  echo "Install on macOS:          brew install gh jq" >&2
+  echo "Authenticate:              gh auth login" >&2
+  exit 1
+fi
+
 # Detect if output is being redirected to a file
 # If so, disable colors to avoid ANSI codes in the file
 if [ -t 1 ]; then
