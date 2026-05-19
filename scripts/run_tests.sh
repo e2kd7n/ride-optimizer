@@ -1,7 +1,19 @@
 #!/bin/bash
 # Test runner script for Strava Commute Analyzer
+#
+# NOTE: For cross-platform compatibility, use the Python wrapper:
+#   python scripts/run_tests.py [all|unit|integration|coverage|quick|watch]
+#
+# This shell script is maintained for Unix environments but will
+# automatically use the Python wrapper if available.
 
 set -e
+
+# Check if Python wrapper exists and use it (cross-platform)
+if [ -f "scripts/run_tests.py" ]; then
+    python3 scripts/run_tests.py "$@"
+    exit $?
+fi
 
 echo "🧪 Running Strava Commute Analyzer Tests"
 echo "========================================"
