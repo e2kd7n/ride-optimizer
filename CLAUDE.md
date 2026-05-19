@@ -20,7 +20,7 @@ pytest --cov=app          # Run with coverage report
 
 **Production:**
 ```bash
-gunicorn -w 4 -b 0.0.0.0:8083 wsgi:app
+gunicorn --config gunicorn.conf.py wsgi:app
 docker-compose up
 ```
 
