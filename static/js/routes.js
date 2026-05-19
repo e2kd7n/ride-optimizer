@@ -711,11 +711,10 @@
         if (!routes.length) {
             renderSummary(0);
             announce('No routes found');
-            container.innerHTML = `
-                <div class="alert alert-warning">
-                    <i class="bi bi-exclamation-triangle"></i> No routes found.
-                </div>
-            `;
+            const hasFilters = state.routes.length > 0;
+            container.innerHTML = hasFilters
+                ? window.renderEmptyState('No routes match your filters.', 'Try widening the distance range or clearing filters.', 'bi-funnel')
+                : window.renderEmptyState('No rides synced yet.', 'Connect Strava and run analysis to populate your route library.', 'bi-bicycle');
             return;
         }
 

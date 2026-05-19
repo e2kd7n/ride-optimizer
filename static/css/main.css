@@ -14,6 +14,13 @@
     --info-color: #17a2b8;
     --light-gray: #f8f9fa;
     --dark-gray: #343a40;
+
+    /* Spacing scale (#280) */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 16px;
+    --space-4: 24px;
+    --space-5: 32px;
 }
 
 body {
@@ -23,6 +30,7 @@ body {
     display: flex;
     flex-direction: column;
     scroll-behavior: smooth;
+    line-height: 1.45;
 }
 
 /* ===== Timestamp Display Styles (Issue #274) ===== */
