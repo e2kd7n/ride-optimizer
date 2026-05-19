@@ -3,7 +3,9 @@
     "allow": [
       "Bash(gh issue create --title '🚀 EPIC: GHCR Container Registry + Pi4 Deployment Pipeline' --milestone v0.13.0 --label epic,deployment,docker,infrastructure,raspberry-pi,ci/cd,P1-high --body ' *)",
       "Bash(gh issue create --title 'docker-compose: bridge networking, APP_PORT variable, pull from GHCR' --milestone v0.13.0 --label deployment,docker,raspberry-pi,infrastructure,P1-high --body ' *)",
-      "Bash(gh issue *)"
+      "Bash(gh issue *)",
+      "Bash(gh api *)",
+      "Bash(gh workflow *)"
     ]
   }
 }

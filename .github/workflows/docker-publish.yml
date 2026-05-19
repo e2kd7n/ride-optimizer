@@ -1,15 +1,28 @@
-name: Build and publish Docker image
+name: Build and Push Container Image
 
 on:
   push:
     branches: [main]
-    tags: ['v*']
+    paths:
+      - 'app/**'
+      - 'src/**'
+      - 'static/**'
+      - 'config/**'
+      - 'cron/**'
+      - 'launch.py'
+      - 'wsgi.py'
+      - 'gunicorn.conf.py'
+      - 'requirements.txt'
+      - 'Dockerfile'
+      - '.github/workflows/docker-publish.yml'
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build-and-push:
@@ -46,10 +59,11 @@ jobs:
             type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -58,3 +72,4 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          provenance: false
