@@ -85,6 +85,27 @@ pip --version
 ```
 
 If Python is not installed, download it from [python.org](https://www.python.org/downloads/) and follow the installation instructions for your operating system.
+## Cross-Platform Support
+
+This application works on **Windows, macOS, and Linux** (including Raspberry Pi).
+
+### Platform-Specific Notes
+
+**Windows Users:**
+- Use Python wrappers for testing: `python scripts/run_tests.py`
+- For scheduled tasks, use: `python scripts/setup_windows_tasks.py --install`
+- Some shell scripts require Git Bash or WSL (see [Cross-Platform Guide](docs/CROSS_PLATFORM_COMPATIBILITY.md))
+
+**macOS Users:**
+- Shell scripts work natively
+- WeasyPrint requires Homebrew: `brew install weasyprint`
+
+**Linux/Raspberry Pi Users:**
+- All features fully supported
+- Use `./cron/install_cron.sh` for scheduled tasks
+
+For detailed cross-platform instructions, see [Cross-Platform Compatibility Guide](docs/CROSS_PLATFORM_COMPATIBILITY.md).
+
 
 ## Installation
 
