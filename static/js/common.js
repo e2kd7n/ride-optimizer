@@ -1,14 +1,35 @@
 /**
  * common.js - Common utilities for Ride Optimizer
  * Epic #237 - UI/UX Redesign
- * 
+ *
  * Features:
  * - Toast notification system (Issue #245)
  * - Auto-save functionality (Issue #244)
  * - Undo/redo support (Issue #249)
  * - Debounce utility
  * - Error/success message handling
+ * - XSS protection via HTML escaping
  */
+
+/**
+ * Escape HTML to prevent XSS attacks
+ * @param {string} unsafe - Unsafe string that may contain HTML
+ * @returns {string} - HTML-escaped safe string
+ */
+function escapeHtml(unsafe) {
+    if (typeof unsafe !== 'string') {
+        unsafe = String(unsafe);
+    }
+    return unsafe
+        .replace(/&/g, "&")
+        .replace(/</g, "<")
+        .replace(/>/g, ">")
+        .replace(/"/g, """)
+        .replace(/'/g, "&#039;");
+}
+
+// Make escapeHtml available globally
+window.escapeHtml = escapeHtml;
 
 // Toast notification system
 let toastQueue = [];
@@ -63,8 +84,9 @@ window.showToast = function(message, type = 'info', options = {}) {
         info: 'ℹ'
     };
     
-    // Build toast content
-    let toastContent = `<strong>${icons[type] || icons.info}</strong> ${message}`;
+    // Build toast content with XSS protection
+    const safeMessage = escapeHtml(message);
+    let toastContent = `<strong>${icons[type] || icons.info}</strong> ${safeMessage}`;
     
     // Add undo button if undo action provided
     if (undoAction) {
