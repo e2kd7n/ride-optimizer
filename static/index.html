@@ -169,12 +169,12 @@
             .map-container {
                 height: 300px;
             }
-            
+
             #commute-map-container {
                 height: 400px !important;
             }
         }
-        
+
         /* Viewport optimization for 1024x768 */
         @media (min-width: 768px) and (max-height: 768px) {
             .map-container {
@@ -187,6 +187,105 @@
                 margin-bottom: 0.75rem !important;
             }
         }
+
+        /* ── Hero Decision Card (#286) ─────────────────────────────── */
+        .hero-decision-card {
+            padding: 0.25rem 0;
+        }
+
+        .hero-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .hero-route-name {
+            font-size: 1.05rem;
+            font-weight: 700;
+        }
+
+        .hero-weather-summary {
+            font-size: 0.9rem;
+            color: #555;
+            margin-bottom: 0.35rem;
+        }
+
+        .hero-time-estimate {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 0.5rem;
+        }
+
+        .hero-reasons {
+            margin: 0.5rem 0 0.5rem 1rem;
+            padding: 0;
+            font-size: 0.85rem;
+            color: #444;
+            list-style: disc;
+        }
+
+        .hero-reasons li {
+            margin-bottom: 0.2rem;
+        }
+
+        .hero-meta {
+            font-size: 0.8rem;
+        }
+
+        .secondary-commute-card {
+            background: #f8f9fa;
+            font-size: 0.85rem;
+        }
+
+        /* ── Conditions / Route Status rows ───────────────────────── */
+        .conditions-row,
+        .route-status-row {
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .conditions-row:last-of-type,
+        .route-status-row:last-of-type {
+            border-bottom: none;
+        }
+
+        /* ── Design system: purple gradient buttons (#280) ─────────── */
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            transition: opacity 0.2s ease-out, transform 0.2s ease-out;
+        }
+
+        .btn-primary:hover,
+        .btn-primary:focus {
+            opacity: 0.9;
+            transform: translateY(-1px);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+        }
+
+        /* Card entrance animation (#280) */
+        @keyframes cardFadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .card {
+            border-radius: 8px !important;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
+            animation: cardFadeIn 0.25s ease-out both;
+            border: 1px solid rgba(0,0,0,0.07) !important;
+        }
+
+        .card:nth-child(2) { animation-delay: 0.05s; }
+        .card:nth-child(3) { animation-delay: 0.10s; }
+        .card:nth-child(4) { animation-delay: 0.15s; }
+
+        /* Compact information density (#280) */
+        .card-body { padding: 1rem 1.25rem !important; }
     </style>
 </head>
 <body>
@@ -195,7 +294,7 @@
     <a href="#home-tab" class="skip-link">Skip to navigation</a>
     
     <!-- Top Navigation (Mobile & Desktop) -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary" role="navigation" aria-label="Main navigation">
+    <nav class="navbar navbar-expand-lg navbar-dark" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);" role="navigation" aria-label="Main navigation">
         <div class="container-fluid">
             <a class="navbar-brand" href="/" aria-label="Ride Optimizer Home">
                 <i class="bi bi-bicycle" aria-hidden="true"></i> Ride Optimizer
@@ -254,31 +353,63 @@
                 </div>
             </div>
             
-            <!-- Commute Section: Route Cards (Left) + Map (Right) -->
+            <!-- Decision Row: Hero Card (left), Conditions + Route Status (right), Map (far right) -->
             <div class="row mb-4">
-                <!-- Left: Route Cards (40%) -->
+                <!-- Hero Decision Card (40%) -->
                 <div class="col-lg-5 mb-3">
-                    <h5 class="mb-3">
-                        <i class="bi bi-signpost-2" aria-hidden="true"></i> Your Commute
-                    </h5>
-                    <div id="commute-recommendation">
-                        <!-- Loading skeletons -->
-                        <div class="skeleton-recommendation-card" aria-busy="true" aria-label="Loading commute recommendation">
-                            <div class="skeleton-recommendation-header">
-                                <div class="skeleton skeleton-recommendation-title"></div>
-                                <div class="skeleton skeleton-recommendation-score"></div>
-                            </div>
-                            <div class="skeleton skeleton-card-line long"></div>
-                            <div class="skeleton-recommendation-metrics">
-                                <div class="skeleton skeleton-recommendation-metric"></div>
-                                <div class="skeleton skeleton-recommendation-metric"></div>
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="card-title mb-3">
+                                <i class="bi bi-signpost-2" aria-hidden="true"></i> Your Commute
+                            </h5>
+                            <div id="commute-recommendation">
+                                <!-- Loading skeletons -->
+                                <div class="skeleton-recommendation-card" aria-busy="true" aria-label="Loading commute recommendation">
+                                    <div class="skeleton-recommendation-header">
+                                        <div class="skeleton skeleton-recommendation-title"></div>
+                                        <div class="skeleton skeleton-recommendation-score"></div>
+                                    </div>
+                                    <div class="skeleton skeleton-card-line long"></div>
+                                    <div class="skeleton-recommendation-metrics">
+                                        <div class="skeleton skeleton-recommendation-metric"></div>
+                                        <div class="skeleton skeleton-recommendation-metric"></div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
-                
-                <!-- Right: Map (60%) -->
-                <div class="col-lg-7 mb-3">
+
+                <!-- Middle: Conditions + Route Status stacked (20%) -->
+                <div class="col-lg-2 mb-3 d-none d-lg-block">
+                    <div class="card mb-3">
+                        <div class="card-body p-3">
+                            <h6 class="card-title mb-2">
+                                <i class="bi bi-bar-chart-line" aria-hidden="true"></i> Today's Conditions
+                            </h6>
+                            <div id="conditions-card">
+                                <div class="skeleton skeleton-card-line" style="height:12px;margin-bottom:6px"></div>
+                                <div class="skeleton skeleton-card-line" style="height:12px;margin-bottom:6px"></div>
+                                <div class="skeleton skeleton-card-line" style="height:12px"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-body p-3">
+                            <h6 class="card-title mb-2">
+                                <i class="bi bi-map" aria-hidden="true"></i> Route Status
+                            </h6>
+                            <div id="route-status-panel">
+                                <div class="skeleton skeleton-card-line" style="height:12px;margin-bottom:6px"></div>
+                                <div class="skeleton skeleton-card-line" style="height:12px;margin-bottom:6px"></div>
+                                <div class="skeleton skeleton-card-line" style="height:12px"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: Map (fills rest) -->
+                <div class="col-lg-5 mb-3">
                     <div class="card h-100">
                         <div class="card-body p-0">
                             <iframe
@@ -286,6 +417,36 @@
                                 style="width: 100%; height: 500px; border: none;"
                                 title="Commute routes map">
                             </iframe>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mobile: Conditions + Route Status row (hidden on lg+) -->
+            <div class="row mb-4 d-lg-none">
+                <div class="col-6 mb-3">
+                    <div class="card">
+                        <div class="card-body p-3">
+                            <h6 class="card-title mb-2">
+                                <i class="bi bi-bar-chart-line" aria-hidden="true"></i> Today's Conditions
+                            </h6>
+                            <div id="conditions-card-mobile">
+                                <div class="skeleton skeleton-card-line" style="height:12px;margin-bottom:6px"></div>
+                                <div class="skeleton skeleton-card-line" style="height:12px"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 mb-3">
+                    <div class="card">
+                        <div class="card-body p-3">
+                            <h6 class="card-title mb-2">
+                                <i class="bi bi-map" aria-hidden="true"></i> Route Status
+                            </h6>
+                            <div id="route-status-panel-mobile">
+                                <div class="skeleton skeleton-card-line" style="height:12px;margin-bottom:6px"></div>
+                                <div class="skeleton skeleton-card-line" style="height:12px"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
