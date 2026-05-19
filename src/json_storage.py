@@ -10,8 +10,11 @@ Provides thread-safe JSON file operations with:
 
 import json
 import os
-import fcntl
+import sys
 import logging
+
+if sys.platform != 'win32':
+    import fcntl
 from pathlib import Path
 from typing import Any, Optional
 from datetime import datetime
@@ -60,15 +63,15 @@ class JSONStorage:
         
         try:
             with open(filepath, 'r') as f:
-                # Acquire shared lock for reading
-                fcntl.flock(f.fileno(), fcntl.LOCK_SH)
+                if sys.platform != 'win32':
+                    fcntl.flock(f.fileno(), fcntl.LOCK_SH)
                 try:
                     data = json.load(f)
                     logger.debug(f"Successfully read {filename}")
                     return data
                 finally:
-                    # Release lock
-                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                    if sys.platform != 'win32':
+                        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
                     
         except json.JSONDecodeError as e:
             logger.error(f"Invalid JSON in {filename}: {e}")
@@ -96,14 +99,15 @@ class JSONStorage:
         try:
             # Write to temp file
             with open(temp_path, 'w') as f:
-                # Acquire exclusive lock for writing
-                fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                if sys.platform != 'win32':
+                    fcntl.flock(f.fileno(), fcntl.LOCK_EX)
                 try:
                     json.dump(data, f, indent=2, default=str)
                     f.flush()
-                    os.fsync(f.fileno())  # Ensure data written to disk
+                    os.fsync(f.fileno())
                 finally:
-                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                    if sys.platform != 'win32':
+                        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
             
             # Set secure permissions (owner read/write only)
             os.chmod(temp_path, 0o600)
