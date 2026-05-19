@@ -1,5 +1,7 @@
 # Raspberry Pi Build Fixes
 
+> **Superseded.** The on-device build approach described here is no longer used. Images are now built in GitHub Actions and published to GHCR; the Pi pulls pre-built images. See [DEPLOYMENT.md](DEPLOYMENT.md).
+
 This document explains the fixes applied to resolve Podman build issues on Raspberry Pi.
 
 ## Problem: `slirp4netns failed` Error
