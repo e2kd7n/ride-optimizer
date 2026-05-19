@@ -23,3 +23,9 @@ docker-compose.override.yml
 <Mock*
 <Magic*
 config/.trainerroad_encryption_key
+
+# Claude Code internals
+.claude/worktrees/
+
+# Maintenance backup archives
+backups/maintenance/*.tar.gz
