@@ -17,6 +17,7 @@ project_comms/
 .mailmap
 rewrite_git_history.sh
 bob_skills.md
+docker-compose.override.yml
 
 # Mock object directories (test artifacts)
 <Mock*
