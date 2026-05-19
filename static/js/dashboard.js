@@ -325,9 +325,11 @@ function renderHeroCard(rec, isHero) {
     const estMins = rec.time_impact && rec.time_impact.estimated_minutes;
     const departureTime = rec.departure_time ? esc(rec.departure_time) : null;
 
+    const borderColor = score >= 70 ? '#28a745' : score >= 50 ? '#ffc107' : '#dc3545';
+
     if (isHero) {
         return `
-            <div class="hero-decision-card">
+            <div class="hero-decision-card" style="border-left: 4px solid ${borderColor}; padding-left: 0.75rem;">
                 <div class="hero-card-header">
                     <span class="hero-route-name">
                         <i class="bi ${scoreIcon} me-1"></i>${routeName}
@@ -338,6 +340,7 @@ function renderHeroCard(rec, isHero) {
                 ${weatherSummary ? `<div class="hero-weather-summary"><i class="bi bi-cloud-sun me-1"></i>${weatherSummary}</div>` : ''}
                 ${estMins ? `<div class="hero-time-estimate"><i class="bi bi-clock me-1"></i>${timeLabel}</div>` : ''}
                 ${reasons.length ? `
+                    <div class="small fw-semibold text-muted mt-2 mb-1">Why this route?</div>
                     <ul class="hero-reasons">
                         ${reasons.map(r => `<li>${esc(r)}</li>`).join('')}
                     </ul>
