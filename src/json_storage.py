@@ -31,6 +31,7 @@ class JSONStorage:
     - File locking prevents race conditions
     - Automatic directory creation
     - Secure file permissions (0o600)
+    - Path traversal protection
     """
     
     def __init__(self, data_dir: str = 'data'):
@@ -40,13 +41,54 @@ class JSONStorage:
         Args:
             data_dir: Directory for JSON files (default: 'data')
         """
-        self.data_dir = Path(data_dir)
+        self.data_dir = Path(data_dir).resolve()
         self.data_dir.mkdir(exist_ok=True, mode=0o700)
         logger.info(f"JSON storage initialized: {self.data_dir}")
     
+    def _validate_filename(self, filename: str) -> Path:
+        """
+        Validate filename to prevent path traversal attacks.
+        
+        Args:
+            filename: Filename to validate
+            
+        Returns:
+            Validated Path object
+            
+        Raises:
+            ValueError: If filename is invalid or contains path traversal
+        """
+        # Remove any path separators to get just the filename
+        safe_filename = os.path.basename(filename)
+        
+        # Ensure it's a JSON file
+        if not safe_filename.endswith('.json'):
+            raise ValueError(f"Invalid filename: must be a .json file")
+        
+        # Ensure no hidden files
+        if safe_filename.startswith('.'):
+            raise ValueError(f"Invalid filename: hidden files not allowed")
+        
+        # Ensure filename is not empty after sanitization
+        if not safe_filename or safe_filename == '.json':
+            raise ValueError(f"Invalid filename: empty or invalid name")
+        
+        # Build full path
+        filepath = self.data_dir / safe_filename
+        
+        # Verify resolved path is within data_dir (prevents symlink attacks)
+        try:
+            resolved = filepath.resolve()
+            if not str(resolved).startswith(str(self.data_dir)):
+                raise ValueError(f"Path traversal detected: {filename}")
+        except Exception as e:
+            raise ValueError(f"Invalid path: {e}")
+        
+        return filepath
+    
     def read(self, filename: str, default: Any = None) -> Any:
         """
-        Read JSON file with file locking.
+        Read JSON file with file locking and path validation.
         
         Args:
             filename: Name of JSON file (e.g., 'favorites.json')
@@ -55,7 +97,11 @@ class JSONStorage:
         Returns:
             Parsed JSON data or default value
         """
-        filepath = self.data_dir / filename
+        try:
+            filepath = self._validate_filename(filename)
+        except ValueError as e:
+            logger.error(f"Invalid filename '{filename}': {e}")
+            return default
         
         if not filepath.exists():
             logger.debug(f"File not found: {filename}, returning default")
@@ -82,7 +128,7 @@ class JSONStorage:
     
     def write(self, filename: str, data: Any) -> bool:
         """
-        Write JSON file atomically with proper permissions.
+        Write JSON file atomically with proper permissions and path validation.
         
         Uses temp file + rename for atomic writes to prevent corruption.
         
@@ -93,7 +139,12 @@ class JSONStorage:
         Returns:
             True if write successful, False otherwise
         """
-        filepath = self.data_dir / filename
+        try:
+            filepath = self._validate_filename(filename)
+        except ValueError as e:
+            logger.error(f"Invalid filename '{filename}': {e}")
+            return False
+        
         temp_path = filepath.with_suffix('.tmp')
         
         try:
@@ -130,7 +181,7 @@ class JSONStorage:
     
     def exists(self, filename: str) -> bool:
         """
-        Check if JSON file exists.
+        Check if JSON file exists with path validation.
         
         Args:
             filename: Name of JSON file
@@ -138,12 +189,16 @@ class JSONStorage:
         Returns:
             True if file exists, False otherwise
         """
-        filepath = self.data_dir / filename
-        return filepath.exists()
+        try:
+            filepath = self._validate_filename(filename)
+            return filepath.exists()
+        except ValueError as e:
+            logger.error(f"Invalid filename '{filename}': {e}")
+            return False
     
     def delete(self, filename: str) -> bool:
         """
-        Delete JSON file.
+        Delete JSON file with path validation.
         
         Args:
             filename: Name of JSON file
@@ -151,7 +206,11 @@ class JSONStorage:
         Returns:
             True if deleted successfully, False otherwise
         """
-        filepath = self.data_dir / filename
+        try:
+            filepath = self._validate_filename(filename)
+        except ValueError as e:
+            logger.error(f"Invalid filename '{filename}': {e}")
+            return False
         
         try:
             if filepath.exists():
