@@ -1,53 +1,30 @@
-version: '3.8'
-
 services:
   ride-optimizer:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: ride-optimizer:latest
+    image: ghcr.io/e2kd7n/ride-optimizer:latest
     container_name: ride-optimizer
     restart: unless-stopped
-    
-    # Environment variables
+
     env_file:
       - .env
-    
-    # Volumes for persistent data
+
+    environment:
+      - APP_PORT=${APP_PORT:-8083}
+
+    ports:
+      - "${APP_PORT:-8083}:${APP_PORT:-8083}"
+
     volumes:
       - ./data:/app/data
       - ./cache:/app/cache
       - ./logs:/app/logs
       - ./config:/app/config
-    
-    # Port mapping (if using Flask API)
-    ports:
-      - "8083:8083"
-    
-    # Resource limits for Raspberry Pi
-    deploy:
-      resources:
-        limits:
-          cpus: '2.0'
-          memory: 1G
-        reservations:
-          cpus: '0.5'
-          memory: 256M
-    
-    # Interactive mode for menu system
-    stdin_open: true
-    tty: true
-    
-    # Network mode - host mode avoids slirp4netns issues on Raspberry Pi
-    # Use 'host' for better compatibility with rootless Podman on ARM
-    network_mode: host
-    
-    # Health check
+
     healthcheck:
-      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      test: ["CMD", "curl", "-f", "http://localhost:${APP_PORT:-8083}/api/status"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 20s
 
-# Made with Bob
+    mem_limit: 512m
+    cpus: "1.5"
