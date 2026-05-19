@@ -7,7 +7,9 @@
       "Bash(gh api *)",
       "Bash(gh workflow *)",
       "Bash(git stash *)",
-      "Bash(git pull *)"
+      "Bash(git pull *)",
+      "Bash(git checkout *)",
+      "Bash(git add *)"
     ]
   }
 }
