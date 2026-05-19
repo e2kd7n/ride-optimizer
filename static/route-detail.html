@@ -11,8 +11,11 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         #route-map {
-            min-height: 320px;
+            min-height: 280px;
             border-radius: 0.5rem;
+        }
+        @media (max-width: 991.98px) {
+            #route-map { height: 280px !important; }
         }
         .metric-card {
             height: 100%;
@@ -29,7 +32,7 @@
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <nav class="navbar navbar-expand-lg navbar-dark" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
         <div class="container-fluid">
             <a class="navbar-brand" href="/">
                 <i class="bi bi-bicycle"></i> Ride Optimizer
@@ -385,38 +388,46 @@
                             </div>
                         </div>
 
-                        <div class="card mt-4">
-                            <div class="card-body">
-                                <h2 class="h5">Map</h2>
-                                <div id="route-map" aria-label="Interactive route map"></div>
+                        <!-- Sticky map + detail content two-column layout (#280) -->
+                        <div class="row mt-4 g-3">
+                            <div class="col-lg-5">
+                                <div style="position: sticky; top: 1rem;">
+                                    <div class="card">
+                                        <div class="card-body">
+                                            <h2 class="h5">Map</h2>
+                                            <div id="route-map" style="height: 420px;" aria-label="Interactive route map"></div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
+                            <div class="col-lg-7">
+                                ${weatherMarkup}
+                                ${routeHistoryMarkup}
 
-                        ${weatherMarkup}
-                        ${routeHistoryMarkup}
-                        
-                        <!-- Performance Metrics Charts -->
-                        <div class="card mt-4" id="performance-metrics-card" style="display: none;">
-                            <div class="card-body">
-                                <h2 class="h5 mb-4">
-                                    <i class="bi bi-graph-up"></i> Performance Trends
-                                </h2>
-                                <div class="row g-4">
-                                    <div class="col-12 col-lg-6">
-                                        <h3 class="h6 text-muted mb-3">Average Speed Over Time</h3>
-                                        <canvas id="speed-chart" style="max-height: 250px;"></canvas>
-                                    </div>
-                                    <div class="col-12 col-lg-6">
-                                        <h3 class="h6 text-muted mb-3">Duration Trends</h3>
-                                        <canvas id="duration-chart" style="max-height: 250px;"></canvas>
-                                    </div>
-                                    <div class="col-12 col-lg-6">
-                                        <h3 class="h6 text-muted mb-3">Heart Rate (if available)</h3>
-                                        <canvas id="heartrate-chart" style="max-height: 250px;"></canvas>
-                                    </div>
-                                    <div class="col-12 col-lg-6">
-                                        <h3 class="h6 text-muted mb-3">Power Output (if available)</h3>
-                                        <canvas id="power-chart" style="max-height: 250px;"></canvas>
+                                <!-- Performance Metrics Charts -->
+                                <div class="card mt-4" id="performance-metrics-card" style="display: none;">
+                                    <div class="card-body">
+                                        <h2 class="h5 mb-4">
+                                            <i class="bi bi-graph-up"></i> Performance Trends
+                                        </h2>
+                                        <div class="row g-4">
+                                            <div class="col-12 col-lg-6">
+                                                <h3 class="h6 text-muted mb-3">Average Speed Over Time</h3>
+                                                <canvas id="speed-chart" style="max-height: 250px;"></canvas>
+                                            </div>
+                                            <div class="col-12 col-lg-6">
+                                                <h3 class="h6 text-muted mb-3">Duration Trends</h3>
+                                                <canvas id="duration-chart" style="max-height: 250px;"></canvas>
+                                            </div>
+                                            <div class="col-12 col-lg-6">
+                                                <h3 class="h6 text-muted mb-3">Heart Rate (if available)</h3>
+                                                <canvas id="heartrate-chart" style="max-height: 250px;"></canvas>
+                                            </div>
+                                            <div class="col-12 col-lg-6">
+                                                <h3 class="h6 text-muted mb-3">Power Output (if available)</h3>
+                                                <canvas id="power-chart" style="max-height: 250px;"></canvas>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

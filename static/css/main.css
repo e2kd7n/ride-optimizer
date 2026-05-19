@@ -22,6 +22,8 @@ body {
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+    scroll-behavior: smooth;
+}
 
 /* ===== Timestamp Display Styles (Issue #274) ===== */
 .timestamp-display {
@@ -104,6 +106,10 @@ body {
 
 .card:hover {
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.card-body {
+    padding: 1rem 1.25rem;
 }
 
 .card-title {
