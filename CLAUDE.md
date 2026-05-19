@@ -21,7 +21,7 @@ pytest --cov=app          # Run with coverage report
 **Production:**
 ```bash
 gunicorn --config gunicorn.conf.py wsgi:app
-docker-compose up
+docker-compose up   # pulls image from GHCR
 ```
 
 ## Environment Setup

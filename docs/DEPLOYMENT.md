@@ -1,685 +1,175 @@
-# Deployment Guide - Raspberry Pi with Podman
+# Deployment Guide — Raspberry Pi 4 via GHCR
 
-This guide covers deploying the Ride Optimizer application in a Podman container on a Raspberry Pi.
+Images are built by GitHub Actions and published to GitHub Container Registry (GHCR). The Pi pulls and runs the pre-built image — no on-device compilation required.
 
 ## Prerequisites
 
-### Hardware Requirements
-- **Raspberry Pi 4** (2GB RAM minimum, 4GB+ recommended)
-- **Raspberry Pi 3B+** (works but slower)
-- **Storage**: 8GB+ SD card (16GB+ recommended)
-- **Network**: Ethernet or WiFi connection
+- Raspberry Pi 4 (2GB RAM minimum, 4GB+ recommended), running Raspberry Pi OS 64-bit
+- Docker installed on the Pi (or Podman — see note below)
+- Git, curl
 
-### Software Requirements
-- **Raspberry Pi OS** (64-bit recommended for better performance)
-- **Podman** and **podman-compose** installed
-- **Git** (for cloning the repository)
+```bash
+# Install Docker on Raspberry Pi OS
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+# Log out and back in for group membership to take effect
+```
 
 ## Quick Start
 
-### 1. Install Podman on Raspberry Pi
-
-```bash
-# Update system
-sudo apt-get update && sudo apt-get upgrade -y
-
-# Install Podman
-sudo apt-get install -y podman
-
-# Install podman-compose
-sudo apt-get install -y python3-pip
-pip3 install podman-compose
-
-# Verify installation
-podman --version
-podman-compose --version
-
-# Enable podman socket (optional, for systemd integration)
-systemctl --user enable --now podman.socket
-```
-
-### 2. Clone and Setup
-
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/ride-optimizer.git
+git clone https://github.com/e2kd7n/ride-optimizer.git
 cd ride-optimizer
 
-# Create .env file from example
+# Create .env from example and fill in your Strava credentials
 cp .env.example .env
-
-# Edit .env with your Strava API credentials
 nano .env
+
+# Pull and start
+docker compose up -d
+
+# Check status (healthy after ~20s)
+docker compose ps
 ```
 
-**Required environment variables:**
-```bash
-STRAVA_CLIENT_ID=your_client_id_here
-STRAVA_CLIENT_SECRET=your_client_secret_here
-```
+The app will be available at `http://<pi-ip>:8083`.
 
-### 3. Build and Run with Podman
+## Changing the Port
 
-**Option A: Using the optimized build script (Recommended for Raspberry Pi)**
-
-```bash
-# Run the Raspberry Pi optimized build script
-./scripts/build_pi.sh
-
-# Start the container
-podman-compose up -d
-
-# View logs
-podman-compose logs -f
-
-# Access the interactive menu
-podman-compose exec ride-optimizer python scripts/menu.py
-```
-
-**Option B: Manual build with network workaround**
+Set `APP_PORT` in `.env`:
 
 ```bash
-# Build with host network to avoid slirp4netns issues
-podman build --network=host -t ride-optimizer:latest .
-
-# Or with podman-compose
-podman-compose build
-
-# Start the container
-podman-compose up -d
-
-# View logs
-podman-compose logs -f
-
-# Access the interactive menu
-podman-compose exec ride-optimizer python scripts/menu.py
+APP_PORT=9000
 ```
 
-### Alternative: Using Podman Directly (without compose)
+Then restart:
 
 ```bash
-# Build the image
-podman build -t ride-optimizer:latest .
-
-# Create volumes for persistent data
-podman volume create ride-optimizer-data
-podman volume create ride-optimizer-cache
-podman volume create ride-optimizer-logs
-
-# Run the container
-podman run -d \
-  --name ride-optimizer \
-  --env-file .env \
-  -v ./data:/app/data:Z \
-  -v ./cache:/app/cache:Z \
-  -v ./logs:/app/logs:Z \
-  -v ./config:/app/config:Z \
-  -p 8083:8083 \
-  --memory=1g \
-  --cpus=2 \
-  ride-optimizer:latest
-
-# Access the menu
-podman exec -it ride-optimizer python scripts/menu.py
+docker compose up -d
 ```
 
-## Container Management
+The compose file uses `${APP_PORT:-8083}` throughout, so no file edits are needed.
 
-### Basic Commands with podman-compose
+## Updating
+
+Push to `main` on GitHub → Actions builds a new image → on next Pi restart (or manually):
 
 ```bash
-# Start container
-podman-compose up -d
-
-# Stop container
-podman-compose down
-
-# Restart container
-podman-compose restart
-
-# View logs
-podman-compose logs -f
-
-# Check container status
-podman-compose ps
-
-# Access container shell
-podman-compose exec ride-optimizer bash
-
-# Run the menu system
-podman-compose exec ride-optimizer python scripts/menu.py
-
-# Run main application
-podman-compose exec ride-optimizer python main.py
+docker compose pull
+docker compose up -d
 ```
 
-### Basic Commands with Podman
+The systemd service (see below) runs `--pull always` on every boot, so reboots automatically apply the latest image.
+
+## Auto-Start on Boot (systemd)
+
+The `deploy/ride-optimizer.service` unit file starts the container on boot and pulls the latest image each time.
+
+### Installation
 
 ```bash
-# Start container
-podman start ride-optimizer
+# Replace 'pi' with your actual username
+sudo cp deploy/ride-optimizer.service /etc/systemd/system/
+sudo sed -i 's/%i/pi/g' /etc/systemd/system/ride-optimizer.service
 
-# Stop container
-podman stop ride-optimizer
+sudo systemctl daemon-reload
+sudo systemctl enable ride-optimizer.service
+sudo systemctl start ride-optimizer.service
 
-# Restart container
-podman restart ride-optimizer
-
-# View logs
-podman logs -f ride-optimizer
-
-# Check container status
-podman ps -a
-
-# Access container shell
-podman exec -it ride-optimizer bash
-
-# Run the menu system
-podman exec -it ride-optimizer python scripts/menu.py
-
-# Remove container
-podman rm ride-optimizer
-
-# Remove image
-podman rmi ride-optimizer:latest
+# Verify
+sudo systemctl status ride-optimizer.service
 ```
 
-### Interactive Mode
+### Rootless Docker / Podman
 
-To use the interactive menu system:
+If running rootless, use a user-level unit instead:
 
 ```bash
-# Attach to running container
-podman attach ride-optimizer
-
-# Or run in interactive mode
-podman run -it --rm \
-  --env-file .env \
-  -v ./data:/app/data:Z \
-  -v ./cache:/app/cache:Z \
-  -v ./logs:/app/logs:Z \
-  -v ./config:/app/config:Z \
-  ride-optimizer:latest \
-  python scripts/menu.py
-```
-
-## Data Persistence
-
-The following directories are mounted as volumes for data persistence:
-
-- **`./data`** - Strava activity data and analysis results
-- **`./cache`** - Geocoding, weather, and route caches
-- **`./logs`** - Application logs (with automatic rotation)
-- **`./config`** - Configuration files
-
-**Note**: The `:Z` suffix on volume mounts enables SELinux relabeling for proper access.
-
-### Log Rotation
-
-The application implements automatic log rotation to prevent disk space exhaustion, which is critical for long-running Raspberry Pi deployments.
-
-**Default Configuration:**
-- **Rotation size**: 10MB per log file
-- **Backup count**: 5 backup files kept
-- **Log files**: `ride_optimizer.log` and `security_audit.log`
-- **File permissions**: 0600 (owner read/write only)
-
-**How It Works:**
-When a log file reaches 10MB, it's automatically rotated:
-```
-logs/
-├── ride_optimizer.log       # Current log (active)
-├── ride_optimizer.log.1     # Most recent backup
-├── ride_optimizer.log.2     # Second most recent
-├── ride_optimizer.log.3
-├── ride_optimizer.log.4
-└── ride_optimizer.log.5     # Oldest backup (deleted when new rotation occurs)
-```
-
-**Disk Space Usage:**
-- Maximum per log type: 60MB (10MB × 6 files)
-- Total maximum: 120MB (main + security logs)
-
-**Customizing Log Rotation:**
-
-Edit `launch.py` to adjust rotation settings:
-
-```python
-from src.logging_config import setup_logging
-
-# Custom configuration
-setup_logging(
-    log_dir='logs',
-    log_level=logging.INFO,
-    max_bytes=5 * 1024 * 1024,  # 5MB per file (instead of 10MB)
-    backup_count=3,              # Keep 3 backups (instead of 5)
-    console_output=False         # Disable console output in production
-)
-```
-
-**Monitoring Log Files:**
-
-```bash
-# Check log file sizes
-ls -lh logs/
-
-# View current log
-tail -f logs/ride_optimizer.log
-
-# View security audit log
-tail -f logs/security_audit.log
-
-# Check total disk usage
-du -sh logs/
-
-# View all log files including backups
-ls -lh logs/*.log*
-```
-
-**Manual Log Cleanup:**
-
-If you need to manually clean up old logs:
-
-```bash
-# Remove all backup logs (keeps current logs only)
-rm logs/*.log.[0-9]*
-
-# Archive old logs before cleanup
-tar -czf logs-backup-$(date +%Y%m%d).tar.gz logs/*.log.[0-9]*
-rm logs/*.log.[0-9]*
-```
-
-**Production Recommendations:**
-
-For Raspberry Pi deployments with limited storage:
-
-1. **Monitor disk space regularly:**
-   ```bash
-   df -h
-   ```
-
-2. **Set up disk space alerts** (optional):
-   ```bash
-   # Add to crontab
-   0 */6 * * * df -h / | awk '$5 > 80 {print "Disk usage warning: " $5}' | mail -s "Disk Alert" user@example.com
-   ```
-
-3. **Consider smaller rotation sizes** for Pi with <16GB storage:
-   ```python
-   max_bytes=5 * 1024 * 1024,  # 5MB
-   backup_count=3               # 3 backups
-   ```
-
-4. **Disable console output** in production to reduce overhead:
-   ```python
-   console_output=False
-   ```
-
-## Podman-Specific Features
-
-### Rootless Containers
-
-Podman runs containers without root privileges by default, which is more secure:
-
-```bash
-# Check if running rootless
-podman info | grep rootless
-
-# Run as current user (default)
-podman run --user $(id -u):$(id -g) ...
-```
-
-### Pod Management
-
-You can run the application in a Podman pod for better organization:
-
-```bash
-# Create a pod
-podman pod create --name ride-optimizer-pod -p 8083:8083
-
-# Run container in the pod
-podman run -d \
-  --pod ride-optimizer-pod \
-  --name ride-optimizer \
-  --env-file .env \
-  -v ./data:/app/data:Z \
-  -v ./cache:/app/cache:Z \
-  -v ./logs:/app/logs:Z \
-  -v ./config:/app/config:Z \
-  ride-optimizer:latest
-
-# Manage the entire pod
-podman pod start ride-optimizer-pod
-podman pod stop ride-optimizer-pod
-podman pod rm ride-optimizer-pod
-```
-
-### Generate Systemd Service
-
-Podman can generate systemd service files automatically:
-
-```bash
-# Generate systemd service file
-podman generate systemd --new --name ride-optimizer > ~/.config/systemd/user/ride-optimizer.service
-
-# Enable and start service
-systemctl --user enable ride-optimizer.service
-systemctl --user start ride-optimizer.service
-
-# Check status
-systemctl --user status ride-optimizer.service
-
-# Enable linger (keep services running after logout)
-loginctl enable-linger $USER
-```
-
-## Performance Optimization
-
-### For Raspberry Pi 3/4
-
-Resource limits can be set directly in the run command:
-
-```bash
-podman run -d \
-  --name ride-optimizer \
-  --memory=1g \
-  --memory-swap=2g \
-  --cpus=2 \
-  --cpu-shares=1024 \
-  ...
-```
-
-### Adjust for Your Hardware
-
-**For Raspberry Pi 3B+:**
-```bash
---memory=512m --cpus=1
-```
-
-**For Raspberry Pi 4 (4GB+):**
-```bash
---memory=2g --cpus=3
-```
-
-## Troubleshooting
-
-### Build Issues
-
-**Problem**: `slirp4netns failed` error during build
-```bash
-# Solution 1: Use host networking (recommended)
-podman build --network=host -t ride-optimizer:latest .
-
-# Solution 2: Build as root
-sudo podman build -t ride-optimizer:latest .
-
-# Solution 3: Use the optimized build script
-./scripts/build_pi.sh
-```
-
-**Problem**: Build takes too long or fails
-```bash
-# Use the optimized Raspberry Pi build script
-./scripts/build_pi.sh
-
-# Or build with more verbose output
-podman build --network=host --log-level=debug -t ride-optimizer:latest .
-
-# Or build with no cache
-podman build --network=host --no-cache -t ride-optimizer:latest .
-```
-
-**Problem**: Out of memory during build
-```bash
-# Check current memory and swap
-free -h
-
-# Increase swap space (recommended for Pi with <4GB RAM)
-sudo dphys-swapfile swapoff
-sudo nano /etc/dphys-swapfile
-# Set CONF_SWAPSIZE=2048 (or 4096 for Pi 3)
-sudo dphys-swapfile setup
-sudo dphys-swapfile swapon
-
-# Verify new swap size
-free -h
-
-# Then retry build
-./scripts/build_pi.sh
-```
-
-**Problem**: `error running container: EOF` during build
-```bash
-# This is related to slirp4netns networking issues
-# Solution: Use host networking
-podman build --network=host -t ride-optimizer:latest .
-
-# Or use the build script which handles this automatically
-./scripts/build_pi.sh
-```
-
-### Runtime Issues
-
-**Problem**: Container exits immediately
-```bash
-# Check logs
-podman logs ride-optimizer
-
-# Run in foreground to see errors
-podman run -it --rm \
-  --env-file .env \
-  -v ./data:/app/data:Z \
-  ride-optimizer:latest
-```
-
-**Problem**: Permission denied errors with volumes
-```bash
-# Fix ownership of data directories
-sudo chown -R $USER:$USER data cache logs config
-
-# Or use :Z suffix for SELinux relabeling
--v ./data:/app/data:Z
-```
-
-**Problem**: Cannot connect to Strava API
-```bash
-# Verify .env file exists and has correct credentials
-cat .env
-
-# Check network connectivity
-podman exec ride-optimizer ping -c 3 www.strava.com
-```
-
-**Problem**: SELinux denials
-```bash
-# Check SELinux status
-getenforce
-
-# Temporarily set to permissive for testing
-sudo setenforce 0
-
-# Or use :Z suffix on all volume mounts
-```
-
-### Performance Issues
-
-**Problem**: Application runs slowly
-```bash
-# Monitor resource usage
-podman stats ride-optimizer
-
-# Check Raspberry Pi temperature
-vcgencmd measure_temp
-
-# Ensure adequate cooling
-```
-
-## Updating the Application
-
-```bash
-# Pull latest changes
-git pull origin main
-
-# Stop and remove old container
-podman stop ride-optimizer
-podman rm ride-optimizer
-
-# Rebuild image
-podman build -t ride-optimizer:latest .
-
-# Start new container
-podman run -d \
-  --name ride-optimizer \
-  --env-file .env \
-  -v ./data:/app/data:Z \
-  -v ./cache:/app/cache:Z \
-  -v ./logs:/app/logs:Z \
-  -v ./config:/app/config:Z \
-  ride-optimizer:latest
-```
-
-## Backup and Restore
-
-### Backup Data
-
-```bash
-# Create backup directory
-mkdir -p ~/backups
-
-# Backup data, cache, and config
-tar -czf ~/backups/ride-optimizer-$(date +%Y%m%d).tar.gz \
-  data/ cache/ config/ .env
-
-# List backups
-ls -lh ~/backups/
-```
-
-### Restore Data
-
-```bash
-# Stop container
-podman stop ride-optimizer
-
-# Extract backup
-tar -xzf ~/backups/ride-optimizer-YYYYMMDD.tar.gz
-
-# Start container
-podman start ride-optimizer
-```
-
-### Export/Import Container Images
-
-```bash
-# Export image to file
-podman save -o ride-optimizer.tar ride-optimizer:latest
-
-# Import image on another system
-podman load -i ride-optimizer.tar
-```
-
-## Security Considerations
-
-1. **Rootless by default**: Podman runs containers without root privileges
-2. **Keep credentials secure**: Never commit `.env` file to git
-3. **Regular updates**: Keep Podman and Raspberry Pi OS updated
-4. **SELinux**: Use `:Z` suffix on volume mounts for proper labeling
-5. **Token encryption**: The app uses encrypted token storage by default
-
-## Advanced Configuration
-
-### Custom Configuration
-
-Edit `config/config.yaml` to customize:
-- Analysis parameters
-- Cache settings
-- Report generation options
-
-### Running as a Systemd Service
-
-Using Podman's built-in systemd integration:
-
-```bash
-# Create container with systemd restart policy
-podman run -d \
-  --name ride-optimizer \
-  --restart=always \
-  --env-file .env \
-  -v ./data:/app/data:Z \
-  -v ./cache:/app/cache:Z \
-  -v ./logs:/app/logs:Z \
-  -v ./config:/app/config:Z \
-  ride-optimizer:latest
-
-# Generate systemd service
 mkdir -p ~/.config/systemd/user/
-podman generate systemd --new --name ride-optimizer \
-  > ~/.config/systemd/user/ride-optimizer.service
+cp deploy/ride-optimizer.service ~/.config/systemd/user/
+# Edit WorkingDirectory to match your clone path
+nano ~/.config/systemd/user/ride-optimizer.service
 
-# Enable and start
 systemctl --user daemon-reload
 systemctl --user enable ride-optimizer.service
 systemctl --user start ride-optimizer.service
 
-# Enable linger (keep running after logout)
+# Keep services running after logout
 loginctl enable-linger $USER
-
-# Check status
-systemctl --user status ride-optimizer.service
 ```
+
+## Local Development Build
+
+To build from source instead of pulling from GHCR, create a `docker-compose.override.yml` (gitignored):
+
+```yaml
+# docker-compose.override.yml — local dev only, not committed
+services:
+  ride-optimizer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ride-optimizer:dev
+```
+
+Then `docker compose up -d --build` will use your local source.
+
+## Data Persistence
+
+Volumes mounted from the repo directory:
+
+| Host path | Container path | Purpose |
+|-----------|---------------|---------|
+| `./data` | `/app/data` | Strava activity data |
+| `./cache` | `/app/cache` | Geocoding, weather, route caches |
+| `./logs` | `/app/logs` | Application logs |
+| `./config` | `/app/config` | Configuration files |
+
+## Coexisting with Other Services
+
+The compose file uses bridge networking (not `host` mode), so ride-optimizer has its own network namespace. Port conflicts with other services (e.g., mealplanner) are explicit and caught at startup rather than at bind time.
+
+Default port **8083** does not conflict with common defaults (80, 443, 3000, 5000, 8000, 8080). Change via `APP_PORT` in `.env` if needed.
 
 ## Monitoring
 
-### View Resource Usage
-
 ```bash
-# Real-time stats
-podman stats ride-optimizer
+# Live logs
+docker compose logs -f
 
-# Container logs
-podman logs -f --tail=100 ride-optimizer
+# Container health and resource usage
+docker compose ps
+docker stats ride-optimizer
 
-# System resources
-htop
+# Manual health check
+curl http://localhost:8083/api/status
 ```
 
-### Health Checks
-
-The container includes a health check that runs every 30 seconds:
+## Backup and Restore
 
 ```bash
-# Check health status
-podman healthcheck run ride-optimizer
+# Backup
+tar -czf ~/backups/ride-optimizer-$(date +%Y%m%d).tar.gz data/ cache/ config/ .env
 
-# View health check logs
-podman inspect ride-optimizer | grep -A 10 Health
+# Restore
+docker compose down
+tar -xzf ~/backups/ride-optimizer-YYYYMMDD.tar.gz
+docker compose up -d
 ```
 
-## Podman vs Docker Compatibility
+## GHCR Package Visibility
 
-The provided `Dockerfile` and `docker-compose.yml` work with both Docker and Podman:
+After the first CI push, the package appears at `https://github.com/e2kd7n?tab=packages`. To allow `docker pull` without authentication on the Pi, set the package to **public** in the GitHub UI. Alternatively, authenticate with a Personal Access Token (PAT) that has `packages:read` scope:
 
-- **Dockerfile**: Fully compatible with Podman
-- **docker-compose.yml**: Use `podman-compose` instead of `docker-compose`
-- **Commands**: Replace `docker` with `podman` in most cases
+```bash
+echo $PAT | docker login ghcr.io -u e2kd7n --password-stdin
+```
 
-### Key Differences
+## Podman Compatibility
 
-| Feature | Docker | Podman |
-|---------|--------|--------|
-| Root required | Yes (daemon) | No (rootless) |
-| Daemon | Required | Daemonless |
-| Compose | docker-compose | podman-compose |
-| Systemd | Manual setup | Built-in generation |
-| Security | Good | Better (rootless) |
-
-## Support
-
-For issues or questions:
-- Check the [main README](../README.md)
-- Review [troubleshooting section](#troubleshooting)
-- Check container logs: `podman logs ride-optimizer`
-- Podman documentation: https://docs.podman.io/
+Replace `docker` with `podman` and `docker compose` with `podman-compose` in the commands above. The Dockerfile and compose file are fully compatible with Podman.
 
 ---
 
-*Last Updated: 2026-05-06*
+*Last Updated: 2026-05-18*
