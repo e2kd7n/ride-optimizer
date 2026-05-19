@@ -13,11 +13,13 @@ No sessions, CORS, rate limiting - optimized for single-user Pi deployment.
 from flask import Flask, jsonify, send_from_directory, request
 from pathlib import Path
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 import webbrowser
 import threading
 import time
 import json
+import secrets
+import os
 from typing import List, Dict, Any
 
 from src.config import Config
@@ -52,9 +54,44 @@ logger = SecureLogger(__name__)
 # Initialize Flask app
 app = Flask(__name__, static_folder='static', static_url_path='')
 app.config['JSON_SORT_KEYS'] = False
+app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', secrets.token_hex(32))
+
+# Configure session security
+app.config.update(
+    SESSION_COOKIE_SECURE=False,  # Set to True when using HTTPS
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=24)
+)
 
 # Register blueprints
 app.register_blueprint(maps_api.bp)
+
+
+@app.after_request
+def set_security_headers(response):
+    """Add security headers to all responses."""
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Referrer-Policy'] = 'no-referrer'
+    
+    # Content Security Policy
+    response.headers['Content-Security-Policy'] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
+        "img-src 'self' data: https: blob:; "
+        "font-src 'self' https://cdn.jsdelivr.net; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'"
+    )
+    
+    # Add HSTS if using HTTPS
+    if request.is_secure:
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    
+    return response
 
 # Initialize configuration and storage
 config = Config()
@@ -869,25 +906,54 @@ def kill_existing_server(port):
     import subprocess
     import signal
     
+    # Validate port is an integer in valid range
+    if not isinstance(port, int) or port < 1024 or port > 65535:
+        logger.error(f"Invalid port number: {port}")
+        return
+    
     try:
         # Find process using the port
         result = subprocess.run(
             ['lsof', '-ti', f':{port}'],
             capture_output=True,
-            text=True
+            text=True,
+            timeout=5  # Add timeout for security
         )
         
         if result.stdout.strip():
             pids = result.stdout.strip().split('\n')
+            current_user = os.getenv('USER') or os.getenv('USERNAME')
+            
             for pid in pids:
                 try:
                     pid_int = int(pid)
-                    logger.info(f"Killing existing server process {pid_int} on port {port}")
-                    import os
-                    os.kill(pid_int, signal.SIGTERM)
-                    time.sleep(0.5)  # Give it time to terminate
-                except (ValueError, ProcessLookupError) as e:
+                    
+                    # Verify process belongs to current user before killing
+                    try:
+                        proc_info = subprocess.run(
+                            ['ps', '-p', str(pid_int), '-o', 'user='],
+                            capture_output=True,
+                            text=True,
+                            timeout=2
+                        )
+                        proc_user = proc_info.stdout.strip()
+                        
+                        if proc_user == current_user:
+                            logger.info(f"Killing server process {pid_int} on port {port}")
+                            os.kill(pid_int, signal.SIGTERM)
+                            time.sleep(0.5)  # Give it time to terminate
+                        else:
+                            logger.warning(f"Skipping process {pid_int} - owned by {proc_user}, not {current_user}")
+                    except subprocess.TimeoutExpired:
+                        logger.warning(f"Timeout checking ownership of process {pid_int}")
+                    except Exception as e:
+                        logger.debug(f"Could not verify process {pid_int} ownership: {e}")
+                        
+                except (ValueError, ProcessLookupError, PermissionError) as e:
                     logger.debug(f"Could not kill process {pid}: {e}")
+                    
+    except subprocess.TimeoutExpired:
+        logger.error("Timeout checking for existing server")
     except FileNotFoundError:
         # lsof not available (Windows)
         logger.debug("lsof command not available, skipping process check")
