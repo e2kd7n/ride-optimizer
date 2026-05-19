@@ -16,6 +16,7 @@ __pycache__/
 project_comms/
 .mailmap
 rewrite_git_history.sh
+docker-compose.override.yml
 
 # Mock object directories (test artifacts)
 <Mock*
