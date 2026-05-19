@@ -58,29 +58,30 @@ class JSONStorage:
         Raises:
             ValueError: If filename is invalid or contains path traversal
         """
-        # Remove any path separators to get just the filename
-        safe_filename = os.path.basename(filename)
+        # Check for path traversal attempts BEFORE sanitization
+        if '..' in filename or '/' in filename or '\\' in filename:
+            raise ValueError(f"Path traversal detected: filename cannot contain '..' or path separators")
         
         # Ensure it's a JSON file
-        if not safe_filename.endswith('.json'):
+        if not filename.endswith('.json'):
             raise ValueError(f"Invalid filename: must be a .json file")
         
         # Ensure no hidden files
-        if safe_filename.startswith('.'):
+        if filename.startswith('.'):
             raise ValueError(f"Invalid filename: hidden files not allowed")
         
-        # Ensure filename is not empty after sanitization
-        if not safe_filename or safe_filename == '.json':
+        # Ensure filename is not empty
+        if not filename or filename == '.json':
             raise ValueError(f"Invalid filename: empty or invalid name")
         
         # Build full path
-        filepath = self.data_dir / safe_filename
+        filepath = self.data_dir / filename
         
-        # Verify resolved path is within data_dir (prevents symlink attacks)
+        # Verify resolved path is within data_dir (defense in depth - prevents symlink attacks)
         try:
             resolved = filepath.resolve()
             if not str(resolved).startswith(str(self.data_dir)):
-                raise ValueError(f"Path traversal detected: {filename}")
+                raise ValueError(f"Path traversal detected: resolved path outside data directory")
         except Exception as e:
             raise ValueError(f"Invalid path: {e}")
         
@@ -97,11 +98,8 @@ class JSONStorage:
         Returns:
             Parsed JSON data or default value
         """
-        try:
-            filepath = self._validate_filename(filename)
-        except ValueError as e:
-            logger.error(f"Invalid filename '{filename}': {e}")
-            return default
+        # Validate filename - raises ValueError on security violations
+        filepath = self._validate_filename(filename)
         
         if not filepath.exists():
             logger.debug(f"File not found: {filename}, returning default")
@@ -139,11 +137,8 @@ class JSONStorage:
         Returns:
             True if write successful, False otherwise
         """
-        try:
-            filepath = self._validate_filename(filename)
-        except ValueError as e:
-            logger.error(f"Invalid filename '{filename}': {e}")
-            return False
+        # Validate filename - raises ValueError on security violations
+        filepath = self._validate_filename(filename)
         
         temp_path = filepath.with_suffix('.tmp')
         
@@ -206,11 +201,8 @@ class JSONStorage:
         Returns:
             True if deleted successfully, False otherwise
         """
-        try:
-            filepath = self._validate_filename(filename)
-        except ValueError as e:
-            logger.error(f"Invalid filename '{filename}': {e}")
-            return False
+        # Validate filename - raises ValueError on security violations
+        filepath = self._validate_filename(filename)
         
         try:
             if filepath.exists():
