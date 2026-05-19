@@ -1068,8 +1068,8 @@ npm install --save-dev axe-core
 npm install --save-dev pa11y
 
 # Run tests
-npx pa11y http://localhost:5000
-npx axe http://localhost:5000
+npx pa11y http://localhost:8083
+npx axe http://localhost:8083
 ```
 
 ---
