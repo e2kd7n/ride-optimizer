@@ -406,27 +406,109 @@ def get_recommendation():
         }), 500
 
 
+def _enrich_commute_recommendation(rec: Dict[str, Any]) -> Dict[str, Any]:
+    """Add reasons, weather_summary, and time_impact to a recommendation dict."""
+    if not rec or rec.get('status') != 'success':
+        return rec
+
+    enriched = dict(rec)
+    weather = rec.get('weather') or {}
+    breakdown = rec.get('breakdown') or {}
+    route = rec.get('route') or {}
+
+    # weather_summary — natural language sentence
+    temp = weather.get('temperature', 0)
+    wind_speed = weather.get('wind_speed', 0)
+    wind_dir = weather.get('wind_direction', '')
+    conditions = (weather.get('conditions') or '').lower()
+
+    sky_part = 'Clear skies'
+    if 'thunder' in conditions or 'storm' in conditions:
+        sky_part = 'Stormy'
+    elif 'rain' in conditions or 'drizzle' in conditions:
+        sky_part = 'Rainy'
+    elif 'snow' in conditions:
+        sky_part = 'Snowy'
+    elif 'cloud' in conditions or 'overcast' in conditions:
+        sky_part = 'Cloudy'
+    elif 'fog' in conditions or 'mist' in conditions:
+        sky_part = 'Foggy'
+    elif conditions:
+        sky_part = conditions.capitalize()
+
+    wind_part = ''
+    if wind_speed >= 15:
+        wind_part = f'strong {wind_dir} wind ({round(wind_speed)} mph)'
+    elif wind_speed >= 8:
+        wind_part = f'light {wind_dir} wind'
+    elif wind_speed >= 3:
+        wind_part = 'gentle breeze'
+
+    enriched['weather_summary'] = f"{sky_part}{', ' + wind_part if wind_part else ''}"
+
+    # reasons — 2–4 decision bullets
+    reasons = []
+    weather_score = breakdown.get('weather', 0)
+    if isinstance(weather_score, (int, float)) and weather_score > 0.75:
+        reasons.append('Favorable weather for cycling today')
+    elif wind_speed >= 15:
+        reasons.append(f'Strong wind — check if it works as a tailwind')
+
+    frequency = route.get('frequency', 0)
+    if frequency >= 10:
+        reasons.append('Your most-ridden route — reliable timing')
+    elif frequency >= 3:
+        reasons.append('A familiar route for you')
+
+    time_score = breakdown.get('time', 0)
+    if isinstance(time_score, (int, float)) and time_score > 0.8:
+        reasons.append('Optimal timing for your usual commute window')
+
+    safety_score = breakdown.get('safety', 0)
+    if isinstance(safety_score, (int, float)) and safety_score > 0.75:
+        reasons.append('No known obstacles or hazards')
+
+    if not reasons:
+        score = rec.get('score', 0)
+        score_val = int(score * 100) if isinstance(score, float) and score <= 1 else int(score)
+        if score_val >= 70:
+            reasons.append('Best available option given current conditions')
+        else:
+            reasons.append('Consider checking alternative routes today')
+
+    enriched['reasons'] = reasons[:4]
+
+    # time_impact — estimated duration (no historical average yet)
+    duration = route.get('duration', 0)
+    enriched['time_impact'] = {
+        'estimated_minutes': round(duration) if duration else None,
+        'vs_average_minutes': None,
+        'label': f'~{round(duration)} min estimated' if duration else None
+    }
+
+    return enriched
+
+
 @app.route('/api/commute')
 def get_commute():
     """
     Get both commute directions (to_work and to_home) for the commute view.
-    
+
     Returns:
-        JSON with both direction recommendations:
-        {
-            'status': 'success',
-            'to_work': {...},
-            'to_home': {...},
-            'timestamp': str
-        }
+        JSON with both direction recommendations including reasons, weather_summary,
+        and time_impact fields for the Hero Decision Card (#286).
     """
     initialize_services()
-    
+
     try:
         # Get recommendations for both directions
-        to_work = _commute_service.get_next_commute(direction='to_work')
-        to_home = _commute_service.get_next_commute(direction='to_home')
-        
+        to_work = _enrich_commute_recommendation(
+            _commute_service.get_next_commute(direction='to_work')
+        )
+        to_home = _enrich_commute_recommendation(
+            _commute_service.get_next_commute(direction='to_home')
+        )
+
         return jsonify({
             'status': 'success',
             'to_work': to_work,
