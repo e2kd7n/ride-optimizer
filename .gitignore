@@ -4,7 +4,10 @@ config/.token_encryption_key
 config/.cache_encryption_key
 config/trainerroad_credentials.json
 config/.trainerroad_encryption_key
+config/secret_key
 /data/cache/
+/data/weather_cache.json
+/cache/
 /output/
 venv/
 __pycache__/
