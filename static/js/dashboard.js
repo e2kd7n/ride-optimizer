@@ -79,12 +79,7 @@ async function loadSystemStatus() {
         container.innerHTML = html;
     } catch (error) {
         console.error('Failed to load system status:', error);
-        container.innerHTML = `
-            <div class="alert alert-danger" role="alert">
-                <i class="bi bi-exclamation-triangle"></i>
-                Failed to load system status. Please try again later.
-            </div>
-        `;
+        container.innerHTML = window.renderErrorState('System status unavailable.', { variant: 'danger', retry: 'loadSystemStatus()' });
     }
 }
 
@@ -214,7 +209,7 @@ async function loadWeather() {
         const weather = await window.apiClient.getWeather();
         
         if (!weather || !weather.current) {
-            container.innerHTML = '<p class="text-white mb-0">Weather data unavailable</p>';
+            container.innerHTML = '<span class="text-white opacity-75 small"><i class="bi bi-cloud-slash me-1"></i>Weather data unavailable</span>';
             return;
         }
         
@@ -268,12 +263,7 @@ async function loadWeather() {
         container.innerHTML = html;
     } catch (error) {
         console.error('Failed to load weather:', error);
-        container.innerHTML = `
-            <div class="alert alert-warning" role="alert">
-                <i class="bi bi-exclamation-triangle"></i>
-                Weather data unavailable. Check back later.
-            </div>
-        `;
+        container.innerHTML = '<span class="text-white opacity-75 small"><i class="bi bi-cloud-slash me-1"></i>Weather unavailable</span>';
     }
 }
 
@@ -389,7 +379,7 @@ async function loadRecommendation() {
         const data = await response.json();
 
         if (data.status !== 'success' || (!data.to_work && !data.to_home)) {
-            container.innerHTML = '<p class="text-muted">No commute recommendations available</p>';
+            container.innerHTML = window.renderEmptyState('No commute recommendations yet.', 'Run analysis to generate route recommendations.', 'bi-signpost-2');
             return;
         }
 
@@ -428,12 +418,7 @@ async function loadRecommendation() {
         container.innerHTML = html;
     } catch (error) {
         console.error('Failed to load commute recommendations:', error);
-        container.innerHTML = `
-            <div class="alert alert-info" role="alert">
-                <i class="bi bi-info-circle"></i>
-                No commute recommendations available.
-            </div>
-        `;
+        container.innerHTML = window.renderErrorState('Commute recommendations unavailable.', { retry: 'loadRecommendation()' });
     }
 }
 
@@ -447,7 +432,7 @@ async function loadConditionsCard() {
     try {
         const weather = await window.apiClient.getWeather();
         if (!weather || !weather.current) {
-            container.innerHTML = '<p class="text-muted small">Conditions unavailable</p>';
+            container.innerHTML = window.renderEmptyState('Conditions unavailable.', '', 'bi-cloud-slash');
             return;
         }
 
@@ -496,7 +481,7 @@ async function loadConditionsCard() {
         if (mobile) mobile.innerHTML = html;
     } catch (error) {
         console.error('Failed to load conditions card:', error);
-        container.innerHTML = '<p class="text-muted small">Conditions unavailable</p>';
+        container.innerHTML = window.renderErrorState('Conditions unavailable.', { small: true, retry: 'loadConditionsCard()' });
     }
 }
 
@@ -512,7 +497,7 @@ async function loadRouteStatus() {
         const data = await response.json();
 
         if (data.status !== 'success' || !data.routes || data.routes.length === 0) {
-            container.innerHTML = '<p class="text-muted small">No route data available</p>';
+            container.innerHTML = window.renderEmptyState('No route data.', 'Sync Strava to see route conditions.', 'bi-map');
             return;
         }
 
@@ -545,7 +530,7 @@ async function loadRouteStatus() {
         if (mobile) mobile.innerHTML = html;
     } catch (error) {
         console.error('Failed to load route status:', error);
-        container.innerHTML = '<p class="text-muted small">Route status unavailable</p>';
+        container.innerHTML = window.renderErrorState('Route status unavailable.', { small: true, retry: 'loadRouteStatus()' });
     }
 }
 
@@ -606,7 +591,7 @@ async function loadRouteStats() {
         const recentRoutes = routes.slice(0, 5);
         
         if (recentRoutes.length === 0) {
-            recentContainer.innerHTML = '<p class="text-muted">No routes available</p>';
+            recentContainer.innerHTML = window.renderEmptyState('No rides synced yet.', 'Connect Strava and run analysis to see your routes.', 'bi-bicycle');
             return;
         }
         
@@ -653,11 +638,7 @@ async function loadRouteStats() {
         recentContainer.innerHTML = routesHtml;
     } catch (error) {
         console.error('Failed to load route stats:', error);
-        container.innerHTML = `
-            <div class="alert alert-danger" role="alert">
-                Failed to load route statistics.
-            </div>
-        `;
+        container.innerHTML = window.renderErrorState('Failed to load route statistics.', { variant: 'danger', retry: 'loadRouteStats()' });
         recentContainer.innerHTML = '';
     }
 }

@@ -783,6 +783,49 @@ window.updateAllTimestamps = function() {
 // Auto-update timestamps every minute
 setInterval(updateAllTimestamps, 60000);
 
+/**
+ * Render a consistent error state with optional retry (#93).
+ * @param {string} message - User-facing error description
+ * @param {object} opts
+ * @param {string} [opts.icon='bi-exclamation-triangle'] - Bootstrap icon class
+ * @param {string} [opts.variant='warning'] - Bootstrap alert variant
+ * @param {string} [opts.retry] - JS expression called by the retry button (omit for no button)
+ * @param {boolean} [opts.small=false] - Compact sizing for sidebar widgets
+ * @returns {string} HTML string
+ */
+window.renderErrorState = function(message, { icon = 'bi-exclamation-triangle', variant = 'warning', retry = null, small = false } = {}) {
+    const sizeClass = small ? 'py-2 small' : '';
+    const retryBtn = retry
+        ? `<div class="mt-2"><button class="btn btn-${variant} btn-sm" onclick="${retry}"><i class="bi bi-arrow-clockwise me-1"></i>Retry</button></div>`
+        : '';
+    return `
+        <div class="alert alert-${variant} ${sizeClass}" role="alert">
+            <div class="d-flex align-items-start gap-2">
+                <i class="bi ${icon} flex-shrink-0 mt-1" aria-hidden="true"></i>
+                <div>
+                    <div>${message}</div>
+                    ${retryBtn}
+                </div>
+            </div>
+        </div>`;
+};
+
+/**
+ * Render a consistent empty state with icon and optional suggestion (#93).
+ * @param {string} message - Primary empty state message
+ * @param {string} [suggestion=''] - Actionable suggestion for the user
+ * @param {string} [icon='bi-inbox'] - Bootstrap icon class
+ * @returns {string} HTML string
+ */
+window.renderEmptyState = function(message, suggestion = '', icon = 'bi-inbox') {
+    return `
+        <div class="text-center py-3 text-muted" role="status">
+            <i class="bi ${icon} fs-2 mb-2 d-block opacity-50" aria-hidden="true"></i>
+            <div class="small">${message}</div>
+            ${suggestion ? `<div class="small mt-1 opacity-75">${suggestion}</div>` : ''}
+        </div>`;
+};
+
 console.log('✓ common.js loaded - Toast, auto-save, undo, unit conversion, and timestamp utilities ready');
 
 // Made with Bob
