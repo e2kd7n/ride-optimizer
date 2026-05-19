@@ -5,14 +5,15 @@ Images are built by GitHub Actions and published to GitHub Container Registry (G
 ## Prerequisites
 
 - Raspberry Pi 4 (2GB RAM minimum, 4GB+ recommended), running Raspberry Pi OS 64-bit
-- Docker installed on the Pi (or Podman — see note below)
+- Podman and podman-compose installed on the Pi
 - Git, curl
 
 ```bash
-# Install Docker on Raspberry Pi OS
-curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER
-# Log out and back in for group membership to take effect
+# Install Podman on Raspberry Pi OS
+sudo apt-get update && sudo apt-get install -y podman podman-compose
+
+# Authenticate with GHCR once — credentials stored globally
+echo "YOUR_GITHUB_PAT" | podman login ghcr.io -u e2kd7n --password-stdin
 ```
 
 ## Quick Start
@@ -27,10 +28,10 @@ cp .env.example .env
 nano .env
 
 # Pull and start
-docker compose up -d
+podman-compose up -d
 
 # Check status (healthy after ~20s)
-docker compose ps
+podman-compose ps
 ```
 
 The app will be available at `http://<pi-ip>:8083`.
@@ -46,7 +47,7 @@ APP_PORT=9000
 Then restart:
 
 ```bash
-docker compose up -d
+podman-compose up -d
 ```
 
 The compose file uses `${APP_PORT:-8083}` throughout, so no file edits are needed.
@@ -56,39 +57,34 @@ The compose file uses `${APP_PORT:-8083}` throughout, so no file edits are neede
 Push to `main` on GitHub → Actions builds a new image → on next Pi restart (or manually):
 
 ```bash
-docker compose pull
-docker compose up -d
+podman-compose pull
+podman-compose up -d
 ```
 
-The systemd service (see below) runs `--pull always` on every boot, so reboots automatically apply the latest image.
+The systemd timer (see below) pulls nightly at 01:30 and redeploys only if the image changed.
 
-## Auto-Start on Boot (systemd)
+## Auto-Update (systemd timer)
 
-The `deploy/ride-optimizer.service` unit file starts the container on boot and pulls the latest image each time.
-
-### Installation
+Install the nightly pull-and-redeploy timer:
 
 ```bash
-# Replace 'pi' with your actual username
-sudo cp deploy/ride-optimizer.service /etc/systemd/system/
-sudo sed -i 's/%i/pi/g' /etc/systemd/system/ride-optimizer.service
-
-sudo systemctl daemon-reload
-sudo systemctl enable ride-optimizer.service
-sudo systemctl start ride-optimizer.service
-
-# Verify
-sudo systemctl status ride-optimizer.service
+chmod +x scripts/pi-auto-update.sh scripts/pi-update-setup.sh
+./scripts/pi-update-setup.sh
 ```
 
-### Rootless Docker / Podman
+Manual trigger:
 
-If running rootless, use a user-level unit instead:
+```bash
+./scripts/pi-auto-update.sh --force
+```
+
+### Rootless Podman
+
+If running rootless, use a user-level unit:
 
 ```bash
 mkdir -p ~/.config/systemd/user/
 cp deploy/ride-optimizer.service ~/.config/systemd/user/
-# Edit WorkingDirectory to match your clone path
 nano ~/.config/systemd/user/ride-optimizer.service
 
 systemctl --user daemon-reload
@@ -113,7 +109,7 @@ services:
     image: ride-optimizer:dev
 ```
 
-Then `docker compose up -d --build` will use your local source.
+Then `podman-compose up -d --build` will use your local source.
 
 ## Data Persistence
 
@@ -136,11 +132,11 @@ Default port **8083** does not conflict with common defaults (80, 443, 3000, 500
 
 ```bash
 # Live logs
-docker compose logs -f
+podman-compose logs -f
 
 # Container health and resource usage
-docker compose ps
-docker stats ride-optimizer
+podman-compose ps
+podman stats ride-optimizer
 
 # Manual health check
 curl http://localhost:8083/api/status
@@ -153,22 +149,14 @@ curl http://localhost:8083/api/status
 tar -czf ~/backups/ride-optimizer-$(date +%Y%m%d).tar.gz data/ cache/ config/ .env
 
 # Restore
-docker compose down
+podman-compose down
 tar -xzf ~/backups/ride-optimizer-YYYYMMDD.tar.gz
-docker compose up -d
+podman-compose up -d
 ```
 
 ## GHCR Package Visibility
 
-After the first CI push, the package appears at `https://github.com/e2kd7n?tab=packages`. To allow `docker pull` without authentication on the Pi, set the package to **public** in the GitHub UI. Alternatively, authenticate with a Personal Access Token (PAT) that has `packages:read` scope:
-
-```bash
-echo $PAT | docker login ghcr.io -u e2kd7n --password-stdin
-```
-
-## Podman Compatibility
-
-Replace `docker` with `podman` and `docker compose` with `podman-compose` in the commands above. The Dockerfile and compose file are fully compatible with Podman.
+After the first CI push, the package appears at `https://github.com/e2kd7n?tab=packages`. To allow unauthenticated pulls, set the package to **public** in the GitHub UI. Otherwise authenticate with a PAT that has `packages:read` scope (see Prerequisites above).
 
 ---
 

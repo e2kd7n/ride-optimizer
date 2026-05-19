@@ -15,7 +15,6 @@ REGISTRY="ghcr.io"
 IMAGE_OWNER="e2kd7n"
 REMOTE_IMAGE="${REGISTRY}/${IMAGE_OWNER}/ride-optimizer:latest"
 LOCAL_IMAGE="ride-optimizer:latest"
-GHCR_TOKEN_FILE="./secrets/ghcr_token.txt"
 FORCE=false
 [ "${1:-}" = "--force" ] && FORCE=true
 
@@ -26,29 +25,23 @@ log "=== Ride Optimizer Auto-Update ==="
 # Disk check — warn but do not block unattended runs
 DISK_USAGE=$(df / | awk 'NR==2 {print $5}' | tr -d '%')
 if [ "$DISK_USAGE" -gt 80 ]; then
-    log "WARNING: Disk at ${DISK_USAGE}% — pull may fail. Consider: docker image prune -a"
-fi
-
-if [ -f "$GHCR_TOKEN_FILE" ]; then
-    log "Authenticating with GHCR..."
-    docker login "$REGISTRY" -u "$IMAGE_OWNER" \
-        --password-stdin < "$GHCR_TOKEN_FILE"
+    log "WARNING: Disk at ${DISK_USAGE}% — pull may fail. Consider: podman image prune -a"
 fi
 
 # Record current local image ID so we can detect a real change after pull
-BEFORE_ID=$(docker inspect "$LOCAL_IMAGE" --format '{{.Id}}' 2>/dev/null || echo "")
+BEFORE_ID=$(podman inspect "$LOCAL_IMAGE" --format '{{.Id}}' 2>/dev/null || echo "")
 
 log "Pulling ${REMOTE_IMAGE}..."
-if ! docker pull "$REMOTE_IMAGE"; then
+if ! podman pull "$REMOTE_IMAGE"; then
     log "ERROR: Pull failed — network issue or image not yet published. Aborting."
     exit 1
 fi
 
-docker tag "$REMOTE_IMAGE" "$LOCAL_IMAGE"
-AFTER_ID=$(docker inspect "$LOCAL_IMAGE" --format '{{.Id}}' 2>/dev/null || echo "")
+podman tag "$REMOTE_IMAGE" "$LOCAL_IMAGE"
+AFTER_ID=$(podman inspect "$LOCAL_IMAGE" --format '{{.Id}}' 2>/dev/null || echo "")
 
 # Keep only the local tag; layers are retained
-docker rmi "$REMOTE_IMAGE" 2>/dev/null || true
+podman rmi "$REMOTE_IMAGE" 2>/dev/null || true
 
 if [ "$BEFORE_ID" = "$AFTER_ID" ] && [ -n "$BEFORE_ID" ] && [ "$FORCE" = false ]; then
     log "Image unchanged (${AFTER_ID:0:12}) — containers not restarted."
@@ -58,19 +51,19 @@ fi
 log "New image: ${BEFORE_ID:0:12} → ${AFTER_ID:0:12}"
 
 log "Restarting containers..."
-docker compose down
-docker compose up -d
+podman-compose down
+podman-compose up -d
 
 log "Waiting for app to become healthy..."
 for i in $(seq 1 12); do
     sleep 5
-    if docker inspect --format='{{.State.Health.Status}}' ride-optimizer 2>/dev/null | grep -q healthy; then
+    if podman inspect --format='{{.State.Health.Status}}' ride-optimizer 2>/dev/null | grep -q healthy; then
         log "✓ App healthy after $((i * 5))s."
         break
     fi
     if [ "$i" -eq 12 ]; then
         log "ERROR: ride-optimizer did not become healthy after 60s. Last 30 log lines:"
-        docker compose logs --tail=30 >&2
+        podman-compose logs --tail=30 >&2
         exit 1
     fi
 done
