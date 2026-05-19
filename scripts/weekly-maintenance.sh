@@ -102,7 +102,51 @@ log_section "Recent Activity (Last 7 Days)"
 log "Recent commits:"
 git log --since="7 days ago" --oneline --no-merges | head -10 | tee -a "$MAINTENANCE_LOG"
 
-# 4. Start issue management in background
+# 4. Branch evaluation
+log_section "Branch Evaluation"
+log "Checking for open branches and PRs..."
+
+# Check for open PRs
+OPEN_PRS=$(gh pr list --state open --json number,title,headRefName 2>/dev/null || echo "[]")
+PR_COUNT=$(echo "$OPEN_PRS" | jq '. | length' 2>/dev/null || echo "0")
+
+if [ "$PR_COUNT" -gt 0 ]; then
+    echo -e "${YELLOW}⚠️  Found $PR_COUNT open PR(s):${NC}" | tee -a "$MAINTENANCE_LOG"
+    echo "$OPEN_PRS" | jq -r '.[] | "  #\(.number): \(.title) (\(.headRefName))"' | tee -a "$MAINTENANCE_LOG"
+    log "  Action: Review PRs for merge readiness"
+else
+    log "✓ No open PRs"
+fi
+
+# Check for stale branches (not merged, older than 7 days)
+log "Checking for stale branches..."
+git fetch --prune origin 2>/dev/null || true
+
+STALE_BRANCHES=$(git for-each-ref --sort=-committerdate refs/remotes/origin/ --format='%(refname:short)|%(committerdate:relative)|%(authorname)' | \
+    grep -v 'origin/HEAD\|origin/main' | \
+    while IFS='|' read -r branch date author; do
+        # Check if branch is merged
+        if ! git branch -r --merged origin/main | grep -q "$branch"; then
+            # Check if older than 7 days
+            if echo "$date" | grep -qE '(week|month|year)'; then
+                echo "$branch|$date|$author"
+            fi
+        fi
+    done)
+
+if [ -n "$STALE_BRANCHES" ]; then
+    echo -e "${YELLOW}⚠️  Found stale unmerged branches:${NC}" | tee -a "$MAINTENANCE_LOG"
+    echo "$STALE_BRANCHES" | while IFS='|' read -r branch date author; do
+        BRANCH_NAME=$(echo "$branch" | sed 's|origin/||')
+        COMMITS_BEHIND=$(git rev-list --count origin/main...$branch 2>/dev/null || echo "?")
+        echo "  - $BRANCH_NAME (last commit: $date, $COMMITS_BEHIND commits behind main)" | tee -a "$MAINTENANCE_LOG"
+    done
+    log "  Action: Review stale branches for closure or rebase"
+else
+    log "✓ No stale branches found"
+fi
+
+# 5. Start issue management in background
 log_section "Issue Management (Background Task)"
 ISSUE_LOG="$LOG_DIR/issue-update-$TIMESTAMP.log"
 log "Starting issue priorities update in background..."
@@ -120,7 +164,7 @@ else
     log "⚠️  Issue update script not found, skipping"
 fi
 
-# 5. Documentation review checklist
+# 6. Documentation review checklist
 log_section "Documentation Review Checklist"
 echo "" | tee -a "$MAINTENANCE_LOG"
 echo "Please review the following:" | tee -a "$MAINTENANCE_LOG"
@@ -130,14 +174,14 @@ echo "  [ ] README.md - Setup instructions accurate?" | tee -a "$MAINTENANCE_LOG
 echo "  [ ] RELEASE_ROADMAP.md - Milestones current?" | tee -a "$MAINTENANCE_LOG"
 echo "" | tee -a "$MAINTENANCE_LOG"
 
-# 6. Quick stats
+# 7. Quick stats
 log_section "Repository Statistics"
 log "Documentation files: $(find docs -name '*.md' | wc -l | tr -d ' ')"
 log "Python modules: $(find src app -name '*.py' 2>/dev/null | wc -l | tr -d ' ')"
 log "Test files: $(find tests -name 'test_*.py' 2>/dev/null | wc -l | tr -d ' ')"
 log "Total commits: $(git rev-list --count HEAD)"
 
-# 7. Update weekly maintenance log
+# 8. Update weekly maintenance log
 log_section "Updating Weekly Maintenance Log"
 WEEKLY_LOG="docs/releases/maintenance/WEEKLY_MAINTENANCE.md"
 if [ -f "$WEEKLY_LOG" ]; then
@@ -175,7 +219,7 @@ else
     log "⚠️  Weekly maintenance log not found"
 fi
 
-# 8. Summary
+# 9. Summary
 log_section "Maintenance Summary"
 echo "" | tee -a "$MAINTENANCE_LOG"
 echo -e "${GREEN}✓ Backups created in $BACKUP_DIR (and pushed to github.com/e2kd7n/backups)${NC}" | tee -a "$MAINTENANCE_LOG"
