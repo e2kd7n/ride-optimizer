@@ -11,6 +11,9 @@ No sessions, CORS, rate limiting - optimized for single-user Pi deployment.
 """
 
 from flask import Flask, jsonify, send_from_directory, request
+from flask_wtf.csrf import CSRFProtect
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from pathlib import Path
 import logging
 from datetime import datetime, timedelta
@@ -62,6 +65,18 @@ app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
     PERMANENT_SESSION_LIFETIME=timedelta(hours=24)
+)
+
+# Initialize CSRF protection
+csrf = CSRFProtect(app)
+
+# Initialize rate limiter
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://",
+    strategy="fixed-window"
 )
 
 # Register blueprints
@@ -300,6 +315,7 @@ def serve_static(path):
 
 
 @app.route('/api/weather')
+@limiter.limit("30 per minute")
 @validate_request_args(WeatherQuerySchema)
 def get_weather():
     """
@@ -366,13 +382,16 @@ def get_weather():
         
     except Exception as e:
         logger.error(f"Error getting weather: {e}", exc_info=True)
+        # Hide internal error details in production
+        error_msg = str(e) if app.debug else 'Weather data temporarily unavailable'
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': error_msg
         }), 500
 
 
 @app.route('/api/recommendation')
+@limiter.limit("20 per minute")
 @validate_request_args(RecommendationQuerySchema)
 def get_recommendation():
     """
@@ -437,9 +456,10 @@ def get_recommendation():
         
     except Exception as e:
         logger.error(f"Error getting recommendation: {e}", exc_info=True)
+        error_msg = str(e) if app.debug else 'Recommendation temporarily unavailable'
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': error_msg
         }), 500
 
 
@@ -620,6 +640,7 @@ def get_commute_map():
 
 
 @app.route('/api/routes')
+@limiter.limit("30 per minute")
 @validate_request_args(RoutesQuerySchema)
 def get_routes():
     """
@@ -675,9 +696,10 @@ def get_routes():
         
     except Exception as e:
         logger.error(f"Error getting routes: {e}", exc_info=True)
+        error_msg = str(e) if app.debug else 'Routes temporarily unavailable'
         return jsonify({
             'status': 'error',
-            'message': str(e),
+            'message': error_msg,
             'routes': [],
             'total_count': 0
         }), 500
@@ -767,18 +789,32 @@ def get_routes_status():
 
 
 @app.route('/api/routes/<route_id>')
+@limiter.limit("60 per minute")
 def get_route_detail(route_id):
-    """Get a single route detail payload by route ID."""
+    """Get a single route detail payload by route ID with validation."""
     initialize_services()
 
     try:
+        # Validate route_id format to prevent injection
+        if not route_id or not route_id.replace('-', '').replace('_', '').isalnum():
+            return jsonify({
+                'status': 'error',
+                'message': 'Invalid route ID format'
+            }), 400
+        
+        if len(route_id) > 100:
+            return jsonify({
+                'status': 'error',
+                'message': 'Route ID too long'
+            }), 400
+        
         route_type = request.args.get('type')
         route = _route_library_service.get_route_by_id(route_id, route_type=route_type)
 
         if not route:
             return jsonify({
                 'status': 'error',
-                'message': f'Route {route_id} not found'
+                'message': 'Route not found'
             }), 404
 
         return jsonify({
@@ -847,9 +883,10 @@ def get_status():
         
     except Exception as e:
         logger.error(f"Error getting status: {e}", exc_info=True)
+        error_msg = str(e) if app.debug else 'Status temporarily unavailable'
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': error_msg
         }), 500
 
 
@@ -875,7 +912,21 @@ def internal_error(error):
 def open_browser(port):
     """Open Chrome browser after a short delay to ensure server is ready."""
     time.sleep(1.5)  # Wait for server to start
-    url = f'http://localhost:{port}'
+    
+    # Validate port
+    if not isinstance(port, int) or port < 1024 or port > 65535:
+        logger.error(f"Invalid port for browser: {port}")
+        return
+    
+    # Use 127.0.0.1 instead of localhost for security
+    url = f'http://127.0.0.1:{port}'
+    
+    # Validate URL before opening
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    if parsed.scheme not in ['http', 'https'] or parsed.hostname not in ['127.0.0.1', 'localhost']:
+        logger.error(f"Invalid URL for browser: {url}")
+        return
     try:
         # Try to open in Chrome specifically
         chrome_path = None
