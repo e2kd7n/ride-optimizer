@@ -646,6 +646,89 @@ def get_routes():
         }), 500
 
 
+@app.route('/api/routes/status')
+def get_routes_status():
+    """
+    Get per-route condition summary crossing route data with current weather (#289).
+
+    Returns:
+        JSON with commute routes list, each with condition_score and condition_note.
+    """
+    initialize_services()
+
+    try:
+        routes_data = _route_library_service.get_all_routes(
+            route_type='commute', sort_by='uses', limit=6
+        )
+        routes = routes_data.get('routes', []) if routes_data.get('status') == 'success' else []
+
+        # Get current weather at home location
+        home_lat = config.get('location.home.latitude')
+        home_lon = config.get('location.home.longitude')
+        current_weather = None
+        if home_lat and home_lon:
+            raw = _weather_service.get_current_weather(home_lat, home_lon)
+            if raw:
+                wind_speed_mph = raw.get('wind_speed_kph', 0) * 0.621371
+                current_weather = {
+                    'conditions': raw.get('conditions', ''),
+                    'wind_speed': round(wind_speed_mph),
+                    'wind_direction': raw.get('wind_direction_cardinal', ''),
+                    'comfort_score': int(raw.get('comfort_score', 0.5) * 100)
+                }
+
+        result_routes = []
+        for route in routes:
+            name = route.get('name', 'Unknown Route')
+            condition_score = 75
+            condition_note = 'Clear'
+
+            if current_weather:
+                wind_speed = current_weather['wind_speed']
+                wind_dir = current_weather['wind_direction']
+                conditions = current_weather['conditions'].lower()
+                comfort = current_weather['comfort_score']
+                condition_score = comfort
+
+                if 'thunder' in conditions or 'storm' in conditions:
+                    condition_note = 'Storm warning'
+                elif 'snow' in conditions:
+                    condition_note = 'Snowy'
+                elif 'rain' in conditions or 'drizzle' in conditions:
+                    condition_note = 'Rainy'
+                elif wind_speed >= 20:
+                    condition_note = f'{wind_speed} mph crosswind'
+                elif wind_speed >= 12:
+                    condition_note = f'{wind_speed} mph wind'
+                elif wind_speed >= 5:
+                    condition_note = f'Light {wind_dir} wind'
+                else:
+                    condition_note = 'Clear'
+
+            result_routes.append({
+                'id': route.get('id'),
+                'name': name,
+                'condition_score': condition_score,
+                'condition_note': condition_note,
+                'distance': route.get('distance', 0),
+                'type': route.get('type', 'commute')
+            })
+
+        return jsonify({
+            'status': 'success',
+            'routes': result_routes,
+            'timestamp': datetime.now().isoformat()
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting route status: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'message': str(e),
+            'routes': []
+        }), 500
+
+
 @app.route('/api/routes/<route_id>')
 def get_route_detail(route_id):
     """Get a single route detail payload by route ID."""
