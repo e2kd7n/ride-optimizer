@@ -11,7 +11,7 @@ No sessions, CORS, rate limiting - optimized for single-user Pi deployment.
 """
 
 from flask import Flask, jsonify, send_from_directory, request
-from flask_wtf.csrf import CSRFProtect
+from flask_wtf.csrf import CSRFProtect, generate_csrf
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from pathlib import Path
@@ -54,20 +54,35 @@ setup_logging(
 )
 logger = SecureLogger(__name__)
 
+def _load_or_create_secret_key() -> str:
+    """Load SECRET_KEY from env var, then persisted file, or generate and persist a new one."""
+    if key := os.getenv('FLASK_SECRET_KEY'):
+        return key
+    key_file = Path('config/secret_key')
+    if key_file.exists():
+        return key_file.read_text().strip()
+    key = secrets.token_hex(32)
+    key_file.parent.mkdir(exist_ok=True)
+    key_file.write_text(key)
+    key_file.chmod(0o600)
+    return key
+
+
 # Initialize Flask app
 app = Flask(__name__, static_folder='static', static_url_path='')
 app.config['JSON_SORT_KEYS'] = False
-app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', secrets.token_hex(32))
+app.config['SECRET_KEY'] = _load_or_create_secret_key()
 
 # Configure session security
 app.config.update(
     SESSION_COOKIE_SECURE=False,  # Set to True when using HTTPS
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
-    PERMANENT_SESSION_LIFETIME=timedelta(hours=24)
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=24),
+    WTF_CSRF_CHECK_DEFAULT=False,  # Explicit opt-in per route via @csrf.protect; JSON API uses SameSite+Content-Type
 )
 
-# Initialize CSRF protection
+# Initialize CSRF protection (infrastructure ready; token served at /api/csrf-token for future mutations)
 csrf = CSRFProtect(app)
 
 # Initialize rate limiter
@@ -107,6 +122,13 @@ def set_security_headers(response):
         response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     
     return response
+
+
+@app.route('/api/csrf-token')
+@csrf.exempt
+def get_csrf_token():
+    """Return a CSRF token for clients making state-changing requests."""
+    return jsonify({'csrf_token': generate_csrf()})
 
 # Initialize configuration and storage
 config = Config()
@@ -547,6 +569,7 @@ def _enrich_commute_recommendation(rec: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @app.route('/api/commute')
+@limiter.limit("30 per minute")
 def get_commute():
     """
     Get both commute directions (to_work and to_home) for the commute view.
@@ -575,9 +598,10 @@ def get_commute():
         
     except Exception as e:
         logger.error(f"Error getting commute data: {e}", exc_info=True)
+        error_msg = str(e) if app.debug else 'Commute data temporarily unavailable'
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': error_msg
         }), 500
 
 

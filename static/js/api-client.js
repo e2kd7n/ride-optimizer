@@ -9,6 +9,20 @@ class APIClient {
         this.retryAttempts = 3;
         this.retryDelay = 1000; // ms
         this.timeout = 10000; // 10 second timeout
+        this._csrfToken = null;
+        this._csrfReady = this._fetchCsrfToken();
+    }
+
+    async _fetchCsrfToken() {
+        try {
+            const response = await fetch(`${this.baseURL}/csrf-token`);
+            if (response.ok) {
+                const data = await response.json();
+                this._csrfToken = data.csrf_token;
+            }
+        } catch (e) {
+            // Non-fatal: SameSite=Lax cookies still protect against cross-origin mutations
+        }
     }
 
     /**
@@ -49,6 +63,14 @@ class APIClient {
      */
     async fetch(endpoint, options = {}) {
         const url = `${this.baseURL}${endpoint}`;
+        const method = (options.method || 'GET').toUpperCase();
+        const isMutation = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method);
+
+        // Ensure CSRF token is ready before any state-changing request
+        if (isMutation) {
+            await this._csrfReady;
+        }
+
         let lastError;
         let lastStatus;
 
@@ -61,6 +83,7 @@ class APIClient {
                     ...options,
                     headers: {
                         'Content-Type': 'application/json',
+                        ...(isMutation && this._csrfToken ? { 'X-CSRFToken': this._csrfToken } : {}),
                         ...options.headers
                     },
                     signal: controller.signal
