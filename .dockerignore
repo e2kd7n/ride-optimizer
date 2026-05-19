@@ -36,6 +36,10 @@ docs/
 plans/
 archive/
 
+# Deprecated CLI tools
+scripts/
+main.py
+
 # Data and cache (will be mounted as volumes)
 data/*
 cache/*
