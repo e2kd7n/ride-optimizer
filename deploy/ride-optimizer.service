@@ -1,0 +1,18 @@
+[Unit]
+Description=Ride Optimizer web application
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/%i/ride-optimizer
+ExecStart=/usr/bin/docker compose up -d --pull always
+ExecStop=/usr/bin/docker compose down
+TimeoutStartSec=120
+Restart=on-failure
+RestartSec=30s
+
+[Install]
+WantedBy=multi-user.target
