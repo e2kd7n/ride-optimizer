@@ -5,7 +5,9 @@
 
 /* ===== Global Styles ===== */
 :root {
-    --primary-color: #007bff;
+    --primary-color: #667eea;
+    --primary-dark: #764ba2;
+    --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     --success-color: #28a745;
     --danger-color: #dc3545;
     --warning-color: #ffc107;
