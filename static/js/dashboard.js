@@ -20,7 +20,9 @@ async function loadDashboard() {
         loadSystemStatus(),
         loadWeather(),
         loadRecommendation(),
-        loadRouteStats()
+        loadRouteStats(),
+        loadConditionsCard(),
+        loadRouteStatus()
     ]);
 }
 
@@ -275,85 +277,146 @@ async function loadWeather() {
 }
 
 /**
- * Load and display commute recommendation
+ * Determine which commute direction to show as hero based on time of day (#287).
+ * Returns 'to_work', 'to_home', or 'weekend'.
+ */
+function getContextualDirection() {
+    const now = new Date();
+    const hour = now.getHours();
+    const isWeekend = now.getDay() === 0 || now.getDay() === 6;
+    if (isWeekend) return 'weekend';
+    if (hour >= 5 && hour < 10) return 'to_work';
+    if (hour >= 15 && hour < 19) return 'to_home';
+    return 'off_peak';
+}
+
+function getHeroHeading(contextDir) {
+    const headings = {
+        to_work:  { icon: 'bi-sunrise',      label: 'Morning commute',  sub: 'To Work' },
+        to_home:  { icon: 'bi-sunset',        label: 'Evening commute',  sub: 'To Home' },
+        weekend:  { icon: 'bi-map',           label: 'Weekend ride',     sub: 'Suggestion' },
+        off_peak: { icon: 'bi-arrow-right-circle', label: 'Next commute', sub: '' }
+    };
+    return headings[contextDir] || headings.off_peak;
+}
+
+/**
+ * Render hero decision card (#286) from a recommendation object.
+ */
+function renderHeroCard(rec, isHero) {
+    if (!rec || rec.status !== 'success') return '';
+
+    const route = rec.route || {};
+    const score = typeof rec.score === 'number' && rec.score <= 1
+        ? Math.round(rec.score * 100)
+        : Math.round(rec.score || 0);
+    const scoreClass = getScoreClass(score);
+    const scoreIcon = score >= 80 ? 'bi-check-circle-fill text-success'
+                    : score >= 60 ? 'bi-hand-thumbs-up-fill text-info'
+                    : score >= 40 ? 'bi-exclamation-triangle-fill text-warning'
+                    : 'bi-x-circle-fill text-danger';
+    const weatherSummary = rec.weather_summary || '';
+    const reasons = rec.reasons || [];
+    const timeLabel = rec.time_impact && rec.time_impact.label ? rec.time_impact.label : null;
+    const estMins = rec.time_impact && rec.time_impact.estimated_minutes;
+
+    if (isHero) {
+        return `
+            <div class="hero-decision-card">
+                <div class="hero-card-header">
+                    <span class="hero-route-name">
+                        <i class="bi ${scoreIcon} me-1"></i>${route.name || 'Route'}
+                        <span class="badge ${scoreClass} ms-2">${score}</span>
+                    </span>
+                    <span class="hero-confidence badge bg-secondary">${rec.confidence || 'Recommended'}</span>
+                </div>
+                ${weatherSummary ? `<div class="hero-weather-summary"><i class="bi bi-cloud-sun me-1"></i>${weatherSummary}</div>` : ''}
+                ${estMins ? `<div class="hero-time-estimate"><i class="bi bi-clock me-1"></i>${timeLabel}</div>` : ''}
+                ${reasons.length ? `
+                    <ul class="hero-reasons">
+                        ${reasons.map(r => `<li>${r}</li>`).join('')}
+                    </ul>
+                ` : ''}
+                <div class="hero-meta small text-muted mt-2">
+                    <span><i class="bi bi-signpost"></i> ${route.distance ? route.distance.toFixed(1) : '—'} mi</span>
+                    <span class="ms-3"><i class="bi bi-graph-up"></i> ${route.elevation || '—'} ft</span>
+                    ${rec.departure_time ? `<span class="ms-3"><i class="bi bi-alarm"></i> ${rec.departure_time}</span>` : ''}
+                </div>
+                <div class="mt-3">
+                    <a href="/commute.html" class="btn btn-primary btn-sm">
+                        <i class="bi bi-map"></i> View on Map
+                    </a>
+                    <a href="/commute.html" class="btn btn-outline-secondary btn-sm ms-2">
+                        Full Details <i class="bi bi-arrow-right"></i>
+                    </a>
+                </div>
+            </div>`;
+    }
+
+    // Compact secondary card
+    return `
+        <div class="secondary-commute-card border rounded p-2 mt-3">
+            <div class="d-flex align-items-center justify-content-between">
+                <span class="small fw-semibold">
+                    <i class="bi ${scoreIcon} me-1"></i>${route.name || 'Route'}
+                </span>
+                <span class="badge ${scoreClass}">${score}</span>
+            </div>
+            ${weatherSummary ? `<div class="small text-muted mt-1">${weatherSummary}</div>` : ''}
+            <div class="d-flex gap-3 mt-1 small text-muted">
+                ${estMins ? `<span><i class="bi bi-clock"></i> ${estMins} min</span>` : ''}
+                <span><i class="bi bi-signpost"></i> ${route.distance ? route.distance.toFixed(1) : '—'} mi</span>
+            </div>
+        </div>`;
+}
+
+/**
+ * Load and display commute recommendation as Hero Decision Card (#286, #287).
  */
 async function loadRecommendation() {
     const container = document.getElementById('commute-recommendation');
-    
+
     try {
-        // Fetch both commute directions
         const response = await fetch('/api/commute');
         const data = await response.json();
-        
+
         if (data.status !== 'success' || (!data.to_work && !data.to_home)) {
             container.innerHTML = '<p class="text-muted">No commute recommendations available</p>';
             return;
         }
-        
-        // Build HTML for both directions
-        let html = '<div class="row g-2">';
-        
-        // To Work card
-        if (data.to_work && data.to_work.status === 'success') {
-            const toWork = data.to_work;
-            const route = toWork.route;
-            const scoreClass = getScoreClass(toWork.score * 100);
-            
-            html += `
-                <div class="col-md-6">
-                    <div class="border border-success rounded p-2" style="border-width: 2px !important;">
-                        <div class="d-flex align-items-center mb-2">
-                            <i class="bi bi-bicycle text-success me-2"></i>
-                            <strong class="text-success">To Work</strong>
-                            <span class="badge ${scoreClass} ms-auto">${Math.round(toWork.score * 100)}</span>
-                        </div>
-                        <div class="small mb-1"><strong>${route.name}</strong></div>
-                        <div class="small text-muted">${toWork.time_window}</div>
-                        <div class="d-flex justify-content-between mt-2 small">
-                            <span><i class="bi bi-clock"></i> ${Math.round(route.duration)}min</span>
-                            <span><i class="bi bi-signpost"></i> ${route.distance.toFixed(1)}mi</span>
-                        </div>
-                    </div>
-                </div>
-            `;
+
+        const contextDir = getContextualDirection();
+        const heading = getHeroHeading(contextDir);
+
+        let primary, secondary, primaryLabel, secondaryLabel;
+        if (contextDir === 'to_home') {
+            primary = data.to_home;
+            secondary = data.to_work;
+            primaryLabel = 'To Home';
+            secondaryLabel = 'To Work (later)';
+        } else {
+            primary = data.to_work;
+            secondary = data.to_home;
+            primaryLabel = contextDir === 'weekend' ? 'Suggested' : 'To Work';
+            secondaryLabel = 'To Home';
         }
-        
-        // To Home card
-        if (data.to_home && data.to_home.status === 'success') {
-            const toHome = data.to_home;
-            const route = toHome.route;
-            const scoreClass = getScoreClass(toHome.score * 100);
-            
+
+        let html = `
+            <div class="hero-card-context mb-2 small text-muted fw-semibold">
+                <i class="bi ${heading.icon} me-1"></i>${heading.label}
+                ${heading.sub ? `<span class="ms-1">· ${heading.sub}</span>` : ''}
+            </div>`;
+
+        html += renderHeroCard(primary, true);
+
+        if (secondary && secondary.status === 'success') {
             html += `
-                <div class="col-md-6">
-                    <div class="border border-primary rounded p-2" style="border-width: 2px !important;">
-                        <div class="d-flex align-items-center mb-2">
-                            <i class="bi bi-house-door text-primary me-2"></i>
-                            <strong class="text-primary">To Home</strong>
-                            <span class="badge ${scoreClass} ms-auto">${Math.round(toHome.score * 100)}</span>
-                        </div>
-                        <div class="small mb-1"><strong>${route.name}</strong></div>
-                        <div class="small text-muted">${toHome.time_window}</div>
-                        <div class="d-flex justify-content-between mt-2 small">
-                            <span><i class="bi bi-clock"></i> ${Math.round(route.duration)}min</span>
-                            <span><i class="bi bi-signpost"></i> ${route.distance.toFixed(1)}mi</span>
-                        </div>
-                    </div>
-                </div>
-            `;
+                <div class="secondary-label small text-muted mt-3 mb-1">
+                    <i class="bi bi-arrow-return-right me-1"></i>${secondaryLabel}
+                </div>`;
+            html += renderHeroCard(secondary, false);
         }
-        
-        html += '</div>';
-        
-        // Add view details button
-        html += `
-            <div class="mt-3">
-                <a href="/commute.html" class="btn btn-primary btn-sm w-100">
-                    <i class="bi bi-arrow-right"></i> View Full Commute Details
-                </a>
-            </div>
-        `;
-        
+
         container.innerHTML = html;
     } catch (error) {
         console.error('Failed to load commute recommendations:', error);
@@ -363,6 +426,113 @@ async function loadRecommendation() {
                 No commute recommendations available.
             </div>
         `;
+    }
+}
+
+/**
+ * Load Today's Conditions card with traffic-light indicators (#288).
+ */
+async function loadConditionsCard() {
+    const container = document.getElementById('conditions-card');
+    if (!container) return;
+
+    try {
+        const weather = await window.apiClient.getWeather();
+        if (!weather || !weather.current) {
+            container.innerHTML = '<p class="text-muted small">Conditions unavailable</p>';
+            return;
+        }
+
+        const current = weather.current;
+        const severity = getWeatherSeverity(current);
+        const comfort = current.comfort_score || 0;
+
+        function conditionRow(label, score, note) {
+            let icon, color;
+            if (score >= 80) { icon = 'bi-check-circle-fill'; color = '#28a745'; }
+            else if (score >= 65) { icon = 'bi-hand-thumbs-up-fill'; color = '#20c997'; }
+            else if (score >= 50) { icon = 'bi-exclamation-triangle-fill'; color = '#ffc107'; }
+            else if (score >= 35) { icon = 'bi-hand-thumbs-down-fill'; color = '#fd7e14'; }
+            else { icon = 'bi-x-circle-fill'; color = '#dc3545'; }
+            return `
+                <div class="conditions-row d-flex align-items-center gap-2 py-1">
+                    <span class="conditions-label small text-muted" style="min-width:90px">${label}</span>
+                    <i class="bi ${icon}" style="color:${color};font-size:1rem;"></i>
+                    <span class="small">${note}</span>
+                </div>`;
+        }
+
+        const windScore = current.wind_speed <= 5 ? 90
+                        : current.wind_speed <= 10 ? 75
+                        : current.wind_speed <= 18 ? 55
+                        : 30;
+        const windNote = current.wind_speed <= 5 ? 'Calm'
+                       : current.wind_speed <= 10 ? `Light ${current.wind_direction} wind`
+                       : current.wind_speed <= 18 ? `${current.wind_direction} wind (${current.wind_speed} mph)`
+                       : `Strong ${current.wind_direction} wind (${current.wind_speed} mph)`;
+
+        const html = `
+            ${conditionRow('Weather', comfort, `${severity.label} — ${(current.conditions || '').toLowerCase()}`)}
+            ${conditionRow('Wind', windScore, windNote)}
+            ${conditionRow('Comfort', comfort, `${comfort}/100`)}
+            <div class="mt-2">
+                <a href="/weather.html" class="small text-muted">Detailed forecast →</a>
+            </div>`;
+
+        container.innerHTML = html;
+        const mobile = document.getElementById('conditions-card-mobile');
+        if (mobile) mobile.innerHTML = html;
+    } catch (error) {
+        console.error('Failed to load conditions card:', error);
+        container.innerHTML = '<p class="text-muted small">Conditions unavailable</p>';
+    }
+}
+
+/**
+ * Load Route Status panel with per-route condition summary (#289).
+ */
+async function loadRouteStatus() {
+    const container = document.getElementById('route-status-panel');
+    if (!container) return;
+
+    try {
+        const response = await fetch('/api/routes/status');
+        const data = await response.json();
+
+        if (data.status !== 'success' || !data.routes || data.routes.length === 0) {
+            container.innerHTML = '<p class="text-muted small">No route data available</p>';
+            return;
+        }
+
+        function routeStatusRow(route) {
+            const score = route.condition_score || 75;
+            let icon, color;
+            if (score >= 80) { icon = 'bi-check-circle-fill'; color = '#28a745'; }
+            else if (score >= 65) { icon = 'bi-hand-thumbs-up-fill'; color = '#20c997'; }
+            else if (score >= 50) { icon = 'bi-exclamation-triangle-fill'; color = '#ffc107'; }
+            else if (score >= 35) { icon = 'bi-hand-thumbs-down-fill'; color = '#fd7e14'; }
+            else { icon = 'bi-x-circle-fill'; color = '#dc3545'; }
+            const name = (route.name || 'Route').slice(0, 22);
+            return `
+                <div class="route-status-row d-flex align-items-center gap-2 py-1">
+                    <span class="small text-truncate" style="min-width:120px;max-width:140px">${name}</span>
+                    <i class="bi ${icon}" style="color:${color};font-size:1rem;flex-shrink:0"></i>
+                    <span class="small text-muted">${route.condition_note || 'Clear'}</span>
+                </div>`;
+        }
+
+        const rows = data.routes.map(routeStatusRow).join('');
+        const html = `
+            ${rows}
+            <div class="mt-2">
+                <a href="/routes.html" class="small text-muted">All Routes →</a>
+            </div>`;
+        container.innerHTML = html;
+        const mobile = document.getElementById('route-status-panel-mobile');
+        if (mobile) mobile.innerHTML = html;
+    } catch (error) {
+        console.error('Failed to load route status:', error);
+        container.innerHTML = '<p class="text-muted small">Route status unavailable</p>';
     }
 }
 
