@@ -11,13 +11,18 @@ No sessions, CORS, rate limiting - optimized for single-user Pi deployment.
 """
 
 from flask import Flask, jsonify, send_from_directory, request
+from flask_wtf.csrf import CSRFProtect
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from pathlib import Path
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 import webbrowser
 import threading
 import time
 import json
+import secrets
+import os
 from typing import List, Dict, Any
 
 from src.config import Config
@@ -52,9 +57,56 @@ logger = SecureLogger(__name__)
 # Initialize Flask app
 app = Flask(__name__, static_folder='static', static_url_path='')
 app.config['JSON_SORT_KEYS'] = False
+app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', secrets.token_hex(32))
+
+# Configure session security
+app.config.update(
+    SESSION_COOKIE_SECURE=False,  # Set to True when using HTTPS
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=24)
+)
+
+# Initialize CSRF protection
+csrf = CSRFProtect(app)
+
+# Initialize rate limiter
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://",
+    strategy="fixed-window"
+)
 
 # Register blueprints
 app.register_blueprint(maps_api.bp)
+
+
+@app.after_request
+def set_security_headers(response):
+    """Add security headers to all responses."""
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Referrer-Policy'] = 'no-referrer'
+    
+    # Content Security Policy
+    response.headers['Content-Security-Policy'] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
+        "img-src 'self' data: https: blob:; "
+        "font-src 'self' https://cdn.jsdelivr.net; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'"
+    )
+    
+    # Add HSTS if using HTTPS
+    if request.is_secure:
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    
+    return response
 
 # Initialize configuration and storage
 config = Config()
@@ -263,6 +315,7 @@ def serve_static(path):
 
 
 @app.route('/api/weather')
+@limiter.limit("30 per minute")
 @validate_request_args(WeatherQuerySchema)
 def get_weather():
     """
@@ -329,13 +382,16 @@ def get_weather():
         
     except Exception as e:
         logger.error(f"Error getting weather: {e}", exc_info=True)
+        # Hide internal error details in production
+        error_msg = str(e) if app.debug else 'Weather data temporarily unavailable'
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': error_msg
         }), 500
 
 
 @app.route('/api/recommendation')
+@limiter.limit("20 per minute")
 @validate_request_args(RecommendationQuerySchema)
 def get_recommendation():
     """
@@ -400,9 +456,10 @@ def get_recommendation():
         
     except Exception as e:
         logger.error(f"Error getting recommendation: {e}", exc_info=True)
+        error_msg = str(e) if app.debug else 'Recommendation temporarily unavailable'
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': error_msg
         }), 500
 
 
@@ -583,6 +640,7 @@ def get_commute_map():
 
 
 @app.route('/api/routes')
+@limiter.limit("30 per minute")
 @validate_request_args(RoutesQuerySchema)
 def get_routes():
     """
@@ -638,9 +696,10 @@ def get_routes():
         
     except Exception as e:
         logger.error(f"Error getting routes: {e}", exc_info=True)
+        error_msg = str(e) if app.debug else 'Routes temporarily unavailable'
         return jsonify({
             'status': 'error',
-            'message': str(e),
+            'message': error_msg,
             'routes': [],
             'total_count': 0
         }), 500
@@ -730,18 +789,32 @@ def get_routes_status():
 
 
 @app.route('/api/routes/<route_id>')
+@limiter.limit("60 per minute")
 def get_route_detail(route_id):
-    """Get a single route detail payload by route ID."""
+    """Get a single route detail payload by route ID with validation."""
     initialize_services()
 
     try:
+        # Validate route_id format to prevent injection
+        if not route_id or not route_id.replace('-', '').replace('_', '').isalnum():
+            return jsonify({
+                'status': 'error',
+                'message': 'Invalid route ID format'
+            }), 400
+        
+        if len(route_id) > 100:
+            return jsonify({
+                'status': 'error',
+                'message': 'Route ID too long'
+            }), 400
+        
         route_type = request.args.get('type')
         route = _route_library_service.get_route_by_id(route_id, route_type=route_type)
 
         if not route:
             return jsonify({
                 'status': 'error',
-                'message': f'Route {route_id} not found'
+                'message': 'Route not found'
             }), 404
 
         return jsonify({
@@ -810,9 +883,10 @@ def get_status():
         
     except Exception as e:
         logger.error(f"Error getting status: {e}", exc_info=True)
+        error_msg = str(e) if app.debug else 'Status temporarily unavailable'
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': error_msg
         }), 500
 
 
@@ -838,7 +912,21 @@ def internal_error(error):
 def open_browser(port):
     """Open Chrome browser after a short delay to ensure server is ready."""
     time.sleep(1.5)  # Wait for server to start
-    url = f'http://localhost:{port}'
+    
+    # Validate port
+    if not isinstance(port, int) or port < 1024 or port > 65535:
+        logger.error(f"Invalid port for browser: {port}")
+        return
+    
+    # Use 127.0.0.1 instead of localhost for security
+    url = f'http://127.0.0.1:{port}'
+    
+    # Validate URL before opening
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    if parsed.scheme not in ['http', 'https'] or parsed.hostname not in ['127.0.0.1', 'localhost']:
+        logger.error(f"Invalid URL for browser: {url}")
+        return
     try:
         # Try to open in Chrome specifically
         chrome_path = None
@@ -869,25 +957,54 @@ def kill_existing_server(port):
     import subprocess
     import signal
     
+    # Validate port is an integer in valid range
+    if not isinstance(port, int) or port < 1024 or port > 65535:
+        logger.error(f"Invalid port number: {port}")
+        return
+    
     try:
         # Find process using the port
         result = subprocess.run(
             ['lsof', '-ti', f':{port}'],
             capture_output=True,
-            text=True
+            text=True,
+            timeout=5  # Add timeout for security
         )
         
         if result.stdout.strip():
             pids = result.stdout.strip().split('\n')
+            current_user = os.getenv('USER') or os.getenv('USERNAME')
+            
             for pid in pids:
                 try:
                     pid_int = int(pid)
-                    logger.info(f"Killing existing server process {pid_int} on port {port}")
-                    import os
-                    os.kill(pid_int, signal.SIGTERM)
-                    time.sleep(0.5)  # Give it time to terminate
-                except (ValueError, ProcessLookupError) as e:
+                    
+                    # Verify process belongs to current user before killing
+                    try:
+                        proc_info = subprocess.run(
+                            ['ps', '-p', str(pid_int), '-o', 'user='],
+                            capture_output=True,
+                            text=True,
+                            timeout=2
+                        )
+                        proc_user = proc_info.stdout.strip()
+                        
+                        if proc_user == current_user:
+                            logger.info(f"Killing server process {pid_int} on port {port}")
+                            os.kill(pid_int, signal.SIGTERM)
+                            time.sleep(0.5)  # Give it time to terminate
+                        else:
+                            logger.warning(f"Skipping process {pid_int} - owned by {proc_user}, not {current_user}")
+                    except subprocess.TimeoutExpired:
+                        logger.warning(f"Timeout checking ownership of process {pid_int}")
+                    except Exception as e:
+                        logger.debug(f"Could not verify process {pid_int} ownership: {e}")
+                        
+                except (ValueError, ProcessLookupError, PermissionError) as e:
                     logger.debug(f"Could not kill process {pid}: {e}")
+                    
+    except subprocess.TimeoutExpired:
+        logger.error("Timeout checking for existing server")
     except FileNotFoundError:
         # lsof not available (Windows)
         logger.debug("lsof command not available, skipping process check")
