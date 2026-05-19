@@ -218,12 +218,13 @@ async function loadWeather() {
             return;
         }
         
+        const esc = window.escapeHtml;
         const current = weather.current;
         const weatherIcon = getWeatherIcon(current.conditions, current.temperature);
         const windArrow = getWindArrow(current.wind_direction);
         const windInfo = getWindInfo(current.wind_speed);
         const severity = getWeatherSeverity(current); // Issue #112 - Weather severity
-        
+
         const html = `
             <div class="weather-icon">
                 <i class="bi ${weatherIcon}"></i>
@@ -240,7 +241,7 @@ async function loadWeather() {
                 </div>
                 <div class="weather-detail-item">
                     <i class="bi bi-wind"></i>
-                    <span>${current.wind_speed} mph ${windArrow} ${current.wind_direction}</span>
+                    <span>${current.wind_speed} mph ${windArrow} ${esc(current.wind_direction)}</span>
                 </div>
                 <div class="weather-detail-item">
                     <i class="bi bi-droplet"></i>
@@ -306,6 +307,7 @@ function getHeroHeading(contextDir) {
 function renderHeroCard(rec, isHero) {
     if (!rec || rec.status !== 'success') return '';
 
+    const esc = window.escapeHtml;
     const route = rec.route || {};
     const score = typeof rec.score === 'number' && rec.score <= 1
         ? Math.round(rec.score * 100)
@@ -315,32 +317,35 @@ function renderHeroCard(rec, isHero) {
                     : score >= 60 ? 'bi-hand-thumbs-up-fill text-info'
                     : score >= 40 ? 'bi-exclamation-triangle-fill text-warning'
                     : 'bi-x-circle-fill text-danger';
-    const weatherSummary = rec.weather_summary || '';
+    const routeName = esc(route.name || 'Route');
+    const confidence = esc(rec.confidence || 'Recommended');
+    const weatherSummary = rec.weather_summary ? esc(rec.weather_summary) : '';
     const reasons = rec.reasons || [];
-    const timeLabel = rec.time_impact && rec.time_impact.label ? rec.time_impact.label : null;
+    const timeLabel = rec.time_impact && rec.time_impact.label ? esc(rec.time_impact.label) : null;
     const estMins = rec.time_impact && rec.time_impact.estimated_minutes;
+    const departureTime = rec.departure_time ? esc(rec.departure_time) : null;
 
     if (isHero) {
         return `
             <div class="hero-decision-card">
                 <div class="hero-card-header">
                     <span class="hero-route-name">
-                        <i class="bi ${scoreIcon} me-1"></i>${route.name || 'Route'}
+                        <i class="bi ${scoreIcon} me-1"></i>${routeName}
                         <span class="badge ${scoreClass} ms-2">${score}</span>
                     </span>
-                    <span class="hero-confidence badge bg-secondary">${rec.confidence || 'Recommended'}</span>
+                    <span class="hero-confidence badge bg-secondary">${confidence}</span>
                 </div>
                 ${weatherSummary ? `<div class="hero-weather-summary"><i class="bi bi-cloud-sun me-1"></i>${weatherSummary}</div>` : ''}
                 ${estMins ? `<div class="hero-time-estimate"><i class="bi bi-clock me-1"></i>${timeLabel}</div>` : ''}
                 ${reasons.length ? `
                     <ul class="hero-reasons">
-                        ${reasons.map(r => `<li>${r}</li>`).join('')}
+                        ${reasons.map(r => `<li>${esc(r)}</li>`).join('')}
                     </ul>
                 ` : ''}
                 <div class="hero-meta small text-muted mt-2">
                     <span><i class="bi bi-signpost"></i> ${route.distance ? route.distance.toFixed(1) : '—'} mi</span>
                     <span class="ms-3"><i class="bi bi-graph-up"></i> ${route.elevation || '—'} ft</span>
-                    ${rec.departure_time ? `<span class="ms-3"><i class="bi bi-alarm"></i> ${rec.departure_time}</span>` : ''}
+                    ${departureTime ? `<span class="ms-3"><i class="bi bi-alarm"></i> ${departureTime}</span>` : ''}
                 </div>
                 <div class="mt-3">
                     <a href="/commute.html" class="btn btn-primary btn-sm">
@@ -358,7 +363,7 @@ function renderHeroCard(rec, isHero) {
         <div class="secondary-commute-card border rounded p-2 mt-3">
             <div class="d-flex align-items-center justify-content-between">
                 <span class="small fw-semibold">
-                    <i class="bi ${scoreIcon} me-1"></i>${route.name || 'Route'}
+                    <i class="bi ${scoreIcon} me-1"></i>${routeName}
                 </span>
                 <span class="badge ${scoreClass}">${score}</span>
             </div>
@@ -443,6 +448,7 @@ async function loadConditionsCard() {
             return;
         }
 
+        const esc = window.escapeHtml;
         const current = weather.current;
         const severity = getWeatherSeverity(current);
         const comfort = current.comfort_score || 0;
@@ -458,21 +464,24 @@ async function loadConditionsCard() {
                 <div class="conditions-row d-flex align-items-center gap-2 py-1">
                     <span class="conditions-label small text-muted" style="min-width:90px">${label}</span>
                     <i class="bi ${icon}" style="color:${color};font-size:1rem;"></i>
-                    <span class="small">${note}</span>
+                    <span class="small">${esc(note)}</span>
                 </div>`;
         }
 
-        const windScore = current.wind_speed <= 5 ? 90
-                        : current.wind_speed <= 10 ? 75
-                        : current.wind_speed <= 18 ? 55
+        const windSpeed = current.wind_speed;
+        const windDir = current.wind_direction || '';
+        const windScore = windSpeed <= 5 ? 90
+                        : windSpeed <= 10 ? 75
+                        : windSpeed <= 18 ? 55
                         : 30;
-        const windNote = current.wind_speed <= 5 ? 'Calm'
-                       : current.wind_speed <= 10 ? `Light ${current.wind_direction} wind`
-                       : current.wind_speed <= 18 ? `${current.wind_direction} wind (${current.wind_speed} mph)`
-                       : `Strong ${current.wind_direction} wind (${current.wind_speed} mph)`;
+        const windNote = windSpeed <= 5 ? 'Calm'
+                       : windSpeed <= 10 ? `Light ${windDir} wind`
+                       : windSpeed <= 18 ? `${windDir} wind (${windSpeed} mph)`
+                       : `Strong ${windDir} wind (${windSpeed} mph)`;
+        const conditionsText = `${severity.label} — ${(current.conditions || '').toLowerCase()}`;
 
         const html = `
-            ${conditionRow('Weather', comfort, `${severity.label} — ${(current.conditions || '').toLowerCase()}`)}
+            ${conditionRow('Weather', comfort, conditionsText)}
             ${conditionRow('Wind', windScore, windNote)}
             ${conditionRow('Comfort', comfort, `${comfort}/100`)}
             <div class="mt-2">
@@ -504,6 +513,7 @@ async function loadRouteStatus() {
             return;
         }
 
+        const esc = window.escapeHtml;
         function routeStatusRow(route) {
             const score = route.condition_score || 75;
             let icon, color;
@@ -512,12 +522,12 @@ async function loadRouteStatus() {
             else if (score >= 50) { icon = 'bi-exclamation-triangle-fill'; color = '#ffc107'; }
             else if (score >= 35) { icon = 'bi-hand-thumbs-down-fill'; color = '#fd7e14'; }
             else { icon = 'bi-x-circle-fill'; color = '#dc3545'; }
-            const name = (route.name || 'Route').slice(0, 22);
+            const name = esc((route.name || 'Route').slice(0, 22));
             return `
                 <div class="route-status-row d-flex align-items-center gap-2 py-1">
                     <span class="small text-truncate" style="min-width:120px;max-width:140px">${name}</span>
                     <i class="bi ${icon}" style="color:${color};font-size:1rem;flex-shrink:0"></i>
-                    <span class="small text-muted">${route.condition_note || 'Clear'}</span>
+                    <span class="small text-muted">${esc(route.condition_note || 'Clear')}</span>
                 </div>`;
         }
 
@@ -597,6 +607,7 @@ async function loadRouteStats() {
             return;
         }
         
+        const esc = window.escapeHtml;
         const routesHtml = `
             <div class="table-responsive">
                 <table class="table table-hover">
@@ -614,13 +625,13 @@ async function loadRouteStats() {
                             <tr>
                                 <td>
                                     ${route.is_favorite ? '<i class="bi bi-star-fill text-warning"></i> ' : ''}
-                                    ${route.name}
+                                    ${esc(route.name)}
                                 </td>
                                 <td>${route.distance} mi</td>
                                 <td>${route.elevation_gain} ft</td>
-                                <td><span class="badge bg-secondary">${route.sport_type || 'Ride'}</span></td>
+                                <td><span class="badge bg-secondary">${esc(route.sport_type || 'Ride')}</span></td>
                                 <td>
-                                    <a href="/routes.html?id=${route.id}" class="btn btn-sm btn-outline-primary">
+                                    <a href="/routes.html?id=${encodeURIComponent(route.id)}" class="btn btn-sm btn-outline-primary">
                                         View
                                     </a>
                                 </td>
