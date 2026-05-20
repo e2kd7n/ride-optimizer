@@ -1,3 +1,7 @@
+# DEPRECATED — DO NOT USE
+# This app factory was part of the abandoned Full Flask / Jinja template architecture.
+# The active app is defined in launch.py (Smart Static architecture).
+# See app/DEPRECATED_DO_NOT_USE.md for full context.
 """
 Flask application factory for Ride Optimizer web platform.
 
