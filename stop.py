@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# DEPRECATED — DO NOT USE
+# Kills the subprocess spawned by launch.py's __main__ dev-launcher block.
+# Production runs in a Podman container managed by podman-compose / systemd.
+# To stop the app: podman stop ride-optimizer
 """
 Stop the Ride Optimizer server.
 
