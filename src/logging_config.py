@@ -78,47 +78,49 @@ def setup_logging(
         datefmt='%Y-%m-%d %H:%M:%S'
     )
     
-    # Main application log with rotation
+    # Main application log with rotation (falls back to console if not writable)
     main_log_file = log_path / 'ride_optimizer.log'
-    main_handler = RotatingFileHandler(
-        main_log_file,
-        maxBytes=max_bytes,
-        backupCount=backup_count,
-        encoding='utf-8'
-    )
-    main_handler.setLevel(log_level)
-    main_handler.setFormatter(formatter)
-    root_logger.addHandler(main_handler)
-    
-    # Set secure file permissions (owner read/write only)
-    _set_secure_permissions(main_log_file)
-    
+    try:
+        main_handler = RotatingFileHandler(
+            main_log_file,
+            maxBytes=max_bytes,
+            backupCount=backup_count,
+            encoding='utf-8'
+        )
+        main_handler.setLevel(log_level)
+        main_handler.setFormatter(formatter)
+        root_logger.addHandler(main_handler)
+        _set_secure_permissions(main_log_file)
+    except PermissionError:
+        console_output = True  # force console so logs are not lost entirely
+        logging.warning(f"Cannot write to {main_log_file} — falling back to console logging")
+
     # Console handler (optional, typically for development)
     if console_output:
         console_handler = logging.StreamHandler()
         console_handler.setLevel(log_level)
         console_handler.setFormatter(formatter)
         root_logger.addHandler(console_handler)
-    
+
     # Security audit log (separate file with rotation)
     security_log_file = log_path / 'security_audit.log'
-    security_handler = RotatingFileHandler(
-        security_log_file,
-        maxBytes=max_bytes,
-        backupCount=backup_count,
-        encoding='utf-8'
-    )
-    security_handler.setLevel(logging.INFO)
-    security_handler.setFormatter(formatter)
-    
-    # Create separate security logger that doesn't propagate to root
     security_logger = logging.getLogger('security_audit')
     security_logger.handlers.clear()
-    security_logger.addHandler(security_handler)
     security_logger.setLevel(logging.INFO)
     security_logger.propagate = False  # Don't send to root logger
-    
-    _set_secure_permissions(security_log_file)
+    try:
+        security_handler = RotatingFileHandler(
+            security_log_file,
+            maxBytes=max_bytes,
+            backupCount=backup_count,
+            encoding='utf-8'
+        )
+        security_handler.setLevel(logging.INFO)
+        security_handler.setFormatter(formatter)
+        security_logger.addHandler(security_handler)
+        _set_secure_permissions(security_log_file)
+    except PermissionError:
+        logging.warning(f"Cannot write to {security_log_file} — security audit logs will go to console")
     
     # Log startup message
     root_logger.info(
