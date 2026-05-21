@@ -9,11 +9,14 @@ This directory contains user guides and implementation documentation for the Rid
 ### Authentication & Security
 - [`AUTHENTICATION_GUIDE.md`](AUTHENTICATION_GUIDE.md) - Strava OAuth authentication setup and configuration
 
+### Design System
+- [`GRID_CONTRACT.md`](GRID_CONTRACT.md) - **Start here for any UI work.** Spacing tokens, column layouts, breakpoints, and verification rules for the 8px grid
+
 ### Implementation Guides
 - [`IMPLEMENTATION_GUIDE.md`](IMPLEMENTATION_GUIDE.md) - General implementation guidelines and best practices
 
 ### Feature Guides
-- [`MOBILE_USAGE_GUIDE.md`](MOBILE_USAGE_GUIDE.md) - Mobile device usage instructions
+- [`MOBILE_USAGE_GUIDE.md`](MOBILE_USAGE_GUIDE.md) - PWA mobile layout, touch targets, bottom nav, and breakpoint rules
 - [`PARALLELISM_GUIDE.md`](PARALLELISM_GUIDE.md) - Parallel processing and performance optimization
 - [`WEATHER_GUIDE.md`](WEATHER_GUIDE.md) - Weather integration and forecasting features
 

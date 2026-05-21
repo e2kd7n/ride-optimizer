@@ -1189,51 +1189,54 @@ Total:             768px ✓
 
 ## Appendix B: Design Tokens
 
+> **Superseded.** The spacing scale in this appendix is incorrect — `--space-md: 12px` is off the 8px grid and must not be used. The authoritative token set and grid rules are in [`docs/guides/GRID_CONTRACT.md`](guides/GRID_CONTRACT.md). The component height tokens and color tokens below remain valid.
+
+The correct spacing tokens (defined in `main.css` `:root`) are:
+
+```css
+--space-1: 4px;   /* sub-grid */
+--space-2: 8px;   /* tight */
+--space-3: 16px;  /* standard */
+--space-4: 24px;  /* comfortable */
+--space-5: 32px;  /* loose */
+```
+
+Component heights, border radius, shadows, and semantic colors from the original appendix remain in effect:
+
 ```css
 :root {
-  /* Spacing Scale (Compact) */
-  --space-xs: 4px;
-  --space-sm: 8px;
-  --space-md: 12px;
-  --space-lg: 16px;
-  --space-xl: 24px;
-  
-  /* Typography Scale (Compact) */
-  --font-xs: 0.75rem;   /* 12px */
-  --font-sm: 0.8rem;    /* 12.8px */
-  --font-md: 0.9rem;    /* 14.4px */
-  --font-lg: 1rem;      /* 16px */
-  --font-xl: 1.25rem;   /* 20px */
-  --font-2xl: 1.5rem;   /* 24px */
-  
-  /* Component Heights (Compact) */
+  /* Component Heights */
   --nav-height: 56px;
   --info-card-height: 72px;
   --route-card-height: 56px;
-  --button-height: 40px;
   --filter-bar-height: 48px;
-  
+  --bottom-nav-height: 56px;
+
+  /* Map Heights (added — see GRID_CONTRACT.md) */
+  --map-height-standard: 400px;
+  --map-height-large: 600px;
+
   /* Border Radius */
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-lg: 12px;
-  
+
   /* Shadows */
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.1);
   --shadow-md: 0 2px 8px rgba(0,0,0,0.1);
   --shadow-lg: 0 4px 12px rgba(0,0,0,0.15);
-  
+
   /* Colors (Semantic) */
   --optimal-bg: linear-gradient(135deg, #d4edda 0%, #ffffff 100%);
   --optimal-border: #28a745;
   --optimal-shadow: 0 4px 12px rgba(40, 167, 69, 0.2);
-  
+
   --favorable-bg: #d4edda;
   --favorable-text: #155724;
-  
+
   --unfavorable-bg: #f8d7da;
   --unfavorable-text: #721c24;
-  
+
   --neutral-bg: #e2e3e5;
   --neutral-text: #6c757d;
 }

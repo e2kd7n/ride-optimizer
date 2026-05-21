@@ -26,8 +26,9 @@ User guides and implementation documentation, including:
 
 **Quick Links:**
 - [Guides Index](guides/README.md)
+- [Grid Contract](guides/GRID_CONTRACT.md) — start here for any UI/CSS work
 - [Authentication Guide](guides/AUTHENTICATION_GUIDE.md)
-- [Mobile Usage Guide](guides/MOBILE_USAGE_GUIDE.md)
+- [Mobile Design Guide](guides/MOBILE_USAGE_GUIDE.md)
 - [Weather Guide](guides/WEATHER_GUIDE.md)
 
 ### [`/archive/`](archive/)
@@ -59,8 +60,9 @@ Archived documentation for historical reference, including:
 - [Implementation Guide](guides/IMPLEMENTATION_GUIDE.md)
 - [Authentication Guide](guides/AUTHENTICATION_GUIDE.md)
 
-**Features:**
-- [Mobile Usage](guides/MOBILE_USAGE_GUIDE.md)
+**Design & UI:**
+- [Grid Contract](guides/GRID_CONTRACT.md)
+- [Mobile Design Guide](guides/MOBILE_USAGE_GUIDE.md)
 - [Weather Integration](guides/WEATHER_GUIDE.md)
 - [Next Commute](releases/v0.8.0/NEXT_COMMUTE_FEATURE.md)
 - [Long Rides](releases/v0.9.0/LONG_RIDES_IMPLEMENTATION_SUMMARY.md)
