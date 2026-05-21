@@ -222,6 +222,13 @@ class APIClient {
     }
 
     /**
+     * Get Strava OAuth connection status
+     */
+    async getStravaStatus() {
+        return this.fetch('/strava/status');
+    }
+
+    /**
      * Get local activity cache stats (count, date range, size, age)
      */
     async getCacheInfo() {

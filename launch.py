@@ -10,7 +10,7 @@ Provides 4 JSON endpoints for static HTML pages to fetch data:
 No sessions, CORS, rate limiting - optimized for single-user Pi deployment.
 """
 
-from flask import Flask, jsonify, send_from_directory, request
+from flask import Flask, jsonify, send_from_directory, request, redirect, url_for, session
 from flask_wtf.csrf import CSRFProtect, generate_csrf
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -36,6 +36,7 @@ from app.services.planner_service import PlannerService
 from app.services.route_library_service import RouteLibraryService
 from app.api import maps_api
 from src.secure_logger import SecureLogger
+from src.auth_secure import SecureTokenStorage
 from src.logging_config import setup_logging
 from app.schemas import (
     WeatherQuerySchema,
@@ -913,6 +914,80 @@ def get_status():
             'status': 'error',
             'message': error_msg
         }), 500
+
+
+@app.route('/api/strava/status')
+def strava_status():
+    import time
+    storage = SecureTokenStorage('config/credentials.json')
+    tokens = storage.load_tokens()
+    if tokens is None:
+        return jsonify({'connected': False, 'reason': 'no_credentials'})
+    if tokens.get('expires_at', 0) < time.time():
+        return jsonify({'connected': False, 'reason': 'token_expired'})
+    return jsonify({'connected': True, 'expires_at': tokens['expires_at']})
+
+
+@app.route('/api/strava/connect')
+def strava_connect():
+    state = secrets.token_hex(16)
+    session['strava_oauth_state'] = state
+    client_id = os.getenv('STRAVA_CLIENT_ID')
+    redirect_uri = url_for('strava_callback', _external=True)
+    auth_url = (
+        'https://www.strava.com/oauth/authorize'
+        f'?client_id={client_id}'
+        f'&redirect_uri={redirect_uri}'
+        '&response_type=code'
+        '&scope=read,activity:read_all'
+        f'&state={state}'
+    )
+    return redirect(auth_url)
+
+
+@app.route('/api/strava/callback')
+@csrf.exempt
+def strava_callback():
+    error = request.args.get('error')
+    if error:
+        logger.error(f"Strava OAuth error: {error}")
+        return redirect('/settings.html?strava_error=' + error)
+
+    state = request.args.get('state')
+    if not state or state != session.pop('strava_oauth_state', None):
+        logger.warning("Strava callback: invalid state (possible CSRF)")
+        return redirect('/settings.html?strava_error=invalid_state')
+
+    code = request.args.get('code')
+    if not code:
+        return redirect('/settings.html?strava_error=no_code')
+
+    try:
+        import requests as http_req
+        resp = http_req.post('https://www.strava.com/oauth/token', data={
+            'client_id': os.getenv('STRAVA_CLIENT_ID'),
+            'client_secret': os.getenv('STRAVA_CLIENT_SECRET'),
+            'code': code,
+            'grant_type': 'authorization_code',
+        }, timeout=15)
+        resp.raise_for_status()
+        token_data = resp.json()
+
+        storage = SecureTokenStorage('config/credentials.json')
+        storage.save_tokens({
+            'access_token': token_data['access_token'],
+            'refresh_token': token_data['refresh_token'],
+            'expires_at': token_data['expires_at'],
+        })
+        logger.info("Strava OAuth complete — credentials saved")
+
+        global _services_initialized
+        _services_initialized = False
+
+        return redirect('/settings.html?strava_connected=1')
+    except Exception as e:
+        logger.error(f"Strava token exchange failed: {e}", exc_info=True)
+        return redirect('/settings.html?strava_error=token_exchange_failed')
 
 
 @app.route('/api/cache-info')
