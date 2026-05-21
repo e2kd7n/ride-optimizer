@@ -1,176 +1,229 @@
-# 📱 Mobile Usage Guide
+# Mobile Design Guide
 
-## Using Your Commute Report on Your Phone
+**Scope:** PWA mobile experience — `index.html`, `routes.html`, `commute.html`, `settings.html`  
+**Applies to:** All work on `static/`, `static/css/main.css`, and page `<style>` blocks  
+**Last Updated:** 2026-05-21
 
-Your Strava Commute Analysis report is now mobile-friendly! You can view it on your phone and it will automatically fetch updated weather data when you have an internet connection.
-
-## 🚀 Quick Start
-
-### Step 1: Generate the Report
-On your computer, run:
-```bash
-python3 main.py --analyze
-```
-
-This creates `commute_report.html` in your project directory.
-
-### Step 2: Transfer to Your Phone
-
-#### Option A: AirDrop (iPhone/Mac)
-1. Right-click `commute_report.html` on your Mac
-2. Select "Share" → "AirDrop"
-3. Send to your iPhone
-4. Save to Files app (iCloud Drive or "On My iPhone")
-
-#### Option B: Email
-1. Email `commute_report.html` to yourself
-2. Open email on your phone
-3. Download the attachment
-4. Save to Files app (iPhone) or Downloads (Android)
-
-#### Option C: Cloud Storage
-1. Upload `commute_report.html` to iCloud Drive, Google Drive, or Dropbox
-2. Open the file from the cloud storage app on your phone
-
-#### Option D: USB Cable (Android)
-1. Connect phone to computer via USB
-2. Copy `commute_report.html` to your phone's storage
-3. Use a file manager app to locate it
-
-### Step 3: Open on Your Phone
-
-#### iPhone:
-1. Open Files app
-2. Navigate to where you saved the file
-3. Tap `commute_report.html`
-4. It will open in Safari
-
-#### Android:
-1. Open your file manager app
-2. Navigate to Downloads or where you saved it
-3. Tap `commute_report.html`
-4. Choose a browser (Chrome, Firefox, etc.)
-
-## ✨ Features That Work on Mobile
-
-### ✅ Works Perfectly:
-- **All route analysis and recommendations** - Static data embedded in the file
-- **Interactive maps** - Powered by Leaflet.js (requires internet)
-- **Charts and visualizations** - Powered by Chart.js (requires internet)
-- **Route comparison tables** - All data is embedded
-- **Long ride recommendations** - Weather updates require internet
-- **Responsive design** - Optimized for mobile screens
-
-### 🌐 Requires Internet Connection:
-- **Weather updates** - Fetches current conditions from weather API
-- **Map tiles** - Downloads map imagery from OpenStreetMap
-- **CDN resources** - Bootstrap, Chart.js, and Leaflet libraries
-
-### ❌ Not Available on Mobile:
-- **Refresh button** - Requires running Python on your computer
-- **Generating new reports** - Must be done on your computer
-
-## 🔄 Updating Your Report
-
-To get fresh data with your latest Strava activities:
-
-1. **On your computer**, run:
-   ```bash
-   python3 main.py --analyze
-   ```
-
-2. **Transfer the new file** to your phone using any method above
-
-3. **Replace the old file** or save with a new name (e.g., `commute_report_2026-03-14.html`)
-
-## 💡 Pro Tips
-
-### Bookmark It
-- Add the report to your home screen for quick access
-- **iPhone**: Open in Safari → Share → "Add to Home Screen"
-- **Android**: Open in Chrome → Menu → "Add to Home Screen"
-
-### Offline Viewing
-- The report data is embedded, so route analysis works offline
-- Maps and weather require internet, but you can still see your routes and scores
-
-### Multiple Reports
-- Save reports with dates in the filename: `commute_report_2026-03-14.html`
-- Compare your progress over time
-
-### Battery Saving
-- The report is just HTML - very lightweight
-- No background processes or battery drain
-- Close the browser tab when done
-
-## 🔒 Privacy & Security
-
-- **All your data stays local** - The HTML file contains your data
-- **No tracking** - No analytics or third-party tracking scripts
-- **Secure** - Anti-piracy protection prevents unauthorized hosting
-- **Your data only** - File only works when opened locally (file://) or on localhost
-
-## 🐛 Troubleshooting
-
-### Maps Not Loading
-- **Check internet connection** - Maps require downloading tiles
-- **Try a different browser** - Some browsers block mixed content
-- **Wait a moment** - Map tiles can take a few seconds to load
-
-### Weather Not Updating
-- **Requires internet** - Weather data is fetched from API
-- **Check API limits** - Free tier has request limits
-- **Try refreshing** - Close and reopen the file
-
-### File Won't Open
-- **Use a browser** - Don't try to open in a text editor
-- **Check file extension** - Must be `.html`
-- **Try different browser** - Safari (iPhone) or Chrome (Android)
-
-### Blank Page or Errors
-- **Check internet connection** - CDN resources need to download
-- **Clear browser cache** - Old cached resources might conflict
-- **Re-transfer file** - File might have been corrupted during transfer
-
-## 📊 What You Can Do on Mobile
-
-### View Your Routes
-- See all your commute route variants
-- Compare performance metrics
-- View route maps and polylines
-
-### Check Weather Impact
-- See how wind affects each route
-- View current weather conditions
-- Get real-time route recommendations
-
-### Plan Long Rides
-- Enter start location and ride date/time
-- Get wind-optimized route recommendations
-- See detailed wind analysis for each segment
-
-### Analyze Performance
-- View your riding statistics
-- See route frequency and consistency
-- Compare different route options
-
-## 🎯 Best Practices
-
-1. **Update Weekly** - Generate a fresh report once a week
-2. **Keep Old Reports** - Save with dates to track progress
-3. **Check Before Commute** - View weather-optimized recommendations
-4. **Use Offline** - Route data works without internet
-5. **Share Carefully** - File contains your personal riding data
-
-## 🆘 Need Help?
-
-If you encounter issues:
-1. Check this guide first
-2. Verify internet connection for weather/maps
-3. Try a different browser
-4. Re-generate and re-transfer the file
-5. Check the main README.md for general troubleshooting
+> This guide replaced a legacy document that covered the old CLI-generated HTML report. That context no longer applies. This document covers the current web app.
 
 ---
 
-**Enjoy your mobile commute analysis! 🚴📱**
+## Overview
+
+The app targets two primary device contexts:
+
+| Context | Viewport | Interaction model | Primary use case |
+|---|---|---|---|
+| Mobile | < 768px | Touch, portrait | Check conditions on the go, pre-ride |
+| Desktop/tablet | ≥ 768px | Mouse or touch, landscape | Plan at desk, compare routes |
+
+The breakpoint between them is Bootstrap's `md` tier: **768px**. Everything below 768px is the mobile experience. See [GRID_CONTRACT.md](GRID_CONTRACT.md) for the full layout and spacing spec.
+
+---
+
+## Mobile layout
+
+### Single column
+
+Below 768px all Bootstrap `col-md-*` columns collapse to full width. No additional overrides are needed for most content — Bootstrap handles it. The exceptions are documented below.
+
+### Page-by-page mobile layout
+
+**Home (`index.html`)**
+```
+┌─────────────────────────────┐
+│ Top navbar (collapsible)    │  56px
+├─────────────────────────────┤
+│ Weather banner              │  auto
+├─────────────────────────────┤
+│ Hero decision card          │  auto
+├─────────────────────────────┤
+│ Conditions  │  Route Status │  col-6 / col-6
+├─────────────────────────────┤
+│ Map iframe                  │  400px (--map-height-standard)
+├─────────────────────────────┤
+│ Route Statistics            │  auto
+├─────────────────────────────┤
+│ [bottom nav — fixed]        │  56px
+└─────────────────────────────┘
+```
+
+**Routes (`routes.html`)**
+```
+┌─────────────────────────────┐
+│ Top navbar                  │  56px
+├─────────────────────────────┤
+│ Filters section             │  auto
+├─────────────────────────────┤
+│ Map                         │  400px (--map-height-standard)
+├─────────────────────────────┤
+│ Route cards (scrollable)    │  auto
+├─────────────────────────────┤
+│ [bottom nav — fixed]        │  56px
+└─────────────────────────────┘
+```
+
+**Commute (`commute.html`)**
+```
+┌─────────────────────────────┐
+│ Top navbar                  │  56px
+├─────────────────────────────┤
+│ Commute cards (stacked)     │  auto, order: 1
+├─────────────────────────────┤
+│ Map                         │  400px (--map-height-standard)
+├─────────────────────────────┤  order: 2
+│ [bottom nav — fixed]        │  56px
+└─────────────────────────────┘
+```
+
+On commute, the cards come before the map on mobile. Use `order-1` / `order-2` Bootstrap utility classes rather than CSS `order` overrides.
+
+**Settings (`settings.html`)**
+```
+┌─────────────────────────────┐
+│ Top navbar                  │  56px
+├─────────────────────────────┤
+│ User Preferences card       │  full width (col-md-6 → full)
+├─────────────────────────────┤
+│ Data Management card        │  full width
+├─────────────────────────────┤
+│ Strava Analysis card        │  full width
+├─────────────────────────────┤
+│ About card                  │  full width
+├─────────────────────────────┤
+│ Save / Reset buttons        │  full width
+├─────────────────────────────┤
+│ [bottom nav — fixed]        │  56px
+└─────────────────────────────┘
+```
+
+---
+
+## Bottom navigation
+
+The bottom nav replaces the top navbar as the primary navigation on mobile. It is fixed to the bottom of the viewport.
+
+```
+┌──────────┬──────────┬──────────┬──────────┐
+│  🏠       │  🗺️       │  ⚙️       │          │  56px fixed
+│  Home    │  Routes  │  Settings│          │
+└──────────┴──────────┴──────────┴──────────┘
+```
+
+### Implementation rules
+
+- Height: `--bottom-nav-height: 56px` — use the token, never hardcode
+- Shown via `display: flex !important` inside `@media (max-width: 767.98px)` — the `!important` is intentional to override Bootstrap's `.d-md-none`
+- The top navbar is hidden on mobile via Bootstrap's `.d-none.d-md-block` classes — do not CSS-hide it separately
+- Each nav item: `min-height: 56px`, `padding: var(--space-1) var(--space-2)` (4px 8px), icon + label stacked vertically
+- Icon margin below: `var(--space-1)` (4px), label font-size: 11px
+
+### Body padding to prevent content clip
+
+The fixed bottom nav overlaps content without this:
+
+```css
+@media (max-width: 767.98px) {
+    body { padding-bottom: var(--bottom-nav-height); }   /* 56px */
+    main, .container-fluid { padding-bottom: 72px; }     /* 56px + 16px buffer */
+}
+```
+
+---
+
+## Touch targets
+
+Every interactive element must meet the minimum touch target:
+
+| Element | Desktop min | Mobile min |
+|---|---|---|
+| Button, link | 44×44px | 48×48px |
+| Form input, select | 44px height | 48px height |
+| Checkbox, radio | 20×20px with 12px margin | 20×20px with 12px margin |
+| Table row | 44px height | 48px height |
+| Bottom nav item | — | 56px height (full bar height) |
+
+On mobile, increase all touch targets:
+
+```css
+@media (max-width: 767.98px) {
+    .btn, button { min-height: 48px; padding: 12px 20px; }
+    input, select, textarea { min-height: 48px; font-size: 16px; }  /* 16px prevents iOS zoom */
+    .table td, .table th { padding: 14px 12px; }
+}
+```
+
+The `font-size: 16px` on inputs is required — iOS Safari zooms in on any input with a font size below 16px, breaking the layout.
+
+---
+
+## Map behavior on mobile
+
+Maps shrink from their desktop height to the standard height on mobile:
+
+```css
+@media (max-width: 767.98px) {
+    .map-container,
+    .map-iframe,
+    #routes-map,
+    #commute-map-container {
+        height: var(--map-height-standard);   /* 400px */
+        min-height: unset;
+    }
+}
+```
+
+Do not use `!important` to override map heights. If a map is inheriting an inline `style="height: Xpx"` that the media query cannot override, replace the inline style with a CSS class.
+
+---
+
+## Filter layout on mobile
+
+The routes page filter section uses `col-md-3 col-sm-6`, which gives 2-column filter inputs at 576px+ and 4-column at 768px+. On mobile (below 576px) all filter inputs are full-width stacked. The preset buttons use `flex-wrap: wrap` with `flex: 1 1 calc(50% - 0.5rem)` to give a 2-up layout on small screens — do not override this.
+
+---
+
+## Typography on mobile
+
+Do not scale body text down below `14px` on mobile. The current `body { line-height: 1.45 }` is appropriate. Font size reductions should only apply to secondary/meta text (timestamps, labels), not body copy or card content.
+
+---
+
+## Swipe gestures
+
+`static/js/mobile.js` handles swipe detection. The visual indicators (`.swipe-indicator`, `.refresh-indicator`) are defined in `main.css`. On mobile:
+
+- Left/right swipe: navigates between pages in the app's navigation order
+- Pull-down: triggers a data refresh
+- The swipe indicators use `var(--space-3)` (16px) positioning from the screen edge, not 20px
+
+---
+
+## Responsive breakpoint cheatsheet
+
+```css
+/* Single breakpoint tier for this app */
+@media (max-width: 767.98px) { /* mobile */ }
+@media (min-width: 768px)    { /* tablet + desktop */ }
+@media (min-width: 992px)    { /* desktop only — three-column layouts */ }
+```
+
+Never use `@media (max-width: 767px)` — it is 0.02px off from Bootstrap's boundary and can cause the bottom nav to flicker at exactly 768px.
+
+---
+
+## What not to do
+
+- Do not create separate mobile-only HTML pages. All pages must work responsively.
+- Do not use `display: none` on desktop elements to "create" a mobile layout. Collapse them with Bootstrap column classes instead.
+- Do not hardcode the bottom nav height (56px) anywhere except the token definition in `:root`. Reference `var(--bottom-nav-height)` everywhere else.
+- Do not override Bootstrap breakpoints. If `col-md-*` doesn't collapse at the right point, check whether the element is actually inside a `.row`.
+- Do not set `font-size` below 16px on any `<input>`, `<select>`, or `<textarea>` — iOS Safari will zoom.
+
+---
+
+## Related documents
+
+- [GRID_CONTRACT.md](GRID_CONTRACT.md) — spacing tokens, column layout specs, breakpoint rules
+- [UIUX_REDESIGN_STRATEGY.md](../UIUX_REDESIGN_STRATEGY.md) — design principles and page vision
+- [DEFINITION_OF_DONE.md](DEFINITION_OF_DONE.md) — mobile checklist items for PR review
