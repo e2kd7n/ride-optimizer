@@ -3,6 +3,7 @@ services:
     image: ghcr.io/e2kd7n/ride-optimizer:latest
     container_name: ride-optimizer
     restart: unless-stopped
+    pull_policy: never
 
     env_file:
       - .env
