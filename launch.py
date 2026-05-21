@@ -141,6 +141,7 @@ _commute_service = None
 _weather_service = None
 _planner_service = None
 _route_library_service = None
+_analysis_job = {'status': 'idle', 'started_at': None, 'result': None}
 
 
 def load_route_groups_from_json(json_path: Path) -> List[RouteGroup]:
@@ -912,6 +913,64 @@ def get_status():
             'status': 'error',
             'message': error_msg
         }), 500
+
+
+@app.route('/api/cache-info')
+def get_cache_info():
+    cache_path = Path('data/cache/activities.json')
+    if not cache_path.exists():
+        return jsonify({'status': 'no_cache', 'activity_count': 0})
+    try:
+        with open(cache_path) as f:
+            activities = json.load(f)
+        dates = sorted(a['start_date'] for a in activities if a.get('start_date'))
+        stat = cache_path.stat()
+        return jsonify({
+            'status': 'ok',
+            'activity_count': len(activities),
+            'date_earliest': dates[0] if dates else None,
+            'date_latest': dates[-1] if dates else None,
+            'cache_size_mb': round(stat.st_size / (1024 * 1024), 1),
+            'cache_age_hours': round((datetime.now().timestamp() - stat.st_mtime) / 3600, 1),
+        })
+    except Exception as e:
+        logger.error(f"Error reading cache info: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/analyze', methods=['POST'])
+def trigger_analysis():
+    global _analysis_job
+    if _analysis_job.get('status') == 'running':
+        return jsonify({'status': 'already_running', 'message': 'Analysis is already in progress'}), 409
+
+    initialize_services()
+    data = request.get_json(silent=True) or {}
+    fetch_new = bool(data.get('fetch_new', False))
+
+    _analysis_job = {'status': 'running', 'started_at': datetime.now().isoformat(), 'result': None}
+
+    def _run():
+        global _analysis_job, _services_initialized
+        try:
+            result = _analysis_service.run_full_analysis(
+                force_refresh=fetch_new,
+                skip_strava_fetch=not fetch_new,
+            )
+            _analysis_job = {'status': 'done', 'started_at': _analysis_job['started_at'], 'result': result}
+            _services_initialized = False
+        except Exception as e:
+            logger.error(f"Background analysis failed: {e}", exc_info=True)
+            _analysis_job = {'status': 'error', 'started_at': _analysis_job['started_at'],
+                             'result': {'status': 'error', 'message': str(e)}}
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({'status': 'started', 'fetch_new': fetch_new})
+
+
+@app.route('/api/analyze/status')
+def get_analyze_status():
+    return jsonify(_analysis_job)
 
 
 @app.errorhandler(404)
