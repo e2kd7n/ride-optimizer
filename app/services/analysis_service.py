@@ -233,41 +233,33 @@ class AnalysisService:
             # Add more fields as needed
         }
     
-    def run_full_analysis(self, force_refresh: bool = False) -> Dict[str, Any]:
+    def run_full_analysis(self, force_refresh: bool = False, skip_strava_fetch: bool = False) -> Dict[str, Any]:
         """
         Run complete analysis workflow.
-        
+
         Steps:
-        1. Fetch activities from Strava
+        1. Fetch activities from Strava (or load from cache)
         2. Find home and work locations
         3. Analyze and group routes
         4. Analyze long rides
         5. Cache results
-        
+
         Args:
-            force_refresh: If True, bypass cache and re-fetch data
-            
-        Returns:
-            Dictionary with analysis summary:
-            {
-                'status': 'success' | 'error',
-                'message': str,
-                'activities_count': int,
-                'route_groups_count': int,
-                'long_rides_count': int,
-                'analysis_time': str (ISO format),
-                'data_freshness': 'fresh' | 'stale',
-                'errors': List[str]
-            }
+            force_refresh: If True, bypass cache and re-fetch data from Strava
+            skip_strava_fetch: If True, load cached activities as-is without any Strava call
         """
-        logger.info(f"Starting full analysis (force_refresh={force_refresh})")
+        logger.info(f"Starting full analysis (force_refresh={force_refresh}, skip_strava_fetch={skip_strava_fetch})")
         errors = []
-        
+
         try:
-            # Step 1: Fetch activities
-            logger.info("Fetching activities from Strava...")
-            self._activities = self.data_fetcher.fetch_activities(force_refresh=force_refresh)
-            logger.info(f"Fetched {len(self._activities)} activities")
+            # Step 1: Fetch or load activities
+            if skip_strava_fetch:
+                logger.info("Loading activities from local cache...")
+                self._activities = self.data_fetcher.load_cached_activities()
+            else:
+                logger.info("Fetching activities from Strava...")
+                self._activities = self.data_fetcher.fetch_activities(force_refresh=force_refresh)
+            logger.info(f"Loaded {len(self._activities)} activities")
             
             if not self._activities:
                 return {

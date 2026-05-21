@@ -184,6 +184,49 @@
                 </div>
             </div>
         
+            <!-- Strava Analysis -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header bg-success text-white">
+                            <h2 class="h5 mb-0">
+                                <i class="bi bi-arrow-repeat" aria-hidden="true"></i> Strava Analysis
+                            </h2>
+                        </div>
+                        <div class="card-body">
+                            <div id="cache-info" class="mb-3">
+                                <span class="text-muted small"><i class="bi bi-hourglass-split"></i> Loading cache info…</span>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold d-block mb-2">Analysis Mode</label>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="radio" name="analysis-mode" id="mode-cached" value="cached" checked>
+                                    <label class="form-check-label" for="mode-cached">
+                                        <strong>Reanalyze cached data</strong>
+                                        <span class="text-muted d-block small">Re-run route grouping on activities already downloaded — no Strava call</span>
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="analysis-mode" id="mode-fetch" value="fetch">
+                                    <label class="form-check-label" for="mode-fetch">
+                                        <strong>Fetch new Strava data</strong>
+                                        <span class="text-muted d-block small">Pull latest activities from Strava, then re-run analysis (slower)</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="d-flex align-items-center gap-3 flex-wrap">
+                                <button type="button" class="btn btn-success" id="run-analysis-btn">
+                                    <i class="bi bi-play-fill" aria-hidden="true"></i> Run Analysis
+                                </button>
+                                <span id="analysis-status" class="text-muted small" style="display:none"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- About Section -->
             <div class="row">
                 <div class="col-12">
@@ -264,17 +307,22 @@
     <!-- Custom JavaScript -->
     <script src="/js/common.js"></script>
     <script src="/js/accessibility.js"></script>
-    
+    <script src="/js/api-client.js"></script>
+
     <script>
         // Initialize page
         document.addEventListener('DOMContentLoaded', function() {
             console.log('✓ Settings page initialized');
-            
+
             // Load saved preferences
             loadUserPreferences();
-            
+
             // Setup event listeners
             setupEventListeners();
+
+            // Load cache info and wire analysis button
+            loadCacheInfo();
+            document.getElementById('run-analysis-btn').addEventListener('click', runAnalysis);
             
             // Setup form validation
             setupFormValidation();
@@ -447,19 +495,90 @@
             if (confirm('Are you sure you want to clear ALL local data? This includes settings, favorites, and hidden routes. This cannot be undone.')) {
                 if (confirm('This is your last chance. Are you absolutely sure?')) {
                     localStorage.clear();
-                    
+
                     if (typeof showToast === 'function') {
                         showToast('All local data cleared', 'warning');
                     } else {
                         alert('All local data cleared');
                     }
-                    
+
                     // Reload page after delay
                     setTimeout(() => {
                         window.location.reload();
                     }, 1500);
                 }
             }
+        }
+
+        async function loadCacheInfo() {
+            const el = document.getElementById('cache-info');
+            try {
+                const info = await window.apiClient.getCacheInfo();
+                if (info.status === 'no_cache') {
+                    el.innerHTML = '<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle"></i> No cache</span> <span class="text-muted small">No activities downloaded yet.</span>';
+                    return;
+                }
+                const fmt = (iso) => iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : '?';
+                const ageText = info.cache_age_hours < 24
+                    ? `${Math.round(info.cache_age_hours)}h ago`
+                    : `${Math.round(info.cache_age_hours / 24)}d ago`;
+                el.innerHTML = `
+                    <div class="d-flex flex-wrap gap-2">
+                        <span class="badge bg-secondary"><i class="bi bi-activity"></i> ${info.activity_count.toLocaleString()} activities</span>
+                        <span class="badge bg-secondary"><i class="bi bi-calendar-range"></i> ${fmt(info.date_earliest)} – ${fmt(info.date_latest)}</span>
+                        <span class="badge bg-secondary"><i class="bi bi-clock"></i> Updated ${ageText}</span>
+                        <span class="badge bg-secondary"><i class="bi bi-hdd"></i> ${info.cache_size_mb} MB</span>
+                    </div>`;
+            } catch (e) {
+                el.innerHTML = '<span class="text-warning small"><i class="bi bi-exclamation-triangle"></i> Could not load cache info</span>';
+            }
+        }
+
+        async function runAnalysis() {
+            const btn = document.getElementById('run-analysis-btn');
+            const statusEl = document.getElementById('analysis-status');
+            const fetchNew = document.querySelector('input[name="analysis-mode"]:checked').value === 'fetch';
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span> Running…';
+            statusEl.style.display = '';
+            statusEl.textContent = fetchNew ? 'Fetching from Strava…' : 'Reanalyzing cached data…';
+
+            try {
+                await window.apiClient.triggerAnalysis({ fetchNew });
+                pollAnalysisStatus();
+            } catch (e) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-play-fill"></i> Run Analysis';
+                statusEl.textContent = 'Failed to start: ' + (e.message || 'Unknown error');
+                if (typeof showToast === 'function') showToast('Failed to start analysis', 'error');
+            }
+        }
+
+        function pollAnalysisStatus() {
+            const btn = document.getElementById('run-analysis-btn');
+            const statusEl = document.getElementById('analysis-status');
+            const poll = setInterval(async () => {
+                try {
+                    const job = await window.apiClient.getAnalysisStatus();
+                    if (job.status === 'done') {
+                        clearInterval(poll);
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="bi bi-play-fill"></i> Run Analysis';
+                        const r = job.result || {};
+                        statusEl.textContent = `Done — ${(r.activities_count || 0).toLocaleString()} activities, ${r.route_groups_count || 0} route groups`;
+                        if (typeof showToast === 'function') showToast('Analysis complete', 'success');
+                        loadCacheInfo();
+                    } else if (job.status === 'error') {
+                        clearInterval(poll);
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="bi bi-play-fill"></i> Run Analysis';
+                        const msg = (job.result || {}).message || 'Unknown error';
+                        statusEl.textContent = 'Error: ' + msg;
+                        if (typeof showToast === 'function') showToast('Analysis failed: ' + msg, 'error');
+                    }
+                } catch (_) { /* network hiccup — keep polling */ }
+            }, 3000);
         }
     </script>
 </body>

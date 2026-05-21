@@ -220,6 +220,32 @@ class APIClient {
             method: 'POST'
         });
     }
+
+    /**
+     * Get local activity cache stats (count, date range, size, age)
+     */
+    async getCacheInfo() {
+        return this.fetch('/cache-info');
+    }
+
+    /**
+     * Trigger a background analysis run.
+     * @param {Object} options
+     * @param {boolean} options.fetchNew  true = pull from Strava first; false = reanalyze cache only
+     */
+    async triggerAnalysis(options = {}) {
+        return this.fetch('/analyze', {
+            method: 'POST',
+            body: JSON.stringify({ fetch_new: options.fetchNew || false }),
+        });
+    }
+
+    /**
+     * Poll the current analysis job status
+     */
+    async getAnalysisStatus() {
+        return this.fetch('/analyze/status');
+    }
 }
 
 // Create global API client instance
