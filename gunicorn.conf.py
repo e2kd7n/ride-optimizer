@@ -1,7 +1,7 @@
 import os
 
 bind = f"0.0.0.0:{os.getenv('APP_PORT', '8083')}"
-workers = int(os.getenv('GUNICORN_WORKERS', '2'))
+workers = int(os.getenv('GUNICORN_WORKERS', '1'))
 timeout = int(os.getenv('GUNICORN_TIMEOUT', '60'))
 keepalive = 5
 accesslog = '-'
