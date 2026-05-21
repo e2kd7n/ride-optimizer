@@ -83,20 +83,20 @@ podman-compose down 2>&1 | grep -v "no such container\|no such pod\|no pod with 
 # The container runs as rideopt (UID 1000); sudo is used so this works even
 # when the directory was previously created by root during an older run.
 mkdir -p logs data cache config
-sudo chown 1000:1000 logs data cache 2>/dev/null || \
-    log "WARNING: could not chown logs/data/cache — if the app fails to start, run: sudo chown -R 1000:1000 logs data cache"
+podman unshare chown -R 1000:1000 logs data cache config 2>/dev/null || \
+    log "WARNING: could not chown logs/data/cache/config — if the app fails to start, run: podman unshare chown -R 1000:1000 logs data cache config"
 
 podman-compose up -d
 
 log "Waiting for app to become healthy..."
-for i in $(seq 1 12); do
+for i in $(seq 1 36); do
     sleep 5
     if podman inspect --format='{{.State.Health.Status}}' ride-optimizer 2>/dev/null | grep -q healthy; then
         log "✓ App healthy after $((i * 5))s."
         break
     fi
-    if [ "$i" -eq 12 ]; then
-        log "ERROR: ride-optimizer did not become healthy after 60s."
+    if [ "$i" -eq 36 ]; then
+        log "ERROR: ride-optimizer did not become healthy after 180s."
         exit 1
     fi
 done
