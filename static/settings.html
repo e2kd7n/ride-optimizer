@@ -194,6 +194,17 @@
                             </h2>
                         </div>
                         <div class="card-body">
+                            <div class="mb-3 d-flex align-items-center gap-3 flex-wrap">
+                                <div id="strava-connection-status">
+                                    <span class="text-muted small"><i class="bi bi-hourglass-split"></i> Checking Strava…</span>
+                                </div>
+                                <a href="/api/strava/connect" class="btn btn-sm btn-outline-warning" id="strava-connect-btn" style="display:none">
+                                    <i class="bi bi-link-45deg"></i> Connect to Strava
+                                </a>
+                            </div>
+
+                            <hr class="my-2">
+
                             <div id="cache-info" class="mb-3">
                                 <span class="text-muted small"><i class="bi bi-hourglass-split"></i> Loading cache info…</span>
                             </div>
@@ -321,8 +332,19 @@
             setupEventListeners();
 
             // Load cache info and wire analysis button
+            loadStravaStatus();
             loadCacheInfo();
             document.getElementById('run-analysis-btn').addEventListener('click', runAnalysis);
+
+            // Handle OAuth redirect results
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('strava_connected') === '1') {
+                if (typeof showToast === 'function') showToast('Strava connected successfully!', 'success');
+                history.replaceState({}, '', '/settings.html');
+            } else if (params.get('strava_error')) {
+                if (typeof showToast === 'function') showToast('Strava connection failed: ' + params.get('strava_error'), 'error');
+                history.replaceState({}, '', '/settings.html');
+            }
             
             // Setup form validation
             setupFormValidation();
@@ -507,6 +529,25 @@
                         window.location.reload();
                     }, 1500);
                 }
+            }
+        }
+
+        async function loadStravaStatus() {
+            const statusEl = document.getElementById('strava-connection-status');
+            const connectBtn = document.getElementById('strava-connect-btn');
+            try {
+                const s = await window.apiClient.getStravaStatus();
+                if (s.connected) {
+                    const exp = new Date(s.expires_at * 1000).toLocaleDateString();
+                    statusEl.innerHTML = `<span class="badge bg-success"><i class="bi bi-check-circle"></i> Strava connected</span> <span class="text-muted small">token expires ${exp}</span>`;
+                    connectBtn.style.display = 'none';
+                } else {
+                    const reason = s.reason === 'token_expired' ? 'token expired' : 'not connected';
+                    statusEl.innerHTML = `<span class="badge bg-danger"><i class="bi bi-x-circle"></i> Strava ${reason}</span>`;
+                    connectBtn.style.display = '';
+                }
+            } catch (e) {
+                statusEl.innerHTML = '<span class="text-warning small"><i class="bi bi-exclamation-triangle"></i> Could not check Strava status</span>';
             }
         }
 
