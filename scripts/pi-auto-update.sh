@@ -51,7 +51,12 @@ fi
 log "New image: ${BEFORE_ID:0:12} → ${AFTER_ID:0:12}"
 
 log "Restarting containers..."
-podman-compose down
+podman-compose down 2>&1 | grep -v "no pod with name or ID" || true
+
+# Ensure mounted directories are writable by container user (UID 1000 = rideopt)
+mkdir -p logs data cache config
+chown 1000:1000 logs data cache 2>/dev/null || true
+
 podman-compose up -d
 
 log "Waiting for app to become healthy..."
