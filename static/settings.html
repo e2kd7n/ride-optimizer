@@ -512,12 +512,19 @@
 
         async function loadCacheInfo() {
             const el = document.getElementById('cache-info');
+            const reanalyzeRadio = document.getElementById('mode-cached');
+            const reanalyzeLabel = reanalyzeRadio.closest('.form-check');
             try {
                 const info = await window.apiClient.getCacheInfo();
                 if (info.status === 'no_cache') {
-                    el.innerHTML = '<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle"></i> No cache</span> <span class="text-muted small">No activities downloaded yet.</span>';
+                    el.innerHTML = '<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle"></i> No local cache</span> <span class="text-muted small">No activities downloaded yet — use "Fetch new Strava data" to populate.</span>';
+                    reanalyzeRadio.disabled = true;
+                    reanalyzeLabel.classList.add('text-muted');
+                    document.getElementById('mode-fetch').checked = true;
                     return;
                 }
+                reanalyzeRadio.disabled = false;
+                reanalyzeLabel.classList.remove('text-muted');
                 const fmt = (iso) => iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : '?';
                 const ageText = info.cache_age_hours < 24
                     ? `${Math.round(info.cache_age_hours)}h ago`

@@ -8,7 +8,9 @@ This service orchestrates the main analysis workflow:
 - Managing data freshness and caching
 """
 
+import json
 import logging
+from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 
@@ -254,8 +256,21 @@ class AnalysisService:
         try:
             # Step 1: Fetch or load activities
             if skip_strava_fetch:
-                logger.info("Loading activities from local cache...")
-                self._activities = self.data_fetcher.load_cached_activities()
+                cache_path = Path('data/cache/activities.json')
+                if not cache_path.exists():
+                    return {
+                        'status': 'error',
+                        'message': 'No cached activities found. Use "Fetch new Strava data" to download activities first.',
+                        'activities_count': 0,
+                        'route_groups_count': 0,
+                        'long_rides_count': 0,
+                        'analysis_time': datetime.now().isoformat(),
+                        'data_freshness': 'unknown',
+                        'errors': ['No cached activities'],
+                    }
+                logger.info("Loading activities from local cache (no Strava auth required)...")
+                with open(cache_path) as f:
+                    self._activities = [Activity.from_dict(a) for a in json.load(f)]
             else:
                 logger.info("Fetching activities from Strava...")
                 self._activities = self.data_fetcher.fetch_activities(force_refresh=force_refresh)
