@@ -144,16 +144,18 @@ class StravaDataFetcher:
     def fetch_activities(self, limit: Optional[int] = None,
                         after: Optional[datetime] = None,
                         before: Optional[datetime] = None,
-                        use_cache: bool = True) -> List[Activity]:
+                        use_cache: bool = True,
+                        progress_callback=None) -> List[Activity]:
         """
         Fetch activities from Strava API.
-        
+
         Args:
             limit: Maximum number of activities to fetch (default from config or 500)
             after: Only fetch activities after this date
             before: Only fetch activities before this date
             use_cache: If True, check cache first and return cached data if valid (default: True)
-            
+            progress_callback: Optional callable(fetched_count) called after each activity
+
         Returns:
             List of Activity objects
         """
@@ -225,7 +227,10 @@ class StravaDataFetcher:
                         
                         activities.append(act)
                         processed_count += 1
-                        
+
+                        if progress_callback:
+                            progress_callback(processed_count)
+
                         # Show progress every 100 activities
                         if processed_count % 100 == 0:
                             print(f"  Fetched {processed_count} activities so far...")
@@ -253,11 +258,15 @@ class StravaDataFetcher:
             print()
             
             logger.info(f"Fetched {len(activities)} activities")
-            
+
+            # Persist to disk so reanalyze-cached-data mode picks up fresh data
+            if activities:
+                self.cache_activities(activities, merge=False)
+
         except Exception as e:
             logger.error(f"Failed to fetch activities: {e}")
             raise
-        
+
         return activities
     
     def get_activity_details(self, activity_id: int) -> Optional[Activity]:
