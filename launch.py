@@ -890,10 +890,6 @@ def get_status():
         status_data = {
             'status': 'success',
             'timestamp': datetime.now().isoformat(),
-            'storage_ok': True,
-            'storage_used_mb': 10,  # TODO: Calculate actual storage
-            'storage_total_mb': 1000,
-            'uptime_seconds': 3600,  # TODO: Track actual uptime
             'last_update': analysis_status.get('last_analysis'),
             'services': {
                 'analysis': 'initialized' if _analysis_service else 'not_initialized',
