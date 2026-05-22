@@ -914,14 +914,39 @@ def get_status():
 
 @app.route('/api/strava/status')
 def strava_status():
-    import time
     storage = SecureTokenStorage('config/credentials.json')
     tokens = storage.load_tokens()
     if tokens is None:
         return jsonify({'connected': False, 'reason': 'no_credentials'})
+
+    # Migration: grant existing tokens without auth_expires_at a 90-day window from now
+    auth_expires_at = tokens.get('auth_expires_at') or (time.time() + 90 * 86400)
+
+    if auth_expires_at < time.time():
+        return jsonify({'connected': False, 'reason': 'auth_expired'})
+
+    # Auto-refresh the short-lived access token when it has expired
     if tokens.get('expires_at', 0) < time.time():
-        return jsonify({'connected': False, 'reason': 'token_expired'})
-    return jsonify({'connected': True, 'expires_at': tokens['expires_at']})
+        try:
+            import requests as http_req
+            resp = http_req.post('https://www.strava.com/oauth/token', data={
+                'client_id': os.getenv('STRAVA_CLIENT_ID'),
+                'client_secret': os.getenv('STRAVA_CLIENT_SECRET'),
+                'refresh_token': tokens['refresh_token'],
+                'grant_type': 'refresh_token',
+            }, timeout=15)
+            resp.raise_for_status()
+            refreshed = resp.json()
+            tokens['access_token'] = refreshed['access_token']
+            tokens['refresh_token'] = refreshed['refresh_token']
+            tokens['expires_at'] = refreshed['expires_at']
+            tokens['auth_expires_at'] = auth_expires_at
+            storage.save_tokens(tokens)
+        except Exception as e:
+            logger.warning(f"Strava token refresh failed in status check: {e}")
+            return jsonify({'connected': False, 'reason': 'refresh_failed'})
+
+    return jsonify({'connected': True, 'expires_at': tokens['expires_at'], 'auth_expires_at': auth_expires_at})
 
 
 @app.route('/api/strava/connect')
@@ -974,6 +999,7 @@ def strava_callback():
             'access_token': token_data['access_token'],
             'refresh_token': token_data['refresh_token'],
             'expires_at': token_data['expires_at'],
+            'auth_expires_at': time.time() + 180 * 86400,
         })
         logger.info("Strava OAuth complete — credentials saved")
 
