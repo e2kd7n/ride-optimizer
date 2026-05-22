@@ -13,16 +13,16 @@ This document identifies cross-platform compatibility issues in the Ride Optimiz
 **Problem:** Bash scripts don't run natively on Windows without WSL/Git Bash/Cygwin.
 
 **Affected Scripts:**
-- `scripts/run_tests.sh`
-- `scripts/run_integration_tests.sh`
-- `scripts/run_with_weasyprint.sh`
-- `scripts/build_pi.sh`
+- `scripts/run-tests.sh`
+- `scripts/run-integration-tests.sh`
+- `scripts/run-with-weasyprint.sh`
+- `scripts/build-pi.sh`
 - `scripts/weekly-maintenance.sh`
 - `scripts/update-issue-priorities.sh`
 - `scripts/align-labels.sh`
 - `scripts/close-issue.sh`
-- `scripts/reopen_integration_issues.sh`
-- `scripts/sync_todos_to_issues.sh`
+- `scripts/reopen-integration-issues.sh`
+- `scripts/sync-todos-to-issues.sh`
 - `scripts/verify-issue-closures.sh`
 - `cron/install_cron.sh`
 
@@ -84,8 +84,8 @@ date -u -v+7d +"%Y-%m-%d" 2>/dev/null || date -u -d "+7 days" +"%Y-%m-%d"
 ### Solution 1: Python Wrapper Scripts
 
 Created cross-platform Python wrappers for commonly-used shell scripts:
-- `scripts/run_tests.py` - Replaces `run_tests.sh`
-- `scripts/run_integration_tests.py` - Replaces `run_integration_tests.sh`
+- `scripts/run_tests.py` - Replaces `run-tests.sh`
+- `scripts/run_integration_tests.py` - Replaces `run-integration-tests.sh`
 - `scripts/update_issue_priorities.py` - Replaces `update-issue-priorities.sh`
 
 **Benefits:**
@@ -151,7 +151,7 @@ python scripts/run_tests.py coverage
 python scripts/run_tests.py all
 
 # Or use shell script
-./scripts/run_tests.sh all
+./scripts/run-tests.sh all
 ```
 
 ### Running Integration Tests
@@ -164,7 +164,7 @@ python scripts/run_integration_tests.py
 **macOS/Linux:**
 ```bash
 python scripts/run_integration_tests.py
-# Or: ./scripts/run_integration_tests.sh
+# Or: ./scripts/run-integration-tests.sh
 ```
 
 ### GitHub Issue Management
@@ -206,14 +206,14 @@ These scripts remain Unix-only due to their nature:
 ### GitHub Integration Scripts
 - `scripts/align-labels.sh` - Requires `gh` CLI
 - `scripts/close-issue.sh` - Requires `gh` CLI
-- `scripts/sync_todos_to_issues.sh` - Requires `gh` CLI
+- `scripts/sync-todos-to-issues.sh` - Requires `gh` CLI
 - `scripts/verify-issue-closures.sh` - Requires `gh` CLI
 
 **Windows Users:** Install GitHub CLI for Windows and use Git Bash or WSL to run these scripts.
 
 ### Build Scripts
-- `scripts/build_pi.sh` - Raspberry Pi specific
-- `scripts/run_with_weasyprint.sh` - macOS specific
+- `scripts/build-pi.sh` - Raspberry Pi specific
+- `scripts/run-with-weasyprint.sh` - macOS specific
 
 **Note:** These are environment-specific and don't need Windows equivalents.
 
@@ -253,7 +253,7 @@ These scripts remain Unix-only due to their nature:
 1. **Use shell scripts** - they're optimized for Unix
 2. **Install cron jobs** for automated tasks
 3. **Monitor logs** in `logs/` directory
-4. **Use `build_pi.sh`** for container builds
+4. **Use `build-pi.sh`** for container builds
 
 ## Future Improvements
 

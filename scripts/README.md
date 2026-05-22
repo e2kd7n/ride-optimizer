@@ -25,14 +25,13 @@ Simply select a category, then choose a script to run. The menu handles all the 
 ## Shell Scripts
 
 ### Testing & Development
-- **run_tests.sh** - Run pytest test suite with various options
-- **run_with_weasyprint.sh** - Run application with WeasyPrint for PDF generation
+- **run-tests.sh** - Run pytest test suite with various options
 
 ### GitHub Integration
 - **close-issue.sh** - Close GitHub issues with properly formatted comments (handles special characters)
 - **create_issues.sh** - Create GitHub issues from templates
 - **create_uiux_epic_issues_temp.sh** - Create UI/UX epic issues (temporary)
-- **sync_todos_to_issues.sh** - Sync TODO items to GitHub issues
+- **sync-todos-to-issues.sh** - Sync TODO items to GitHub issues
 - **update-issue-priorities.sh** - Update ISSUE_PRIORITIES.md from GitHub
 - **verify-issue-closures.sh** - Verify issues are properly closed
 
@@ -59,7 +58,7 @@ You can also run scripts directly without the menu:
 
 ```bash
 # Run tests
-./scripts/run_tests.sh all
+./scripts/run-tests.sh all
 
 # Test geocoding
 python scripts/test_geocoding.py

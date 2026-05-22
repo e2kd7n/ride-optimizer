@@ -35,5 +35,5 @@ config/.trainerroad_encryption_key
 # Maintenance backup archives
 backups/maintenance/*.tar.gz
 
-# Backup files — pushed to private backup repo via scripts/backup_env.sh
+# Backup files — pushed to private backup repo via scripts/backup-env.sh
 *.backup

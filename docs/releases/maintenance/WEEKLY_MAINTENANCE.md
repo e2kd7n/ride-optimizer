@@ -32,7 +32,7 @@ echo $! > /tmp/maintenance-task.pid
 ### Tasks That Benefit from Parallel Execution
 - **Issue Management** (10-30 min): `./scripts/update-issue-priorities.sh`
 - **GitHub Label Sync** (5-10 min): `./scripts/sync-github-labels.sh`
-- **Test Suite** (5-15 min): `./scripts/run_tests.sh all`
+- **Test Suite** (5-15 min): `./scripts/run-tests.sh all`
 - **Dependency Updates** (5-10 min): `pip list --outdated`
 - **Security Scans** (2-5 min): `safety check`
 
