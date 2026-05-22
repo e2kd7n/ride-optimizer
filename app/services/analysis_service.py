@@ -78,7 +78,7 @@ class AnalysisService:
             ValueError: If authentication fails
         """
         if self._strava_client is None:
-            from src.auth import get_authenticated_client
+            from src.auth_secure import get_authenticated_client
             logger.info("Authenticating with Strava (lazy initialization)...")
             self._strava_client = get_authenticated_client(self.config)
             self._data_fetcher = StravaDataFetcher(self._strava_client, self.config)
