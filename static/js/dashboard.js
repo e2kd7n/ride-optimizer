@@ -424,6 +424,7 @@ async function loadRecommendation() {
 
 /**
  * Load Today's Conditions card with traffic-light indicators (#288).
+ * Mobile: collapses to a 1-line summary with an expand chevron.
  */
 async function loadConditionsCard() {
     const container = document.getElementById('conditions-card');
@@ -441,17 +442,20 @@ async function loadConditionsCard() {
         const severity = getWeatherSeverity(current);
         const comfort = current.comfort_score || 0;
 
+        function conditionStatus(score) {
+            if (score >= 80) return { icon: 'bi-check-circle-fill', color: '#28a745', label: 'Excellent' };
+            if (score >= 65) return { icon: 'bi-hand-thumbs-up-fill', color: '#20c997', label: 'Good' };
+            if (score >= 50) return { icon: 'bi-exclamation-triangle-fill', color: '#ffc107', label: 'Fair' };
+            if (score >= 35) return { icon: 'bi-hand-thumbs-down-fill', color: '#fd7e14', label: 'Poor' };
+            return { icon: 'bi-x-circle-fill', color: '#dc3545', label: 'Bad' };
+        }
+
         function conditionRow(label, score, note) {
-            let icon, color;
-            if (score >= 80) { icon = 'bi-check-circle-fill'; color = '#28a745'; }
-            else if (score >= 65) { icon = 'bi-hand-thumbs-up-fill'; color = '#20c997'; }
-            else if (score >= 50) { icon = 'bi-exclamation-triangle-fill'; color = '#ffc107'; }
-            else if (score >= 35) { icon = 'bi-hand-thumbs-down-fill'; color = '#fd7e14'; }
-            else { icon = 'bi-x-circle-fill'; color = '#dc3545'; }
+            const s = conditionStatus(score);
             return `
                 <div class="conditions-row d-flex align-items-center gap-2 py-1">
                     <span class="conditions-label small text-muted" style="min-width:90px">${label}</span>
-                    <i class="bi ${icon}" style="color:${color};font-size:1rem;"></i>
+                    <i class="bi ${s.icon}" style="color:${s.color};font-size:1rem;"></i>
                     <span class="small">${esc(note)}</span>
                 </div>`;
         }
@@ -468,15 +472,39 @@ async function loadConditionsCard() {
                        : `Strong ${windDir} wind (${windSpeed} mph)`;
         const conditionsText = `${severity.label} — ${(current.conditions || '').toLowerCase()}`;
 
+        const overall = conditionStatus(comfort);
         const html = `
-            ${conditionRow('Weather', comfort, conditionsText)}
-            ${conditionRow('Wind', windScore, windNote)}
-            ${conditionRow('Comfort', comfort, `${comfort}/100`)}
-            <div class="mt-2">
-                <a href="/weather.html" class="small text-muted">Detailed forecast →</a>
+            <div class="conditions-summary-toggle d-flex d-md-none align-items-center gap-2"
+                 role="button" tabindex="0" aria-expanded="false" aria-controls="conditions-full-rows">
+                <i class="bi ${overall.icon}" style="color:${overall.color}"></i>
+                <span class="small fw-semibold">${overall.label} · ${comfort}/100</span>
+                <i class="bi bi-chevron-down ms-auto conditions-chevron" aria-hidden="true"></i>
+            </div>
+            <div class="conditions-full-rows">
+                ${conditionRow('Weather', comfort, conditionsText)}
+                ${conditionRow('Wind', windScore, windNote)}
+                ${conditionRow('Comfort', comfort, `${comfort}/100`)}
+                <div class="mt-2">
+                    <a href="/weather.html" class="small text-muted">Detailed forecast →</a>
+                </div>
             </div>`;
 
         container.innerHTML = html;
+
+        const toggle = container.querySelector('.conditions-summary-toggle');
+        const fullRows = container.querySelector('.conditions-full-rows');
+        if (toggle && fullRows) {
+            toggle.addEventListener('click', () => {
+                const expanded = toggle.getAttribute('aria-expanded') === 'true';
+                toggle.setAttribute('aria-expanded', String(!expanded));
+                fullRows.classList.toggle('conditions-rows-open', !expanded);
+                toggle.querySelector('.conditions-chevron').style.transform = expanded ? '' : 'rotate(180deg)';
+            });
+            toggle.addEventListener('keydown', e => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle.click(); }
+            });
+        }
+
         const mobile = document.getElementById('conditions-card-mobile');
         if (mobile) mobile.innerHTML = html;
     } catch (error) {
@@ -487,6 +515,7 @@ async function loadConditionsCard() {
 
 /**
  * Load Route Status panel with per-route condition summary (#289).
+ * Mobile: panel is hidden when fewer than 2 routes (not worth showing).
  */
 async function loadRouteStatus() {
     const container = document.getElementById('route-status-panel');
@@ -498,7 +527,12 @@ async function loadRouteStatus() {
 
         if (data.status !== 'success' || !data.routes || data.routes.length === 0) {
             container.innerHTML = window.renderEmptyState('No route data.', 'Sync Strava to see route conditions.', 'bi-map');
+            container.closest('.col-6').classList.add('d-none', 'd-md-block');
             return;
+        }
+
+        if (data.routes.length < 2) {
+            container.closest('.col-6').classList.add('d-none', 'd-md-block');
         }
 
         const esc = window.escapeHtml;
