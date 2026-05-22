@@ -33,6 +33,9 @@ from cryptography.fernet import Fernet
 
 logger = logging.getLogger(__name__)
 
+_AUTH_EXPIRY_SECS = 180 * 86400   # preferred: 180 days
+_AUTH_MIGRATION_SECS = 90 * 86400  # minimum for existing tokens without the field
+
 # Security audit logger
 security_logger = logging.getLogger('security_audit')
 security_handler = None
@@ -447,9 +450,10 @@ class SecureStravaAuthenticator:
         tokens = {
             'access_token': access_info['access_token'],  # type: ignore[index]
             'refresh_token': access_info['refresh_token'],  # type: ignore[index]
-            'expires_at': access_info['expires_at']  # type: ignore[index]
+            'expires_at': access_info['expires_at'],  # type: ignore[index]
+            'auth_expires_at': current_time() + _AUTH_EXPIRY_SECS,
         }
-        
+
         log_security_event('TOKEN_EXCHANGED', {
             'timestamp': datetime.now(timezone.utc).isoformat()
         })
@@ -505,10 +509,11 @@ class SecureStravaAuthenticator:
         if tokens:
             logger.info("Found existing tokens")
             # Check if token needs refresh
-            import time
-            if tokens['expires_at'] < time.time():
+            if tokens['expires_at'] < current_time():
                 logger.info("Access token expired, refreshing...")
+                auth_expires_at = tokens.get('auth_expires_at', current_time() + _AUTH_MIGRATION_SECS)
                 tokens = self.refresh_access_token(tokens['refresh_token'])
+                tokens['auth_expires_at'] = auth_expires_at
                 self.save_tokens(tokens)
             log_security_event('AUTH_SUCCESS', {
                 'method': 'existing_tokens',
@@ -595,12 +600,13 @@ class SecureStravaAuthenticator:
             raise ValueError("No tokens found. Please authenticate first.")
         
         # Check if token needs refresh
-        import time
-        if tokens['expires_at'] < time.time():
+        if tokens['expires_at'] < current_time():
             logger.info("Access token expired, refreshing...")
+            auth_expires_at = tokens.get('auth_expires_at', current_time() + _AUTH_MIGRATION_SECS)
             tokens = self.refresh_access_token(tokens['refresh_token'])
+            tokens['auth_expires_at'] = auth_expires_at
             self.save_tokens(tokens)
-        
+
         # Create client with full token info for auto-refresh feature
         # This eliminates warnings about missing refresh_token and token_expires
         client = Client(
