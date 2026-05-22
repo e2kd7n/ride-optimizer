@@ -7,6 +7,8 @@ config/.trainerroad_encryption_key
 config/secret_key
 /data/cache/
 /data/weather_cache.json
+/data/*.json
+/data/*.db
 /cache/
 /output/
 venv/
