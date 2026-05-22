@@ -1013,13 +1013,13 @@ tr:focus-visible {
 button {
     min-height: 44px;
     min-width: 44px;
-    padding: 10px 16px;
+    padding: var(--space-2) var(--space-3);
 }
 
 .btn-sm,
 .btn-group-sm > .btn {
     min-height: 44px;
-    padding: 10px 12px;
+    padding: var(--space-1) var(--space-2);
 }
 
 a {
@@ -1047,31 +1047,31 @@ input[type="url"],
 select,
 textarea {
     min-height: 44px;
-    padding: 10px 12px;
+    padding: var(--space-2) var(--space-3);
 }
 
 input[type="checkbox"],
 input[type="radio"] {
-    width: 20px;
-    height: 20px;
-    margin: 12px;
+    width: 16px;
+    height: 16px;
+    margin: var(--space-2);
 }
 
 .form-check {
     min-height: 44px;
     display: flex;
     align-items: center;
-    padding: 8px 0;
+    padding: var(--space-2) 0;
 }
 
 .form-check-label {
-    padding-left: 8px;
+    padding-left: var(--space-2);
     cursor: pointer;
 }
 
 .nav-tabs .nav-link {
     min-height: 44px;
-    padding: 10px 16px;
+    padding: var(--space-2) var(--space-3);
     display: flex;
     align-items: center;
 }
@@ -1082,20 +1082,20 @@ input[type="radio"] {
 
 .table td,
 .table th {
-    padding: 12px 10px;
+    padding: var(--space-3) var(--space-2);
 }
 
 .btn-close,
 .modal-close {
     min-width: 44px;
     min-height: 44px;
-    padding: 12px;
+    padding: var(--space-2);
 }
 
 .btn-icon {
     min-width: 44px;
     min-height: 44px;
-    padding: 10px;
+    padding: var(--space-2);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1104,7 +1104,7 @@ input[type="radio"] {
 .btn + .btn,
 .nav-link + .nav-link,
 .form-check + .form-check {
-    margin-left: 8px;
+    margin-left: var(--space-2);
 }
 
 .btn-group .btn + .btn {
@@ -1362,7 +1362,7 @@ input[type="radio"] {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
     border-radius: 8px;
-    margin-bottom: 12px;
+    margin-bottom: var(--space-2);
     height: 72px;
     align-items: center;
 }
@@ -1387,8 +1387,8 @@ input[type="radio"] {
 
 .home-quick-actions {
     display: flex;
-    gap: 8px;
-    margin-bottom: 12px;
+    gap: var(--space-2);
+    margin-bottom: var(--space-2);
     height: 48px;
 }
 
@@ -1518,24 +1518,24 @@ input[type="radio"] {
     .btn,
     button {
         min-height: 48px;
-        padding: 12px 20px;
+        padding: var(--space-3) var(--space-4);
     }
-    
+
     .nav-tabs .nav-link {
         min-height: 48px;
-        padding: 12px 20px;
+        padding: var(--space-3) var(--space-4);
     }
-    
+
     .btn + .btn,
     .nav-link + .nav-link {
-        margin-left: 12px;
+        margin-left: var(--space-3);
     }
-    
+
     .table td,
     .table th {
-        padding: 14px 12px;
+        padding: var(--space-3) var(--space-2);
     }
-    
+
     input[type="text"],
     input[type="email"],
     input[type="password"],
@@ -1546,7 +1546,7 @@ input[type="radio"] {
     select,
     textarea {
         min-height: 48px;
-        padding: 12px 16px;
+        padding: var(--space-2) var(--space-3);
         font-size: 16px;
     }
 }
@@ -1636,7 +1636,7 @@ input[type="radio"] {
     color: white;
     border: none;
     border-radius: 4px;
-    padding: 6px 12px;
+    padding: var(--space-1) var(--space-2);
     font-size: 0.875rem;
     font-weight: 500;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
