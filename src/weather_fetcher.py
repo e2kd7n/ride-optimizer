@@ -161,32 +161,36 @@ class WeatherFetcher:
             params = {
                 'latitude': lat,
                 'longitude': lon,
-                'current': 'temperature_2m,relative_humidity_2m,precipitation,'
+                'current': 'temperature_2m,apparent_temperature,relative_humidity_2m,'
+                          'precipitation,weather_code,'
                           'wind_speed_10m,wind_direction_10m,wind_gusts_10m',
                 'wind_speed_unit': 'kmh',
                 'timezone': 'auto'
             }
-            
+
             response = self.session.get(self.base_url, params=params, timeout=10)
             response.raise_for_status()
-            
+
             data = response.json()
-            
+
             if 'current' not in data:
                 return None
-            
+
             current = data['current']
-            
+
             wind_dir = current.get('wind_direction_10m')
+            weather_code = current.get('weather_code')
             conditions = {
                 'timestamp': current.get('time'),
                 'temp_c': current.get('temperature_2m'),
+                'feels_like_c': current.get('apparent_temperature'),
                 'wind_speed_kph': current.get('wind_speed_10m'),
                 'wind_gust_kph': current.get('wind_gusts_10m'),
                 'wind_direction_deg': wind_dir,
                 'wind_direction_cardinal': WeatherFetcher.degrees_to_cardinal(wind_dir) if wind_dir is not None else 'N/A',
                 'humidity': current.get('relative_humidity_2m'),
                 'precipitation_mm': current.get('precipitation'),
+                'conditions': WeatherFetcher.weather_code_to_conditions(weather_code),
                 'lat': lat,
                 'lon': lon
             }
@@ -363,6 +367,31 @@ class WeatherFetcher:
         
         return avg_conditions
     
+    @staticmethod
+    def weather_code_to_conditions(code: Optional[int]) -> str:
+        """Map WMO weather interpretation code to a human-readable conditions string."""
+        if code is None:
+            return 'Unknown'
+        if code == 0:
+            return 'Clear Sky'
+        if code in (1, 2, 3):
+            return ('Mainly Clear', 'Partly Cloudy', 'Overcast')[code - 1]
+        if code in (45, 48):
+            return 'Foggy'
+        if code in (51, 53, 55):
+            return 'Drizzle'
+        if code in (61, 63, 65):
+            return 'Rain'
+        if code in (71, 73, 75, 77):
+            return 'Snow'
+        if code in (80, 81, 82):
+            return 'Rain Showers'
+        if code in (85, 86):
+            return 'Snow Showers'
+        if code in (95, 96, 99):
+            return 'Thunderstorm'
+        return 'Unknown'
+
     @staticmethod
     def degrees_to_cardinal(degrees: float) -> str:
         """

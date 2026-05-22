@@ -381,9 +381,11 @@ def get_weather():
         if weather_data:
             # Convert field names to match frontend expectations
             wind_speed_mph = weather_data.get('wind_speed_kph', 0) * 0.621371
+            temp_c = weather_data.get('temp_c', 0) or 0
+            feels_like_c = weather_data.get('feels_like_c', temp_c) or temp_c
             formatted_weather = {
-                'temperature': round(weather_data.get('temperature_f', weather_data.get('temp_c', 0) * 9/5 + 32)),
-                'feels_like': round(weather_data.get('feels_like_f', weather_data.get('temperature_f', 0))),
+                'temperature': round(weather_data.get('temperature_f', temp_c * 9/5 + 32)),
+                'feels_like': round(weather_data.get('feels_like_f', feels_like_c * 9/5 + 32)),
                 'conditions': weather_data.get('conditions', 'Unknown'),
                 'description': weather_data.get('conditions', 'Unknown'),
                 'wind_speed': round(wind_speed_mph),  # Round to nearest mph
@@ -1019,7 +1021,8 @@ def get_cache_info():
         return jsonify({'status': 'no_cache', 'activity_count': 0})
     try:
         with open(cache_path) as f:
-            activities = json.load(f)
+            cache_data = json.load(f)
+        activities = cache_data.get('activities', cache_data) if isinstance(cache_data, dict) else cache_data
         dates = sorted(a['start_date'] for a in activities if a.get('start_date'))
         stat = cache_path.stat()
         return jsonify({

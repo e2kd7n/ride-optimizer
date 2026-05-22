@@ -59,7 +59,7 @@ class WeatherService:
         score = 1.0
         
         # Temperature scoring (optimal: 15-25°C / 59-77°F)
-        temp_c = weather_data.get('temperature_c', weather_data.get('temperature', 20))
+        temp_c = weather_data.get('temp_c', weather_data.get('temperature_c', weather_data.get('temperature', 20)))
         if isinstance(temp_c, (int, float)):
             if temp_c < 0:
                 score -= 0.4
