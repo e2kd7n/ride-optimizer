@@ -235,7 +235,8 @@ class AnalysisService:
             # Add more fields as needed
         }
     
-    def run_full_analysis(self, force_refresh: bool = False, skip_strava_fetch: bool = False) -> Dict[str, Any]:
+    def run_full_analysis(self, force_refresh: bool = False, skip_strava_fetch: bool = False,
+                          on_progress=None) -> Dict[str, Any]:
         """
         Run complete analysis workflow.
 
@@ -249,13 +250,22 @@ class AnalysisService:
         Args:
             force_refresh: If True, bypass cache and re-fetch data from Strava
             skip_strava_fetch: If True, load cached activities as-is without any Strava call
+            on_progress: Optional callable(**kwargs) for live status updates
         """
+        def _notify(**kwargs):
+            if on_progress:
+                try:
+                    on_progress(**kwargs)
+                except Exception:
+                    pass
+
         logger.info(f"Starting full analysis (force_refresh={force_refresh}, skip_strava_fetch={skip_strava_fetch})")
         errors = []
 
         try:
             # Step 1: Fetch or load activities
             if skip_strava_fetch:
+                _notify(phase='loading', label='Loading cached activities…')
                 cache_path = Path('data/cache/activities.json')
                 if not cache_path.exists():
                     return {
@@ -272,8 +282,17 @@ class AnalysisService:
                 with open(cache_path) as f:
                     self._activities = [Activity.from_dict(a) for a in json.load(f)]
             else:
+                _notify(phase='fetching', fetched=0, label='Connecting to Strava…')
                 logger.info("Fetching activities from Strava...")
-                self._activities = self.data_fetcher.fetch_activities(use_cache=not force_refresh)
+
+                def _fetch_cb(count):
+                    _notify(phase='fetching', fetched=count,
+                            label=f'Fetching from Strava… {count:,} activities so far')
+
+                self._activities = self.data_fetcher.fetch_activities(
+                    use_cache=not force_refresh,
+                    progress_callback=_fetch_cb,
+                )
             logger.info(f"Loaded {len(self._activities)} activities")
             
             if not self._activities:
