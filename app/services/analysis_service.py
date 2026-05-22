@@ -273,7 +273,7 @@ class AnalysisService:
                     self._activities = [Activity.from_dict(a) for a in json.load(f)]
             else:
                 logger.info("Fetching activities from Strava...")
-                self._activities = self.data_fetcher.fetch_activities(force_refresh=force_refresh)
+                self._activities = self.data_fetcher.fetch_activities(use_cache=not force_refresh)
             logger.info(f"Loaded {len(self._activities)} activities")
             
             if not self._activities:
