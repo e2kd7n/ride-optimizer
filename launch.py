@@ -1045,7 +1045,21 @@ def trigger_analysis():
     data = request.get_json(silent=True) or {}
     fetch_new = bool(data.get('fetch_new', False))
 
-    _analysis_job = {'status': 'running', 'started_at': datetime.now().isoformat(), 'result': None}
+    _analysis_job = {
+        'status': 'running',
+        'phase': 'starting',
+        'fetched': 0,
+        'preview_ready': False,
+        'preview_count': 0,
+        'label': 'Starting…',
+        'started_at': datetime.now().isoformat(),
+        'result': None,
+    }
+
+    def _update_job(**kwargs):
+        global _analysis_job
+        for k, v in kwargs.items():
+            _analysis_job[k] = v
 
     def _run():
         global _analysis_job, _services_initialized
@@ -1053,13 +1067,16 @@ def trigger_analysis():
             result = _analysis_service.run_full_analysis(
                 force_refresh=fetch_new,
                 skip_strava_fetch=not fetch_new,
+                on_progress=_update_job,
             )
-            _analysis_job = {'status': 'done', 'started_at': _analysis_job['started_at'], 'result': result}
+            _update_job(status='done', phase='done', result=result,
+                        label=f"Done — {result.get('activities_count', 0):,} activities")
             _services_initialized = False
         except Exception as e:
             logger.error(f"Background analysis failed: {e}", exc_info=True)
-            _analysis_job = {'status': 'error', 'started_at': _analysis_job['started_at'],
-                             'result': {'status': 'error', 'message': str(e)}}
+            _update_job(status='error', phase='error',
+                        result={'status': 'error', 'message': str(e)},
+                        label=f'Error: {e}')
 
     threading.Thread(target=_run, daemon=True).start()
     return jsonify({'status': 'started', 'fetch_new': fetch_new})
