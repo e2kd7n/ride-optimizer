@@ -1,6 +1,6 @@
 #!/bin/bash
 # Backup .env and all *.backup files to private backups repository
-# Usage: ./scripts/backup_env.sh
+# Usage: ./scripts/backup-env.sh
 
 set -e
 

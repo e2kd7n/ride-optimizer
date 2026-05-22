@@ -60,7 +60,7 @@ case "${1:-all}" in
         exit 0
         ;;
     *)
-        echo "Usage: ./run_tests.sh [all|unit|integration|coverage|quick|watch]"
+        echo "Usage: ./run-tests.sh [all|unit|integration|coverage|quick|watch]"
         echo ""
         echo "Options:"
         echo "  all         - Run all tests (default)"
