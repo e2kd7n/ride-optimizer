@@ -227,11 +227,29 @@
                                 </div>
                             </div>
 
-                            <div class="d-flex align-items-center gap-3 flex-wrap">
+                            <div>
                                 <button type="button" class="btn btn-success" id="run-analysis-btn">
                                     <i class="bi bi-play-fill" aria-hidden="true"></i> Run Analysis
                                 </button>
-                                <span id="analysis-status" class="text-muted small" style="display:none"></span>
+                            </div>
+
+                            <!-- Progress panel (hidden until analysis starts) -->
+                            <div id="analysis-progress" class="mt-3" style="display:none">
+                                <div class="d-flex align-items-center gap-2 mb-1">
+                                    <span class="spinner-border spinner-border-sm text-success flex-shrink-0"
+                                          id="analysis-spinner" role="status" aria-hidden="true"></span>
+                                    <span id="analysis-status" class="small fw-medium text-body"></span>
+                                </div>
+                                <div class="progress mb-2" style="height:var(--space-1)">
+                                    <div class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+                                         id="analysis-progress-bar" role="progressbar" style="width:100%"
+                                         aria-valuenow="100" aria-valuemin="0" aria-valuemax="100"></div>
+                                </div>
+                                <div id="preview-ready-msg" class="small text-success" style="display:none">
+                                    <i class="bi bi-check-circle-fill me-1" aria-hidden="true"></i>
+                                    Preview ready —
+                                    <a href="/routes.html" class="text-success fw-medium">view routes →</a>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -584,13 +602,19 @@
 
         async function runAnalysis() {
             const btn = document.getElementById('run-analysis-btn');
+            const progressEl = document.getElementById('analysis-progress');
+            const spinnerEl = document.getElementById('analysis-spinner');
             const statusEl = document.getElementById('analysis-status');
+            const previewMsg = document.getElementById('preview-ready-msg');
             const fetchNew = document.querySelector('input[name="analysis-mode"]:checked').value === 'fetch';
 
             btn.disabled = true;
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span> Running…';
-            statusEl.style.display = '';
-            statusEl.textContent = fetchNew ? 'Fetching from Strava…' : 'Reanalyzing cached data…';
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Running…';
+            progressEl.style.display = '';
+            spinnerEl.style.display = '';
+            previewMsg.style.display = 'none';
+            previewMsg.dataset.shown = '';
+            statusEl.textContent = fetchNew ? 'Connecting to Strava…' : 'Loading cached data…';
 
             try {
                 await window.apiClient.triggerAnalysis({ fetchNew });
@@ -598,6 +622,7 @@
             } catch (e) {
                 btn.disabled = false;
                 btn.innerHTML = '<i class="bi bi-play-fill"></i> Run Analysis';
+                progressEl.style.display = 'none';
                 statusEl.textContent = 'Failed to start: ' + (e.message || 'Unknown error');
                 if (typeof showToast === 'function') showToast('Failed to start analysis', 'error');
             }
@@ -605,28 +630,67 @@
 
         function pollAnalysisStatus() {
             const btn = document.getElementById('run-analysis-btn');
+            const progressEl = document.getElementById('analysis-progress');
+            const spinnerEl = document.getElementById('analysis-spinner');
             const statusEl = document.getElementById('analysis-status');
+            const progressBar = document.getElementById('analysis-progress-bar');
+            const previewMsg = document.getElementById('preview-ready-msg');
+
+            const phaseLabels = {
+                starting: 'Starting…',
+                loading: 'Loading cached activities…',
+                fetching: 'Fetching activities from Strava…',
+                processing_preview: 'Processing first activities for preview…',
+                processing: 'Analyzing routes…',
+            };
+
             const poll = setInterval(async () => {
                 try {
                     const job = await window.apiClient.getAnalysisStatus();
+
+                    // Update status text: prefer the server label, fall back to phase map
+                    const label = job.label || phaseLabels[job.phase] || 'Running…';
+                    statusEl.textContent = label;
+
+                    // Slow the progress bar animation during processing (fast during fetch)
+                    if (job.phase === 'fetching') {
+                        progressBar.style.animationDuration = '0.75s';
+                    } else {
+                        progressBar.style.animationDuration = '2s';
+                    }
+
+                    // Show preview-ready link once (only when fetching from Strava)
+                    if (job.preview_ready && !previewMsg.dataset.shown) {
+                        previewMsg.style.display = '';
+                        previewMsg.dataset.shown = '1';
+                    }
+
                     if (job.status === 'done') {
                         clearInterval(poll);
+                        spinnerEl.style.display = 'none';
+                        progressBar.classList.remove('progress-bar-animated');
+                        progressBar.style.animationDuration = '';
                         btn.disabled = false;
-                        btn.innerHTML = '<i class="bi bi-play-fill"></i> Run Analysis';
+                        btn.innerHTML = '<i class="bi bi-play-fill" aria-hidden="true"></i> Run Analysis';
                         const r = job.result || {};
-                        statusEl.textContent = `Done — ${(r.activities_count || 0).toLocaleString()} activities, ${r.route_groups_count || 0} route groups`;
+                        const acts = (r.activities_count || 0).toLocaleString();
+                        const groups = r.route_groups_count || 0;
+                        statusEl.textContent = `Done — ${acts} activities, ${groups} route group${groups !== 1 ? 's' : ''}`;
                         if (typeof showToast === 'function') showToast('Analysis complete', 'success');
                         loadCacheInfo();
                     } else if (job.status === 'error') {
                         clearInterval(poll);
+                        spinnerEl.style.display = 'none';
+                        progressBar.classList.remove('progress-bar-animated');
+                        progressBar.classList.replace('bg-success', 'bg-danger');
                         btn.disabled = false;
-                        btn.innerHTML = '<i class="bi bi-play-fill"></i> Run Analysis';
+                        btn.innerHTML = '<i class="bi bi-play-fill" aria-hidden="true"></i> Run Analysis';
                         const msg = (job.result || {}).message || 'Unknown error';
                         statusEl.textContent = 'Error: ' + msg;
                         if (typeof showToast === 'function') showToast('Analysis failed: ' + msg, 'error');
                     }
                 } catch (_) { /* network hiccup — keep polling */ }
-            }, 3000);
+            }, 1500);
         }
     </script>
 </body>

@@ -306,14 +306,40 @@ class AnalysisService:
                     'data_freshness': 'unknown',
                     'errors': ['No activities available for analysis']
                 }
-            
-            # Step 2: Find locations
+
+            total = len(self._activities)
+
+            # Preview: best-effort pipeline on first ~10 activities after a live Strava fetch.
+            # Gives the user something to look at while the full analysis runs.
+            if not skip_strava_fetch:
+                preview_n = min(10, total)
+                _notify(phase='processing_preview', fetched=total, preview_count=preview_n,
+                        label=f'Processing first {preview_n} of {total:,} activities for preview…')
+                try:
+                    preview_acts = self._activities[:preview_n]
+                    lf = LocationFinder(preview_acts, self.config)
+                    h, w = lf.find_locations()
+                    ra = RouteAnalyzer(activities=preview_acts, home=h, work=w,
+                                       config=self.config, force_reanalysis=True)
+                    ra.analyze_routes()
+                    logger.info(f"Preview analysis complete on {preview_n} activities")
+                except Exception as exc:
+                    logger.warning(f"Preview analysis skipped ({exc})")
+                _notify(preview_ready=True, preview_count=preview_n,
+                        label=f'Preview ready — {total:,} activities fetched, '
+                              f'processing {total - preview_n:,} more…')
+
+            # Step 2: Find locations (full dataset)
+            _notify(phase='processing', fetched=total,
+                    label=f'Detecting your home and work locations…')
             logger.info("Finding home and work locations...")
             location_finder = LocationFinder(self._activities, self.config)
             self._home_location, self._work_location = location_finder.find_locations()
             logger.info(f"Home: {self._home_location.name}, Work: {self._work_location.name}")
-            
+
             # Step 3: Analyze routes
+            _notify(phase='processing', fetched=total,
+                    label=f'Grouping {total:,} activities into routes…')
             logger.info("Analyzing and grouping routes...")
             route_analyzer = RouteAnalyzer(
                 activities=self._activities,
@@ -322,39 +348,40 @@ class AnalysisService:
                 config=self.config,
                 force_reanalysis=force_refresh
             )
-            
+
             self._route_groups = route_analyzer.analyze_routes()
             logger.info(f"Found {len(self._route_groups)} route groups")
-            
+
             # Step 4: Analyze long rides
+            _notify(phase='processing', fetched=total, label='Analyzing long rides…')
             logger.info("Analyzing long rides...")
             long_ride_analyzer = LongRideAnalyzer(
                 activities=self._activities,
                 config=self.config
             )
-            
+
             # Get commute activities from route groups
             commute_activity_ids = set()
             for group in self._route_groups:
                 for route in group.routes:
                     commute_activity_ids.add(route.activity_id)
-            
+
             commute_activities = [
-                a for a in self._activities 
+                a for a in self._activities
                 if a.id in commute_activity_ids
             ]
-            
+
             _, long_ride_activities = long_ride_analyzer.classify_activities(commute_activities)
             self._long_rides = long_ride_analyzer.group_similar_rides(long_ride_activities)
             logger.info(f"Found {len(self._long_rides)} unique long rides")
-            
+
             # Step 5: Update analysis time
             self._last_analysis_time = datetime.now()
-            
+
             return {
                 'status': 'success',
                 'message': 'Analysis completed successfully',
-                'activities_count': len(self._activities),
+                'activities_count': total,
                 'route_groups_count': len(self._route_groups),
                 'long_rides_count': len(self._long_rides),
                 'analysis_time': self._last_analysis_time.isoformat(),
