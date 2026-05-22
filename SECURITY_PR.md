@@ -221,7 +221,7 @@ app.config.update(
 ### Automated Testing
 ```bash
 # All existing tests pass
-./scripts/run_tests.sh all
+./scripts/run-tests.sh all
 # Result: 47 passed, 0 failed
 ```
 

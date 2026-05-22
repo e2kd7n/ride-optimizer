@@ -1448,10 +1448,10 @@ fetcher = StravaDataFetcher(client, config, use_test_cache=True)
 
 ```bash
 # All tests
-./run_tests.sh all
+./run-tests.sh all
 
 # With coverage
-./run_tests.sh coverage
+./run-tests.sh coverage
 
 # Specific test file
 pytest -v tests/test_units.py

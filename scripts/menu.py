@@ -35,26 +35,23 @@ class ScriptMenu:
         # Format: (script_name, description, script_type)
         self.categories: Dict[str, List[Tuple[str, str, str]]] = {
             "Testing & Validation": [
-                ("run_tests.sh all", "Run all tests", "shell"),
-                ("run_tests.sh unit", "Run unit tests only", "shell"),
-                ("run_tests.sh integration", "Run integration tests only", "shell"),
-                ("run_tests.sh coverage", "Run tests with coverage report", "shell"),
-                ("run_tests.sh quick", "Run quick tests (exclude slow)", "shell"),
+                ("run-tests.sh all", "Run all tests", "shell"),
+                ("run-tests.sh unit", "Run unit tests only", "shell"),
+                ("run-tests.sh integration", "Run integration tests only", "shell"),
+                ("run-tests.sh coverage", "Run tests with coverage report", "shell"),
+                ("run-tests.sh quick", "Run quick tests (exclude slow)", "shell"),
                 ("test_imports.py", "Verify all imports work", "python"),
                 ("verify_dependencies.py", "Check dependencies installed", "python"),
                 ("test_trainerroad_integration.py", "Test TrainerRoad integration", "python"),
             ],
             "GitHub Integration": [
-                ("sync_todos_to_issues.sh", "Sync TODOs to GitHub issues", "shell"),
+                ("sync-todos-to-issues.sh", "Sync TODOs to GitHub issues", "shell"),
                 ("update-issue-priorities.sh", "Update issue priorities", "shell"),
             ],
             "Data Management": [
                 ("set_rate_limit_block.py", "Set rate limit block", "python"),
                 ("migrate_cache_to_json_storage.py", "Migrate cache to JSON storage", "python"),
                 ("migrate_to_json.py", "Migrate data to JSON", "python"),
-            ],
-            "Application": [
-                ("run_with_weasyprint.sh", "Run app with WeasyPrint PDF", "shell"),
             ],
         }
         

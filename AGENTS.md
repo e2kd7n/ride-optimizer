@@ -145,7 +145,7 @@ After marking any task complete:
 ### Testing Requirements
 - **Test markers**: Use `@pytest.mark.unit`, `@pytest.mark.integration`, `@pytest.mark.slow`
 - **Run single test**: `pytest tests/test_module.py::TestClass::test_method -v`
-- **Coverage**: `./scripts/run_tests.sh coverage` generates HTML report in `htmlcov/`
+- **Coverage**: `./scripts/run-tests.sh coverage` generates HTML report in `htmlcov/`
 - **Test isolation**: Each test must use separate cache files to avoid conflicts
 
 ### Configuration System
@@ -167,7 +167,7 @@ After marking any task complete:
 - **Auth first time**: `python main.py --auth` (opens browser, starts local server on port 8000)
 - **Fetch with date range**: When both `--from-date` and `--to-date` specified, `--limit` is ignored (fetches ALL in range)
 - **Parallel analysis**: `python main.py --analyze --parallel 4` (1-8 workers)
-- **Run tests**: `./scripts/run_tests.sh [all|unit|integration|coverage|quick]`
+- **Run tests**: `./scripts/run-tests.sh [all|unit|integration|coverage|quick]`
 
 ## Issue Management (Project-Specific)
 

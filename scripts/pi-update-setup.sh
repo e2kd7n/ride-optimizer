@@ -54,3 +54,14 @@ echo ""
 echo "Manual trigger (two options):"
 echo "  sudo systemctl start ${SERVICE}.service"
 echo "  ./scripts/pi-auto-update.sh --force"
+
+# Install weekly Podman image prune cron job
+echo ""
+echo "Installing weekly image prune cron job..."
+sudo tee /etc/cron.weekly/podman-prune > /dev/null << 'EOF'
+#!/bin/bash
+# Remove dangling Podman images to reclaim SD card space.
+podman image prune -f >> /var/log/podman-prune.log 2>&1
+EOF
+sudo chmod 755 /etc/cron.weekly/podman-prune
+echo "✓ Weekly image prune installed (/etc/cron.weekly/podman-prune)"

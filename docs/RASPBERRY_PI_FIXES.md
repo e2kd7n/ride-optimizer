@@ -46,7 +46,7 @@ network_mode: host
 **Trade-off**: Port mapping is ignored with host networking, but the container can access all host ports directly.
 
 #### 3. Build Script with Network Workaround
-**File**: `scripts/build_pi.sh`
+**File**: `scripts/build-pi.sh`
 
 **Features**:
 - Automatically uses `--network=host` flag during build
@@ -57,8 +57,8 @@ network_mode: host
 
 **Usage**:
 ```bash
-chmod +x scripts/build_pi.sh
-./scripts/build_pi.sh
+chmod +x scripts/build-pi.sh
+./scripts/build-pi.sh
 ```
 
 ## Alternative Solutions
@@ -142,7 +142,7 @@ After applying fixes, verify the build works:
 podman rmi ride-optimizer:latest 2>/dev/null || true
 
 # Build with script
-./scripts/build_pi.sh
+./scripts/build-pi.sh
 
 # Or manual build
 podman build --network=host -t ride-optimizer:latest .
