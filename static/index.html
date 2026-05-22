@@ -252,6 +252,14 @@
             border-bottom: none;
         }
 
+        /* ── Conditions card mobile collapse (#288) ────────────────── */
+        @media (max-width: 767.98px) {
+            .conditions-full-rows { display: none; }
+            .conditions-full-rows.conditions-rows-open { display: block; }
+            .conditions-summary-toggle { cursor: pointer; }
+            .conditions-chevron { transition: transform 0.2s ease; }
+        }
+
         /* ── Design system: purple gradient buttons (#280) ─────────── */
         .btn-primary {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
