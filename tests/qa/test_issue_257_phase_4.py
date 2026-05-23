@@ -23,15 +23,13 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from app import create_app
-
-
 class TestIssue257Phase4:
     """Test suite for Issue #257 Phase 4 - Integration & Testing"""
-    
+
     def __init__(self):
-        self.app = create_app()
-        self.client = self.app.test_client()
+        import launch
+        launch.app.config['TESTING'] = True
+        self.client = launch.app.test_client()
         self.results = {
             'passed': 0,
             'failed': 0,

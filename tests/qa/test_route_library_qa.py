@@ -23,17 +23,14 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from flask import Flask
-from app import create_app
-
-
 class RouteLibraryQATest:
     """QA test harness for route library functionality"""
-    
+
     def __init__(self, verbose=False):
+        import launch
         self.verbose = verbose
-        self.app = create_app()
-        self.client = self.app.test_client()
+        launch.app.config['TESTING'] = True
+        self.client = launch.app.test_client()
         self.results = []
         
     def log(self, message, level="INFO"):
@@ -103,7 +100,7 @@ class RouteLibraryQATest:
         self.log("Testing search API...")
         
         try:
-            response = self.client.get('/routes/api/search?q=test')
+            response = self.client.get('/api/routes/search?q=test')
             
             if response.status_code == 200:
                 data = response.get_json()
