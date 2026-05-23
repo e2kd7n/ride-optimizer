@@ -561,12 +561,13 @@ def _enrich_commute_recommendation(rec: Dict[str, Any]) -> Dict[str, Any]:
 
     enriched['reasons'] = reasons[:4]
 
-    # time_impact — estimated duration (no historical average yet)
-    duration = route.get('duration', 0)
+    # time_impact — estimated duration; route.duration is in seconds, convert to minutes
+    duration_secs = route.get('duration', 0)
+    duration_mins = round(duration_secs / 60) if duration_secs else None
     enriched['time_impact'] = {
-        'estimated_minutes': round(duration) if duration else None,
+        'estimated_minutes': duration_mins,
         'vs_average_minutes': None,
-        'label': f'~{round(duration)} min estimated' if duration else None
+        'label': f'~{duration_mins} minutes estimated' if duration_mins else None
     }
 
     return enriched
@@ -683,45 +684,49 @@ def get_routes():
         JSON with routes list and metadata
     """
     initialize_services()
-    
+
     try:
+        search_query = request.args.get('search', '').strip()
         route_type = request.args.get('type', 'all')
         sort_by = request.args.get('sort', 'uses')
         limit = request.args.get('limit', type=int)
-        
-        routes_data = _route_library_service.get_all_routes(
-            route_type=route_type,
-            sort_by=sort_by,
-            limit=limit
-        )
-        
-        # Format routes for frontend (dashboard.js expects specific fields)
-        if routes_data.get('status') == 'success' and routes_data.get('routes'):
-            formatted_routes = []
-            for route in routes_data['routes']:
-                formatted_route = {
-                    'id': route.get('id'),
-                    'name': route.get('name', 'Unknown Route'),
-                    'distance': route.get('distance', 0),  # Already in km
-                    'duration': route.get('duration', 0),  # minutes
-                    'elevation_gain': route.get('elevation', 0),
-                    'sport_type': route.get('type', 'Ride'),
-                    'is_favorite': route.get('is_favorite', False),
-                    'uses': route.get('uses', 0),
-                    'type': route.get('type', 'commute'),
-                    'difficulty': route.get('difficulty', 'Easy')
-                }
-                formatted_routes.append(formatted_route)
-            
-            return jsonify({
-                'status': 'success',
-                'routes': formatted_routes,
-                'total_count': len(formatted_routes),
-                'timestamp': datetime.now().isoformat()
-            })
+
+        if search_query:
+            routes_data = _route_library_service.search_routes(
+                query=search_query,
+                limit=limit or 50
+            )
+            raw_routes = routes_data.get('results', [])
         else:
-            return jsonify(routes_data)
-        
+            routes_data = _route_library_service.get_all_routes(
+                route_type=route_type,
+                sort_by=sort_by,
+                limit=limit
+            )
+            raw_routes = routes_data.get('routes', []) if routes_data.get('status') == 'success' else []
+
+        formatted_routes = []
+        for route in raw_routes:
+            formatted_routes.append({
+                'id': route.get('id'),
+                'name': route.get('name', 'Unknown Route'),
+                'distance': route.get('distance', 0),
+                'duration': route.get('duration', 0),
+                'elevation_gain': route.get('elevation', 0),
+                'sport_type': route.get('type', 'Ride'),
+                'is_favorite': route.get('is_favorite', False),
+                'uses': route.get('uses', 0),
+                'type': route.get('type', 'commute'),
+                'difficulty': route.get('difficulty', 'Easy')
+            })
+
+        return jsonify({
+            'status': 'success',
+            'routes': formatted_routes,
+            'total_count': len(formatted_routes),
+            'timestamp': datetime.now().isoformat()
+        })
+
     except Exception as e:
         logger.error(f"Error getting routes: {e}", exc_info=True)
         error_msg = str(e) if app.debug else 'Routes temporarily unavailable'
@@ -813,6 +818,52 @@ def get_routes_status():
             'status': 'error',
             'message': str(e),
             'routes': []
+        }), 500
+
+
+@app.route('/api/routes/search')
+@limiter.limit("30 per minute")
+def search_routes():
+    """
+    Search routes by name.
+
+    Query params:
+    - q: Search query string (required)
+    - limit: Maximum results (default 10, max 100)
+
+    Returns:
+        JSON with routes list matching the query
+    """
+    initialize_services()
+
+    query = request.args.get('q', '').strip()
+    if not query:
+        return jsonify({
+            'status': 'error',
+            'message': 'Query parameter q is required',
+            'routes': [],
+            'total_count': 0
+        }), 400
+
+    limit = min(request.args.get('limit', 10, type=int), 100)
+
+    try:
+        result = _route_library_service.search_routes(query, limit=limit)
+        routes = result.get('results', [])
+        return jsonify({
+            'status': 'success',
+            'query': query,
+            'routes': routes,
+            'total_count': len(routes)
+        })
+    except Exception as e:
+        logger.error(f"Error searching routes: {e}", exc_info=True)
+        error_msg = str(e) if app.debug else 'Search temporarily unavailable'
+        return jsonify({
+            'status': 'error',
+            'message': error_msg,
+            'routes': [],
+            'total_count': 0
         }), 500
 
 
