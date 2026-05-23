@@ -32,6 +32,7 @@ from src.location_finder import Location
 from app.services.analysis_service import AnalysisService
 from app.services.commute_service import CommuteService
 from app.services.weather_service import WeatherService
+from src.weather_fetcher import WindImpactCalculator
 from app.services.planner_service import PlannerService
 from app.services.route_library_service import RouteLibraryService
 from app.api import maps_api
@@ -416,6 +417,92 @@ def get_weather():
         }), 500
 
 
+def _degrees_to_cardinal(deg: float) -> str:
+    dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
+            'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW']
+    return dirs[round(deg / 22.5) % 16]
+
+
+@app.route('/api/weather/commute-windows')
+@limiter.limit("20 per minute")
+def get_commute_windows():
+    """
+    Get hourly weather forecast sliced into morning and evening commute windows.
+
+    Returns morning (7–9 AM) and evening (3–6 PM) conditions plus an optimal
+    departure suggestion for each window — covering issues #110, #111, #115.
+    """
+    initialize_services()
+
+    try:
+        lat = config.get('location.home.latitude')
+        lon = config.get('location.home.longitude')
+        if not lat or not lon:
+            return jsonify({'status': 'error', 'message': 'Home location not configured'}), 400
+
+        lat, lon = float(lat), float(lon)
+        hourly = _weather_service.fetcher.get_hourly_forecast(lat, lon, hours=24)
+        if not hourly:
+            return jsonify({'status': 'error', 'message': 'Forecast unavailable'}), 503
+
+        def _format_hour(h: dict) -> dict:
+            temp_f = round(h['temp_c'] * 9 / 5 + 32)
+            wind_mph = round(h['wind_speed_kph'] * 0.621371)
+            gust_mph = round(h.get('wind_gust_kph', h['wind_speed_kph']) * 0.621371)
+            wind_deg = h.get('wind_direction_deg', 0)
+            return {
+                'hour': h['timestamp'][11:16],   # "HH:MM"
+                'temp_f': temp_f,
+                'wind_mph': wind_mph,
+                'wind_gust_mph': gust_mph,
+                'wind_direction': _degrees_to_cardinal(wind_deg),
+                'precip_prob': h.get('precipitation_prob', 0),
+            }
+
+        def _window_summary(hours: list) -> dict:
+            if not hours:
+                return {}
+            avg_temp = round(sum(h['temp_f'] for h in hours) / len(hours))
+            avg_wind = round(sum(h['wind_mph'] for h in hours) / len(hours))
+            max_precip = max(h['precip_prob'] for h in hours)
+            # Optimal = least discomfort: weight precip 2x, wind equally
+            best = min(hours, key=lambda h: h['precip_prob'] * 2 + h['wind_mph'])
+            dirs = [h['wind_direction'] for h in hours]
+            dominant_dir = max(set(dirs), key=dirs.count)
+            return {
+                'avg_temp_f': avg_temp,
+                'avg_wind_mph': avg_wind,
+                'max_precip_prob': max_precip,
+                'dominant_wind_direction': dominant_dir,
+                'optimal_departure': best['hour'],
+                'hours': hours,
+            }
+
+        morning_raw, evening_raw = [], []
+        for h in hourly:
+            ts = h.get('timestamp', '')
+            try:
+                hour_int = int(ts[11:13])
+            except (ValueError, IndexError):
+                continue
+            if 7 <= hour_int <= 8:   # 7:00–8:59
+                morning_raw.append(_format_hour(h))
+            elif 15 <= hour_int <= 17:  # 15:00–17:59
+                evening_raw.append(_format_hour(h))
+
+        return jsonify({
+            'status': 'success',
+            'morning': _window_summary(morning_raw),
+            'evening': _window_summary(evening_raw),
+            'timestamp': datetime.now().isoformat(),
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting commute windows: {e}", exc_info=True)
+        error_msg = str(e) if app.debug else 'Forecast data temporarily unavailable'
+        return jsonify({'status': 'error', 'message': error_msg}), 500
+
+
 @app.route('/api/recommendation')
 @limiter.limit("20 per minute")
 @validate_request_args(RecommendationQuerySchema)
@@ -529,13 +616,47 @@ def _enrich_commute_recommendation(rec: Dict[str, Any]) -> Dict[str, Any]:
 
     enriched['weather_summary'] = f"{sky_part}{', ' + wind_part if wind_part else ''}"
 
+    # wind_impact — headwind/tailwind analysis for this route (#113)
+    wind_impact = None
+    coords = route.get('coordinates') or []
+    wind_deg = weather.get('wind_direction_deg')
+    wind_kph = weather.get('wind_speed_kph')
+    if len(coords) >= 2 and wind_deg is not None and wind_kph is not None:
+        try:
+            start = tuple(coords[0])[:2]
+            end = tuple(coords[-1])[:2]
+            bearing = WindImpactCalculator.calculate_bearing(start, end)
+            components = WindImpactCalculator.calculate_wind_component(
+                float(wind_kph), float(wind_deg), bearing
+            )
+            hw_mph = round(components['headwind_kph'] * 0.621371)
+            abs_mph = abs(hw_mph)
+            if hw_mph > 3:
+                label = f'Headwind ~{abs_mph} mph'
+                icon = 'bi-wind text-warning'
+            elif hw_mph < -3:
+                label = f'Tailwind ~{abs_mph} mph'
+                icon = 'bi-wind text-success'
+            else:
+                label = 'Crosswind'
+                icon = 'bi-wind text-info'
+            wind_impact = {'label': label, 'mph': abs_mph, 'icon': icon,
+                           'is_tailwind': hw_mph < -3, 'is_headwind': hw_mph > 3}
+        except Exception:
+            pass
+    enriched['wind_impact'] = wind_impact
+
     # reasons — 2–4 decision bullets
     reasons = []
     weather_score = breakdown.get('weather', 0)
     if isinstance(weather_score, (int, float)) and weather_score > 0.75:
         reasons.append('Favorable weather for cycling today')
+    elif wind_impact and wind_impact.get('is_tailwind') and wind_speed >= 8:
+        reasons.append(f"Tailwind advantage — ~{wind_impact['mph']} mph boost")
+    elif wind_impact and wind_impact.get('is_headwind') and wind_speed >= 15:
+        reasons.append(f"Strong headwind (~{wind_impact['mph']} mph) — expect slower pace")
     elif wind_speed >= 15:
-        reasons.append(f'Strong wind — check if it works as a tailwind')
+        reasons.append('Strong wind — check if it works as a tailwind')
 
     frequency = route.get('frequency', 0)
     if frequency >= 10:
