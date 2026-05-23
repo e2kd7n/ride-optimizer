@@ -23,18 +23,14 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from flask import Flask
-from app import create_app
-from src.config import Config
-
-
 class DashboardQATest:
     """QA test harness for dashboard functionality"""
-    
+
     def __init__(self, verbose=False):
+        import launch
         self.verbose = verbose
-        self.app = create_app()
-        self.client = self.app.test_client()
+        launch.app.config['TESTING'] = True
+        self.client = launch.app.test_client()
         self.results = []
         
     def log(self, message, level="INFO"):

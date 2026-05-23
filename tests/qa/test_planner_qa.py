@@ -23,17 +23,14 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from flask import Flask
-from app import create_app
-
-
 class PlannerQATest:
     """QA test harness for long ride planner functionality"""
-    
+
     def __init__(self, verbose=False):
+        import launch
         self.verbose = verbose
-        self.app = create_app()
-        self.client = self.app.test_client()
+        launch.app.config['TESTING'] = True
+        self.client = launch.app.test_client()
         self.results = []
         
     def log(self, message, level="INFO"):
@@ -219,5 +216,42 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+import pytest
+from unittest.mock import Mock
+from app.services.planner_service import PlannerService
+from src.config import Config
+
+
+@pytest.fixture
+def planner_service():
+    config = Mock(spec=Config)
+    config.get = Mock(return_value=None)
+    return PlannerService(config)
+
+
+def test_planner_error_handling_negative_distance(planner_service):
+    result = planner_service.analyze_long_ride(distance=-100, duration=300)
+    assert 'error' in result
+    assert result.get('status') == 400
+
+
+def test_planner_error_handling_zero_distance(planner_service):
+    result = planner_service.analyze_long_ride(distance=0, duration=300)
+    assert 'error' in result
+    assert result.get('status') == 400
+
+
+def test_planner_error_handling_negative_duration(planner_service):
+    result = planner_service.analyze_long_ride(distance=50, duration=-1)
+    assert 'error' in result
+    assert result.get('status') == 400
+
+
+def test_planner_analyze_returns_dict_on_valid_input(planner_service):
+    result = planner_service.analyze_long_ride(distance=50, duration=3)
+    assert isinstance(result, dict)
+    assert result.get('status') in ('success', 'error')
+
 
 # Made with Bob

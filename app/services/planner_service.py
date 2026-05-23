@@ -351,11 +351,16 @@ class PlannerService:
                 'warnings': List[str]
             }
         """
+        if distance <= 0:
+            return {'error': 'Distance must be positive', 'status': 400}
+        if duration <= 0:
+            return {'error': 'Duration must be positive', 'status': 400}
+
         try:
             # Use today if no date provided
             if date is None:
                 date = datetime.now().date()
-            
+
             logger.info(f"Analyzing long ride: {distance}km, {duration}h on {date}")
             
             # Calculate difficulty
