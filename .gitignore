@@ -29,7 +29,7 @@ docker-compose.override.yml
 <Magic*
 config/.trainerroad_encryption_key
 
-# Claude Code internals
+# AI Code Assistant internals
 .claude/worktrees/
 
 # Maintenance backup archives
