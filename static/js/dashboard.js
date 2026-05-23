@@ -709,9 +709,30 @@ async function loadCommuteWindows() {
             const wind = window.avg_wind_mph || 0;
             const precipColor = precip >= 60 ? 'text-danger' : precip >= 30 ? 'text-warning' : 'text-success';
             const windColor = wind >= 15 ? 'text-danger' : wind >= 8 ? 'text-warning' : 'text-success';
-            const optText = window.optimal_departure
-                ? `<span class="badge bg-primary ms-1" title="Optimal departure">${esc(window.optimal_departure)}</span>`
+            const opt = window.optimal_departure;
+            const optText = opt
+                ? `<span class="badge bg-primary ms-1" title="Best departure: lowest wind + precip">${esc(opt)}</span>`
                 : '';
+
+            // Hourly progression rows (#115 — weather progression)
+            const hours = Array.isArray(window.hours) ? window.hours : [];
+            const progressionRows = hours.map(h => {
+                const isOpt = opt && h.hour === opt;
+                const hWind = h.wind_mph || 0;
+                const hWindClass = hWind >= 15 ? 'text-danger' : hWind >= 8 ? 'text-warning' : 'text-muted';
+                const hPrecip = h.precip_prob || 0;
+                const hPrecipPart = hPrecip > 0
+                    ? `<span class="${hPrecip >= 60 ? 'text-danger' : hPrecip >= 30 ? 'text-warning' : 'text-muted'}"> · ${hPrecip}%</span>`
+                    : '';
+                return `<div class="d-flex align-items-center gap-1 ${isOpt ? 'fw-semibold' : ''}" style="font-size:0.7rem;line-height:1.6">
+                    <span class="text-muted" style="min-width:36px">${esc(h.hour)}</span>
+                    <span>${h.temp_f}°</span>
+                    <span class="${hWindClass}">${hWind}mph</span>
+                    ${hPrecipPart}
+                    ${isOpt ? '<i class="bi bi-arrow-left text-primary" title="Best departure"></i>' : ''}
+                </div>`;
+            }).join('');
+
             return `
                 <div class="commute-window-card d-flex align-items-start gap-2 py-2">
                     <i class="bi ${icon} text-muted" style="font-size:1.1rem;margin-top:2px;flex-shrink:0"></i>
@@ -720,11 +741,12 @@ async function loadCommuteWindows() {
                             <span class="small fw-semibold">${label}</span>
                             ${optText}
                         </div>
-                        <div class="d-flex flex-wrap gap-2 small text-muted">
-                            <span><i class="bi bi-thermometer-half"></i> ${window.avg_temp_f}°F</span>
+                        <div class="d-flex flex-wrap gap-2 small text-muted mb-1">
+                            <span><i class="bi bi-thermometer-half"></i> ${window.avg_temp_f}°F avg</span>
                             <span class="${windColor}"><i class="bi bi-wind"></i> ${wind} mph ${esc(window.dominant_wind_direction || '')}</span>
                             ${precip > 0 ? `<span class="${precipColor}"><i class="bi bi-cloud-rain"></i> ${precip}%</span>` : ''}
                         </div>
+                        ${progressionRows ? `<div class="commute-window-progression">${progressionRows}</div>` : ''}
                     </div>
                 </div>`;
         }
