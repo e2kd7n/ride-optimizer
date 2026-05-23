@@ -22,7 +22,8 @@ async function loadDashboard() {
         loadRecommendation(),
         loadRouteStats(),
         loadConditionsCard(),
-        loadRouteStatus()
+        loadRouteStatus(),
+        loadCommuteWindows()
     ]);
 }
 
@@ -230,7 +231,7 @@ async function loadWeather() {
             </div>
             <div class="weather-details flex-grow-1">
                 <div class="weather-detail-item">
-                    <span class="badge bg-${severity.color}" style="font-size: 1rem; padding: 0.5rem 0.75rem;" title="Weather severity: ${severity.label}">
+                    <span class="badge bg-${severity.color}" style="font-size: 1rem; padding: var(--space-2) var(--space-3);" title="Weather severity: ${severity.label}">
                         ${severity.icon} ${severity.label}
                     </span>
                 </div>
@@ -316,14 +317,21 @@ function renderHeroCard(rec, isHero) {
     const departureTime = rec.departure_time ? esc(rec.departure_time) : null;
 
     const borderColor = score >= 70 ? '#28a745' : score >= 50 ? '#ffc107' : '#dc3545';
+    const windImpact = rec.wind_impact;
+    const windBadge = windImpact
+        ? `<span class="badge bg-light text-dark border ms-2" title="Wind impact on this route">
+               <i class="bi ${esc(windImpact.icon || 'bi-wind')}"></i> ${esc(windImpact.label)}
+           </span>`
+        : '';
 
     if (isHero) {
         return `
-            <div class="hero-decision-card" style="border-left: 4px solid ${borderColor}; padding-left: 0.75rem;">
+            <div class="hero-decision-card" style="border-left: 4px solid ${borderColor}; padding-left: var(--space-3);">
                 <div class="hero-card-header">
                     <span class="hero-route-name">
                         <i class="bi ${scoreIcon} me-1"></i>${routeName}
                         <span class="badge ${scoreClass} ms-2">${score}</span>
+                        ${windBadge}
                     </span>
                     <span class="hero-confidence badge bg-secondary">${confidence}</span>
                 </div>
@@ -527,12 +535,12 @@ async function loadRouteStatus() {
 
         if (data.status !== 'success' || !data.routes || data.routes.length === 0) {
             container.innerHTML = window.renderEmptyState('No route data.', 'Sync Strava to see route conditions.', 'bi-map');
-            container.closest('.col-6').classList.add('d-none', 'd-md-block');
+            container.closest('.route-status-col').classList.add('d-none', 'd-md-block');
             return;
         }
 
         if (data.routes.length < 2) {
-            container.closest('.col-6').classList.add('d-none', 'd-md-block');
+            container.closest('.route-status-col').classList.add('d-none', 'd-md-block');
         }
 
         const esc = window.escapeHtml;
@@ -674,6 +682,65 @@ async function loadRouteStats() {
         console.error('Failed to load route stats:', error);
         container.innerHTML = window.renderErrorState('Failed to load route statistics.', { variant: 'danger', retry: 'loadRouteStats()' });
         recentContainer.innerHTML = '';
+    }
+}
+
+/**
+ * Load morning/evening commute window forecast cards (#110, #111, #115).
+ */
+async function loadCommuteWindows() {
+    const container = document.getElementById('commute-windows');
+    if (!container) return;
+
+    try {
+        const response = await fetch('/api/weather/commute-windows');
+        const data = await response.json();
+
+        if (data.status !== 'success') {
+            container.innerHTML = window.renderEmptyState('Forecast unavailable.', '', 'bi-cloud-slash');
+            return;
+        }
+
+        const esc = window.escapeHtml;
+
+        function windowCard(label, icon, window) {
+            if (!window || !window.avg_temp_f) return '';
+            const precip = window.max_precip_prob || 0;
+            const wind = window.avg_wind_mph || 0;
+            const precipColor = precip >= 60 ? 'text-danger' : precip >= 30 ? 'text-warning' : 'text-success';
+            const windColor = wind >= 15 ? 'text-danger' : wind >= 8 ? 'text-warning' : 'text-success';
+            const optText = window.optimal_departure
+                ? `<span class="badge bg-primary ms-1" title="Optimal departure">${esc(window.optimal_departure)}</span>`
+                : '';
+            return `
+                <div class="commute-window-card d-flex align-items-start gap-2 py-2">
+                    <i class="bi ${icon} text-muted" style="font-size:1.1rem;margin-top:2px;flex-shrink:0"></i>
+                    <div class="flex-grow-1">
+                        <div class="d-flex align-items-center gap-1 mb-1">
+                            <span class="small fw-semibold">${label}</span>
+                            ${optText}
+                        </div>
+                        <div class="d-flex flex-wrap gap-2 small text-muted">
+                            <span><i class="bi bi-thermometer-half"></i> ${window.avg_temp_f}°F</span>
+                            <span class="${windColor}"><i class="bi bi-wind"></i> ${wind} mph ${esc(window.dominant_wind_direction || '')}</span>
+                            ${precip > 0 ? `<span class="${precipColor}"><i class="bi bi-cloud-rain"></i> ${precip}%</span>` : ''}
+                        </div>
+                    </div>
+                </div>`;
+        }
+
+        const html = `
+            ${windowCard('Morning (7–9 AM)', 'bi-sunrise', data.morning)}
+            ${data.morning && data.evening ? '<hr class="my-1">' : ''}
+            ${windowCard('Evening (3–6 PM)', 'bi-sunset', data.evening)}
+            <div class="mt-1">
+                <a href="/weather.html" class="small text-muted">Full forecast →</a>
+            </div>`;
+
+        container.innerHTML = html;
+    } catch (error) {
+        console.error('Failed to load commute windows:', error);
+        container.innerHTML = window.renderErrorState('Forecast unavailable.', { small: true, retry: 'loadCommuteWindows()' });
     }
 }
 
