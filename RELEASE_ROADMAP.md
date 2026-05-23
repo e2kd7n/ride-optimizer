@@ -12,9 +12,9 @@
 
 ## 🎯 Current Status
 
-**Current Release:** v0.11.0 (deployed)
-**Next Release:** v0.12.0 (in development)
-**Future Releases:** v0.13.0, v0.14.0
+**Current Release:** v0.13.0 (deployed)
+**Next Release:** v0.14.0 (in development)
+**Future Releases:** v0.15.0
 **Target:** Single-user Raspberry Pi deployment
 
 **Source of Truth:** GitHub Milestones (automatically detected)
@@ -58,32 +58,51 @@
 
 > **Note:** Release planning is now managed via GitHub milestones. Issues are assigned to milestones and prioritized within each release.
 
-### v0.12.0 - Next Release (In Development)
+### v0.14.0 - Next Release (In Development)
 **Status:** Active Development
-**GitHub Milestone:** [v0.12.0](https://github.com/user/repo/milestone/X)
-**Focus:** Backend infrastructure and code quality improvements
-
-**Key Issues:**
-- 2 P1-high issues (API endpoints)
-- 15 P2-medium issues (architecture, testing, code quality)
-
-### v0.13.0 - Future Release
-**Status:** Planning
-**GitHub Milestone:** [v0.13.0](https://github.com/user/repo/milestone/Y)
-**Focus:** UI/UX improvements and user experience
-
-**Key Issues:**
-- 9 P1-high issues (error handling, FTUE, mobile navigation)
-- Multiple P2-medium issues (design, weather features)
-
-### v0.14.0 - Future Release
-**Status:** Planning
-**GitHub Milestone:** [v0.14.0](https://github.com/user/repo/milestone/Z)
+**GitHub Milestone:** [v0.14.0](https://github.com/e2kd7n/ride-optimizer/milestone/6)
 **Focus:** Testing, performance, and production readiness
 
 **Key Issues:**
-- 13 P1-high issues (test coverage, performance, API features)
-- Multiple P2-medium issues (testing infrastructure)
+- 7 P1-high issues (test coverage, geocoding, API features)
+- 18 P2-medium issues (testing infrastructure, weather features, UX improvements)
+- 9 P3-low issues (design refinements, accessibility)
+- 13 P4-future issues (long-term enhancements)
+
+### v0.15.0 - Future Release
+**Status:** Planning
+**GitHub Milestone:** [v0.15.0](https://github.com/e2kd7n/ride-optimizer/milestone/7)
+**Focus:** Advanced features and long ride enhancements
+
+**Key Issues:**
+- 1 P1-high issue (Marshmallow validation schemas)
+- 5 P2-medium issues (skeleton loaders, API methods, interactive maps)
+
+### v0.13.0 - UI/UX Improvements (COMPLETED)
+**Status:** Deployed (2026-05-23)
+**GitHub Milestone:** [v0.13.0](https://github.com/e2kd7n/ride-optimizer/milestone/5)
+**Focus:** UI/UX improvements and user experience enhancements
+
+**Major Accomplishments:**
+- ✅ Decision-First Dashboard redesign (Epic #285)
+- ✅ GHCR Container Registry + Pi4 deployment pipeline (Epic #290)
+- ✅ UAT findings - Critical navigation & interaction fixes (Epic #265)
+- ✅ Design alignment with CLI prototype (Epic #280)
+- ✅ Improved error handling and user feedback (#279)
+- ✅ Mobile navigation fixes (#223)
+- ✅ Grid alignment audit (#297)
+- ✅ Comprehensive E2E testing (#255)
+
+**Total Issues Closed:** 37
+
+### v0.12.0 - Backend Infrastructure (COMPLETED)
+**Status:** Deployed (2026-05-14)
+**Focus:** Backend infrastructure and code quality improvements
+
+**Key Accomplishments:**
+- Backend service architecture
+- API endpoint improvements
+- Code quality enhancements
 
 ### v0.11.0 - Architecture Simplification (COMPLETED)
 **Status:** Deployed
