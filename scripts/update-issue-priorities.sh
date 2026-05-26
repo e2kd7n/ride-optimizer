@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# WSL/Cygwin fix: LANG is unset in those environments, causing bash to mangle multi-byte
+# UTF-8 sequences (emoji appear as garbage). macOS sets en_US.UTF-8 automatically.
+export LANG="${LANG:-en_US.UTF-8}"
+export LC_ALL="${LC_ALL:-en_US.UTF-8}"
+
 # Check required dependencies before doing anything
 MISSING_DEPS=()
 command -v gh  >/dev/null 2>&1 || MISSING_DEPS+=("gh (GitHub CLI)")
@@ -18,38 +23,18 @@ fi
 
 # Detect if output is being redirected to a file
 # If so, disable colors to avoid ANSI codes in the file
-if [ -t 1 ]; then
-  # Output is to terminal, use colors
-  RED='\033[0;31m'
-  GREEN='\033[0;32m'
-  YELLOW='\033[1;33m'
-  BLUE='\033[0;34m'
-  NC='\033[0m' # No Color
+# Check stderr (fd 2) for tty — log functions write there, not stdout.
+if [ -t 2 ]; then
+  RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
 else
-  # Output is redirected, no colors
-  RED=''
-  GREEN=''
-  YELLOW=''
-  BLUE=''
-  NC=''
+  RED=''; GREEN=''; YELLOW=''; BLUE=''; NC=''
 fi
 
-# Function to log actions (to stderr so it doesn't pollute markdown output)
-log_action() {
-  echo -e "${BLUE}[$(date +%H:%M:%S)]${NC} $1" >&2
-}
-
-log_success() {
-  echo -e "${GREEN}[$(date +%H:%M:%S)]${NC} ✅ $1" >&2
-}
-
-log_warning() {
-  echo -e "${YELLOW}[$(date +%H:%M:%S)]${NC} ⚠️  $1" >&2
-}
-
-log_error() {
-  echo -e "${RED}[$(date +%H:%M:%S)]${NC} ❌ $1" >&2
-}
+# Use printf instead of echo -e: more portable across bash versions and WSL/Cygwin.
+log_action()  { printf "${BLUE}[%s]${NC} %s\n"    "$(date +%H:%M:%S)" "$1" >&2; }
+log_success() { printf "${GREEN}[%s]${NC} ✅ %s\n" "$(date +%H:%M:%S)" "$1" >&2; }
+log_warning() { printf "${YELLOW}[%s]${NC} ⚠️  %s\n" "$(date +%H:%M:%S)" "$1" >&2; }
+log_error()   { printf "${RED}[%s]${NC} ❌ %s\n"   "$(date +%H:%M:%S)" "$1" >&2; }
 
 # Function to sanitize comments for gh issue close
 # Escapes backticks to prevent shell command substitution
