@@ -17,6 +17,7 @@ sys.path.insert(0, str(project_root))
 
 from src.config import Config
 from src.json_storage import JSONStorage
+from src.ntfy_notifier import NtfyNotifier
 from app.services.weather_service import WeatherService
 
 # Configure logging
@@ -43,9 +44,16 @@ def main():
     start_time = datetime.now()
     storage = JSONStorage()
     
+    # Initialize notifier
+    try:
+        config = Config()
+        notifier = NtfyNotifier(config.get('notifications.ntfy'))
+    except Exception as e:
+        logger.warning(f"Failed to initialize notifier: {e}")
+        notifier = None
+    
     try:
         # Initialize services
-        config = Config()
         weather_service = WeatherService(config)
         
         # Get home location
@@ -101,6 +109,10 @@ def main():
         
     except Exception as e:
         logger.error(f"Weather refresh failed: {e}", exc_info=True)
+        
+        # Send failure notification (weather is non-critical, so only log)
+        if notifier:
+            logger.info("Weather refresh failed but not sending notification (non-critical)")
         
         # Record failure
         job_record = {
