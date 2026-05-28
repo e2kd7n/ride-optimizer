@@ -113,4 +113,24 @@ preferences:
   # Options: "chrome", "firefox", "safari", "edge", "default"
   # "default" uses system default browser
 
+notifications:
+  ntfy:
+    enabled: ${NTFY_ENABLED}
+    server: ${NTFY_SERVER}
+    topic: ${NTFY_TOPIC}
+    priorities:
+      critical: ${NTFY_PRIORITY_CRITICAL}
+      warning: ${NTFY_PRIORITY_WARNING}
+      info: ${NTFY_PRIORITY_INFO}
+    throttle_hours: 6  # Minimum hours between duplicate alerts
+    alert_types:
+      disk_space_critical: true
+      disk_space_warning: true
+      stale_data: true
+      cache_corruption: true
+      api_unresponsive: true
+      cron_failure: true
+      security_vulnerabilities: true
+      maintenance_summary: false  # Opt-in
+
 # Made with Bob

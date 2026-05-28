@@ -15,7 +15,9 @@ from datetime import datetime, timezone
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+from src.config import Config
 from src.json_storage import JSONStorage
+from src.ntfy_notifier import NtfyNotifier
 
 # Configure logging
 log_dir = project_root / 'logs'
@@ -40,6 +42,14 @@ def main():
     
     start_time = datetime.now()
     storage = JSONStorage()
+    
+    # Initialize notifier
+    try:
+        config = Config()
+        notifier = NtfyNotifier(config.get('notifications.ntfy'))
+    except Exception as e:
+        logger.warning(f"Failed to initialize notifier: {e}")
+        notifier = None
     
     try:
         cache_dir = project_root / 'cache'
@@ -112,6 +122,10 @@ def main():
         
     except Exception as e:
         logger.error(f"Cache cleanup failed: {e}", exc_info=True)
+        
+        # Send failure notification
+        if notifier:
+            notifier.send_cron_failure_alert('cache_cleanup', str(e))
         
         # Record failure
         job_record = {
