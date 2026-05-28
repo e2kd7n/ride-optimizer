@@ -17,6 +17,7 @@ sys.path.insert(0, str(project_root))
 
 from src.config import Config
 from src.json_storage import JSONStorage
+from src.ntfy_notifier import NtfyNotifier
 from app.services.analysis_service import AnalysisService
 
 # Configure logging
@@ -43,9 +44,16 @@ def main():
     start_time = datetime.now()
     storage = JSONStorage()
     
+    # Initialize notifier
+    try:
+        config = Config()
+        notifier = NtfyNotifier(config.get('notifications.ntfy'))
+    except Exception as e:
+        logger.warning(f"Failed to initialize notifier: {e}")
+        notifier = None
+    
     try:
         # Initialize services
-        config = Config()
         analysis_service = AnalysisService(config)
         
         # Run full analysis
@@ -89,6 +97,10 @@ def main():
         
     except Exception as e:
         logger.error(f"Daily analysis failed: {e}", exc_info=True)
+        
+        # Send failure notification
+        if notifier:
+            notifier.send_cron_failure_alert('daily_analysis', str(e))
         
         # Record failure
         job_record = {

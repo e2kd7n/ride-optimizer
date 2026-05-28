@@ -17,6 +17,8 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.json_storage import JSONStorage
+from src.config import Config
+from src.ntfy_notifier import NtfyNotifier
 
 # Configure logging
 log_dir = project_root / 'logs'
@@ -117,6 +119,14 @@ def main():
     start_time = datetime.now()
     storage = JSONStorage()
     
+    # Initialize notifier
+    try:
+        config = Config()
+        notifier = NtfyNotifier(config.get('notifications.ntfy'))
+    except Exception as e:
+        logger.warning(f"Failed to initialize notifier: {e}")
+        notifier = None
+    
     try:
         # Run all health checks
         checks = {
@@ -125,6 +135,38 @@ def main():
             'last_analysis': check_last_analysis(),
             'api_status': check_api_status()
         }
+        
+        # Send notifications for specific issues
+        if notifier:
+            # Disk space alerts
+            disk_check = checks['disk_space']
+            if disk_check['status'] == 'warning' and 'percent_used' in disk_check:
+                if disk_check['percent_used'] >= 90:
+                    notifier.send_disk_space_critical(
+                        disk_check['percent_used'],
+                        disk_check['free_gb']
+                    )
+                elif disk_check['percent_used'] >= 80:
+                    notifier.send_disk_space_warning(
+                        disk_check['percent_used'],
+                        disk_check['free_gb']
+                    )
+            
+            # Stale data alert
+            analysis_check = checks['last_analysis']
+            if analysis_check['status'] == 'warning' and 'age_hours' in analysis_check:
+                if analysis_check['age_hours'] >= 36:
+                    notifier.send_stale_data_alert(analysis_check['age_hours'])
+            
+            # Cache corruption alert
+            cache_check = checks['cache_files']
+            if cache_check['status'] == 'error' and 'error' in cache_check:
+                notifier.send_cache_corruption_alert(cache_check['error'])
+            
+            # API unresponsive alert
+            api_check = checks['api_status']
+            if api_check['status'] == 'warning' and api_check.get('http_status', 200) >= 500:
+                notifier.send_api_unresponsive_alert()
         
         # Determine overall status
         statuses = [check['status'] for check in checks.values()]
@@ -173,6 +215,11 @@ def main():
         
     except Exception as e:
         logger.error(f"Health check failed: {e}", exc_info=True)
+        
+        # Send cron failure notification
+        if notifier:
+            notifier.send_cron_failure_alert('system_health', str(e))
+        
         return 1
 
 
