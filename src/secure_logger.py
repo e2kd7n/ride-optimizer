@@ -232,4 +232,3 @@ def get_logger(name: str) -> SecureLogger:
     """
     return SecureLogger(name)
 
-# Made with Bob

@@ -244,4 +244,3 @@ if [ "${WAIT_FOR_COMPLETION:-false}" = "true" ] && [ -n "${ISSUE_PID:-}" ]; then
     log "✓ Issue management complete"
 fi
 
-# Made with Bob

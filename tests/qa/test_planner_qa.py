@@ -254,4 +254,3 @@ def test_planner_analyze_returns_dict_on_valid_input(planner_service):
     assert result.get('status') in ('success', 'error')
 
 
-# Made with Bob

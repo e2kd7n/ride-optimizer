@@ -807,4 +807,3 @@ class AnalysisService:
         self._work_location = None
         self._last_analysis_time = None
 
-# Made with Bob

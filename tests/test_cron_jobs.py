@@ -349,4 +349,3 @@ class TestCronInstallation:
         assert mode & stat.S_IXUSR  # User executable
 
 
-# Made with Bob

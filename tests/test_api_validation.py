@@ -251,4 +251,3 @@ class TestMapQuerySchema:
             schema.load({'route_type': 'invalid'})
         assert 'route_type' in exc_info.value.messages
 
-# Made with Bob

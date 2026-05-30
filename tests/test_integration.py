@@ -635,5 +635,3 @@ locations:
         assert recommender.morning_window_start is not None
         assert recommender.evening_window_start is not None
 
-# Made with Bob
-# Made with Bob

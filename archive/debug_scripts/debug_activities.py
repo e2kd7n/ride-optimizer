@@ -43,4 +43,3 @@ print(f"Activities with start_latlng: {with_start}/{len(commute_activities)}")
 print(f"Activities with end_latlng: {with_end}/{len(commute_activities)}")
 print(f"Activities with polyline: {with_polyline}/{len(commute_activities)}")
 
-# Made with Bob

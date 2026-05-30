@@ -198,4 +198,3 @@ class TestLaunchInitialization:
         launch.initialize_services()
         assert launch._services_initialized is True
 
-# Made with Bob

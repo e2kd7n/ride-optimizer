@@ -91,4 +91,3 @@ echo "✅ Sync complete!"
 echo ""
 echo "View all issues: ${REPO_URL}/issues"
 
-# Made with Bob

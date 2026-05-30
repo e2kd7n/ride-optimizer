@@ -123,4 +123,3 @@ if __name__ == '__main__':
     add_difficulty_ratings(route_file)
     print("✅ Done!")
 
-# Made with Bob

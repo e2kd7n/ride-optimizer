@@ -432,4 +432,3 @@ class CommuteForecastGenerator:
             return "avoid"
 
 
-# Made with Bob

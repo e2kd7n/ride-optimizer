@@ -488,4 +488,3 @@ class TestSecureCacheIntegration:
         loaded_data = storage2.load_cache()
         assert loaded_data is None
 
-# Made with Bob

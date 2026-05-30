@@ -126,4 +126,3 @@ with open('src/report_generator.py', 'w') as f:
 print(f"✓ Updated report_generator.py with test route metadata")
 print(f"\nDone! Run 'python3 main.py --analyze' to regenerate the report.")
 
-# Made with Bob

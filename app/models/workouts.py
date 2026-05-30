@@ -289,4 +289,3 @@ class WorkoutMetadata(db.Model, TimestampMixin):
         
         return best_route, min(best_score, 1.0)
 
-# Made with Bob

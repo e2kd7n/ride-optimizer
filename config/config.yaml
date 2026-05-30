@@ -133,4 +133,3 @@ notifications:
       security_vulnerabilities: true
       maintenance_summary: false  # Opt-in
 
-# Made with Bob

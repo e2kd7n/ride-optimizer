@@ -390,4 +390,3 @@ class CarbonCalculator:
         return statements
 
 
-# Made with Bob

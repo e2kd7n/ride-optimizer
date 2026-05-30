@@ -929,4 +929,3 @@ class LongRideAnalyzer:
         return recommendations
 
 
-# Made with Bob

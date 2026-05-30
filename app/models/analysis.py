@@ -107,4 +107,3 @@ class AnalysisSnapshot(db.Model, TimestampMixin):
         age = datetime.utcnow() - latest.analysis_date
         return age.total_seconds() > (hours * 3600)
 
-# Made with Bob

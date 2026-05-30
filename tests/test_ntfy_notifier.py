@@ -389,4 +389,3 @@ class TestConfigurationParsing:
         assert value == 'default_value'
 
 
-# Made with Bob

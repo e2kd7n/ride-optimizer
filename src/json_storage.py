@@ -247,4 +247,3 @@ def get_storage(data_dir: str = 'data') -> JSONStorage:
     return _default_storage
 
 
-# Made with Bob

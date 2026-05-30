@@ -464,4 +464,3 @@ class RouteOptimizer:
         
         return "Recommended as " + " and ".join(reasons)
 
-# Made with Bob
