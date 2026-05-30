@@ -141,4 +141,3 @@ class LongRide(db.Model, TimestampMixin):
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
 
-# Made with Bob

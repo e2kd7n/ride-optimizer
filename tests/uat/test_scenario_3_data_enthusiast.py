@@ -504,4 +504,3 @@ class TestDataEnthusiastExportFunctionality:
         max_size = 5 * 1024 * 1024  # 5MB
         assert data_size < max_size, f"Export file too large: {data_size / 1024 / 1024:.2f}MB"
 
-# Made with Bob

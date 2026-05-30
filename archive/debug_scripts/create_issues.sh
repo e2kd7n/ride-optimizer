@@ -206,4 +206,3 @@ gh issue create --title "[LOW PRIORITY] Grey out unselected routes on map when r
 
 echo "All issues created successfully!"
 
-# Made with Bob

@@ -145,4 +145,3 @@ if FRECHET_AVAILABLE:
 else:
     print("\n❌ Fréchet distance not available - install similaritymeasures")
 
-# Made with Bob

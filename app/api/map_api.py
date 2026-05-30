@@ -370,4 +370,3 @@ def _get_speed_category(speed_ms: float) -> str:
     else:
         return 'very_fast'
 
-# Made with Bob

@@ -340,4 +340,3 @@ def check_system_health() -> None:
             _record_job_failure(job, e)
             logger.error(f"Health check job failed: {e}", exc_info=True)
 
-# Made with Bob

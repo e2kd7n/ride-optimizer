@@ -721,7 +721,6 @@ class CommuteService:
         </div>
         """
 
-# Made with Bob
 
     
     def get_workout_aware_commute(self, direction: Optional[str] = None) -> Dict[str, Any]:
@@ -916,4 +915,3 @@ class CommuteService:
             return None
 
 
-# Made with Bob

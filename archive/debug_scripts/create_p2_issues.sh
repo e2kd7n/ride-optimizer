@@ -67,4 +67,3 @@ echo "1. Update ISSUE_PRIORITIES.md with actual issue numbers"
 echo "2. Delete FUTURE_TODOS.md (issues now tracked on GitHub)"
 echo "3. Update summary statistics in ISSUE_PRIORITIES.md"
 
-# Made with Bob

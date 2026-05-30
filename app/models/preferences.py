@@ -154,4 +154,3 @@ class UserPreference(db.Model, TimestampMixin):
                 if not existing:
                     cls.set(category, key, value)
 
-# Made with Bob

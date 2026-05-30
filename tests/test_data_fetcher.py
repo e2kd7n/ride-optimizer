@@ -193,4 +193,3 @@ class TestStravaDataFetcher:
         assert 'total' in result
         assert result['total'] == 1
 
-# Made with Bob

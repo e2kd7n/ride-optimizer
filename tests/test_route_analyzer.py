@@ -327,4 +327,3 @@ class TestRouteAnalyzer:
         assert similarity == 0.67
         mock_hausdorff.assert_called_once()
 
-# Made with Bob

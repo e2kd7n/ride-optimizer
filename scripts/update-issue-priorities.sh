@@ -876,4 +876,3 @@ echo "- **Prioritize within release** - Focus on P0/P1 issues for next release f
 echo "- **Defer strategically** - Move P3/P4 issues to future releases if needed"
 echo "- **Review regularly** - Run this script weekly to track progress"
 
-# Made with Bob

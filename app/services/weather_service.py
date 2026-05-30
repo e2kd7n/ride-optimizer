@@ -384,4 +384,3 @@ class WeatherService:
             return {}
 
 
-# Made with Bob

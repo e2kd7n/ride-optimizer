@@ -637,4 +637,3 @@ class WindImpactCalculator:
         return result
 
 
-# Made with Bob

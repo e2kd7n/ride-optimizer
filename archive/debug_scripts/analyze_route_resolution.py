@@ -100,4 +100,3 @@ if all_avg_distances:
 
 print("\n" + "="*70)
 
-# Made with Bob

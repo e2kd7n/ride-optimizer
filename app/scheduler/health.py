@@ -339,4 +339,3 @@ class HealthChecker:
             AnalysisSnapshot.analysis_date.desc()
         ).first()
 
-# Made with Bob
