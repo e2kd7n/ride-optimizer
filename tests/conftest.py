@@ -404,4 +404,3 @@ def mock_long_ride_analysis():
     }
 
 
-# Made with Bob

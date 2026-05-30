@@ -36,4 +36,3 @@ class FavoriteRoute(Base):
             'notes': self.notes
         }
 
-# Made with Bob

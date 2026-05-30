@@ -566,4 +566,3 @@ class TestDashboardWeatherOverlays:
         assert html is not None
         assert 'folium-map' in html
 
-# Made with Bob

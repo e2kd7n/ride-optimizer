@@ -563,4 +563,3 @@ class TrainerRoadService:
         return constraints
 
 
-# Made with Bob

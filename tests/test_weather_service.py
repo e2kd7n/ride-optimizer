@@ -552,4 +552,3 @@ class TestGetDegradedWeather:
         assert result['comfort_score'] == 0.75
 
 
-# Made with Bob

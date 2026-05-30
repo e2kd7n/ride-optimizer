@@ -243,4 +243,3 @@ class TestWeatherUIIntegration:
             assert b'Weather' in response.data or b'weather' in response.data
 
 
-# Made with Bob

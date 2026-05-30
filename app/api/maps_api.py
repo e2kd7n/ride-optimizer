@@ -347,4 +347,3 @@ def get_route_color(index: int) -> str:
     return colors[index % len(colors)]
 
 
-# Made with Bob

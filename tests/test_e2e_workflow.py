@@ -295,4 +295,3 @@ class TestE2EIntegration:
         assert all(d['data']['activities_count'] == first_count for d in data_list)
 
 
-# Made with Bob

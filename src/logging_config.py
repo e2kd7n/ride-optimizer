@@ -237,4 +237,3 @@ def reconfigure_logging(
             root_logger.removeHandler(console_handler)
 
 
-# Made with Bob

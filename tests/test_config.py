@@ -127,4 +127,3 @@ invalid: yaml: syntax:
         config = Config(str(config_file))
         assert config.get('any.key', 'default') == 'default'
 
-# Made with Bob

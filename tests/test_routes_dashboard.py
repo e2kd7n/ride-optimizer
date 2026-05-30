@@ -271,4 +271,3 @@ class TestGetServices:
             assert services1 is g.services
 
 
-# Made with Bob

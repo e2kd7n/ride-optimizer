@@ -1097,4 +1097,3 @@ class PlannerService:
                 tooltip=f"{label} forecast"
             ).add_to(weather_overlay)
 
-# Made with Bob

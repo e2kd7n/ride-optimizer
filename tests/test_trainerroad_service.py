@@ -596,4 +596,3 @@ class TestGetWorkoutConstraints:
             assert constraints['tss'] == 150
 
 
-# Made with Bob

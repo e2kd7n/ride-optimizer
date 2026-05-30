@@ -659,4 +659,3 @@ class TestCommuteRecommendationDataclass:
         assert recommendation.forecast_weather is not None
 
 
-# Made with Bob

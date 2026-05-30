@@ -1002,4 +1002,3 @@ class AnalyticsService:
         return recommendations
 
 
-# Made with Bob

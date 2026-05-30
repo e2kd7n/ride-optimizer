@@ -1657,4 +1657,3 @@ end tell
         """
         return not self._geocoding_thread or not self._geocoding_thread.is_alive()
 
-# Made with Bob

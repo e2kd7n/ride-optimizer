@@ -219,4 +219,3 @@ def get_scheduler_status() -> dict:
         'job_count': len(jobs)
     }
 
-# Made with Bob

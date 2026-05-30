@@ -536,4 +536,3 @@ class StravaDataFetcher:
         """
         return polyline.decode(encoded)
 
-# Made with Bob

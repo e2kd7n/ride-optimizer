@@ -205,4 +205,3 @@ class WeatherSnapshot(db.Model, TimestampMixin):
         db.session.commit()
 
 
-# Made with Bob

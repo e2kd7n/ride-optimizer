@@ -93,4 +93,3 @@ if from_work:
         is_plus = "PLUS" if route['distance'] > threshold else ""
         print(f"  {route['distance']:.2f}km - {route['name']} {is_plus}")
 
-# Made with Bob

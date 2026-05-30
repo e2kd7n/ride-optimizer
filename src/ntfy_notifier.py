@@ -329,4 +329,3 @@ class NtfyNotifier:
         return self.send_info(title, message, tags=['maintenance', 'summary'], alert_key=self.ALERT_MAINTENANCE_SUMMARY)
 
 
-# Made with Bob

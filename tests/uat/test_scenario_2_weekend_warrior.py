@@ -389,4 +389,3 @@ class TestWeekendWarriorDataAccuracy:
             assert 45 <= route['distance_miles'] <= 55, \
                 f"Route {route['route_name']} distance {route['distance_miles']} outside range"
 
-# Made with Bob

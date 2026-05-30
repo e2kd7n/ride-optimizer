@@ -581,4 +581,3 @@ class TestPlannerMapWeatherOverlays:
         assert html is not None
         assert 'Acceptable' in html
 
-# Made with Bob

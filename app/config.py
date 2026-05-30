@@ -113,4 +113,3 @@ config = {
     'default': DevelopmentConfig
 }
 
-# Made with Bob

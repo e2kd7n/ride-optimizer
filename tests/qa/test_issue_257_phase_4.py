@@ -332,4 +332,3 @@ if __name__ == '__main__':
     exit_code = tester.run_all_tests()
     sys.exit(exit_code)
 
-# Made with Bob

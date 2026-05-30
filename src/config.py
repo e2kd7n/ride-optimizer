@@ -118,4 +118,3 @@ def load_config(config_path: str = "config/config.yaml") -> Config:
     """
     return Config(config_path)
 
-# Made with Bob
