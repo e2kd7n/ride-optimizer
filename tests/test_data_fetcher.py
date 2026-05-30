@@ -192,3 +192,4 @@ class TestStravaDataFetcher:
         assert 'new' in result
         assert 'total' in result
         assert result['total'] == 1
+

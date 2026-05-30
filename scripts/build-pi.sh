@@ -103,3 +103,4 @@ else
     echo "  5. Check logs: journalctl --user -u podman"
     exit 1
 fi
+

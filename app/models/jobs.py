@@ -208,3 +208,4 @@ class JobHistory(db.Model, TimestampMixin):
         
         db.session.commit()
         return count
+

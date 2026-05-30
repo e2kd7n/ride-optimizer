@@ -231,3 +231,4 @@ def get_logger(name: str) -> SecureLogger:
         SecureLogger instance
     """
     return SecureLogger(name)
+

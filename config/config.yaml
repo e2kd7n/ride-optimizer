@@ -132,3 +132,4 @@ notifications:
       cron_failure: true
       security_vulnerabilities: true
       maintenance_summary: false  # Opt-in
+

@@ -245,3 +245,5 @@ def get_storage(data_dir: str = 'data') -> JSONStorage:
     if _default_storage is None:
         _default_storage = JSONStorage(data_dir)
     return _default_storage
+
+

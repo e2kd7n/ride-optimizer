@@ -398,3 +398,4 @@ class TestCommuteForecastGenerator:
         assert window.temp_c == 15.0  # Average of max and min
         assert window.window_start == time(7, 0)
         assert window.window_end == time(9, 0)
+

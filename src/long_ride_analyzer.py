@@ -927,3 +927,5 @@ class LongRideAnalyzer:
         logger.info(f"Generated {len(recommendations)} ride recommendations")
         
         return recommendations
+
+

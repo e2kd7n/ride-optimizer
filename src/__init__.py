@@ -7,3 +7,4 @@ optimal commute routes between home and work.
 
 __version__ = "1.0.0"
 __author__ = "Strava Commute Analyzer Team"
+

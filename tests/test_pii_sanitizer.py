@@ -388,3 +388,4 @@ class TestSecureLoggerIntegration:
         output = stream.getvalue()
         assert "41.87xx" in output
         assert "41.8781136" not in output
+

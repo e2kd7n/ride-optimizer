@@ -250,3 +250,4 @@ class TestMapQuerySchema:
         with pytest.raises(ValidationError) as exc_info:
             schema.load({'route_type': 'invalid'})
         assert 'route_type' in exc_info.value.messages
+

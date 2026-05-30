@@ -347,3 +347,5 @@ class TestCronInstallation:
         import stat
         mode = install_script.stat().st_mode
         assert mode & stat.S_IXUSR  # User executable
+
+

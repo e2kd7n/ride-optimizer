@@ -402,3 +402,5 @@ def mock_long_ride_analysis():
             "exploration_opportunities": ["New scenic loop", "Alternative descent"]
         }
     }
+
+

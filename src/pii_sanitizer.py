@@ -278,3 +278,4 @@ def sanitize_dict(data: Dict[str, Any], keys_to_sanitize: Optional[List[str]] = 
                 sanitized[key] = sanitize_log_message(value)
     
     return sanitized
+

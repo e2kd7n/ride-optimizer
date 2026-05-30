@@ -369,3 +369,4 @@ def _get_speed_category(speed_ms: float) -> str:
         return 'fast'
     else:
         return 'very_fast'
+

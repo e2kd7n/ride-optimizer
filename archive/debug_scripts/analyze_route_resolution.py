@@ -99,3 +99,4 @@ if all_avg_distances:
     print(f"  Max average: {max(all_avg_distances):.1f} meters")
 
 print("\n" + "="*70)
+

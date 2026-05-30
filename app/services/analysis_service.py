@@ -806,3 +806,4 @@ class AnalysisService:
         self._home_location = None
         self._work_location = None
         self._last_analysis_time = None
+

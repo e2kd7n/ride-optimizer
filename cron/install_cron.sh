@@ -66,3 +66,4 @@ echo ""
 echo "To view cron logs:"
 echo "  tail -f $PROJECT_ROOT/logs/cron.log"
 echo ""
+

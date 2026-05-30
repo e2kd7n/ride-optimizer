@@ -382,3 +382,5 @@ class WeatherService:
         except Exception as e:
             logger.error(f"Error getting degraded weather: {e}", exc_info=True)
             return {}
+
+

@@ -197,3 +197,4 @@ class TestLaunchInitialization:
         monkeypatch.setattr(launch, '_services_initialized', True)
         launch.initialize_services()
         assert launch._services_initialized is True
+

@@ -497,3 +497,5 @@ class TestRouteSorting:
         ]
         sorted_routes = initialized_service._sort_routes(routes, 'recent')
         assert sorted_routes == routes  # Order unchanged
+
+

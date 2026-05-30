@@ -535,3 +535,4 @@ class StravaDataFetcher:
             List of (lat, lon) tuples
         """
         return polyline.decode(encoded)
+

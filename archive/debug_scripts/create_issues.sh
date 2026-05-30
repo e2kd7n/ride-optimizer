@@ -205,3 +205,4 @@ gh issue create --title "[LOW PRIORITY] Grey out unselected routes on map when r
 - [ ] Click again to restore all routes"
 
 echo "All issues created successfully!"
+

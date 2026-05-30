@@ -153,3 +153,4 @@ class UserPreference(db.Model, TimestampMixin):
                 existing = cls.query.filter_by(category=category, key=key).first()
                 if not existing:
                     cls.set(category, key, value)
+

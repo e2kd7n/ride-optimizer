@@ -696,3 +696,4 @@ class TestErrorHandlers:
                 assert 'message' in data
         finally:
             app.config['TESTING'] = True
+

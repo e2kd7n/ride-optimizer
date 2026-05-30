@@ -95,3 +95,4 @@ class TestUnitConverter:
         converter = UnitConverter('invalid')
         # Should default to metric
         assert converter.distance(1000) == "1.00 km"
+

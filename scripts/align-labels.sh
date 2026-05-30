@@ -154,3 +154,4 @@ echo "  - Category: architecture, performance, testing, security, accessibility"
 echo "  - Tech: backend, frontend, design, ux"
 echo "  - Infrastructure: deployment, docker, ci/cd, raspberry-pi"
 echo "  - Special: blocking-launch, quick-win, data-loss-prevention"
+

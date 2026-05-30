@@ -1000,3 +1000,5 @@ class AnalyticsService:
         recommendations.append("Include variety: mix commutes, long rides, and recovery rides")
         
         return recommendations
+
+

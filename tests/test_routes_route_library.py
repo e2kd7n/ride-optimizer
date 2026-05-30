@@ -591,3 +591,5 @@ class TestApiLibraryStats:
         data = response.get_json()
         assert data['status'] == 'error'
         assert 'Test error' in data['message']
+
+

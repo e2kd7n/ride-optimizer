@@ -1656,3 +1656,4 @@ end tell
             True if no geocoding thread or thread has finished
         """
         return not self._geocoding_thread or not self._geocoding_thread.is_alive()
+

@@ -117,3 +117,4 @@ def load_config(config_path: str = "config/config.yaml") -> Config:
         Config object
     """
     return Config(config_path)
+

@@ -66,3 +66,4 @@ def reset_db(app):
         db.drop_all()
         db.create_all()
         app.logger.warning("Database reset complete - all data deleted")
+

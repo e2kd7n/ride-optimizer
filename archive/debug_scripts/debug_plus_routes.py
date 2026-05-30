@@ -92,3 +92,4 @@ if from_work:
     for route in sorted(from_work, key=lambda x: x['distance'], reverse=True):
         is_plus = "PLUS" if route['distance'] > threshold else ""
         print(f"  {route['distance']:.2f}km - {route['name']} {is_plus}")
+

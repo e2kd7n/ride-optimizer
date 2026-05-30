@@ -31,3 +31,4 @@ fi
 gh issue close "$ISSUE_NUMBER" --comment "$COMMENT"
 
 echo "✓ Successfully closed issue #$ISSUE_NUMBER"
+

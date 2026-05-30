@@ -120,3 +120,4 @@ class TestUtilityFunctions:
 
         assert _get_speed_color(4.0) == '#e74c3c'
         assert _get_speed_color(7.0) == '#27ae60'
+

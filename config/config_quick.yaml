@@ -54,3 +54,4 @@ output:
   report_directory: "output/reports_quick"
   map_filename: "route_map.html"
   report_filename: "commute_analysis.html"
+

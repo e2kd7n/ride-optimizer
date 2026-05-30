@@ -235,3 +235,5 @@ def reconfigure_logging(
         elif not console_output and console_handler:
             # Remove console handler
             root_logger.removeHandler(console_handler)
+
+

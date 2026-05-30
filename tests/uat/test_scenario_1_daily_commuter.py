@@ -294,3 +294,4 @@ class TestDailyCommuterPerformance:
         
         response_time = end_time - start_time
         assert response_time < 3.0, f"Recommendation took {response_time:.2f}s"
+

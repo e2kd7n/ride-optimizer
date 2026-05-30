@@ -721,6 +721,7 @@ class CommuteService:
         </div>
         """
 
+
     
     def get_workout_aware_commute(self, direction: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -912,3 +913,5 @@ class CommuteService:
         except Exception as e:
             logger.error(f"Failed to extend route: {e}", exc_info=True)
             return None
+
+

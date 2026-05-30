@@ -186,3 +186,4 @@ def validate_request_args(schema_class):
         wrapper.__name__ = f.__name__
         return wrapper
     return decorator
+

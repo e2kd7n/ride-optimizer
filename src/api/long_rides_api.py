@@ -278,3 +278,4 @@ def create_api(long_rides: List[LongRide], config: Config) -> LongRidesAPI:
         LongRidesAPI instance
     """
     return LongRidesAPI(long_rides, config)
+

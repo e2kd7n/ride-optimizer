@@ -387,3 +387,5 @@ class TestConfigurationParsing:
         """Test getting default config value."""
         value = notifier._get_config_value(None, 'missing', 'MISSING_VAR', 'default_value')
         assert value == 'default_value'
+
+

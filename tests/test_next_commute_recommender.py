@@ -657,3 +657,5 @@ class TestCommuteRecommendationDataclass:
         assert recommendation.score == 85.5
         assert recommendation.is_today is True
         assert recommendation.forecast_weather is not None
+
+

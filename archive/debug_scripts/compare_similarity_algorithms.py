@@ -144,3 +144,4 @@ if FRECHET_AVAILABLE:
     print("\n✅ Fréchet distance is available and working")
 else:
     print("\n❌ Fréchet distance not available - install similaritymeasures")
+

@@ -288,3 +288,4 @@ class WorkoutMetadata(db.Model, TimestampMixin):
             db.session.commit()
         
         return best_route, min(best_score, 1.0)
+

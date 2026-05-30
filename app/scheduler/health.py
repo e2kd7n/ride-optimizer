@@ -338,3 +338,4 @@ class HealthChecker:
         ).order_by(
             AnalysisSnapshot.analysis_date.desc()
         ).first()
+

@@ -268,3 +268,5 @@ class TestAPIDataFlow:
         assert data['status'] == 'success'
         assert 'weather' in data
         assert data['weather']['temperature'] == 72
+
+

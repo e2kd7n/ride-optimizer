@@ -339,3 +339,4 @@ def check_system_health() -> None:
         except Exception as e:
             _record_job_failure(job, e)
             logger.error(f"Health check job failed: {e}", exc_info=True)
+

@@ -635,3 +635,5 @@ class WindImpactCalculator:
         self._wind_analysis_cache[cache_key] = result
         
         return result
+
+

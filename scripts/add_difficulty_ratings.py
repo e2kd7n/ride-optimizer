@@ -122,3 +122,4 @@ if __name__ == '__main__':
     print(f"🚴 Adding difficulty ratings to routes...")
     add_difficulty_ratings(route_file)
     print("✅ Done!")
+

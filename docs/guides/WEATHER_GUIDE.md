@@ -248,3 +248,4 @@ Planned features:
 ---
 
 **Note**: Weather analysis is a tool to help optimize your route selection. Always use your judgment and consider safety factors beyond wind conditions.
+

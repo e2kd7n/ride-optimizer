@@ -345,3 +345,5 @@ def get_route_color(index: int) -> str:
         '#20c997',  # Teal
     ]
     return colors[index % len(colors)]
+
+

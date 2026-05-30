@@ -625,3 +625,4 @@ class ReportGenerator:
         
         template = env.get_template("report_template.html")
         return template.render(**context)
+

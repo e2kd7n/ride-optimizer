@@ -420,3 +420,5 @@ class TrafficAnalyzer:
                     'avg_duration_min': round(pattern.avg_duration_by_day[day] / 60, 1)
                 })
         return breakdown
+
+

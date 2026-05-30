@@ -392,3 +392,5 @@ class TestEdgeCases:
         # Should only have main log file, no backups
         log_files = list(Path(temp_log_dir).glob('ride_optimizer.log*'))
         assert len(log_files) == 1
+
+

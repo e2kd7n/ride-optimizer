@@ -340,3 +340,4 @@ class TestGetServices:
                 
                 # Should return same instance
                 assert services1 is services2
+

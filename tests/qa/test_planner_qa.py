@@ -252,3 +252,5 @@ def test_planner_analyze_returns_dict_on_valid_input(planner_service):
     result = planner_service.analyze_long_ride(distance=50, duration=3)
     assert isinstance(result, dict)
     assert result.get('status') in ('success', 'error')
+
+

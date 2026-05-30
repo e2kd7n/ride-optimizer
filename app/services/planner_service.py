@@ -1096,3 +1096,4 @@ class PlannerService:
                 popup=folium.Popup(popup_html, max_width=300),
                 tooltip=f"{label} forecast"
             ).add_to(weather_overlay)
+

@@ -21,3 +21,4 @@ while IFS='|' read -r number title; do
 done
 
 echo "Done!"
+

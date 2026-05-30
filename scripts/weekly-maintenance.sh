@@ -243,3 +243,4 @@ if [ "${WAIT_FOR_COMPLETION:-false}" = "true" ] && [ -n "${ISSUE_PID:-}" ]; then
     wait $ISSUE_PID
     log "✓ Issue management complete"
 fi
+

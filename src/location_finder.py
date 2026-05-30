@@ -310,3 +310,5 @@ class LocationFinder:
             'avg_arrival_time': str(location.avg_arrival_time) if location.avg_arrival_time else None,
             'radius_meters': location.radius
         }
+
+

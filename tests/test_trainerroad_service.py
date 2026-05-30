@@ -594,3 +594,5 @@ class TestGetWorkoutConstraints:
             
             assert any('High training load' in note for note in constraints['notes'])
             assert constraints['tss'] == 150
+
+

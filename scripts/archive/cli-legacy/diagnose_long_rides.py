@@ -77,3 +77,4 @@ else:
     print("  Check browser console for JavaScript errors")
 
 print("\n" + "=" * 60)
+

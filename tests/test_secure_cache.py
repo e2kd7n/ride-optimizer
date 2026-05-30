@@ -487,3 +487,4 @@ class TestSecureCacheIntegration:
         # Try to load with wrong key
         loaded_data = storage2.load_cache()
         assert loaded_data is None
+

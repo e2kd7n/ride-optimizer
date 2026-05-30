@@ -550,3 +550,5 @@ class TestGetDegradedWeather:
         assert result['wind_speed_kph'] == 10
         assert result['conditions'] == 'Cloudy'
         assert result['comfort_score'] == 0.75
+
+

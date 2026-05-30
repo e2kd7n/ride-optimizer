@@ -203,3 +203,5 @@ class WeatherSnapshot(db.Model, TimestampMixin):
         """Save changes to database."""
         db.session.add(self)
         db.session.commit()
+
+
