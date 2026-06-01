@@ -1,7 +1,7 @@
 # Release Roadmap
 
 **Created:** 2026-05-06 16:23 CDT
-**Updated:** 2026-05-14 (Release-Aware Priority System)
+**Updated:** 2026-06-01 (Weekly Maintenance - Version Status Correction)
 **Based on:** Architecture Simplification (Issue #152)
 
 > **⚠️ IMPORTANT:** This file now inherits release numbers from GitHub milestones.
@@ -12,9 +12,9 @@
 
 ## 🎯 Current Status
 
-**Current Release:** v0.13.0 (deployed)
-**Next Release:** v0.14.0 (in development)
-**Future Releases:** v0.15.0
+**Current Release:** v0.13.0 (in development - not yet tagged)
+**Next Release:** v0.14.0 (50 open issues)
+**Future Releases:** v0.15.0 (8 open issues)
 **Target:** Single-user Raspberry Pi deployment
 
 **Source of Truth:** GitHub Milestones (automatically detected)
