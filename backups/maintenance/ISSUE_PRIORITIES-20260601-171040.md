@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-05-14 21:32:50 UTC / 2026-05-14 16:32:50 CDT
+**Last Updated:** 2026-05-23 16:16:38 UTC / 2026-05-23 11:16:38 CDT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -25,55 +25,31 @@ This file reflects the current state of GitHub issues organized by release miles
 **No P1 issues** ✅
 
 ### 🟡 P2 - MEDIUM
-- #227 - Improve Test Coverage for New Features
-- #115 - Display optimal departure time suggestions
-- #114 - Add transit recommendations when conditions are poor
-- #113 - Show optimal route recommendations based on wind
-- #112 - Add weather severity indicators (good/fair/poor/miserable icons)
-- #111 - Add evening commute window (3-6 PM) weather display
-- #110 - Add morning commute window (7-9 AM) weather display
-- #108 - Integrate forecast generator into main.py workflow
-- #105 - Add monthly ride statistics breakdown
-- #94 - Implement Accessibility Improvements
-- #93 - Implement Comprehensive Error States
-- #92 - Add Loading States with Skeleton Loaders
+**No P2 issues** ✅
 
 ### 🟢 P3 - LOW
-- #200 - Route naming improvements (Start → Main → End format)
-- #169 - Design: Verify WCAG AA contrast ratios (4.5:1)
 - #145 - 🌤️ EPIC: Weather Dashboard & Forecast Integration
-- #120 - [LOW PRIORITY] Debug and fix Bootstrap tab switching functionality
 - #54 - Weather Dashboard Implementation (Epic)
 
 ### 📋 P4 - FUTURE
-- #68 - ✨ Visual Hierarchy & Polish
-- #66 - 🎓 Feature Discovery & Onboarding
-- #64 - 📊 Progressive Disclosure for Metrics
-- #62 - 🎨 EPIC: Mobile-First UI/UX Redesign & Accessibility
 - #47 - Add Side-by-Side Route Comparison Feature
-- #39 - Evaluate Photon API as Nominatim alternative
-- #38 - Add social features (compare with other commuters)
 - #37 - Add real-time route suggestions
-- #35 - Add integration with other fitness platforms
 
 ---
 
 ## 📅 v0.14.0 (Future Release)
 
 ### 🔴 P1 - HIGH
-- #226 - Fix Planner Error Handling Test
-- #224 - Fix Route Library Search API Response Format
 - #208 - Create test data fixtures for integration testing
-- #206 - Implement lazy service initialization to fix performance issues
-- #205 - Create missing QA test harnesses for dashboard, commute, and planner
 - #163 - Test Coverage: data_fetcher.py (49% → 80%)
 - #162 - Test Coverage: long_ride_analyzer.py (13% → 50%)
 - #161 - Test Coverage: route_analyzer.py (20% → 50%)
 - #118 - Re-enable geocoding after rate limit expires
-- #91 - Add Rate Limiting to API Endpoints
-- #89 - Add Data Persistence Layer for API
 
 ### 🟡 P2 - MEDIUM
+- #300 - Test coverage gaps: wire up broken test files and fix pre-existing mock failures
+- #272 - Add Hourly Weather Forecast
+- #227 - Improve Test Coverage for New Features
 - #209 - Implement graceful degradation for unavailable services
 - #207 - Implement dependency injection pattern for better testability
 - #192 - Establish PR review requirements
@@ -87,14 +63,15 @@ This file reflects the current state of GitHub issues organized by release miles
 - #136 - Implement settings and preferences page for home/work locations, units, time windows, and planner defaults
 
 ### 🟢 P3 - LOW
+- #200 - Route naming improvements (Start → Main → End format)
 - #199 - Design: Test on real iOS/Android devices
 - #196 - Design: Ensure touch targets ≥44x44px with 8px spacing
 - #195 - Design: Verify mobile-first responsive design (320px viewport)
 - #170 - Design: Test keyboard navigation and screen reader support
+- #120 - [LOW PRIORITY] Debug and fix Bootstrap tab switching functionality
 
 ### 📋 P4 - FUTURE
 - #203 - Implement GDPR-compliant data deletion endpoint
-- #144 - 🌐 EPIC: Personal Web Platform Migration (v3.0.0)
 
 ---
 
@@ -102,7 +79,6 @@ This file reflects the current state of GitHub issues organized by release miles
 
 ### 🔴 P1 - HIGH
 - #172 - Add Marshmallow validation schemas for planner endpoints
-- #171 - Build planner frontend UI (currently placeholder only)
 
 ### 🟡 P2 - MEDIUM
 - #193 - Long Rides: Implement skeleton loaders and error states
@@ -125,9 +101,7 @@ None
 - #254 - Implement Animated GIF Tutorials for Key Features
 
 ### 🟡 P2 - MEDIUM
-- #272 - Add Hourly Weather Forecast
 - #194 - Long Rides: Add accessibility features (WCAG 2.1 AA)
-- #109 - Design 7-day forecast card layout
 
 ### 🟢 P3 - LOW
 None
