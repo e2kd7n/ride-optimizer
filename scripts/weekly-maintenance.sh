@@ -13,13 +13,20 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-BACKUP_DIR="backups/maintenance"
-LOG_DIR="logs"
+# Store the original working directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+BACKUP_DIR="$PROJECT_ROOT/backups/maintenance"
+LOG_DIR="$PROJECT_ROOT/logs"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 MAINTENANCE_LOG="$LOG_DIR/maintenance-$TIMESTAMP.log"
 
 # Create directories if they don't exist
 mkdir -p "$BACKUP_DIR" "$LOG_DIR"
+
+# Create log file immediately
+touch "$MAINTENANCE_LOG"
 
 echo -e "${BLUE}=== Weekly Maintenance - $(date -u +"%Y-%m-%d %H:%M UTC") ===${NC}"
 echo "Log file: $MAINTENANCE_LOG"
