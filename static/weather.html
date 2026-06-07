@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather Forecast - Ride Optimizer</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="/css/main.css">
+    <style>
+        .forecast-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 8px;
+        }
+        @media (max-width: 767px) {
+            .forecast-grid {
+                grid-template-columns: repeat(4, 1fr);
+            }
+        }
+        @media (max-width: 480px) {
+            .forecast-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        .forecast-card {
+            background: var(--surface-card, #fff);
+            border: 1px solid rgba(0,0,0,0.08);
+            border-radius: 8px;
+            padding: 12px 8px;
+            text-align: center;
+            transition: box-shadow 0.2s;
+        }
+        .forecast-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+        }
+        .forecast-card.today {
+            border-color: #667eea;
+            border-width: 2px;
+        }
+        .forecast-day {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: #6c757d;
+        }
+        .forecast-card.today .forecast-day {
+            color: #667eea;
+        }
+        .forecast-icon {
+            font-size: 1.75rem;
+            margin: 6px 0;
+            display: block;
+        }
+        .forecast-temps {
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+        .forecast-temps .hi { color: #212529; }
+        .forecast-temps .lo { color: #6c757d; }
+        .forecast-detail {
+            font-size: 0.7rem;
+            color: #6c757d;
+            margin-top: 4px;
+        }
+        .comfort-pill {
+            display: inline-block;
+            font-size: 0.65rem;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 999px;
+            margin-top: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+        }
+        .comfort-pill.favorable { background: #d1fae5; color: #065f46; }
+        .comfort-pill.neutral   { background: #fef3c7; color: #92400e; }
+        .comfort-pill.unfavorable { background: #fee2e2; color: #991b1b; }
+
+        .commute-window-card {
+            border-radius: 8px;
+            padding: 16px;
+            border: 1px solid rgba(0,0,0,0.08);
+        }
+        .commute-window-card.morning { border-left: 4px solid #f59e0b; }
+        .commute-window-card.evening { border-left: 4px solid #6366f1; }
+
+        .window-metric {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.875rem;
+            margin-bottom: 4px;
+        }
+        .window-metric i { width: 16px; color: #6c757d; }
+
+        .transit-alert {
+            border-left: 4px solid #dc3545;
+            background: #fff5f5;
+        }
+
+        .skeleton-forecast {
+            height: 140px;
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: loading 1.5s infinite;
+            border-radius: 8px;
+        }
+        @keyframes loading {
+            0%   { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+    </style>
+</head>
+<body>
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+
+    <nav class="navbar navbar-expand-lg navbar-dark" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-bicycle"></i> Ride Optimizer
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/"><i class="bi bi-house-door"></i> Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/commute.html"><i class="bi bi-signpost-2"></i> Commute</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/routes.html"><i class="bi bi-map"></i> Routes</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/weather.html"><i class="bi bi-cloud-sun"></i> Weather</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/settings.html"><i class="bi bi-gear"></i> Settings</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <main id="main-content" class="container mt-4">
+        <div class="row mb-3">
+            <div class="col-12">
+                <h2><i class="bi bi-cloud-sun"></i> Weather Forecast</h2>
+                <p class="text-muted">7-day outlook and commute windows for your home location</p>
+            </div>
+        </div>
+
+        <!-- Transit alert — shown when today is unfavorable -->
+        <div id="transit-alert" class="alert transit-alert d-none mb-3" role="alert">
+            <div class="d-flex align-items-start gap-2">
+                <i class="bi bi-bus-front fs-5 text-danger mt-1"></i>
+                <div>
+                    <strong>Consider transit today</strong>
+                    <div id="transit-reason" class="small mt-1"></div>
+                    <a id="transit-link" href="https://www.google.com/maps" target="_blank" rel="noopener"
+                       class="btn btn-sm btn-outline-danger mt-2">
+                        <i class="bi bi-box-arrow-up-right me-1"></i>Open transit planner
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- 7-day forecast -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-calendar-week me-2"></i>7-Day Forecast</span>
+                <small id="forecast-updated" class="text-muted"></small>
+            </div>
+            <div class="card-body">
+                <div id="forecast-grid" class="forecast-grid">
+                    <!-- Skeletons while loading -->
+                    <div class="skeleton-forecast"></div>
+                    <div class="skeleton-forecast"></div>
+                    <div class="skeleton-forecast"></div>
+                    <div class="skeleton-forecast"></div>
+                    <div class="skeleton-forecast d-none d-sm-block"></div>
+                    <div class="skeleton-forecast d-none d-sm-block"></div>
+                    <div class="skeleton-forecast d-none d-sm-block"></div>
+                </div>
+                <div id="forecast-error" class="text-center text-muted py-3 d-none">
+                    <i class="bi bi-exclamation-circle me-1"></i>
+                    <span id="forecast-error-msg">Unable to load forecast</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Today's commute windows -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="bi bi-clock me-2"></i>Today's Commute Windows
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div id="morning-window" class="commute-window-card morning">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <i class="bi bi-sunrise text-warning fs-5"></i>
+                                <strong>Morning (7–9 AM)</strong>
+                            </div>
+                            <div id="morning-content">
+                                <div class="text-muted small">Loading…</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div id="evening-window" class="commute-window-card evening">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <i class="bi bi-sunset text-primary fs-5"></i>
+                                <strong>Evening (3–6 PM)</strong>
+                            </div>
+                            <div id="evening-content">
+                                <div class="text-muted small">Loading…</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="windows-error" class="text-center text-muted py-2 d-none">
+                    <i class="bi bi-exclamation-circle me-1"></i>Commute window data unavailable
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="mt-5 py-3 bg-light">
+        <div class="container text-center text-muted">
+            <small>Ride Optimizer v0.13.0 - Smart Commute Planning</small>
+        </div>
+    </footer>
+
+    <nav id="bottom-nav" class="bottom-nav d-md-none" role="navigation" aria-label="Mobile navigation">
+        <button class="bottom-nav-item" onclick="window.location.href='/'" aria-label="Home">
+            <i class="bi bi-house-door" aria-hidden="true"></i>
+            <span>Home</span>
+        </button>
+        <button class="bottom-nav-item" onclick="window.location.href='/commute.html'" aria-label="Commute">
+            <i class="bi bi-signpost-2" aria-hidden="true"></i>
+            <span>Commute</span>
+        </button>
+        <button class="bottom-nav-item active" aria-label="Weather" aria-current="page">
+            <i class="bi bi-cloud-sun" aria-hidden="true"></i>
+            <span>Weather</span>
+        </button>
+        <button class="bottom-nav-item" onclick="window.location.href='/settings.html'" aria-label="Settings">
+            <i class="bi bi-gear" aria-hidden="true"></i>
+            <span>Settings</span>
+        </button>
+    </nav>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/js/common.js"></script>
+    <script src="/js/api-client.js"></script>
+    <script src="/js/weather.js"></script>
+</body>
+</html>

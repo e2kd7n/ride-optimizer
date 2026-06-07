@@ -503,6 +503,91 @@ def get_commute_windows():
         return jsonify({'status': 'error', 'message': error_msg}), 500
 
 
+@app.route('/api/weather/forecast')
+@limiter.limit("20 per minute")
+def get_weather_forecast():
+    """
+    Get 7-day daily weather forecast.
+
+    Returns daily forecasts with comfort scores and cycling favorability,
+    covering issues #109 and #54 (7-day forecast card data).
+    """
+    initialize_services()
+
+    try:
+        lat = config.get('location.home.latitude')
+        lon = config.get('location.home.longitude')
+        if not lat or not lon:
+            return jsonify({'status': 'error', 'message': 'Home location not configured'}), 400
+
+        lat, lon = float(lat), float(lon)
+        raw = _weather_service.fetcher.get_daily_forecast(lat, lon, days=7)
+        if not raw:
+            return jsonify({'status': 'error', 'message': 'Forecast unavailable'}), 503
+
+        def _comfort(day: dict) -> float:
+            temp_c = (day.get('temp_max_c', 20) + day.get('temp_min_c', 15)) / 2
+            score = 1.0
+            if temp_c < 0:
+                score -= 0.4
+            elif temp_c < 10:
+                score -= 0.2
+            elif temp_c > 35:
+                score -= 0.5
+            elif temp_c > 30:
+                score -= 0.3
+            wind = day.get('wind_speed_max_kph', 0) or 0
+            if wind > 30:
+                score -= 0.3
+            elif wind > 20:
+                score -= 0.15
+            precip = day.get('precipitation_sum_mm', 0) or 0
+            if precip > 5:
+                score -= 0.4
+            elif precip > 0:
+                score -= 0.2
+            return round(max(0.0, min(1.0, score)), 2)
+
+        def _favorability(score: float) -> str:
+            if score >= 0.7:
+                return 'favorable'
+            elif score >= 0.4:
+                return 'neutral'
+            return 'unfavorable'
+
+        days = []
+        for day in raw:
+            comfort = _comfort(day)
+            temp_max_f = round(day.get('temp_max_c', 20) * 9 / 5 + 32)
+            temp_min_f = round(day.get('temp_min_c', 15) * 9 / 5 + 32)
+            wind_mph = round((day.get('wind_speed_max_kph', 0) or 0) * 0.621371)
+            wind_dir = _degrees_to_cardinal(day.get('wind_direction_dominant_deg', 0) or 0)
+            precip_prob = day.get('precipitation_prob_max', 0) or 0
+            precip_in = round((day.get('precipitation_sum_mm', 0) or 0) * 0.0393701, 2)
+            days.append({
+                'date': day.get('date'),
+                'temp_max_f': temp_max_f,
+                'temp_min_f': temp_min_f,
+                'wind_mph': wind_mph,
+                'wind_direction': wind_dir,
+                'precip_prob': precip_prob,
+                'precip_in': precip_in,
+                'comfort_score': int(comfort * 100),
+                'cycling_favorability': _favorability(comfort),
+            })
+
+        return jsonify({
+            'status': 'success',
+            'forecast': days,
+            'timestamp': datetime.now().isoformat(),
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting weather forecast: {e}", exc_info=True)
+        error_msg = str(e) if app.debug else 'Forecast data temporarily unavailable'
+        return jsonify({'status': 'error', 'message': error_msg}), 500
+
+
 @app.route('/api/recommendation')
 @limiter.limit("20 per minute")
 @validate_request_args(RecommendationQuerySchema)
