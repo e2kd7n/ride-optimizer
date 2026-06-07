@@ -162,6 +162,10 @@ class APIClient {
         return this.fetch('/weather');
     }
 
+    async getForecast() {
+        return this.fetch('/weather/forecast');
+    }
+
     /**
      * Get next commute recommendation
      */
