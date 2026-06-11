@@ -68,10 +68,7 @@ class Config:
             return [self._replace_env_vars(item) for item in config]
         elif isinstance(config, str) and config.startswith('${') and config.endswith('}'):
             var_name = config[2:-1]
-            value = os.getenv(var_name)
-            if value is None:
-                raise ValueError(f"Environment variable {var_name} not found")
-            return value
+            return os.getenv(var_name)
         else:
             return config
     

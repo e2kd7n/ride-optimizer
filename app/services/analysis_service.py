@@ -318,7 +318,7 @@ class AnalysisService:
                 try:
                     preview_acts = self._activities[:preview_n]
                     lf = LocationFinder(preview_acts, self.config)
-                    h, w = lf.find_locations()
+                    h, w = lf.identify_home_work()
                     ra = RouteAnalyzer(activities=preview_acts, home=h, work=w,
                                        config=self.config, force_reanalysis=True)
                     ra.analyze_routes()
@@ -334,7 +334,7 @@ class AnalysisService:
                     label=f'Detecting your home and work locations…')
             logger.info("Finding home and work locations...")
             location_finder = LocationFinder(self._activities, self.config)
-            self._home_location, self._work_location = location_finder.find_locations()
+            self._home_location, self._work_location = location_finder.identify_home_work()
             logger.info(f"Home: {self._home_location.name}, Work: {self._work_location.name}")
 
             # Step 3: Analyze routes

@@ -613,8 +613,9 @@ class SecureStravaAuthenticator:
             access_token=tokens['access_token'],
             refresh_token=tokens['refresh_token']
         )
-        # Set token expiration time as an attribute (not a constructor parameter)
+        # Set both attribute names — stravalib warns if token_expires is missing
         client.token_expires_at = tokens['expires_at']  # type: ignore[attr-defined]
+        client.token_expires = tokens['expires_at']  # type: ignore[attr-defined]
         return client
 
 

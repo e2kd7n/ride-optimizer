@@ -1132,6 +1132,7 @@ def get_route_detail(route_id):
 
 
 @app.route('/api/status')
+@limiter.exempt
 def get_status():
     """
     Get system health and data freshness status.
@@ -1280,7 +1281,9 @@ def get_cache_info():
         with open(cache_path) as f:
             cache_data = json.load(f)
         activities = cache_data.get('activities', cache_data) if isinstance(cache_data, dict) else cache_data
-        dates = sorted(a['start_date'] for a in activities if a.get('start_date'))
+        if not isinstance(activities, list):
+            return jsonify({'status': 'error', 'message': 'Cache format unrecognized'}), 500
+        dates = sorted(a['start_date'] for a in activities if isinstance(a, dict) and a.get('start_date'))
         stat = cache_path.stat()
         return jsonify({
             'status': 'ok',
