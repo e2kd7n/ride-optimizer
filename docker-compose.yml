@@ -9,6 +9,12 @@ services:
 
     environment:
       - APP_PORT=${APP_PORT:-8083}
+      - NTFY_ENABLED=${NTFY_ENABLED:-false}
+      - NTFY_SERVER=${NTFY_SERVER:-https://ntfy.sh}
+      - NTFY_TOPIC=${NTFY_TOPIC:-ride-optimizer}
+      - NTFY_PRIORITY_CRITICAL=${NTFY_PRIORITY_CRITICAL:-urgent}
+      - NTFY_PRIORITY_WARNING=${NTFY_PRIORITY_WARNING:-default}
+      - NTFY_PRIORITY_INFO=${NTFY_PRIORITY_INFO:-low}
 
     ports:
       - "${APP_PORT:-8083}:${APP_PORT:-8083}"
