@@ -171,10 +171,10 @@ class TestGetNextCommute:
         }
         
         commute_service._recommender = Mock()
-        commute_service._recommender.get_next_commute_recommendation.return_value = mock_rec
-        
-        result = commute_service.get_next_commute()
-        
+        commute_service._recommender.get_next_commute_recommendations.return_value = {'to_work': mock_rec}
+
+        result = commute_service.get_next_commute(direction='to_work')
+
         assert result['status'] == 'success'
         assert result['direction'] == 'to_work'
         assert result['time_window'] == 'morning'
@@ -200,30 +200,28 @@ class TestGetNextCommute:
         mock_rec.forecast_weather = None
         
         commute_service._recommender = Mock()
-        commute_service._recommender.get_next_commute_recommendation.return_value = mock_rec
-        
+        commute_service._recommender.get_next_commute_recommendations.return_value = {'to_home': mock_rec}
+
         result = commute_service.get_next_commute(direction='to_home')
-        
-        commute_service._recommender.get_next_commute_recommendation.assert_called_once_with(
-            direction='to_home'
-        )
+
+        commute_service._recommender.get_next_commute_recommendations.assert_called_once()
         assert result['direction'] == 'to_home'
     
     def test_get_next_commute_no_suitable_route(self, commute_service):
         """Test when no suitable route is found."""
         commute_service._recommender = Mock()
-        commute_service._recommender.get_next_commute_recommendation.return_value = None
-        
+        commute_service._recommender.get_next_commute_recommendations.return_value = {}
+
         result = commute_service.get_next_commute()
-        
+
         assert result['status'] == 'error'
         assert 'no suitable' in result['message'].lower()
         assert result['route'] is None
-    
+
     def test_get_next_commute_exception_handling(self, commute_service):
         """Test exception handling during recommendation."""
         commute_service._recommender = Mock()
-        commute_service._recommender.get_next_commute_recommendation.side_effect = \
+        commute_service._recommender.get_next_commute_recommendations.side_effect = \
             Exception("Weather API unavailable")
         
         result = commute_service.get_next_commute()
@@ -448,7 +446,7 @@ class TestCommuteServiceIntegration:
         mock_rec.window_end = time(9, 0)
         mock_rec.forecast_weather = None
         
-        mock_recommender.get_next_commute_recommendation.return_value = mock_rec
+        mock_recommender.get_next_commute_recommendations.return_value = {'to_work': mock_rec}
         mock_recommender.morning_window_start = time(7, 0)
         mock_recommender.morning_window_end = time(9, 0)
         mock_recommender.evening_window_start = time(15, 0)

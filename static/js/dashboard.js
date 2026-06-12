@@ -324,6 +324,25 @@ function renderHeroCard(rec, isHero) {
            </span>`
         : '';
 
+    const transit = rec.transit_recommendation;
+    const transitBanner = transit && transit.suggested ? (() => {
+        const isSevere = transit.severity === 'severe';
+        const alertClass = isSevere ? 'alert-danger' : 'alert-warning';
+        const icon = isSevere ? 'bi-exclamation-triangle-fill' : 'bi-bus-front-fill';
+        const url = transit.transit_url || 'https://www.google.com/maps?travelmode=transit';
+        return `
+            <div class="alert ${alertClass} py-2 px-3 mt-3 mb-0 d-flex align-items-start gap-2" role="alert">
+                <i class="bi ${icon} mt-1 flex-shrink-0"></i>
+                <div class="flex-grow-1 small">
+                    <strong>${isSevere ? 'Conditions unsafe for cycling.' : 'Consider transit today.'}</strong>
+                    ${transit.reason ? ` ${esc(transit.reason)}.` : ''}
+                    <a href="${esc(url)}" target="_blank" rel="noopener noreferrer" class="d-block mt-1">
+                        <i class="bi bi-box-arrow-up-right me-1"></i>Open transit planner
+                    </a>
+                </div>
+            </div>`;
+    })() : '';
+
     if (isHero) {
         return `
             <div class="hero-decision-card" style="border-left: 4px solid ${borderColor}; padding-left: var(--space-3);">
@@ -348,6 +367,7 @@ function renderHeroCard(rec, isHero) {
                     <span class="ms-3"><i class="bi bi-graph-up"></i> ${route.elevation || '—'} ft</span>
                     ${departureTime ? `<span class="ms-3"><i class="bi bi-alarm"></i> ${departureTime}</span>` : ''}
                 </div>
+                ${transitBanner}
                 <div class="mt-3">
                     <a href="/commute.html" class="btn btn-primary btn-sm">
                         <i class="bi bi-map"></i> View on Map

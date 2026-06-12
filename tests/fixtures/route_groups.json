@@ -1,0 +1,220 @@
+{
+  "route_groups": [
+    {
+      "id": "home_to_work_a1b2c3",
+      "direction": "home_to_work",
+      "name": "Lakefront Trail → Downtown",
+      "frequency": 18,
+      "is_plus_route": false,
+      "difficulty": "Easy",
+      "representative_route": {
+        "activity_id": 10000001,
+        "direction": "home_to_work",
+        "coordinates": [
+          [41.8800, -87.6300],
+          [41.8820, -87.6280],
+          [41.8840, -87.6260],
+          [41.8860, -87.6240],
+          [41.8880, -87.6220],
+          [41.8900, -87.6200]
+        ],
+        "distance": 12480.0,
+        "duration": 2280,
+        "elevation_gain": 85.0,
+        "timestamp": "2026-05-01T07:15:00+00:00",
+        "average_speed": 5.47,
+        "activity_name": "Morning Commute",
+        "is_plus_route": false
+      },
+      "routes": [
+        {
+          "activity_id": 10000001,
+          "direction": "home_to_work",
+          "coordinates": [
+            [41.8800, -87.6300],
+            [41.8820, -87.6280],
+            [41.8840, -87.6260],
+            [41.8860, -87.6240],
+            [41.8880, -87.6220],
+            [41.8900, -87.6200]
+          ],
+          "distance": 12480.0,
+          "duration": 2280,
+          "elevation_gain": 85.0,
+          "timestamp": "2026-05-01T07:15:00+00:00",
+          "average_speed": 5.47,
+          "activity_name": "Morning Commute",
+          "is_plus_route": false
+        },
+        {
+          "activity_id": 10000003,
+          "direction": "home_to_work",
+          "coordinates": [
+            [41.8801, -87.6301],
+            [41.8821, -87.6281],
+            [41.8841, -87.6261],
+            [41.8861, -87.6241],
+            [41.8881, -87.6221],
+            [41.8900, -87.6200]
+          ],
+          "distance": 12510.0,
+          "duration": 2220,
+          "elevation_gain": 88.0,
+          "timestamp": "2026-05-02T07:20:00+00:00",
+          "average_speed": 5.63,
+          "activity_name": "Morning Commute",
+          "is_plus_route": false
+        },
+        {
+          "activity_id": 10000010,
+          "direction": "home_to_work",
+          "coordinates": [
+            [41.8800, -87.6300],
+            [41.8820, -87.6280],
+            [41.8840, -87.6261],
+            [41.8860, -87.6241],
+            [41.8880, -87.6221],
+            [41.8900, -87.6200]
+          ],
+          "distance": 12490.0,
+          "duration": 2250,
+          "elevation_gain": 86.0,
+          "timestamp": "2026-05-08T07:18:00+00:00",
+          "average_speed": 5.55,
+          "activity_name": "Morning Commute",
+          "is_plus_route": false
+        }
+      ]
+    },
+    {
+      "id": "work_to_home_d4e5f6",
+      "direction": "work_to_home",
+      "name": "Downtown → Lakefront Trail",
+      "frequency": 16,
+      "is_plus_route": false,
+      "difficulty": "Easy",
+      "representative_route": {
+        "activity_id": 10000002,
+        "direction": "work_to_home",
+        "coordinates": [
+          [41.8900, -87.6200],
+          [41.8880, -87.6220],
+          [41.8860, -87.6240],
+          [41.8840, -87.6260],
+          [41.8820, -87.6280],
+          [41.8800, -87.6300]
+        ],
+        "distance": 12650.0,
+        "duration": 2340,
+        "elevation_gain": 90.0,
+        "timestamp": "2026-05-01T17:30:00+00:00",
+        "average_speed": 5.41,
+        "activity_name": "Evening Commute",
+        "is_plus_route": false
+      },
+      "routes": [
+        {
+          "activity_id": 10000002,
+          "direction": "work_to_home",
+          "coordinates": [
+            [41.8900, -87.6200],
+            [41.8880, -87.6220],
+            [41.8860, -87.6240],
+            [41.8840, -87.6260],
+            [41.8820, -87.6280],
+            [41.8800, -87.6300]
+          ],
+          "distance": 12650.0,
+          "duration": 2340,
+          "elevation_gain": 90.0,
+          "timestamp": "2026-05-01T17:30:00+00:00",
+          "average_speed": 5.41,
+          "activity_name": "Evening Commute",
+          "is_plus_route": false
+        },
+        {
+          "activity_id": 10000005,
+          "direction": "work_to_home",
+          "coordinates": [
+            [41.8900, -87.6200],
+            [41.8881, -87.6220],
+            [41.8861, -87.6240],
+            [41.8841, -87.6260],
+            [41.8821, -87.6280],
+            [41.8800, -87.6300]
+          ],
+          "distance": 12680.0,
+          "duration": 2280,
+          "elevation_gain": 91.0,
+          "timestamp": "2026-05-05T17:15:00+00:00",
+          "average_speed": 5.56,
+          "activity_name": "Evening Commute",
+          "is_plus_route": false
+        }
+      ]
+    },
+    {
+      "id": "home_to_work_plus_g7h8i9",
+      "direction": "home_to_work",
+      "name": "Scenic Lakefront Loop → Downtown",
+      "frequency": 4,
+      "is_plus_route": true,
+      "difficulty": "Moderate",
+      "representative_route": {
+        "activity_id": 10000006,
+        "direction": "home_to_work",
+        "coordinates": [
+          [41.8800, -87.6300],
+          [41.8790, -87.6350],
+          [41.8770, -87.6380],
+          [41.8800, -87.6350],
+          [41.8840, -87.6300],
+          [41.8870, -87.6250],
+          [41.8900, -87.6200]
+        ],
+        "distance": 15800.0,
+        "duration": 2880,
+        "elevation_gain": 140.0,
+        "timestamp": "2026-05-06T07:10:00+00:00",
+        "average_speed": 5.49,
+        "activity_name": "Morning Commute - Plus Route",
+        "is_plus_route": true
+      },
+      "routes": [
+        {
+          "activity_id": 10000006,
+          "direction": "home_to_work",
+          "coordinates": [
+            [41.8800, -87.6300],
+            [41.8790, -87.6350],
+            [41.8770, -87.6380],
+            [41.8800, -87.6350],
+            [41.8840, -87.6300],
+            [41.8870, -87.6250],
+            [41.8900, -87.6200]
+          ],
+          "distance": 15800.0,
+          "duration": 2880,
+          "elevation_gain": 140.0,
+          "timestamp": "2026-05-06T07:10:00+00:00",
+          "average_speed": 5.49,
+          "activity_name": "Morning Commute - Plus Route",
+          "is_plus_route": true
+        }
+      ]
+    }
+  ],
+  "home_location": {
+    "lat": 41.8800,
+    "lon": -87.6300,
+    "name": "Home",
+    "activity_count": 22
+  },
+  "work_location": {
+    "lat": 41.8900,
+    "lon": -87.6200,
+    "name": "Work",
+    "activity_count": 20
+  },
+  "updated_at": "2026-05-19T20:00:00+00:00"
+}
