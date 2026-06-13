@@ -55,8 +55,9 @@
 
         try {
             state.mapInstance = L.map('routes-map').setView([41.8781, -87.6298], 11); // Default to Chicago
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors',
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
+                subdomains: 'abcd',
                 maxZoom: 19
             }).addTo(state.mapInstance);
 
@@ -156,8 +157,8 @@
             // Create polyline with default styling
             const polyline = L.polyline(coordinates, {
                 color: color,
-                weight: 4,
-                opacity: 0.8
+                weight: 5,
+                opacity: 0.9
             }).addTo(state.mapInstance);
 
             // Bind popup
@@ -199,8 +200,8 @@
                 startMarker: startMarker,
                 endMarker: endMarker,
                 color: color,
-                defaultWeight: 4,
-                defaultOpacity: 0.8
+                defaultWeight: 5,
+                defaultOpacity: 0.9
             });
 
             // Select this route (bring to front with enhanced styling)
@@ -213,81 +214,7 @@
                 animate: true,
                 duration: 0.5
             });
-    /**
-     * Select a route on the map (bring to front with enhanced styling)
-     * Issue #74: Ensure selected polylines and tooltips appear on top
-     * Issue #122: Grey out unselected routes
-     */
-    function selectRoute(routeId) {
-        // Grey out ALL routes first
-        state.displayedRoutes.forEach((mapObjects, id) => {
-            if (mapObjects && mapObjects.polyline) {
-                // Grey out unselected routes
-                mapObjects.polyline.setStyle({
-                    weight: mapObjects.defaultWeight || 4,
-                    opacity: 0.3, // Greyed out
-                    color: '#999999' // Grey color
-                });
-                
-                // Grey out markers
-                if (mapObjects.startMarker) {
-                    mapObjects.startMarker.setZIndexOffset(0);
-                    mapObjects.startMarker.setOpacity(0.3);
-                }
-                if (mapObjects.endMarker) {
-                    mapObjects.endMarker.setZIndexOffset(0);
-                    mapObjects.endMarker.setOpacity(0.3);
-                }
-                
-                // Remove selected class from tooltip
-                const tooltip = mapObjects.polyline.getTooltip();
-                if (tooltip) {
-                    const tooltipElement = tooltip.getElement();
-                    if (tooltipElement) {
-                        tooltipElement.classList.remove('selected-route-tooltip');
-                    }
-                }
-            }
-        });
 
-        // Highlight the selected route
-        const mapObjects = state.displayedRoutes.get(routeId);
-        if (mapObjects && mapObjects.polyline) {
-            // Bring polyline to front (z-index)
-            mapObjects.polyline.bringToFront();
-            
-            // Bring markers to front (markers use setZIndexOffset, not bringToFront)
-            if (mapObjects.startMarker) {
-                mapObjects.startMarker.setZIndexOffset(1000);
-                mapObjects.startMarker.setOpacity(1.0);
-            }
-            if (mapObjects.endMarker) {
-                mapObjects.endMarker.setZIndexOffset(1000);
-                mapObjects.endMarker.setOpacity(1.0);
-            }
-            
-            // Enhance visual styling with original color
-            mapObjects.polyline.setStyle({
-                weight: 6, // Thicker line
-                opacity: 1.0, // Full opacity
-                color: mapObjects.color // Restore original color
-            });
-            
-            // Add selected class to tooltip for higher z-index
-            const tooltip = mapObjects.polyline.getTooltip();
-            if (tooltip) {
-                const tooltipElement = tooltip.getElement();
-                if (tooltipElement) {
-                    tooltipElement.classList.add('selected-route-tooltip');
-                }
-            }
-            
-            state.selectedRouteId = routeId;
-            console.log(`✓ Route ${routeId} selected and brought to front, others greyed out`);
-        }
-    }
-
-            
             updateMapStatus();
 
             // Update card styling to show it's on the map
@@ -314,6 +241,55 @@
             if (window.showToast) {
                 window.showToast(`Failed to display route: ${errorMessage}`, 'error');
             }
+        }
+    }
+
+    function selectRoute(routeId) {
+        state.displayedRoutes.forEach((mapObjects) => {
+            if (mapObjects && mapObjects.polyline) {
+                mapObjects.polyline.setStyle({
+                    weight: mapObjects.defaultWeight || 4,
+                    opacity: 0.3,
+                    color: '#999999'
+                });
+                if (mapObjects.startMarker) {
+                    mapObjects.startMarker.setZIndexOffset(0);
+                    mapObjects.startMarker.setOpacity(0.3);
+                }
+                if (mapObjects.endMarker) {
+                    mapObjects.endMarker.setZIndexOffset(0);
+                    mapObjects.endMarker.setOpacity(0.3);
+                }
+                const tooltip = mapObjects.polyline.getTooltip();
+                if (tooltip) {
+                    const el = tooltip.getElement();
+                    if (el) el.classList.remove('selected-route-tooltip');
+                }
+            }
+        });
+
+        const mapObjects = state.displayedRoutes.get(routeId);
+        if (mapObjects && mapObjects.polyline) {
+            mapObjects.polyline.bringToFront();
+            if (mapObjects.startMarker) {
+                mapObjects.startMarker.setZIndexOffset(1000);
+                mapObjects.startMarker.setOpacity(1.0);
+            }
+            if (mapObjects.endMarker) {
+                mapObjects.endMarker.setZIndexOffset(1000);
+                mapObjects.endMarker.setOpacity(1.0);
+            }
+            mapObjects.polyline.setStyle({
+                weight: 6,
+                opacity: 1.0,
+                color: mapObjects.color
+            });
+            const tooltip = mapObjects.polyline.getTooltip();
+            if (tooltip) {
+                const el = tooltip.getElement();
+                if (el) el.classList.add('selected-route-tooltip');
+            }
+            state.selectedRouteId = routeId;
         }
     }
 
@@ -684,24 +660,22 @@
         summary.innerHTML = count > 0
             ? `<i class="bi bi-info-circle"></i> Showing ${count} route${count === 1 ? '' : 's'}`
             : '<i class="bi bi-exclamation-triangle"></i> No routes match the current filters';
+    }
 
     function displayRoutesTimestamp(timestamp) {
         const summary = byId('results-summary');
         if (!summary || !timestamp) return;
-        
-        // Check if timestamp element already exists
+
         let timestampEl = summary.querySelector('.timestamp-display');
         if (!timestampEl) {
             timestampEl = document.createElement('small');
             timestampEl.className = 'timestamp-display ms-2';
             summary.appendChild(timestampEl);
         }
-        
-        // Update timestamp content
+
         timestampEl.setAttribute('data-timestamp', timestamp);
         timestampEl.setAttribute('title', window.formatAbsoluteTime(timestamp));
         timestampEl.innerHTML = `<i class="bi bi-clock"></i> Synced ${window.formatRelativeTime(timestamp)}`;
-    }
     }
 
     function renderRoutes(routes) {
