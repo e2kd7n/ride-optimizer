@@ -1062,14 +1062,12 @@ input[type="checkbox"],
 input[type="radio"] {
     width: 16px;
     height: 16px;
-    margin: var(--space-2);
 }
 
 .form-check {
     min-height: 44px;
     display: flex;
     align-items: center;
-    padding: var(--space-2) 0;
 }
 
 .form-check-label {
