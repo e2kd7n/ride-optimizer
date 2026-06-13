@@ -17,6 +17,9 @@ data_fetching:
   cache_duration_days: 365  # Extended to 1 year - historical data doesn't change
   max_activities: 500
 
+long_rides:
+  cache_path: "data/cache/long_rides_store.json"  # Persistence store for LongRidesDataStore
+
 location_detection:
   clustering:
     eps: 0.002  # ~200 meters

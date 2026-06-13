@@ -79,6 +79,7 @@ def mock_long_ride():
     ride.activity_ids = [67890, 67891, 67892]
     ride.activity_dates = ["2024-01-15", "2024-02-20", "2024-03-10"]
     ride.type = "loop"
+    ride.timestamp = "2024-03-10T08:00:00+00:00"
     return ride
 
 

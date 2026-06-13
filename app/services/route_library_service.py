@@ -309,18 +309,35 @@ class RouteLibraryService:
         if self._route_groups:
             stats['commute_routes'] = len(self._route_groups)
             stats['total_routes'] += len(self._route_groups)
-            
+
+            def _grp_freq(g):
+                return g.frequency if hasattr(g, 'frequency') else g.get('frequency', 0)
+
+            def _grp_dist(g):
+                if hasattr(g, 'representative_route'):
+                    return g.representative_route.distance if g.representative_route else 0
+                return g.get('representative_route', {}).get('distance', 0)
+
             for group in self._route_groups:
-                stats['total_activities'] += group.get('frequency', 0)
-                stats['total_distance'] += group.get('representative_route', {}).get('distance', 0) * group.get('frequency', 0)
-            
+                freq = _grp_freq(group)
+                stats['total_activities'] += freq
+                stats['total_distance'] += _grp_dist(group) * freq
+
             # Find most used commute route
             if self._route_groups:
-                most_used = max(self._route_groups, key=lambda g: g.get('frequency', 0))
+                most_used = max(self._route_groups, key=_grp_freq)
+                if hasattr(most_used, 'id'):
+                    most_used_id = most_used.id
+                    most_used_name = most_used.name
+                    most_used_freq = most_used.frequency
+                else:
+                    most_used_id = most_used.get('id')
+                    most_used_name = most_used.get('name')
+                    most_used_freq = most_used.get('frequency', 0)
                 stats['most_used_route'] = {
-                    'id': most_used.get('id'),
-                    'name': most_used.get('name'),
-                    'uses': most_used.get('frequency', 0),
+                    'id': most_used_id,
+                    'name': most_used_name,
+                    'uses': most_used_freq,
                     'type': 'commute'
                 }
         

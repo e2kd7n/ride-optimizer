@@ -5,6 +5,7 @@ Provides REST API endpoints for long ride recommendations.
 """
 
 import logging
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -14,29 +15,43 @@ from geopy.exc import GeocoderTimedOut, GeocoderServiceError
 from ..long_ride_analyzer import LongRideAnalyzer, LongRide
 from ..weather_fetcher import WeatherFetcher
 from ..config import Config
+from ..cache.long_rides_store import LongRidesDataStore
 
 logger = logging.getLogger(__name__)
 
 
 class LongRidesAPI:
     """Flask API server for long ride recommendations."""
-    
+
     def __init__(self, long_rides: List[LongRide], config: Config):
         """
         Initialize API server.
-        
+
+        Persists *long_rides* via :class:`LongRidesDataStore` so they survive
+        restarts.  If *long_rides* is empty the store is consulted first.
+
         Args:
             long_rides: List of LongRide objects
             config: Configuration object
         """
         self.app = Flask(__name__)
         CORS(self.app)  # Enable CORS for all routes
-        
-        self.long_rides = long_rides
+
         self.config = config
+        cache_path = config.get("long_rides.cache_path", "data/cache/long_rides_store.json")
+        self.store = LongRidesDataStore(cache_path=Path(cache_path))
+
+        if long_rides:
+            self.store.save(long_rides)
+            self.long_rides = long_rides
+        else:
+            self.long_rides = self.store.load()
+            if self.long_rides:
+                logger.info("LongRidesAPI: restored %d rides from cache", len(self.long_rides))
+
         self.weather_fetcher = WeatherFetcher()
         self.geocoder = Nominatim(user_agent="ride-optimizer")
-        
+
         # Register routes
         self._register_routes()
         
@@ -253,6 +268,18 @@ class LongRidesAPI:
                     'error': 'Internal server error'
                 }), 500
     
+        @self.app.route('/api/long-rides/cache', methods=['GET'])
+        def cache_stats():
+            """Return cache metadata."""
+            return jsonify({'success': True, 'cache': self.store.stats()})
+
+        @self.app.route('/api/long-rides/cache', methods=['DELETE'])
+        def invalidate_cache():
+            """Invalidate the long-rides cache."""
+            self.store.invalidate()
+            self.long_rides = []
+            return jsonify({'success': True, 'message': 'Cache invalidated'})
+
     def run(self, host='localhost', port=8083, debug=False):
         """
         Run the API server.
