@@ -106,7 +106,7 @@ def set_security_headers(response):
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['X-XSS-Protection'] = '1; mode=block'
-    response.headers['Referrer-Policy'] = 'no-referrer'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
     
     # Content Security Policy
     response.headers['Content-Security-Policy'] = (
@@ -776,7 +776,71 @@ def _enrich_commute_recommendation(rec: Dict[str, Any]) -> Dict[str, Any]:
         'label': f'~{duration_mins} minutes estimated' if duration_mins else None
     }
 
+    # transit_recommendation — suggest transit when conditions are unfavorable (#114)
+    enriched['transit_recommendation'] = _get_transit_recommendation(weather)
+
     return enriched
+
+
+def _get_transit_recommendation(weather: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Return a transit suggestion when cycling conditions are too poor.
+
+    Triggers on:
+    - comfort_score < 0.4 (service-level 'unfavorable')
+    - Thunderstorms / severe storms regardless of score
+
+    Returns dict with:
+      suggested (bool), severity ('severe'|'poor'|None), reason (str), transit_url (str)
+    """
+    if not weather:
+        return {'suggested': False}
+
+    conditions = (weather.get('conditions') or '').lower()
+    comfort_score = weather.get('comfort_score')
+    favorability = (weather.get('cycling_favorability') or '').lower()
+
+    # Severe: thunderstorm / electrical storm — always suggest transit
+    is_severe = 'thunder' in conditions or 'storm' in conditions
+    is_heavy_precip = 'heavy rain' in conditions or 'heavy snow' in conditions or 'blizzard' in conditions
+
+    if is_severe or is_heavy_precip:
+        reason = 'Dangerous conditions — thunderstorm or severe weather' if is_severe else 'Heavy precipitation — cycling not advised'
+        return {
+            'suggested': True,
+            'severity': 'severe',
+            'reason': reason,
+            'transit_url': 'https://www.google.com/maps?travelmode=transit',
+        }
+
+    # Poor: backend says 'unfavorable' (comfort_score < 0.4)
+    if favorability == 'unfavorable' or (isinstance(comfort_score, (int, float)) and comfort_score < 0.4):
+        # Build a human-readable reason from the dominant factor
+        temp = weather.get('temperature', weather.get('temp_f'))
+        wind_speed = weather.get('wind_speed', weather.get('wind_speed_kph', 0))
+        precip_mm = weather.get('precipitation_mm', weather.get('precipitation', 0))
+
+        if 'rain' in conditions or 'drizzle' in conditions or (isinstance(precip_mm, (int, float)) and precip_mm > 2):
+            reason = 'Rainy conditions — consider public transit or waiting for a dry window'
+        elif 'snow' in conditions:
+            reason = 'Snowy conditions — transit may be safer'
+        elif isinstance(temp, (int, float)) and temp <= 25:
+            reason = f'Very cold ({round(temp)}°F) — transit recommended'
+        elif isinstance(temp, (int, float)) and temp >= 95:
+            reason = f'Extreme heat ({round(temp)}°F) — consider transit'
+        elif isinstance(wind_speed, (int, float)) and wind_speed >= 25:
+            reason = f'Very strong winds ({round(wind_speed)} mph) — transit recommended'
+        else:
+            reason = 'Poor cycling conditions today — transit is a good alternative'
+
+        return {
+            'suggested': True,
+            'severity': 'poor',
+            'reason': reason,
+            'transit_url': 'https://www.google.com/maps?travelmode=transit',
+        }
+
+    return {'suggested': False}
 
 
 @app.route('/api/commute')
@@ -1213,6 +1277,9 @@ def strava_status():
 def strava_connect():
     state = secrets.token_hex(16)
     session['strava_oauth_state'] = state
+    # Remember if the user came from the setup wizard
+    if request.args.get('setup_redirect') == '1':
+        session['setup_redirect'] = True
     client_id = os.getenv('STRAVA_CLIENT_ID')
     redirect_uri = url_for('strava_callback', _external=True)
     auth_url = (
@@ -1266,10 +1333,146 @@ def strava_callback():
         global _services_initialized
         _services_initialized = False
 
+        # Redirect back to setup wizard when coming from FTUE flow
+        setup_redirect = session.pop('setup_redirect', False)
+        if setup_redirect:
+            return redirect('/setup.html?connected=1')
         return redirect('/settings.html?strava_connected=1')
     except Exception as e:
         logger.error(f"Strava token exchange failed: {e}", exc_info=True)
+        setup_redirect = session.pop('setup_redirect', False)
+        if setup_redirect:
+            return redirect('/setup.html?strava_error=token_exchange_failed')
         return redirect('/settings.html?strava_error=token_exchange_failed')
+
+
+# ---------------------------------------------------------------------------
+# Setup / FTUE endpoints (Issue #260)
+# ---------------------------------------------------------------------------
+
+def _env_path() -> Path:
+    return Path('.env')
+
+
+def _read_env() -> dict:
+    """Parse .env file into a dict. Returns {} when file is absent."""
+    env_file = _env_path()
+    if not env_file.exists():
+        return {}
+    result = {}
+    for line in env_file.read_text(encoding='utf-8').splitlines():
+        line = line.strip()
+        if line and not line.startswith('#') and '=' in line:
+            key, _, value = line.partition('=')
+            result[key.strip()] = value.strip()
+    return result
+
+
+def _write_env(data: dict) -> None:
+    """Write *data* key=value pairs to .env, preserving existing unrelated keys."""
+    env_file = _env_path()
+    existing = {}
+    lines_out = []
+
+    if env_file.exists():
+        for line in env_file.read_text(encoding='utf-8').splitlines():
+            stripped = line.strip()
+            if stripped and not stripped.startswith('#') and '=' in stripped:
+                key, _, value = stripped.partition('=')
+                existing[key.strip()] = len(lines_out)
+                lines_out.append(line)
+            else:
+                lines_out.append(line)
+
+    for key, value in data.items():
+        safe_value = str(value).replace('\n', '').replace('\r', '')
+        if key in existing:
+            lines_out[existing[key]] = f'{key}={safe_value}'
+        else:
+            lines_out.append(f'{key}={safe_value}')
+
+    env_file.write_text('\n'.join(lines_out) + '\n', encoding='utf-8')
+    env_file.chmod(0o600)
+
+
+@app.route('/api/setup/status')
+def setup_status():
+    """Return whether Strava credentials are configured."""
+    client_id = os.getenv('STRAVA_CLIENT_ID') or _read_env().get('STRAVA_CLIENT_ID', '')
+    client_secret = os.getenv('STRAVA_CLIENT_SECRET') or _read_env().get('STRAVA_CLIENT_SECRET', '')
+    configured = bool(client_id and client_secret)
+    storage = SecureTokenStorage('config/credentials.json')
+    tokens = storage.load_tokens()
+    authorized = tokens is not None
+    return jsonify({
+        'configured': configured,
+        'authorized': authorized,
+        'setup_complete': configured and authorized,
+    })
+
+
+@app.route('/api/setup/credentials', methods=['POST'])
+@csrf.exempt
+def setup_credentials():
+    """Save Strava Client ID and Secret to .env."""
+    data = request.get_json(silent=True) or {}
+    client_id = str(data.get('client_id', '')).strip()
+    client_secret = str(data.get('client_secret', '')).strip()
+
+    if not client_id or not client_secret:
+        return jsonify({'success': False, 'error': 'client_id and client_secret are required'}), 400
+    if not client_id.isdigit():
+        return jsonify({'success': False, 'error': 'client_id must be numeric'}), 400
+    if len(client_secret) < 8:
+        return jsonify({'success': False, 'error': 'client_secret appears too short'}), 400
+
+    try:
+        _write_env({'STRAVA_CLIENT_ID': client_id, 'STRAVA_CLIENT_SECRET': client_secret})
+        os.environ['STRAVA_CLIENT_ID'] = client_id
+        os.environ['STRAVA_CLIENT_SECRET'] = client_secret
+        logger.info("Setup: Strava credentials saved via setup wizard")
+        return jsonify({'success': True})
+    except OSError as exc:
+        logger.error("Setup: failed to write .env: %s", exc)
+        return jsonify({'success': False, 'error': 'Could not write credentials file'}), 500
+
+
+@app.route('/api/setup/verify', methods=['POST'])
+@csrf.exempt
+def setup_verify():
+    """Test Strava credentials by exchanging a short-lived auth code or hitting /athlete."""
+    client_id = os.getenv('STRAVA_CLIENT_ID') or _read_env().get('STRAVA_CLIENT_ID', '')
+    client_secret = os.getenv('STRAVA_CLIENT_SECRET') or _read_env().get('STRAVA_CLIENT_SECRET', '')
+
+    if not client_id or not client_secret:
+        return jsonify({'valid': False, 'error': 'Credentials not configured yet'}), 400
+
+    # We can't fully verify without a token, but we can confirm the credentials
+    # exist and look structurally valid.  A lightweight check posts to the Strava
+    # token endpoint with an obviously-bad code — Strava returns 400 with
+    # {"message":"Bad Request","errors":[{"resource":"AuthorizationCode",...}]}
+    # which tells us the app_id/secret were accepted (not a 401 Unauthorized).
+    try:
+        import requests as http_req
+        resp = http_req.post(
+            'https://www.strava.com/oauth/token',
+            data={
+                'client_id': client_id,
+                'client_secret': client_secret,
+                'code': 'verify_probe',
+                'grant_type': 'authorization_code',
+            },
+            timeout=10,
+        )
+        body = resp.json()
+        if resp.status_code == 400 and 'AuthorizationCode' in str(body):
+            return jsonify({'valid': True, 'message': 'Credentials accepted by Strava'})
+        if resp.status_code == 401:
+            return jsonify({'valid': False, 'error': 'Strava rejected the credentials — check your Client ID and Secret'})
+        return jsonify({'valid': True, 'message': 'Credentials appear valid'})
+    except Exception as exc:
+        logger.warning("Setup verify error: %s", exc)
+        return jsonify({'valid': False, 'error': 'Could not reach Strava to verify'}), 503
 
 
 @app.route('/api/cache-info')

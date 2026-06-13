@@ -925,7 +925,42 @@ class LongRideAnalyzer:
         )
         
         logger.info(f"Generated {len(recommendations)} ride recommendations")
-        
+
         return recommendations
+
+    def group_similar_rides(self, long_ride_activities: List[Activity]) -> List[LongRide]:
+        """
+        Full pipeline: group activities into unique LongRide objects.
+
+        Steps:
+        1. Group by Strava activity name
+        2. Consolidate similarly-named groups via route similarity
+        3. Match unnamed/generic rides to existing named groups
+        4. Generate fallback names for remaining unnamed rides
+        5. Consolidate into LongRide objects
+
+        Args:
+            long_ride_activities: Activities already filtered to non-commute long rides
+
+        Returns:
+            List of unique LongRide objects
+        """
+        if not long_ride_activities:
+            return []
+
+        name_groups, unnamed_rides = self.group_rides_by_name(long_ride_activities)
+
+        if name_groups:
+            name_groups = self.consolidate_similar_named_groups(name_groups)
+
+        if unnamed_rides and name_groups:
+            name_groups, unnamed_rides = self.match_unnamed_rides_to_groups(
+                unnamed_rides, name_groups, use_parallel=False
+            )
+
+        fallback_groups = self.generate_fallback_names(unnamed_rides) if unnamed_rides else {}
+        all_groups = {**name_groups, **fallback_groups}
+
+        return self.consolidate_named_groups(all_groups)
 
 

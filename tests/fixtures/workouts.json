@@ -1,0 +1,120 @@
+{
+  "workouts": [
+    {
+      "id": "wo_001",
+      "name": "Baxter",
+      "date": "2026-05-01",
+      "duration_minutes": 60,
+      "tss": 45,
+      "if_": 0.70,
+      "type": "Endurance",
+      "description": "Easy endurance ride to build aerobic base",
+      "completed": true
+    },
+    {
+      "id": "wo_002",
+      "name": "Bluebell +4",
+      "date": "2026-05-03",
+      "duration_minutes": 90,
+      "tss": 68,
+      "if_": 0.72,
+      "type": "Endurance",
+      "description": "Extended endurance with moderate intensity",
+      "completed": true
+    },
+    {
+      "id": "wo_003",
+      "name": "Dade -1",
+      "date": "2026-05-06",
+      "duration_minutes": 60,
+      "tss": 70,
+      "if_": 0.83,
+      "type": "VO2Max",
+      "description": "VO2max intervals: 3x8 min at 108-112% FTP",
+      "completed": true
+    },
+    {
+      "id": "wo_004",
+      "name": "Carson",
+      "date": "2026-05-08",
+      "duration_minutes": 60,
+      "tss": 60,
+      "if_": 0.77,
+      "type": "Sweet Spot",
+      "description": "Sweet spot: 5x6 min at 88-94% FTP",
+      "completed": true
+    },
+    {
+      "id": "wo_005",
+      "name": "Antelope",
+      "date": "2026-05-10",
+      "duration_minutes": 90,
+      "tss": 80,
+      "if_": 0.76,
+      "type": "Sweet Spot",
+      "description": "Sweet spot: 5x10 min at 88-94% FTP",
+      "completed": false
+    },
+    {
+      "id": "wo_006",
+      "name": "Pettit",
+      "date": "2026-05-12",
+      "duration_minutes": 60,
+      "tss": 39,
+      "if_": 0.60,
+      "type": "Recovery",
+      "description": "Active recovery at easy pace",
+      "completed": false
+    },
+    {
+      "id": "wo_007",
+      "name": "Disaster",
+      "date": "2026-05-13",
+      "duration_minutes": 60,
+      "tss": 76,
+      "if_": 0.85,
+      "type": "VO2Max",
+      "description": "Brutal VO2max: 6x4 min at 120% FTP",
+      "completed": false
+    },
+    {
+      "id": "wo_008",
+      "name": "Seneca Rocks",
+      "date": "2026-05-15",
+      "duration_minutes": 120,
+      "tss": 112,
+      "if_": 0.79,
+      "type": "Sweet Spot",
+      "description": "Sweet spot: 3x30 min at 88-94% FTP with recovery",
+      "completed": false
+    },
+    {
+      "id": "wo_009",
+      "name": "Fletcher",
+      "date": "2026-05-17",
+      "duration_minutes": 60,
+      "tss": 40,
+      "if_": 0.62,
+      "type": "Recovery",
+      "description": "Easy recovery spin",
+      "completed": false
+    },
+    {
+      "id": "wo_010",
+      "name": "Mount Field",
+      "date": "2026-05-19",
+      "duration_minutes": 60,
+      "tss": 62,
+      "if_": 0.78,
+      "type": "Threshold",
+      "description": "Threshold: 2x20 min at 95-99% FTP",
+      "completed": false
+    }
+  ],
+  "athlete": {
+    "ftp": 240,
+    "weight_kg": 75.0,
+    "plan_name": "Build Mid Volume",
+    "plan_week": 3
+  }
+}

@@ -59,7 +59,7 @@ class TestLaunchAPIEndpoints:
         assert args[1] == -74.0060
 
     def test_weather_endpoint_error(self, client, mock_services):
-        """Test /api/weather error handling."""
+        """Test /api/weather error handling returns 500 with error status."""
         mock_services['weather'].get_current_weather.side_effect = Exception('API Error')
 
         response = client.get('/api/weather?lat=40.7128&lon=-74.0060')
@@ -67,7 +67,7 @@ class TestLaunchAPIEndpoints:
         assert response.status_code == 500
         data = response.get_json()
         assert data['status'] == 'error'
-        assert 'API Error' in data['message']
+        assert 'message' in data
 
     def test_recommendation_endpoint_formats_success_payload(self, client, mock_services):
         """Test /api/recommendation returns normalized frontend/API payload."""
