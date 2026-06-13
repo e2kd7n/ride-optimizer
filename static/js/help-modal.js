@@ -54,10 +54,10 @@
 
     function buildModalHTML() {
         const cards = TUTORIALS.map((t) => `
-            <div class="col-sm-6">
+            <div class="col-md-6">
                 <div class="card h-100 tutorial-card" data-tutorial-id="${t.id}">
                     <div class="tutorial-img-wrapper position-relative overflow-hidden"
-                         style="height:180px; background:#f8f9fa;">
+                         style="height:176px; background:#f8f9fa;">
                         <img
                             class="tutorial-img w-100 h-100"
                             style="object-fit:cover; cursor:pointer;"
