@@ -1068,6 +1068,15 @@ input[type="radio"] {
     min-height: 44px;
     display: flex;
     align-items: center;
+    padding-left: 0;           /* reset Bootstrap's 1.5em float-indent; our flex layout doesn't need it */
+}
+
+/* Bootstrap's float layout uses margin-left:-1.5em to pull the checkbox left of the padding.
+   In flexbox that negative margin shifts the checkbox left past the card edge. Reset both. */
+.form-check .form-check-input {
+    margin-left: 0;
+    margin-top: 0;
+    flex-shrink: 0;
 }
 
 .form-check-label {
