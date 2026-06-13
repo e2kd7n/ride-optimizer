@@ -245,9 +245,12 @@ class APIClient {
      * @param {boolean} options.fetchNew  true = pull from Strava first; false = reanalyze cache only
      */
     async triggerAnalysis(options = {}) {
+        const body = { fetch_new: options.fetchNew || false };
+        if (options.afterDate) body.after_date = options.afterDate;
+        if (options.beforeDate) body.before_date = options.beforeDate;
         return this.fetch('/analyze', {
             method: 'POST',
-            body: JSON.stringify({ fetch_new: options.fetchNew || false }),
+            body: JSON.stringify(body),
         });
     }
 
