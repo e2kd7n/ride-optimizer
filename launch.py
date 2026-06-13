@@ -1546,7 +1546,7 @@ def trigger_analysis():
         global _analysis_job, _services_initialized
         try:
             result = _analysis_service.run_full_analysis(
-                force_refresh=fetch_new,
+                force_refresh=True,
                 skip_strava_fetch=not fetch_new,
                 after=after_date,
                 before=before_date,
