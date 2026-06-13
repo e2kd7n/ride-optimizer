@@ -231,9 +231,11 @@
                 
                 // Grey out markers
                 if (mapObjects.startMarker) {
+                    mapObjects.startMarker.setZIndexOffset(0);
                     mapObjects.startMarker.setOpacity(0.3);
                 }
                 if (mapObjects.endMarker) {
+                    mapObjects.endMarker.setZIndexOffset(0);
                     mapObjects.endMarker.setOpacity(0.3);
                 }
                 
@@ -254,13 +256,13 @@
             // Bring polyline to front (z-index)
             mapObjects.polyline.bringToFront();
             
-            // Bring markers to front
+            // Bring markers to front (markers use setZIndexOffset, not bringToFront)
             if (mapObjects.startMarker) {
-                mapObjects.startMarker.bringToFront();
+                mapObjects.startMarker.setZIndexOffset(1000);
                 mapObjects.startMarker.setOpacity(1.0);
             }
             if (mapObjects.endMarker) {
-                mapObjects.endMarker.bringToFront();
+                mapObjects.endMarker.setZIndexOffset(1000);
                 mapObjects.endMarker.setOpacity(1.0);
             }
             
