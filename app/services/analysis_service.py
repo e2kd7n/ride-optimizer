@@ -115,10 +115,15 @@ class AnalysisService:
             # Load route groups
             routes_data = self.storage.read('route_groups.json', default={})
             if routes_data.get('route_groups'):
-                # TODO: Deserialize RouteGroup objects from JSON
-                # For now, store as dict until we implement proper serialization
-                self._route_groups = routes_data['route_groups']
-                logger.info(f"Loaded {len(self._route_groups)} route groups from cache")
+                try:
+                    self._route_groups = [
+                        self._deserialize_route_group(rg)
+                        for rg in routes_data['route_groups']
+                    ]
+                    logger.info(f"Loaded {len(self._route_groups)} route groups from cache")
+                except Exception as deser_err:
+                    logger.warning(f"Could not deserialize route groups (stale format?): {deser_err}")
+                    self._route_groups = routes_data['route_groups']
                 
                 # Extract home and work locations from route groups metadata
                 if routes_data.get('home_location'):
@@ -144,9 +149,15 @@ class AnalysisService:
             # Load long rides
             long_rides_data = self.storage.read('long_rides.json', default={})
             if long_rides_data.get('long_rides'):
-                # TODO: Deserialize LongRide objects from JSON
-                self._long_rides = long_rides_data['long_rides']
-                logger.info(f"Loaded {len(self._long_rides)} long rides from cache")
+                try:
+                    self._long_rides = [
+                        self._deserialize_long_ride(lr)
+                        for lr in long_rides_data['long_rides']
+                    ]
+                    logger.info(f"Loaded {len(self._long_rides)} long rides from cache")
+                except Exception as deser_err:
+                    logger.warning(f"Could not deserialize long rides (stale format?): {deser_err}")
+                    self._long_rides = long_rides_data['long_rides']
             
             # Load activities count (we don't cache full activity objects)
             if status_data.get('activities_count'):
@@ -217,23 +228,105 @@ class AnalysisService:
         except Exception as e:
             logger.error(f"Failed to save cache: {e}", exc_info=True)
     
+    def _serialize_route(self, route) -> Dict[str, Any]:
+        """Serialize a Route object to a JSON-compatible dict."""
+        return {
+            'activity_id': route.activity_id,
+            'direction': route.direction,
+            'coordinates': route.coordinates,
+            'distance': route.distance,
+            'duration': route.duration,
+            'elevation_gain': route.elevation_gain,
+            'timestamp': route.timestamp,
+            'average_speed': route.average_speed,
+            'activity_name': getattr(route, 'activity_name', ''),
+            'is_plus_route': getattr(route, 'is_plus_route', False),
+        }
+
     def _serialize_route_group(self, route_group: RouteGroup) -> Dict[str, Any]:
         """Serialize RouteGroup to JSON-compatible dict."""
-        # TODO: Implement proper serialization based on RouteGroup structure
         return {
-            'name': getattr(route_group, 'name', 'Unknown'),
-            'routes_count': len(getattr(route_group, 'routes', [])),
-            # Add more fields as needed
+            'id': route_group.id,
+            'direction': route_group.direction,
+            'routes': [self._serialize_route(r) for r in route_group.routes],
+            'representative_route': self._serialize_route(route_group.representative_route),
+            'frequency': route_group.frequency,
+            'name': route_group.name,
+            'is_plus_route': getattr(route_group, 'is_plus_route', False),
+            'difficulty': getattr(route_group, 'difficulty', 'Easy'),
         }
-    
+
+    def _deserialize_route(self, data: Dict[str, Any]):
+        """Deserialize a Route from a dict."""
+        from src.route_analyzer import Route
+        return Route(
+            activity_id=data['activity_id'],
+            direction=data['direction'],
+            coordinates=[tuple(c) for c in data.get('coordinates', [])],
+            distance=data['distance'],
+            duration=data['duration'],
+            elevation_gain=data['elevation_gain'],
+            timestamp=data['timestamp'],
+            average_speed=data['average_speed'],
+            activity_name=data.get('activity_name', ''),
+            is_plus_route=data.get('is_plus_route', False),
+        )
+
+    def _deserialize_route_group(self, data: Dict[str, Any]):
+        """Deserialize a RouteGroup from a dict."""
+        routes = [self._deserialize_route(r) for r in data.get('routes', [])]
+        rep = self._deserialize_route(data['representative_route'])
+        return RouteGroup(
+            id=data['id'],
+            direction=data['direction'],
+            routes=routes,
+            representative_route=rep,
+            frequency=data['frequency'],
+            name=data.get('name'),
+            is_plus_route=data.get('is_plus_route', False),
+            difficulty=data.get('difficulty', 'Easy'),
+        )
+
     def _serialize_long_ride(self, long_ride: LongRide) -> Dict[str, Any]:
         """Serialize LongRide to JSON-compatible dict."""
-        # TODO: Implement proper serialization based on LongRide structure
         return {
-            'name': getattr(long_ride, 'name', 'Unknown'),
-            'distance': getattr(long_ride, 'distance', 0),
-            # Add more fields as needed
+            'activity_id': long_ride.activity_id,
+            'name': long_ride.name,
+            'coordinates': long_ride.coordinates,
+            'distance': long_ride.distance,
+            'duration': long_ride.duration,
+            'elevation_gain': long_ride.elevation_gain,
+            'timestamp': long_ride.timestamp,
+            'average_speed': long_ride.average_speed,
+            'start_location': list(long_ride.start_location),
+            'end_location': list(long_ride.end_location),
+            'is_loop': long_ride.is_loop,
+            'type': long_ride.type,
+            'uses': getattr(long_ride, 'uses', 1),
+            'activity_ids': getattr(long_ride, 'activity_ids', None),
+            'activity_dates': getattr(long_ride, 'activity_dates', None),
         }
+
+    def _deserialize_long_ride(self, data: Dict[str, Any]):
+        """Deserialize a LongRide from a dict."""
+        from src.long_ride_analyzer import LongRide as LR
+        return LR(
+            activity_id=data['activity_id'],
+            name=data['name'],
+            coordinates=[tuple(c) for c in data.get('coordinates', [])],
+            distance=data['distance'],
+            duration=data['duration'],
+            elevation_gain=data['elevation_gain'],
+            timestamp=data['timestamp'],
+            average_speed=data['average_speed'],
+            start_location=tuple(data['start_location']),
+            end_location=tuple(data['end_location']),
+            is_loop=data['is_loop'],
+            type=data['type'],
+            uses=data.get('uses', 1),
+            activity_ids=data.get('activity_ids'),
+            activity_dates=data.get('activity_dates'),
+        )
     
     def run_full_analysis(self, force_refresh: bool = False, skip_strava_fetch: bool = False,
                           on_progress=None) -> Dict[str, Any]:
@@ -375,8 +468,9 @@ class AnalysisService:
             self._long_rides = long_ride_analyzer.group_similar_rides(long_ride_activities)
             logger.info(f"Found {len(self._long_rides)} unique long rides")
 
-            # Step 5: Update analysis time
+            # Step 5: Update analysis time and persist results
             self._last_analysis_time = datetime.now()
+            self._save_to_cache()
 
             return {
                 'status': 'success',

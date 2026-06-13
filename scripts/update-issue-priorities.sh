@@ -475,6 +475,14 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Write markdown output directly to the file instead of relying on shell redirect.
+# PowerShell's > operator writes UTF-16 LE; bash's exec > always writes UTF-8.
+# Override with OUTPUT_FILE=- to get stdout (e.g. for piping/previewing).
+OUTPUT_FILE="${OUTPUT_FILE:-ISSUE_PRIORITIES.md}"
+if [ "$OUTPUT_FILE" != "-" ]; then
+  exec > "$OUTPUT_FILE"
+fi
+
 # Run intelligent issue management functions
 echo "" >&2
 log_action "🔍 Running Intelligent Issue Management..."
@@ -852,7 +860,11 @@ echo "\`\`\`"
 echo ""
 echo "### 3. Regenerate This File"
 echo "\`\`\`bash"
+echo "# macOS / Linux / WSL — output written directly to ISSUE_PRIORITIES.md"
 echo "./scripts/update-issue-priorities.sh"
+echo ""
+echo "# Windows (PowerShell) — same command, no redirect needed"
+echo "wsl bash ./scripts/update-issue-priorities.sh"
 echo "\`\`\`"
 echo ""
 echo "### 4. Commit and Communicate"

@@ -29,7 +29,7 @@ def create_app(config_name: str = 'default') -> Flask:
     app = Flask(
         __name__,
         static_folder=str(project_root / 'static'),
-        static_url_path='',
+        static_url_path='/static',
     )
 
     from app.config import config as config_map
@@ -39,5 +39,8 @@ def create_app(config_name: str = 'default') -> Flask:
     db.init_app(app)
     with app.app_context():
         db.create_all()
+
+    from app.routes.planner import bp as planner_bp
+    app.register_blueprint(planner_bp)
 
     return app
