@@ -34,6 +34,7 @@ config/.trainerroad_encryption_key
 
 # AI Code Assistant internals
 .claude/worktrees/
+.claude/settings.json
 
 # Maintenance backup archives
 backups/maintenance/*.tar.gz
