@@ -329,6 +329,7 @@ class AnalysisService:
         )
     
     def run_full_analysis(self, force_refresh: bool = False, skip_strava_fetch: bool = False,
+                          after: Optional[datetime] = None, before: Optional[datetime] = None,
                           on_progress=None) -> Dict[str, Any]:
         """
         Run complete analysis workflow.
@@ -384,6 +385,8 @@ class AnalysisService:
 
                 self._activities = self.data_fetcher.fetch_activities(
                     use_cache=not force_refresh,
+                    after=after,
+                    before=before,
                     progress_callback=_fetch_cb,
                 )
             logger.info(f"Loaded {len(self._activities)} activities")

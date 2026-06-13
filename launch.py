@@ -1511,6 +1511,21 @@ def trigger_analysis():
     data = request.get_json(silent=True) or {}
     fetch_new = bool(data.get('fetch_new', False))
 
+    after_date = None
+    before_date = None
+    if fetch_new:
+        for key, target in [('after_date', 'after_date'), ('before_date', 'before_date')]:
+            raw = data.get(key)
+            if raw:
+                try:
+                    parsed = datetime.fromisoformat(raw)
+                    if key == 'after_date':
+                        after_date = parsed
+                    else:
+                        before_date = parsed
+                except (ValueError, TypeError):
+                    pass
+
     _analysis_job = {
         'status': 'running',
         'phase': 'starting',
@@ -1533,6 +1548,8 @@ def trigger_analysis():
             result = _analysis_service.run_full_analysis(
                 force_refresh=fetch_new,
                 skip_strava_fetch=not fetch_new,
+                after=after_date,
+                before=before_date,
                 on_progress=_update_job,
             )
             _update_job(status='done', phase='done', result=result,
