@@ -222,8 +222,31 @@
                                     <input class="form-check-input" type="radio" name="analysis-mode" id="mode-fetch" value="fetch">
                                     <label class="form-check-label" for="mode-fetch">
                                         <strong>Fetch new Strava data</strong>
-                                        <span class="text-muted d-block small">Pull latest activities from Strava, then re-run analysis (slower)</span>
+                                        <span class="text-muted d-block small">Pull activities from Strava, then re-run analysis (slower)</span>
                                     </label>
+                                </div>
+
+                                <!-- Date range panel: shown when Fetch New is selected -->
+                                <div id="fetch-date-range" class="mt-2 ms-3 ps-3 border-start border-secondary-subtle" style="display:none">
+                                    <p class="small fw-semibold text-body-secondary mb-1">How far back to fetch</p>
+                                    <div class="d-flex flex-wrap gap-1 mb-1">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary fetch-preset active" data-preset="latest">Latest</button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary fetch-preset" data-preset="1yr" id="preset-1yr">+1 year back</button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary fetch-preset" data-preset="2yr" id="preset-2yr">+2 years back</button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary fetch-preset" data-preset="alltime">All time</button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary fetch-preset" data-preset="custom">Custom…</button>
+                                    </div>
+                                    <div id="custom-date-fields" class="d-flex flex-wrap gap-2 align-items-end mt-2" style="display:none">
+                                        <div>
+                                            <label class="form-label small mb-0" for="fetch-after">From</label>
+                                            <input type="date" class="form-control form-control-sm" id="fetch-after">
+                                        </div>
+                                        <div>
+                                            <label class="form-label small mb-0" for="fetch-before">To (optional)</label>
+                                            <input type="date" class="form-control form-control-sm" id="fetch-before">
+                                        </div>
+                                    </div>
+                                    <p id="date-preset-hint" class="small text-muted mb-0 mt-1"></p>
                                 </div>
                             </div>
 
@@ -353,6 +376,7 @@
             // Load cache info and wire analysis button
             loadStravaStatus();
             loadCacheInfo();
+            setupFetchModeControls();
             document.getElementById('run-analysis-btn').addEventListener('click', runAnalysis);
 
             // Handle OAuth redirect results
@@ -551,6 +575,100 @@
             }
         }
 
+        let _cacheEarliestDate = null;
+        let _currentFetchPreset = 'latest';
+
+        function setupFetchModeControls() {
+            const dateRange = document.getElementById('fetch-date-range');
+            document.querySelectorAll('input[name="analysis-mode"]').forEach(r => {
+                r.addEventListener('change', () => {
+                    const isFetch = document.querySelector('input[name="analysis-mode"]:checked').value === 'fetch';
+                    dateRange.style.display = isFetch ? '' : 'none';
+                });
+            });
+
+            document.querySelectorAll('.fetch-preset').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    document.querySelectorAll('.fetch-preset').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    _currentFetchPreset = this.dataset.preset;
+                    document.getElementById('custom-date-fields').style.display =
+                        _currentFetchPreset === 'custom' ? '' : 'none';
+                    updateDatePresetHint();
+                });
+            });
+        }
+
+        function getPresetAfterDate(preset) {
+            const earliest = _cacheEarliestDate ? new Date(_cacheEarliestDate) : null;
+            const today = new Date();
+            if (preset === '1yr') {
+                const base = earliest || today;
+                return new Date(base.getFullYear() - 1, base.getMonth(), base.getDate());
+            }
+            if (preset === '2yr') {
+                const base = earliest || today;
+                return new Date(base.getFullYear() - 2, base.getMonth(), base.getDate());
+            }
+            if (preset === 'alltime') return new Date('2009-01-01');
+            return null;
+        }
+
+        function updateSmartPresetLabels() {
+            const earliest = _cacheEarliestDate ? new Date(_cacheEarliestDate) : null;
+            const fmt = (d) => d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+            const btn1yr = document.getElementById('preset-1yr');
+            const btn2yr = document.getElementById('preset-2yr');
+            if (btn1yr) {
+                const d = getPresetAfterDate('1yr');
+                btn1yr.textContent = earliest ? `+1 year (back to ${fmt(d)})` : `Past year (from ${fmt(d)})`;
+            }
+            if (btn2yr) {
+                const d = getPresetAfterDate('2yr');
+                btn2yr.textContent = earliest ? `+2 years (back to ${fmt(d)})` : `Past 2 years (from ${fmt(d)})`;
+            }
+            updateDatePresetHint();
+        }
+
+        function updateDatePresetHint() {
+            const hint = document.getElementById('date-preset-hint');
+            if (!hint) return;
+            const preset = _currentFetchPreset;
+            const earliest = _cacheEarliestDate ? new Date(_cacheEarliestDate) : null;
+            const fmt = (d) => d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+            let msg = '';
+            switch (preset) {
+                case 'latest':
+                    msg = earliest
+                        ? `Fetches the most recent activities. Your cache currently starts at ${fmt(earliest)}.`
+                        : 'Fetches the most recent activities (up to the configured limit).';
+                    break;
+                case '1yr':
+                case '2yr': {
+                    const from = getPresetAfterDate(preset);
+                    msg = `Fetches activities from ${fmt(from)} to today.`;
+                    if (earliest) {
+                        if (earliest <= from) {
+                            msg += ' Your cache already covers this range.';
+                        } else {
+                            const months = Math.round((earliest - from) / (30.5 * 24 * 3600 * 1000));
+                            msg += ` Extends your history back ~${months} month${months !== 1 ? 's' : ''}.`;
+                        }
+                    }
+                    break;
+                }
+                case 'alltime':
+                    msg = earliest
+                        ? `Fetches all activities back to 2009, extending your cache by ~${Math.round((earliest - new Date('2009-01-01')) / (365.25 * 24 * 3600 * 1000))} more years. May take several minutes.`
+                        : 'Fetches all your Strava activities since 2009. May take several minutes.';
+                    break;
+                case 'custom':
+                    msg = 'Specify exact start and end dates. Leave "To" blank to fetch up to today.';
+                    break;
+            }
+            hint.textContent = msg;
+        }
+
         async function loadStravaStatus() {
             const statusEl = document.getElementById('strava-connection-status');
             const connectBtn = document.getElementById('strava-connect-btn');
@@ -581,8 +699,11 @@
                     reanalyzeRadio.disabled = true;
                     reanalyzeLabel.classList.add('text-muted');
                     document.getElementById('mode-fetch').checked = true;
+                    updateSmartPresetLabels();
                     return;
                 }
+                _cacheEarliestDate = info.date_earliest || null;
+                updateSmartPresetLabels();
                 reanalyzeRadio.disabled = false;
                 reanalyzeLabel.classList.remove('text-muted');
                 const fmt = (iso) => iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : '?';
@@ -609,6 +730,18 @@
             const previewMsg = document.getElementById('preview-ready-msg');
             const fetchNew = document.querySelector('input[name="analysis-mode"]:checked').value === 'fetch';
 
+            let afterDate = null, beforeDate = null;
+            if (fetchNew) {
+                const preset = _currentFetchPreset;
+                const isoDate = (d) => d.toISOString().slice(0, 10);
+                const d = getPresetAfterDate(preset);
+                if (d) afterDate = isoDate(d);
+                if (preset === 'custom') {
+                    afterDate = document.getElementById('fetch-after').value || null;
+                    beforeDate = document.getElementById('fetch-before').value || null;
+                }
+            }
+
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Running…';
             progressEl.style.display = '';
@@ -618,7 +751,7 @@
             statusEl.textContent = fetchNew ? 'Connecting to Strava…' : 'Loading cached data…';
 
             try {
-                await window.apiClient.triggerAnalysis({ fetchNew });
+                await window.apiClient.triggerAnalysis({ fetchNew, afterDate, beforeDate });
                 pollAnalysisStatus();
             } catch (e) {
                 btn.disabled = false;
