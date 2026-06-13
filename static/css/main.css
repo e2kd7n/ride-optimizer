@@ -1121,7 +1121,6 @@ input[type="radio"] {
     justify-content: center;
 }
 
-.btn + .btn,
 .nav-link + .nav-link {
     margin-left: var(--space-2);
 }
@@ -1545,7 +1544,6 @@ input[type="radio"] {
         padding: var(--space-3) var(--space-4);
     }
 
-    .btn + .btn,
     .nav-link + .nav-link {
         margin-left: var(--space-3);
     }
