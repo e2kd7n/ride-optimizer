@@ -4,7 +4,7 @@ This directory contains all documentation for the Ride Optimizer application, or
 
 ---
 
-## 📁 Directory Structure
+## Directory Structure
 
 ### [`/releases/`](releases/)
 Release documentation organized by version, including:
@@ -21,8 +21,9 @@ Release documentation organized by version, including:
 ### [`/guides/`](guides/)
 User guides and implementation documentation, including:
 - Authentication and security setup
-- Feature-specific guides (mobile, weather, parallelism)
+- Feature-specific guides (mobile, weather, parallelism, notifications)
 - Implementation best practices
+- Grid contract for UI work
 
 **Quick Links:**
 - [Guides Index](guides/README.md)
@@ -31,27 +32,32 @@ User guides and implementation documentation, including:
 - [Mobile Design Guide](guides/MOBILE_USAGE_GUIDE.md)
 - [Weather Guide](guides/WEATHER_GUIDE.md)
 
+### [`/api/`](api/)
+API reference documentation.
+
+### [`/reviews/`](reviews/)
+Design and engineering review documents.
+
 ### [`/archive/`](archive/)
 Archived documentation for historical reference, including:
 - Completed code reviews and audits
 - Security documentation and fixes
-- Superseded documentation
+- Superseded plans, proposals, and summaries
 
 **Quick Links:**
 - [Archive Index](archive/README.md)
 
 ---
 
-## 📚 Core Documentation
+## Core Documentation
 
-### Root-Level Documents
-- [`TECHNICAL_SPEC.md`](TECHNICAL_SPEC.md) - Complete technical specification
-- [`TEST_COVERAGE_ROADMAP.md`](TEST_COVERAGE_ROADMAP.md) - Test coverage roadmap and strategy
-- [`VERSION_REBASELINE_PLAN.md`](VERSION_REBASELINE_PLAN.md) - Version rebaseline plan
+- [`TECHNICAL_SPEC.md`](TECHNICAL_SPEC.md) — Complete technical specification
+- [`DEPLOYMENT.md`](DEPLOYMENT.md) — Raspberry Pi deployment via GHCR
+- [`PRIVACY.md`](PRIVACY.md) — Privacy policy and data handling
 
 ---
 
-## 🔍 Finding Documentation
+## Finding Documentation
 
 ### By Topic
 
@@ -63,23 +69,23 @@ Archived documentation for historical reference, including:
 **Design & UI:**
 - [Grid Contract](guides/GRID_CONTRACT.md)
 - [Mobile Design Guide](guides/MOBILE_USAGE_GUIDE.md)
+- [Notifications Guide](guides/NOTIFICATIONS_GUIDE.md)
 - [Weather Integration](guides/WEATHER_GUIDE.md)
-- [Next Commute](releases/v0.8.0/NEXT_COMMUTE_FEATURE.md)
-- [Long Rides](releases/v0.9.0/LONG_RIDES_IMPLEMENTATION_SUMMARY.md)
 
 **Performance:**
 - [Parallelism Guide](guides/PARALLELISM_GUIDE.md)
 
 **Releases:**
 - [All Releases](releases/HISTORICAL_RELEASES.md)
-- [Latest Release Notes](releases/)
+- [Release Index](releases/README.md)
 
-**Planning:**
+**Planning & Priorities:**
 - [Technical Specification](TECHNICAL_SPEC.md)
 - [Issue Priorities](../ISSUE_PRIORITIES.md)
+- [Release Roadmap](../RELEASE_ROADMAP.md)
 
 ### By Version
-- **v2.0.0:** [Release Notes](releases/v2.0.0/RELEASE_NOTES.md)
+- **v0.5.0:** [Release Notes](releases/v0.5.0/RELEASE_NOTES.md)
 - **v0.6.0:** [Release Notes](releases/v0.6.0/RELEASE_NOTES_v0.6.0.md)
 - **v0.7.0:** [Features](releases/v0.7.0/)
 - **v0.8.0:** [Next Commute](releases/v0.8.0/NEXT_COMMUTE_FEATURE.md)
@@ -88,7 +94,7 @@ Archived documentation for historical reference, including:
 
 ---
 
-## 📝 Documentation Standards
+## Documentation Standards
 
 ### File Naming
 - Use `SCREAMING_SNAKE_CASE.md` for documentation files
@@ -99,8 +105,10 @@ Archived documentation for historical reference, including:
 ### Organization
 - **Releases:** Version-specific documentation goes in `releases/vX.Y.Z/`
 - **Guides:** User-facing guides go in `guides/`
+- **API:** API reference goes in `api/`
+- **Reviews:** Design/engineering reviews go in `reviews/`
 - **Archive:** Completed/superseded docs go in `archive/`
-- **Root:** Core technical specs and planning docs stay at `docs/` root
+- **Root:** Core technical specs and operational docs stay at `docs/` root
 
 ### Content Guidelines
 - Include a table of contents for documents longer than 3 sections
@@ -111,19 +119,10 @@ Archived documentation for historical reference, including:
 
 ---
 
-## 🔗 External Documentation
-
-- **Project Root:** [`../README.md`](../README.md)
-- **Issue Tracking:** [`../ISSUE_PRIORITIES.md`](../ISSUE_PRIORITIES.md), [`../ISSUES_TRACKING.md`](../ISSUES_TRACKING.md)
-- **Plans:** [`../plans/`](../plans/)
-- **Scripts:** [`../scripts/README.md`](../scripts/README.md)
-
----
-
-## 🤝 Contributing
+## Contributing
 
 When adding new documentation:
-1. Choose the appropriate directory (`releases/`, `guides/`, or `archive/`)
+1. Choose the appropriate directory (`releases/`, `guides/`, `api/`, or `archive/`)
 2. Follow the naming conventions above
 3. Update the relevant README file
 4. Link to related documentation
@@ -131,6 +130,4 @@ When adding new documentation:
 
 ---
 
-**Last Updated:** May 5, 2026  
-**Maintained By:** Development Team  
-**Repository:** ride-optimizer
+**Last Updated:** 2026-06-13
