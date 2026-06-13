@@ -1070,10 +1070,10 @@ input[type="radio"] {
 }
 
 .form-check {
-    min-height: 44px;
     display: flex;
     align-items: center;
-    padding-left: 0;           /* reset Bootstrap's 1.5em float-indent; our flex layout doesn't need it */
+    padding: var(--space-1) 0;
+    padding-left: 0;
 }
 
 /* Bootstrap's float layout uses margin-left:-1.5em to pull the checkbox left of the padding.
@@ -1122,8 +1122,7 @@ input[type="radio"] {
 }
 
 .btn + .btn,
-.nav-link + .nav-link,
-.form-check + .form-check {
+.nav-link + .nav-link {
     margin-left: var(--space-2);
 }
 
