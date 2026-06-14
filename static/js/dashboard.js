@@ -21,7 +21,6 @@ async function loadDashboard() {
         loadWeather(),
         loadRecommendation(),
         loadRouteStats(),
-        loadConditionsCard(),
         loadRouteStatus(),
         loadCommuteWindows()
     ]);
