@@ -55,38 +55,42 @@ body {
 /* ===== Timestamp Display Styles (Issue #274) ===== */
 .timestamp-display {
     display: inline-block;
-    font-size: 0.875rem;
+    font-size: var(--font-size-sm);
     color: #6c757d;
-    margin-top: 0.25rem;
+    margin-top: var(--space-1);
 }
 
 .timestamp-display i {
-    margin-right: 0.25rem;
+    margin-right: var(--space-1);
 }
 
 .card .timestamp-display {
     position: absolute;
     top: var(--space-2);
     right: var(--space-2);
-    font-size: 0.75rem;
+    font-size: var(--font-size-xs);
 }
 
 @media (max-width: 767.98px) {
     .card .timestamp-display {
         position: static;
         display: block;
-        margin-top: 0.5rem;
+        margin-top: var(--space-2);
     }
 }
 
 /* ===== Navigation ===== */
+.navbar-gradient {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
 .navbar-brand {
     font-weight: 600;
-    font-size: 1.25rem;
+    font-size: var(--font-size-lg);
 }
 
 .navbar-brand i {
-    margin-right: 0.5rem;
+    margin-right: var(--space-2);
 }
 
 /* Desktop navigation tabs - keep left-aligned (Issue #258) */
@@ -99,9 +103,9 @@ body {
     border: none;
     background: transparent;
     color: rgba(255, 255, 255, 0.85);
-    padding: 0.5rem 1rem;
-    margin: 0 0.25rem;
-    border-radius: 0.25rem;
+    padding: var(--space-2) var(--space-3);
+    margin: 0 var(--space-1);
+    border-radius: 4px;
     transition: all 0.2s ease;
 }
 
@@ -118,15 +122,15 @@ body {
 }
 
 .navbar .navbar-nav .nav-link i {
-    margin-right: 0.5rem;
+    margin-right: var(--space-2);
 }
 
 /* ===== Cards ===== */
 .card {
     border: none;
-    border-radius: 0.5rem;
+    border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    margin-bottom: 1rem;
+    margin-bottom: var(--space-3);
     transition: box-shadow 0.3s ease;
 }
 
@@ -141,17 +145,17 @@ body {
 .card-title {
     font-weight: 600;
     color: var(--dark-gray);
-    margin-bottom: 1rem;
+    margin-bottom: var(--space-3);
 }
 
 .card-title i {
-    margin-right: 0.5rem;
+    margin-right: var(--space-2);
     color: var(--primary-color);
 }
 
 /* ===== Statistics Cards ===== */
 .stat-card {
-    padding: 1rem;
+    padding: var(--space-3);
     text-align: center;
     transition: transform 0.2s ease;
 }
@@ -162,7 +166,7 @@ body {
 
 .stat-card h3 {
     font-weight: 700;
-    margin: 0.5rem 0;
+    margin: var(--space-2) 0;
     color: var(--dark-gray);
 }
 
@@ -173,12 +177,12 @@ body {
 /* ===== Badges ===== */
 .badge {
     font-weight: 500;
-    padding: 0.35em 0.65em;
+    padding: var(--space-1) var(--space-2);
 }
 
 /* ===== Buttons ===== */
 .btn {
-    border-radius: 0.375rem;
+    border-radius: 4px;
     font-weight: 500;
     transition: all 0.2s ease;
 }
@@ -211,12 +215,12 @@ body {
 /* ===== Alerts ===== */
 .alert {
     border: none;
-    border-radius: 0.375rem;
-    padding: 1rem;
+    border-radius: 4px;
+    padding: var(--space-3);
 }
 
 .alert i {
-    margin-right: 0.5rem;
+    margin-right: var(--space-2);
 }
 
 /* ===== Loading Spinner ===== */
@@ -236,19 +240,19 @@ footer {
 /* ===== Filters Section ===== */
 .filters-section {
     background-color: white;
-    padding: 1.5rem;
-    border-radius: 0.5rem;
+    padding: var(--space-4);
+    border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    margin-bottom: 1.5rem;
+    margin-bottom: var(--space-4);
 }
 
 .filter-group {
-    margin-bottom: 1rem;
+    margin-bottom: var(--space-3);
 }
 
 .filter-group label {
     font-weight: 600;
-    margin-bottom: 0.5rem;
+    margin-bottom: var(--space-2);
     display: block;
 }
 
@@ -273,11 +277,11 @@ footer {
 /* Mobile-specific filter improvements */
 @media (max-width: 767.98px) {
     .filters-section {
-        padding: 1rem;
+        padding: var(--space-3);
     }
-    
+
     .preset-filter {
-        flex: 1 1 calc(50% - 0.5rem);
+        flex: 1 1 calc(50% - var(--space-2));
         min-width: 0;
     }
     
@@ -290,9 +294,9 @@ footer {
 .route-card,
 .route-library-card {
     border: 1px solid #dee2e6;
-    border-radius: 0.5rem;
-    padding: 1rem;
-    margin-bottom: 1rem;
+    border-radius: 8px;
+    padding: var(--space-3);
+    margin-bottom: var(--space-3);
     background-color: white;
     transition: all 0.2s ease;
     cursor: pointer;
@@ -306,7 +310,7 @@ footer {
 }
 
 .route-library-card:active {
-    transform: translateY(-2px);
+    transform: translateY(calc(-1 * var(--space-1)));
     box-shadow: 0 2px 4px rgba(0, 123, 255, 0.2);
 }
 
@@ -338,7 +342,7 @@ footer {
 
 .route-card-stats {
     display: flex;
-    gap: 1.5rem;
+    gap: var(--space-4);
     margin-bottom: var(--space-2);
 }
 
@@ -348,7 +352,7 @@ footer {
 }
 
 .route-stat-label {
-    font-size: 0.75rem;
+    font-size: var(--font-size-xs);
     color: #6c757d;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -367,7 +371,7 @@ footer {
 }
 
 .temperature-display {
-    font-size: 2.5rem;
+    font-size: var(--font-size-hero);
     font-weight: 700;
     color: var(--dark-gray);
 }
@@ -377,38 +381,38 @@ footer {
 /* Small devices (phones, less than 576px) */
 @media (max-width: 575.98px) {
     .container {
-        padding-left: 1rem;
-        padding-right: 1rem;
+        padding-left: var(--space-3);
+        padding-right: var(--space-3);
     }
-    
+
     .card-body {
-        padding: 1rem;
+        padding: var(--space-3);
     }
-    
+
     .stat-card {
         padding: var(--space-2);
     }
-    
+
     .stat-card h3 {
-        font-size: 1.5rem;
+        font-size: var(--font-size-lg);
     }
-    
+
     .route-card-stats {
         flex-direction: column;
-        gap: 0.5rem;
+        gap: var(--space-2);
     }
-    
+
     .table-responsive {
-        font-size: 0.875rem;
+        font-size: var(--font-size-sm);
     }
-    
+
     .btn {
         width: 100%;
-        margin-bottom: 0.5rem;
+        margin-bottom: var(--space-2);
     }
-    
+
     .navbar-brand {
-        font-size: 1rem;
+        font-size: var(--font-size-base);
     }
 }
 
@@ -426,7 +430,7 @@ footer {
     }
     
     .route-card-stats {
-        gap: 2rem;
+        gap: var(--space-5);
     }
 }
 
@@ -596,7 +600,7 @@ a:focus-visible {
 .route-row:focus-visible,
 tr:focus-visible {
     outline: 3px solid #667eea;
-    outline-offset: -3px;
+    outline-offset: calc(-1 * var(--space-1));
     background-color: rgba(102, 126, 234, 0.1);
 }
 
@@ -613,7 +617,7 @@ tr:focus-visible {
     left: 0;
     background: #667eea;
     color: white;
-    padding: 8px;
+    padding: var(--space-2);
     text-decoration: none;
     z-index: 100;
 }
@@ -664,7 +668,7 @@ tr:focus-visible {
     flex: 0 0 32px;
     font-weight: bold;
     color: #667eea;
-    font-size: 1.1em;
+    font-size: var(--font-size-base);
 }
 
 .route-card-compact-name {
@@ -674,21 +678,21 @@ tr:focus-visible {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    padding-right: 8px;
+    padding-right: var(--space-2);
 }
 
 .route-card-compact-metrics {
     display: flex;
     gap: var(--space-2);
     align-items: center;
-    font-size: 0.85em;
+    font-size: var(--font-size-sm);
     color: #6c757d;
 }
 
 .route-card-compact-metric {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-1);
     white-space: nowrap;
 }
 
@@ -825,24 +829,24 @@ tr:focus-visible {
 /* Additional skeleton loaders for statistics and tables */
 .skeleton-stat-card {
     height: 120px;
-    border-radius: 0.5rem;
+    border-radius: 8px;
     background: white;
     border: 1px solid #e0e0e0;
-    padding: 1rem;
-    margin-bottom: 1rem;
+    padding: var(--space-3);
+    margin-bottom: var(--space-3);
 }
 
 .skeleton-stat-icon {
     width: 48px;
     height: 48px;
     border-radius: 50%;
-    margin: 0 auto 0.5rem;
+    margin: 0 auto var(--space-2);
 }
 
 .skeleton-stat-value {
     width: 80px;
     height: 32px;
-    margin: 0 auto 0.5rem;
+    margin: 0 auto var(--space-2);
 }
 
 .skeleton-stat-label {
@@ -853,13 +857,13 @@ tr:focus-visible {
 
 .skeleton-table {
     background: white;
-    border-radius: 0.5rem;
-    padding: 1rem;
+    border-radius: 8px;
+    padding: var(--space-3);
 }
 
 .skeleton-table-row {
     display: flex;
-    gap: 1rem;
+    gap: var(--space-3);
     padding: var(--space-2) 0;
     border-bottom: 1px solid #f0f0f0;
 }
@@ -885,17 +889,17 @@ tr:focus-visible {
 /* Skeleton for recommendation cards */
 .skeleton-recommendation-card {
     height: 200px;
-    border-radius: 0.5rem;
+    border-radius: 8px;
     background: white;
     border: 1px solid #e0e0e0;
-    padding: 1.5rem;
-    margin-bottom: 1rem;
+    padding: var(--space-4);
+    margin-bottom: var(--space-3);
 }
 
 .skeleton-recommendation-header {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 1rem;
+    margin-bottom: var(--space-3);
 }
 
 .skeleton-recommendation-title {
@@ -906,13 +910,13 @@ tr:focus-visible {
 .skeleton-recommendation-score {
     width: 64px;
     height: 40px;
-    border-radius: 0.5rem;
+    border-radius: 8px;
 }
 
 .skeleton-recommendation-metrics {
     display: flex;
-    gap: 1rem;
-    margin-top: 1rem;
+    gap: var(--space-3);
+    margin-top: var(--space-3);
 }
 
 .skeleton-recommendation-metric {
@@ -923,7 +927,7 @@ tr:focus-visible {
 /* Skeleton card components */
 .skeleton-card {
     background: white;
-    border-radius: 0.5rem;
+    border-radius: 8px;
     padding: var(--space-4);
     border: 1px solid #e0e0e0;
 }
@@ -1206,7 +1210,7 @@ input[type="radio"] {
 
 .bottom-nav-item i,
 .mobile-bottom-nav-icon {
-    font-size: 20px;
+    font-size: 24px;
     margin-bottom: var(--space-1);
 }
 
@@ -1273,7 +1277,7 @@ input[type="radio"] {
     display: none;
     align-items: center;
     justify-content: center;
-    font-size: 28px;
+    font-size: 32px;
     color: white;
     z-index: 10001;
     pointer-events: none;
@@ -1375,7 +1379,7 @@ input[type="radio"] {
 /* ===== Issue #239: Home Page Compact Layout (1024x768 optimization) ===== */
 .home-compact-info-bar {
     display: flex;
-    gap: 16px;
+    gap: var(--space-3);
     padding: var(--space-2) var(--space-3);
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
@@ -1508,11 +1512,11 @@ input[type="radio"] {
     }
     
     .toast-container {
-        bottom: 76px;
+        bottom: 80px;
         left: 50%;
         right: auto;
         transform: translateX(-50%);
-        max-width: calc(100% - 40px);
+        max-width: calc(100% - var(--space-5));
     }
     
     .toast-item {
@@ -1529,8 +1533,8 @@ input[type="radio"] {
     
     .route-card-compact-metrics {
         flex-wrap: wrap;
-        gap: 8px;
-        margin-top: 4px;
+        gap: var(--space-2);
+        margin-top: var(--space-1);
     }
     
     .btn,

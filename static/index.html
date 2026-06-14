@@ -20,45 +20,45 @@
         .map-container {
             height: var(--map-height-standard);
             width: 100%;
-            border-radius: 0.375rem;
+            border-radius: 8px;
         }
-        
+
         /* Weather banner styles */
         .weather-banner {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            border-radius: 0.5rem;
-            padding: 1rem 1.5rem;
+            border-radius: 8px;
+            padding: var(--space-3) var(--space-4);
             box-shadow: 0 2px 8px rgba(0,0,0,0.15);
             display: flex;
             align-items: center;
-            gap: 1.5rem;
+            gap: var(--space-4);
             flex-wrap: wrap;
         }
-        
+
         .weather-banner .weather-icon {
             font-size: 3rem;
             opacity: 0.9;
         }
-        
+
         .weather-banner .weather-temp {
-            font-size: 2.5rem;
+            font-size: var(--font-size-hero);
             font-weight: 700;
             line-height: 1;
         }
-        
+
         .weather-banner .weather-details {
             display: flex;
             flex-wrap: wrap;
-            gap: 1rem;
-            font-size: 0.9rem;
+            gap: var(--space-3);
+            font-size: var(--font-size-sm);
             opacity: 0.95;
         }
-        
+
         .weather-banner .weather-detail-item {
             display: flex;
             align-items: center;
-            gap: 0.25rem;
+            gap: var(--space-1);
         }
         
         .weather-banner .comfort-badge {
@@ -70,28 +70,28 @@
         
         @media (max-width: 767.98px) {
             .weather-banner {
-                padding: 1rem;
-                gap: 1rem;
+                padding: var(--space-3);
+                gap: var(--space-3);
             }
 
             .weather-banner .weather-icon {
-                font-size: 2rem;
+                font-size: var(--font-size-xl);
             }
 
             .weather-banner .weather-temp {
-                font-size: 1.75rem;
+                font-size: var(--font-size-lg);
             }
 
             .weather-banner .weather-details {
-                font-size: 0.85rem;
+                font-size: var(--font-size-sm);
                 gap: var(--space-2);
             }
         }
-        
+
         /* Commute card styles */
         .commute-card {
             background: white;
-            border-radius: 0.5rem;
+            border-radius: 8px;
             padding: var(--space-3);
             margin-bottom: var(--space-3);
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
@@ -110,24 +110,24 @@
         .commute-card.to-home {
             border-left: 4px solid var(--primary-color);
         }
-        
+
         .commute-card-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 1rem;
+            margin-bottom: var(--space-3);
         }
-        
+
         .commute-direction {
-            font-size: 1.1rem;
+            font-size: var(--font-size-base);
             font-weight: 600;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: var(--space-2);
         }
-        
+
         .commute-score {
-            font-size: 1.75rem;
+            font-size: var(--font-size-xl);
             font-weight: 700;
             color: var(--success-color);
         }
@@ -141,99 +141,82 @@
         }
 
         .commute-route-name {
-            font-size: 0.95rem;
+            font-size: var(--font-size-base);
             font-weight: 600;
             margin-bottom: var(--space-2);
         }
-        
+
         .commute-metrics {
             display: flex;
             flex-wrap: wrap;
             gap: var(--space-2);
-            font-size: 0.875rem;
+            font-size: var(--font-size-sm);
         }
-        
+
         .commute-metric {
             display: flex;
             align-items: center;
-            gap: 0.25rem;
+            gap: var(--space-1);
         }
-        
+
         .commute-time-window {
-            font-size: 0.875rem;
+            font-size: var(--font-size-sm);
             color: #6c757d;
-            margin-top: 0.5rem;
+            margin-top: var(--space-2);
         }
-        
+
         @media (max-width: 767.98px) {
             .map-container {
-                height: 300px;
-            }
-
-            #commute-map-container {
-                height: var(--map-height-standard) !important;
-            }
-        }
-
-        /* Viewport optimization for 1024x768 */
-        @media (min-width: 768px) and (max-height: 768px) {
-            .map-container {
-                height: 350px;
-            }
-            h1 {
-                margin-bottom: 1rem !important;
-            }
-            .card {
-                margin-bottom: var(--space-2) !important;
+                height: var(--map-height-standard);
             }
         }
 
         /* ── Hero Decision Card (#286) ─────────────────────────────── */
         .hero-decision-card {
-            padding: 0.25rem 0;
+            padding: var(--space-1) 0;
         }
 
         .hero-card-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 0.5rem;
+            margin-bottom: var(--space-2);
             flex-wrap: wrap;
-            gap: 0.5rem;
+            gap: var(--space-2);
         }
 
         .hero-route-name {
-            font-size: 1.05rem;
+            font-size: var(--font-size-base);
             font-weight: 700;
         }
 
         .hero-weather-summary {
-            font-size: 0.9rem;
+            font-size: var(--font-size-sm);
             color: #555;
             margin-bottom: var(--space-1);
         }
 
         .hero-time-estimate {
-            font-size: 0.9rem;
+            font-size: var(--font-size-sm);
             font-weight: 600;
             color: #333;
-            margin-bottom: 0.5rem;
+            margin-bottom: var(--space-2);
         }
 
         .hero-reasons {
-            margin: 0.5rem 0 0.5rem 1rem;
+            margin: var(--space-2) 0 var(--space-2) var(--space-3);
             padding: 0;
-            font-size: 0.85rem;
+            font-size: var(--font-size-sm);
             color: #444;
             list-style: disc;
         }
 
         .hero-reasons li {
-            margin-bottom: 0.2rem;
+            margin-bottom: var(--space-1);
         }
 
         .hero-meta {
-            font-size: 0.8rem;
+            font-size: var(--font-size-xs);
         }
 
         .secondary-commute-card {
@@ -282,18 +265,15 @@
         }
 
         .card {
-            border-radius: 8px !important;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
             animation: cardFadeIn 0.25s ease-out both;
-            border: 1px solid rgba(0,0,0,0.07) !important;
+            border: 1px solid rgba(0,0,0,0.07);
         }
 
         .card:nth-child(2) { animation-delay: 0.05s; }
         .card:nth-child(3) { animation-delay: 0.10s; }
         .card:nth-child(4) { animation-delay: 0.15s; }
-
-        /* Compact information density (#280) */
-        .card-body { padding: var(--space-3) !important; }
     </style>
 </head>
 <body>
@@ -302,7 +282,7 @@
     <a href="#home-tab" class="skip-link">Skip to navigation</a>
     
     <!-- Top Navigation (Mobile & Desktop) -->
-    <nav class="navbar navbar-expand-lg navbar-dark" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);" role="navigation" aria-label="Main navigation">
+    <nav class="navbar navbar-expand-lg navbar-dark navbar-gradient" role="navigation" aria-label="Main navigation">
         <div class="container">
             <a class="navbar-brand" href="/" aria-label="Ride Optimizer Home">
                 <i class="bi bi-bicycle" aria-hidden="true"></i> Ride Optimizer
@@ -315,7 +295,7 @@
             
             <!-- Collapsible Navigation Menu -->
             <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav ms-auto">
+                <ul class="navbar-nav">
                     <li class="nav-item">
                         <a class="nav-link active" href="/" aria-current="page">
                             <i class="bi bi-house-door" aria-hidden="true"></i> Home

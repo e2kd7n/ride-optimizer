@@ -12,8 +12,8 @@
         
         .commute-card {
             background: linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(248,249,250,0.95) 100%);
-            border-radius: 0.5rem;
-            padding: 1.5rem;
+            border-radius: 8px;
+            padding: var(--space-4);
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             transition: all 0.3s ease;
             cursor: pointer;
@@ -42,19 +42,19 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 1rem;
+            margin-bottom: var(--space-3);
         }
-        
+
         .commute-direction {
-            font-size: 1.25rem;
+            font-size: var(--font-size-lg);
             font-weight: 600;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: var(--space-2);
         }
-        
+
         .commute-score {
-            font-size: 2rem;
+            font-size: var(--font-size-xl);
             font-weight: 700;
             color: #28a745;
         }
@@ -68,28 +68,28 @@
         }
         
         .commute-route-name {
-            font-size: 1rem;
+            font-size: var(--font-size-base);
             font-weight: 600;
-            margin-bottom: 0.75rem;
+            margin-bottom: var(--space-2);
         }
-        
+
         .commute-metrics {
             display: flex;
             flex-wrap: wrap;
             gap: var(--space-2);
-            font-size: 0.875rem;
+            font-size: var(--font-size-sm);
         }
-        
+
         .commute-metric {
             display: flex;
             align-items: center;
-            gap: 0.25rem;
+            gap: var(--space-1);
         }
-        
+
         .commute-time-window {
-            font-size: 0.875rem;
+            font-size: var(--font-size-sm);
             color: #6c757d;
-            margin-top: 0.5rem;
+            margin-top: var(--space-2);
         }
         
         
@@ -99,7 +99,7 @@
             background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
             background-size: 200% 100%;
             animation: loading 1.5s infinite;
-            border-radius: 0.5rem;
+            border-radius: 8px;
         }
         
         @keyframes loading {
@@ -113,7 +113,7 @@
     <a href="#main-content" class="skip-link">Skip to main content</a>
     
     <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+    <nav class="navbar navbar-expand-lg navbar-dark navbar-gradient">
         <div class="container">
             <a class="navbar-brand" href="/">
                 <i class="bi bi-bicycle"></i> Ride Optimizer

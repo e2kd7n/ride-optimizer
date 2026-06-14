@@ -12,7 +12,7 @@
         #routes-map {
             height: var(--map-height-standard);
             min-height: 320px;
-            border-radius: 0.5rem;
+            border-radius: 8px;
             transition: height 0.3s ease;
         }
         #routes-map.expanded {
@@ -21,8 +21,11 @@
     </style>
 </head>
 <body>
+    <!-- Skip Links for Accessibility -->
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+
     <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+    <nav class="navbar navbar-expand-lg navbar-dark navbar-gradient">
         <div class="container">
             <a class="navbar-brand" href="/">
                 <i class="bi bi-bicycle"></i> Ride Optimizer
@@ -53,7 +56,7 @@
     </nav>
 
     <!-- Main Content -->
-    <div class="container mt-4">
+    <main id="main-content" class="container mt-4" role="main">
         <div class="row mb-4">
             <div class="col-12">
                 <h2>
@@ -88,7 +91,7 @@
             </div>
 
             <div class="row">
-                <div class="col-md-3 col-sm-6">
+                <div class="col-md-3">
                     <div class="filter-group">
                         <label for="filter-favorite">Favorites</label>
                         <select id="filter-favorite" class="form-select">
@@ -98,7 +101,7 @@
                         </select>
                     </div>
                 </div>
-                <div class="col-md-3 col-sm-6">
+                <div class="col-md-3">
                     <div class="filter-group">
                         <label for="filter-sport-type">Sport Type</label>
                         <select id="filter-sport-type" class="form-select">
@@ -110,7 +113,7 @@
                         </select>
                     </div>
                 </div>
-                <div class="col-md-3 col-sm-6">
+                <div class="col-md-3">
                     <div class="filter-group">
                         <label for="filter-difficulty">Difficulty</label>
                         <select id="filter-difficulty" class="form-select">
@@ -122,7 +125,7 @@
                         </select>
                     </div>
                 </div>
-                <div class="col-md-3 col-sm-6">
+                <div class="col-md-3">
                     <div class="filter-group">
                         <label for="filter-min-distance" id="filter-min-distance-label">Min Distance (mi)</label>
                         <input type="number" id="filter-min-distance" class="form-control" placeholder="0" min="0" step="0.1">
@@ -130,13 +133,13 @@
                 </div>
             </div>
             <div class="row mt-3">
-                <div class="col-md-3 col-sm-6">
+                <div class="col-md-3">
                     <div class="filter-group">
                         <label for="filter-max-distance" id="filter-max-distance-label">Max Distance (mi)</label>
                         <input type="number" id="filter-max-distance" class="form-control" placeholder="100" min="0" step="0.1">
                     </div>
                 </div>
-                <div class="col-md-3 col-sm-6">
+                <div class="col-md-3">
                     <div class="filter-group">
                         <label for="sort-by">Sort By</label>
                         <select id="sort-by" class="form-select">
@@ -150,13 +153,13 @@
                         </select>
                     </div>
                 </div>
-                <div class="col-md-3 col-sm-6">
+                <div class="col-md-3">
                     <div class="filter-group">
                         <label for="search-query">Search</label>
                         <input type="text" id="search-query" class="form-control" placeholder="Search routes...">
                     </div>
                 </div>
-                <div class="col-md-3 col-sm-6 d-flex align-items-end">
+                <div class="col-md-3 d-flex align-items-end">
                     <button id="apply-filters" class="btn btn-primary w-100">
                         <i class="bi bi-search"></i> Apply Filters
                     </button>
@@ -277,7 +280,7 @@
 
         <!-- Pagination -->
         <div id="pagination-container" class="mt-4"></div>
-    </div>
+    </main>
 
     <!-- Footer -->
     <footer class="mt-5 py-3 bg-light">
