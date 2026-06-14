@@ -109,11 +109,11 @@
                 renderCommuteCards(data);
                 loadCommuteMap();
             } else {
-                showError(cardsContainer, data.message || 'Failed to load commute data');
+                if (cardsContainer) showError(cardsContainer, data.message || 'Failed to load commute data');
             }
         } catch (error) {
             console.error('Error loading commute data:', error);
-            showError(cardsContainer, 'Unable to load commute recommendations');
+            if (cardsContainer) showError(cardsContainer, 'Unable to load commute recommendations');
         }
     }
     
@@ -122,6 +122,7 @@
      */
     function renderCommuteCards(data) {
         const cardsContainer = document.getElementById('commute-cards');
+        if (!cardsContainer) return;
         cardsContainer.innerHTML = '';
         
         // Render To Work card
