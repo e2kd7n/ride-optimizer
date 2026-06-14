@@ -213,13 +213,14 @@ class CommuteService:
                 'route': None
             }
     
-    def get_all_commute_options(self, direction: str) -> Dict[str, Any]:
+    def get_all_commute_options(self, direction: str = None) -> Dict[str, Any]:
         """
         Get all available commute options for a direction.
-        
+
         Args:
-            direction: "to_work" or "to_home"
-            
+            direction: "to_work" or "to_home". Defaults to "to_work" before noon,
+                       "to_home" in the afternoon.
+
         Returns:
             Dictionary with all options:
             {
@@ -229,6 +230,10 @@ class CommuteService:
                 'count': int
             }
         """
+        if direction is None:
+            from datetime import datetime as _dt
+            direction = 'to_work' if _dt.now().hour < 12 else 'to_home'
+
         if not self._recommender:
             return {
                 'status': 'error',
@@ -237,9 +242,8 @@ class CommuteService:
                 'options': [],
                 'count': 0
             }
-        
+
         try:
-            # Get all recommendations for direction
             recommendations = self._recommender.get_all_recommendations(direction)
             
             options = [
