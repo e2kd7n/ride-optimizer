@@ -209,25 +209,12 @@
                                 <span class="text-muted small"><i class="bi bi-hourglass-split"></i> Loading cache info…</span>
                             </div>
 
+                            <!-- Strava Sync section -->
                             <div class="mb-3">
-                                <label class="form-label fw-bold d-block mb-2">Analysis Mode</label>
-                                <div class="form-check mb-2">
-                                    <input class="form-check-input" type="radio" name="analysis-mode" id="mode-cached" value="cached" checked>
-                                    <label class="form-check-label" for="mode-cached">
-                                        <strong>Reanalyze cached data</strong>
-                                        <span class="text-muted d-block small">Re-run route grouping on activities already downloaded — no Strava call</span>
-                                    </label>
-                                </div>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="analysis-mode" id="mode-fetch" value="fetch">
-                                    <label class="form-check-label" for="mode-fetch">
-                                        <strong>Fetch new Strava data</strong>
-                                        <span class="text-muted d-block small">Pull activities from Strava, then re-run analysis (slower)</span>
-                                    </label>
-                                </div>
+                                <label class="form-label fw-bold d-block mb-1">Sync from Strava</label>
+                                <p class="small text-muted mb-2">Fetch activities from Strava and merge into local cache. Runs independently — you can sync while analysis is running.</p>
 
-                                <!-- Date range panel: shown when Fetch New is selected -->
-                                <div id="fetch-date-range" class="mt-2 ms-3 ps-3 border-start border-secondary-subtle" style="display:none">
+                                <div class="mb-2">
                                     <p class="small fw-semibold text-body-secondary mb-1">How far back to fetch</p>
                                     <div class="d-flex flex-wrap gap-1 mb-1">
                                         <button type="button" class="btn btn-sm btn-outline-secondary fetch-preset active" data-preset="latest">Latest</button>
@@ -248,6 +235,31 @@
                                     </div>
                                     <p id="date-preset-hint" class="small text-muted mb-0 mt-1"></p>
                                 </div>
+
+                                <button type="button" class="btn btn-primary" id="fetch-btn">
+                                    <i class="bi bi-cloud-download" aria-hidden="true"></i> Fetch Activities
+                                </button>
+
+                                <!-- Fetch progress -->
+                                <div id="fetch-progress" class="mt-2" style="display:none">
+                                    <div class="d-flex align-items-center gap-2 mb-1">
+                                        <span class="spinner-border spinner-border-sm text-primary flex-shrink-0"
+                                              id="fetch-spinner" role="status" aria-hidden="true"></span>
+                                        <span id="fetch-status" class="small fw-medium text-body"></span>
+                                    </div>
+                                    <div class="progress progress-xs">
+                                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+                                             role="progressbar" style="width:100%"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <hr class="my-3">
+
+                            <!-- Analysis section -->
+                            <div class="mb-3">
+                                <label class="form-label fw-bold d-block mb-1">Run Analysis</label>
+                                <p class="small text-muted mb-2">Re-run route grouping on cached activities.</p>
                             </div>
 
                             <div>
@@ -379,8 +391,9 @@
             loadCacheInfo();
             setupFetchModeControls();
             document.getElementById('run-analysis-btn').addEventListener('click', runAnalysis);
+            document.getElementById('fetch-btn').addEventListener('click', startFetch);
 
-            // Restore progress UI if analysis is already running (e.g. after page reload)
+            // Restore progress UI if analysis or fetch is already running (e.g. after page reload)
             (async () => {
                 try {
                     const job = await window.apiClient.getAnalysisStatus();
@@ -395,6 +408,21 @@
                         spinnerEl.style.display = '';
                         statusEl.textContent = job.label || 'Analysis in progress…';
                         pollAnalysisStatus();
+                    }
+                } catch (_) {}
+            })();
+            (async () => {
+                try {
+                    const job = await window.apiClient.fetch('/fetch/status');
+                    if (job.status === 'running') {
+                        const btn = document.getElementById('fetch-btn');
+                        const progressEl = document.getElementById('fetch-progress');
+                        const statusEl = document.getElementById('fetch-status');
+                        btn.disabled = true;
+                        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Fetching…';
+                        progressEl.style.display = '';
+                        statusEl.textContent = job.label || 'Fetch in progress…';
+                        pollFetchStatus();
                     }
                 } catch (_) {}
             })();
@@ -601,23 +629,11 @@
         function updateRunBtnLabel() {
             const btn = document.getElementById('run-analysis-btn');
             if (btn.disabled) return;
-            const isFetch = document.querySelector('input[name="analysis-mode"]:checked').value === 'fetch';
-            btn.innerHTML = isFetch
-                ? '<i class="bi bi-cloud-download" aria-hidden="true"></i> Fetch &amp; Analyze'
-                : '<i class="bi bi-play-fill" aria-hidden="true"></i> Run Analysis';
-            btn.onclick = null; // restore default click listener (set via addEventListener)
+            btn.innerHTML = '<i class="bi bi-play-fill" aria-hidden="true"></i> Run Analysis';
+            btn.onclick = null;
         }
 
         function setupFetchModeControls() {
-            const dateRange = document.getElementById('fetch-date-range');
-            document.querySelectorAll('input[name="analysis-mode"]').forEach(r => {
-                r.addEventListener('change', () => {
-                    const isFetch = document.querySelector('input[name="analysis-mode"]:checked').value === 'fetch';
-                    dateRange.style.display = isFetch ? '' : 'none';
-                    updateRunBtnLabel();
-                });
-            });
-
             document.querySelectorAll('.fetch-preset').forEach(btn => {
                 btn.addEventListener('click', function() {
                     document.querySelectorAll('.fetch-preset').forEach(b => b.classList.remove('active'));
@@ -759,19 +775,6 @@
             const spinnerEl = document.getElementById('analysis-spinner');
             const statusEl = document.getElementById('analysis-status');
             const previewMsg = document.getElementById('preview-ready-msg');
-            const fetchNew = document.querySelector('input[name="analysis-mode"]:checked').value === 'fetch';
-
-            let afterDate = null, beforeDate = null;
-            if (fetchNew) {
-                const preset = _currentFetchPreset;
-                const isoDate = (d) => d.toISOString().slice(0, 10);
-                const d = getPresetAfterDate(preset);
-                if (d) afterDate = isoDate(d);
-                if (preset === 'custom') {
-                    afterDate = document.getElementById('fetch-after').value || null;
-                    beforeDate = document.getElementById('fetch-before').value || null;
-                }
-            }
 
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Running…';
@@ -779,10 +782,10 @@
             spinnerEl.style.display = '';
             previewMsg.style.display = 'none';
             previewMsg.dataset.shown = '';
-            statusEl.textContent = fetchNew ? 'Connecting to Strava…' : 'Loading cached data…';
+            statusEl.textContent = 'Loading cached data…';
 
             try {
-                await window.apiClient.triggerAnalysis({ fetchNew, afterDate, beforeDate });
+                await window.apiClient.triggerAnalysis({ fetchNew: false });
                 pollAnalysisStatus();
             } catch (e) {
                 btn.disabled = false;
@@ -909,6 +912,70 @@
             try {
                 await window.apiClient.fetch('/analyze/stop', { method: 'POST' });
             } catch (_) {}
+        }
+
+        async function startFetch() {
+            const btn = document.getElementById('fetch-btn');
+            const progressEl = document.getElementById('fetch-progress');
+            const statusEl = document.getElementById('fetch-status');
+
+            const preset = _currentFetchPreset;
+            const isoDate = (d) => d.toISOString().slice(0, 10);
+            let afterDate = null, beforeDate = null;
+            const d = getPresetAfterDate(preset);
+            if (d) afterDate = isoDate(d);
+            if (preset === 'custom') {
+                afterDate = document.getElementById('fetch-after').value || null;
+                beforeDate = document.getElementById('fetch-before').value || null;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Fetching…';
+            progressEl.style.display = '';
+            statusEl.textContent = 'Connecting to Strava…';
+
+            try {
+                await window.apiClient.fetch('/fetch', {
+                    method: 'POST',
+                    body: JSON.stringify({ after_date: afterDate, before_date: beforeDate, limit: 1000 }),
+                });
+                pollFetchStatus();
+            } catch (e) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-cloud-download"></i> Fetch Activities';
+                progressEl.style.display = 'none';
+                if (typeof showToast === 'function') showToast('Failed to start fetch: ' + (e.message || 'Unknown error'), 'error');
+            }
+        }
+
+        function pollFetchStatus() {
+            const btn = document.getElementById('fetch-btn');
+            const progressEl = document.getElementById('fetch-progress');
+            const spinnerEl = document.getElementById('fetch-spinner');
+            const statusEl = document.getElementById('fetch-status');
+
+            const poll = setInterval(async () => {
+                try {
+                    const job = await window.apiClient.fetch('/fetch/status');
+                    statusEl.textContent = job.label || 'Fetching…';
+
+                    if (job.status === 'done') {
+                        clearInterval(poll);
+                        spinnerEl.style.display = 'none';
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="bi bi-cloud-download"></i> Fetch Activities';
+                        if (typeof showToast === 'function') showToast(job.label || 'Fetch complete', 'success');
+                        loadCacheInfo();
+                    } else if (job.status === 'error') {
+                        clearInterval(poll);
+                        spinnerEl.style.display = 'none';
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="bi bi-cloud-download"></i> Fetch Activities';
+                        statusEl.textContent = job.label || 'Fetch failed';
+                        if (typeof showToast === 'function') showToast(job.label || 'Fetch failed', 'error');
+                    }
+                } catch (_) {}
+            }, 3000);
         }
     </script>
 </body>

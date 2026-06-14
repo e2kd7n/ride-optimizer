@@ -145,7 +145,8 @@ class StravaDataFetcher:
                         after: Optional[datetime] = None,
                         before: Optional[datetime] = None,
                         use_cache: bool = True,
-                        progress_callback=None) -> List[Activity]:
+                        progress_callback=None,
+                        merge_cache: bool = False) -> List[Activity]:
         """
         Fetch activities from Strava API.
 
@@ -261,7 +262,7 @@ class StravaDataFetcher:
 
             # Persist to disk so reanalyze-cached-data mode picks up fresh data
             if activities:
-                self.cache_activities(activities, merge=False)
+                self.cache_activities(activities, merge=merge_cache)
 
         except Exception as e:
             logger.error(f"Failed to fetch activities: {e}")
