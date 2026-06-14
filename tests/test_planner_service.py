@@ -410,17 +410,32 @@ class TestWeatherIntegration:
     
     def test_get_weather_for_ride(self, app, initialized_service, mock_long_ride):
         """Test getting weather for a ride."""
-        # Need Flask app context for WeatherSnapshot
-        with app.app_context():
-            target_date = date.today()
-            weather = initialized_service._get_weather_for_ride(mock_long_ride, target_date)
-            
-            assert weather is not None
-            assert 'temperature_c' in weather
-            assert 'conditions' in weather
-            assert 'wind_speed_kph' in weather
-            assert 'wind_direction_deg' in weather
-            assert 'precipitation_mm' in weather
+        mock_forecast = [{
+            'date': str(date.today()),
+            'temp_max_c': 22.0,
+            'temp_min_c': 15.0,
+            'precipitation_sum_mm': 0.5,
+            'precipitation_prob_max': 10,
+            'wind_speed_max_kph': 15.0,
+            'wind_direction_dominant_deg': 180,
+            'temperature': 18.5,
+            'conditions': 'Clear',
+            'wind_speed': 15.0,
+            'wind_direction': 180,
+            'precipitation': 0.5,
+        }]
+        with patch.object(initialized_service.weather_fetcher, 'get_daily_forecast', return_value=mock_forecast):
+            # Need Flask app context for WeatherSnapshot
+            with app.app_context():
+                target_date = date.today()
+                weather = initialized_service._get_weather_for_ride(mock_long_ride, target_date)
+
+                assert weather is not None
+                assert 'temperature_c' in weather
+                assert 'conditions' in weather
+                assert 'wind_speed_kph' in weather
+                assert 'wind_direction_deg' in weather
+                assert 'precipitation_mm' in weather
     
     def test_calculate_weather_score(self, initialized_service):
         """Test weather score calculation."""
