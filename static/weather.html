@@ -11,16 +11,11 @@
         .forecast-grid {
             display: grid;
             grid-template-columns: repeat(7, 1fr);
-            gap: 8px;
+            gap: var(--space-2);
         }
-        @media (max-width: 767px) {
+        @media (max-width: 767.98px) {
             .forecast-grid {
                 grid-template-columns: repeat(4, 1fr);
-            }
-        }
-        @media (max-width: 480px) {
-            .forecast-grid {
-                grid-template-columns: repeat(2, 1fr);
             }
         }
 
@@ -28,7 +23,7 @@
             background: var(--surface-card, #fff);
             border: 1px solid rgba(0,0,0,0.08);
             border-radius: 8px;
-            padding: 12px 8px;
+            padding: var(--space-2);
             text-align: center;
             transition: box-shadow 0.2s;
         }
@@ -40,7 +35,7 @@
             border-width: 2px;
         }
         .forecast-day {
-            font-size: 0.75rem;
+            font-size: var(--font-size-xs);
             font-weight: 600;
             text-transform: uppercase;
             color: #6c757d;
@@ -49,28 +44,28 @@
             color: #667eea;
         }
         .forecast-icon {
-            font-size: 1.75rem;
-            margin: 6px 0;
+            font-size: var(--font-size-lg);
+            margin: var(--space-1) 0;
             display: block;
         }
         .forecast-temps {
-            font-size: 0.875rem;
+            font-size: var(--font-size-sm);
             font-weight: 600;
         }
         .forecast-temps .hi { color: #212529; }
         .forecast-temps .lo { color: #6c757d; }
         .forecast-detail {
-            font-size: 0.7rem;
+            font-size: var(--font-size-xs);
             color: #6c757d;
-            margin-top: 4px;
+            margin-top: var(--space-1);
         }
         .comfort-pill {
             display: inline-block;
-            font-size: 0.65rem;
+            font-size: var(--font-size-xs);
             font-weight: 600;
-            padding: 2px 6px;
+            padding: var(--space-1) var(--space-2);
             border-radius: 999px;
-            margin-top: 6px;
+            margin-top: var(--space-1);
             text-transform: uppercase;
             letter-spacing: 0.02em;
         }
@@ -80,7 +75,7 @@
 
         .commute-window-card {
             border-radius: 8px;
-            padding: 16px;
+            padding: var(--space-3);
             border: 1px solid rgba(0,0,0,0.08);
         }
         .commute-window-card.morning { border-left: 4px solid #f59e0b; }
@@ -89,9 +84,9 @@
         .window-metric {
             display: flex;
             align-items: center;
-            gap: 6px;
-            font-size: 0.875rem;
-            margin-bottom: 4px;
+            gap: var(--space-1);
+            font-size: var(--font-size-sm);
+            margin-bottom: var(--space-1);
         }
         .window-metric i { width: 16px; color: #6c757d; }
 
@@ -101,7 +96,7 @@
         }
 
         .skeleton-forecast {
-            height: 140px;
+            height: 144px;
             background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
             background-size: 200% 100%;
             animation: loading 1.5s infinite;
@@ -116,7 +111,7 @@
 <body>
     <a href="#main-content" class="skip-link">Skip to main content</a>
 
-    <nav class="navbar navbar-expand-lg navbar-dark" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+    <nav class="navbar navbar-expand-lg navbar-dark navbar-gradient">
         <div class="container">
             <a class="navbar-brand" href="/">
                 <i class="bi bi-bicycle"></i> Ride Optimizer
