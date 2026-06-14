@@ -64,7 +64,8 @@ def index():
 
         recommendation = _build_recommendation(result)
 
-        alt_result = services['commute'].get_all_commute_options()
+        alt_direction = direction or (result.get('direction') if isinstance(result, dict) else None)
+        alt_result = services['commute'].get_all_commute_options(alt_direction)
         if isinstance(alt_result, dict) and alt_result.get('status') == 'success':
             alternatives = alt_result.get('options', [])
 
