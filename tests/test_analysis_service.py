@@ -10,8 +10,9 @@ Tests cover:
 - Error handling and edge cases
 """
 
+import json
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock, MagicMock, patch, mock_open
 from datetime import datetime, timedelta
 
 from app.services.analysis_service import AnalysisService
@@ -84,7 +85,7 @@ def mock_location():
 def analysis_service(mock_config):
     """Create an AnalysisService instance."""
     # Mock get_authenticated_client to avoid loading real credentials
-    with patch('src.auth.get_authenticated_client') as mock_auth:
+    with patch('src.auth_secure.get_authenticated_client') as mock_auth:
         mock_client = Mock()
         mock_auth.return_value = mock_client
         service = AnalysisService(mock_config)
@@ -99,7 +100,7 @@ class TestAnalysisServiceInitialization:
     
     def test_init(self, mock_config):
         """Test service initialization."""
-        with patch('src.auth.get_authenticated_client') as mock_auth:
+        with patch('src.auth_secure.get_authenticated_client') as mock_auth:
             mock_client = Mock()
             mock_auth.return_value = mock_client
             service = AnalysisService(mock_config)
@@ -137,7 +138,7 @@ class TestRunFullAnalysis:
         
         # Mock location finder
         mock_location_finder = Mock()
-        mock_location_finder.find_locations = Mock(return_value=(home, work))
+        mock_location_finder.identify_home_work = Mock(return_value=(home, work))
         mock_location_finder_class.return_value = mock_location_finder
         
         # Mock route analyzer
@@ -189,7 +190,7 @@ class TestRunFullAnalysis:
         
         # Mock location finder
         mock_location_finder = Mock()
-        mock_location_finder.find_locations = Mock(return_value=(Mock(), Mock()))
+        mock_location_finder.identify_home_work = Mock(return_value=(Mock(), Mock()))
         mock_location_finder_class.return_value = mock_location_finder
         
         with patch('app.services.analysis_service.RouteAnalyzer'), \
@@ -197,10 +198,9 @@ class TestRunFullAnalysis:
             
             result = analysis_service.run_full_analysis(force_refresh=True)
             
-            # Verify force_refresh was passed through
-            mock_data_fetcher.fetch_activities.assert_called_once_with(
-                force_refresh=True
-            )
+            mock_data_fetcher.fetch_activities.assert_called_once()
+            call_kwargs = mock_data_fetcher.fetch_activities.call_args.kwargs
+            assert call_kwargs.get('use_cache') is False
     
     def test_run_full_analysis_exception_handling(self, analysis_service):
         """Test exception handling during analysis."""
@@ -208,13 +208,60 @@ class TestRunFullAnalysis:
         mock_data_fetcher = Mock()
         mock_data_fetcher.fetch_activities = Mock(side_effect=Exception("API Error"))
         analysis_service._data_fetcher = mock_data_fetcher
-        
+
         result = analysis_service.run_full_analysis()
-        
+
         assert result['status'] == 'error'
         assert 'API Error' in result['message']
         assert 'API Error' in result['errors'][0]
         assert result['activities_count'] == 0
+
+    @patch('app.services.analysis_service.LocationFinder')
+    @patch('app.services.analysis_service.LongRideAnalyzer')
+    @patch('app.services.analysis_service.RouteAnalyzer')
+    def test_skip_strava_fetch_reads_activities_key(self, mock_route_analyzer_class,
+                                                    mock_long_ride_analyzer_class,
+                                                    mock_location_finder_class,
+                                                    analysis_service, mock_location):
+        """Cache file uses {timestamp, count, activities:[...]} wrapper — skip_strava_fetch must read the nested list."""
+        home, work = mock_location
+
+        activity_data = {
+            'id': 99, 'name': 'Test Ride', 'type': 'Ride',
+            'distance': 10000.0, 'moving_time': 1800, 'elapsed_time': 1900,
+            'total_elevation_gain': 50.0, 'average_speed': 5.5, 'max_speed': 8.0,
+        }
+        wrapped_json = json.dumps({
+            'timestamp': '2026-06-13T00:00:00',
+            'count': 1,
+            'activities': [activity_data],
+        })
+
+        mock_location_finder_class.return_value.identify_home_work.return_value = (home, work)
+        mock_route_analyzer_class.return_value.analyze_routes.return_value = [Mock(routes=[])]
+        mock_long_ride_analyzer_class.return_value.classify_activities.return_value = ([], [])
+        mock_long_ride_analyzer_class.return_value.group_similar_rides.return_value = []
+
+        mock_path_instance = Mock()
+        mock_path_instance.exists.return_value = True
+
+        with patch('app.services.analysis_service.Path', return_value=mock_path_instance), \
+             patch('builtins.open', mock_open(read_data=wrapped_json)):
+            result = analysis_service.run_full_analysis(skip_strava_fetch=True)
+
+        assert result['status'] == 'success'
+        assert result['activities_count'] == 1
+
+    def test_skip_strava_fetch_missing_cache(self, analysis_service):
+        """skip_strava_fetch with no cache file returns a clear error."""
+        mock_path_instance = Mock()
+        mock_path_instance.exists.return_value = False
+
+        with patch('app.services.analysis_service.Path', return_value=mock_path_instance):
+            result = analysis_service.run_full_analysis(skip_strava_fetch=True)
+
+        assert result['status'] == 'error'
+        assert 'No cached activities' in result['message'] or 'No cached activities' in result['errors'][0]
 
 
 @pytest.mark.unit
@@ -400,7 +447,7 @@ class TestAnalysisServiceIntegration:
         
         # Mock location finder
         mock_location_finder = Mock()
-        mock_location_finder.find_locations = Mock(return_value=(home, work))
+        mock_location_finder.identify_home_work = Mock(return_value=(home, work))
         mock_location_finder_class.return_value = mock_location_finder
         
         mock_route_analyzer = Mock()
@@ -453,7 +500,7 @@ class TestAnalysisServiceIntegration:
         
         # Mock location finder
         mock_location_finder = Mock()
-        mock_location_finder.find_locations = Mock(return_value=(home, work))
+        mock_location_finder.identify_home_work = Mock(return_value=(home, work))
         mock_location_finder_class.return_value = mock_location_finder
         
         # Create mock route group for non-empty result

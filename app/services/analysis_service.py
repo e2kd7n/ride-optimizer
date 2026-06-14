@@ -374,7 +374,9 @@ class AnalysisService:
                     }
                 logger.info("Loading activities from local cache (no Strava auth required)...")
                 with open(cache_path) as f:
-                    self._activities = [Activity.from_dict(a) for a in json.load(f)]
+                    raw = json.load(f)
+                    acts = raw['activities'] if isinstance(raw, dict) else raw
+                    self._activities = [Activity.from_dict(a) for a in acts]
             else:
                 _notify(phase='fetching', fetched=0, label='Connecting to Strava…')
                 logger.info("Fetching activities from Strava...")
