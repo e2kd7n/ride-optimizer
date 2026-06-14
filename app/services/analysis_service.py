@@ -436,15 +436,32 @@ class AnalysisService:
             logger.info(f"Home: {self._home_location.name}, Work: {self._work_location.name}")
 
             # Step 3: Analyze routes
-            _notify(phase='processing', fetched=total,
+            _notify(phase='processing', fetched=total, routes_done=0, routes_total=0,
                     label=f'Grouping {total:,} activities into routes…')
             logger.info("Analyzing and grouping routes...")
+
+            _grouping_start = datetime.now()
+
+            def _route_progress(done, route_total, direction):
+                elapsed = (datetime.now() - _grouping_start).total_seconds()
+                eta = int(elapsed / done * (route_total - done)) if done > 0 else None
+                pct = int(done / route_total * 100) if route_total > 0 else 0
+                _notify(
+                    phase='grouping',
+                    routes_done=done,
+                    routes_total=route_total,
+                    eta_secs=eta,
+                    label=f'Grouping routes… {done}/{route_total} ({pct}%)'
+                    + (f' — {eta // 60}m {eta % 60}s remaining' if eta is not None else ''),
+                )
+
             route_analyzer = RouteAnalyzer(
                 activities=self._activities,
                 home=self._home_location,
                 work=self._work_location,
                 config=self.config,
-                force_reanalysis=force_refresh
+                force_reanalysis=force_refresh,
+                progress_callback=_route_progress,
             )
 
             self._route_groups = route_analyzer.group_similar_routes()
