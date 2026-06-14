@@ -793,33 +793,34 @@
         announce(`Applied ${preset} distance filter`);
     }
 
-    function bindEvents() {
-        const applyButton = byId('apply-filters');
-        if (applyButton) {
-            applyButton.addEventListener('click', () => {
-                state.filteredRoutes = applyClientFilters(state.routes, getFilters());
-                renderRoutes(state.filteredRoutes);
-            });
-        }
+    function applyFilters() {
+        state.filteredRoutes = applyClientFilters(state.routes, getFilters());
+        renderRoutes(state.filteredRoutes);
+    }
 
-        const searchInput = byId('search-query');
-        if (searchInput) {
-            searchInput.addEventListener('keydown', (event) => {
-                if (event.key === 'Enter') {
-                    event.preventDefault();
-                    state.filteredRoutes = applyClientFilters(state.routes, getFilters());
-                    renderRoutes(state.filteredRoutes);
-                }
-            });
-        }
-        
-        // Bind preset filter buttons
+    function bindEvents() {
+        // Auto-apply: dropdowns fire immediately on change
+        ['filter-favorite', 'filter-sport-type', 'filter-difficulty', 'sort-by'].forEach(id => {
+            const el = byId(id);
+            if (el) el.addEventListener('change', applyFilters);
+        });
+
+        // Auto-apply: text/number inputs debounced 300 ms
+        let debounceTimer;
+        const debouncedApply = () => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(applyFilters, 300);
+        };
+        ['search-query', 'filter-min-distance', 'filter-max-distance'].forEach(id => {
+            const el = byId(id);
+            if (el) el.addEventListener('input', debouncedApply);
+        });
+
+        // Preset buttons
         document.querySelectorAll('.preset-filter').forEach(button => {
             button.addEventListener('click', () => {
                 const preset = button.getAttribute('data-preset');
-                if (preset) {
-                    applyPreset(preset);
-                }
+                if (preset) applyPreset(preset);
             });
         });
 
