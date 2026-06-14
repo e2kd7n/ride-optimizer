@@ -598,12 +598,23 @@
         let _cacheEarliestDate = null;
         let _currentFetchPreset = 'latest';
 
+        function updateRunBtnLabel() {
+            const btn = document.getElementById('run-analysis-btn');
+            if (btn.disabled) return;
+            const isFetch = document.querySelector('input[name="analysis-mode"]:checked').value === 'fetch';
+            btn.innerHTML = isFetch
+                ? '<i class="bi bi-cloud-download" aria-hidden="true"></i> Fetch &amp; Analyze'
+                : '<i class="bi bi-play-fill" aria-hidden="true"></i> Run Analysis';
+            btn.onclick = null; // restore default click listener (set via addEventListener)
+        }
+
         function setupFetchModeControls() {
             const dateRange = document.getElementById('fetch-date-range');
             document.querySelectorAll('input[name="analysis-mode"]').forEach(r => {
                 r.addEventListener('change', () => {
                     const isFetch = document.querySelector('input[name="analysis-mode"]:checked').value === 'fetch';
                     dateRange.style.display = isFetch ? '' : 'none';
+                    updateRunBtnLabel();
                 });
             });
 
@@ -853,13 +864,23 @@
                         progressBar.style.animationDuration = '';
                         etaEl.style.display = 'none';
                         btn.disabled = false;
-                        btn.innerHTML = '<i class="bi bi-play-fill" aria-hidden="true"></i> Run Analysis';
+                        updateRunBtnLabel();
                         const r = job.result || {};
                         const acts = (r.activities_count || 0).toLocaleString();
                         const groups = r.route_groups_count || 0;
                         statusEl.textContent = `Done — ${acts} activities, ${groups} route group${groups !== 1 ? 's' : ''}`;
                         if (typeof showToast === 'function') showToast('Analysis complete', 'success');
                         loadCacheInfo();
+                    } else if (job.status === 'stopped') {
+                        clearInterval(poll);
+                        spinnerEl.style.display = 'none';
+                        progressBar.classList.remove('progress-bar-animated');
+                        progressBar.style.animationDuration = '';
+                        etaEl.style.display = 'none';
+                        btn.disabled = false;
+                        updateRunBtnLabel();
+                        statusEl.textContent = 'Analysis stopped.';
+                        if (typeof showToast === 'function') showToast('Analysis stopped', 'info');
                     } else if (job.status === 'error') {
                         clearInterval(poll);
                         spinnerEl.style.display = 'none';
@@ -867,13 +888,27 @@
                         progressBar.classList.replace('bg-success', 'bg-danger');
                         etaEl.style.display = 'none';
                         btn.disabled = false;
-                        btn.innerHTML = '<i class="bi bi-play-fill" aria-hidden="true"></i> Run Analysis';
+                        updateRunBtnLabel();
                         const msg = (job.result || {}).message || 'Unknown error';
                         statusEl.textContent = 'Error: ' + msg;
                         if (typeof showToast === 'function') showToast('Analysis failed: ' + msg, 'error');
+                    } else {
+                        // Still running — show Stop button
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="bi bi-stop-fill" aria-hidden="true"></i> Stop';
+                        btn.onclick = stopAnalysis;
                     }
                 } catch (_) { /* network hiccup — keep polling */ }
             }, 3000);
+        }
+
+        async function stopAnalysis() {
+            const btn = document.getElementById('run-analysis-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Stopping…';
+            try {
+                await window.apiClient.fetch('/analyze/stop', { method: 'POST' });
+            } catch (_) {}
         }
     </script>
 </body>
