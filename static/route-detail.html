@@ -396,7 +396,7 @@
                                     <div class="card">
                                         <div class="card-body">
                                             <h2 class="h5">Map</h2>
-                                            <div id="route-map" style="height: 420px;" aria-label="Interactive route map"></div>
+                                            <div id="route-map" style="height: var(--map-height-standard);" aria-label="Interactive route map"></div>
                                         </div>
                                     </div>
                                 </div>
@@ -414,19 +414,19 @@
                                         <div class="row g-4">
                                             <div class="col-12 col-lg-6">
                                                 <h3 class="h6 text-muted mb-3">Average Speed Over Time</h3>
-                                                <canvas id="speed-chart" style="max-height: 250px;"></canvas>
+                                                <canvas id="speed-chart" style="max-height: var(--chart-height);"></canvas>
                                             </div>
                                             <div class="col-12 col-lg-6">
                                                 <h3 class="h6 text-muted mb-3">Duration Trends</h3>
-                                                <canvas id="duration-chart" style="max-height: 250px;"></canvas>
+                                                <canvas id="duration-chart" style="max-height: var(--chart-height);"></canvas>
                                             </div>
                                             <div class="col-12 col-lg-6">
                                                 <h3 class="h6 text-muted mb-3">Heart Rate (if available)</h3>
-                                                <canvas id="heartrate-chart" style="max-height: 250px;"></canvas>
+                                                <canvas id="heartrate-chart" style="max-height: var(--chart-height);"></canvas>
                                             </div>
                                             <div class="col-12 col-lg-6">
                                                 <h3 class="h6 text-muted mb-3">Power Output (if available)</h3>
-                                                <canvas id="power-chart" style="max-height: 250px;"></canvas>
+                                                <canvas id="power-chart" style="max-height: var(--chart-height);"></canvas>
                                             </div>
                                         </div>
                                     </div>
