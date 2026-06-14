@@ -131,7 +131,7 @@ class RouteAnalyzer:
     
     def __init__(self, activities: List[Activity], home: Location,
                  work: Location, config, n_workers=2, force_reanalysis=False,
-                 progress_callback=None):
+                 progress_callback=None, stop_check=None):
         """
         Initialize route analyzer.
 
@@ -142,7 +142,8 @@ class RouteAnalyzer:
             config: Configuration object
             n_workers: Number of parallel workers for route grouping (1-8)
             force_reanalysis: If True, clear cache and reprocess all routes
-            progress_callback: Optional callable(routes_done, routes_total, direction)
+            progress_callback: Optional callable(routes_done, routes_total, direction, ...)
+            stop_check: Optional callable() → bool; returns True when caller wants early exit
         """
         self.activities = activities
         self.home = home
@@ -150,6 +151,7 @@ class RouteAnalyzer:
         self.config = config
         self.n_workers = max(1, min(8, n_workers))  # Clamp between 1 and 8
         self.progress_callback = progress_callback
+        self.stop_check = stop_check
         self.similarity_threshold = config.get('route_analysis.similarity_threshold', 0.85)
         self.route_namer = RouteNamer(config)
         self.force_reanalysis = force_reanalysis
@@ -1006,11 +1008,14 @@ class RouteAnalyzer:
             groups.append(route_group)
             group_id += 1
 
+            if self.stop_check and self.stop_check():
+                break
+
         groups.sort(key=lambda g: g.frequency, reverse=True)
         return groups
-    
+
     @staticmethod
-    def _group_routes_by_similarity_static(routes: List[Route], direction: str, 
+    def _group_routes_by_similarity_static(routes: List[Route], direction: str,
                                           similarity_threshold: float,
                                           similarity_cache: Dict[str, float]) -> List[RouteGroup]:
         """
