@@ -445,19 +445,26 @@ class AnalysisService:
             logger.info("Analyzing and grouping routes...")
 
             _grouping_start = datetime.now()
+            _eta_smoothed = None
 
             def _route_progress(done, route_total, direction,
                                 comparisons_done=0, comparisons_estimated=0):
+                nonlocal _eta_smoothed
                 elapsed = (datetime.now() - _grouping_start).total_seconds()
                 # Base ETA on comparisons (linear in time) rather than routes
                 # consumed (front-loaded — first pivot is the most expensive).
                 if comparisons_done > 0 and comparisons_estimated > comparisons_done:
-                    eta = int(elapsed / comparisons_done
-                              * (comparisons_estimated - comparisons_done))
+                    raw_eta = elapsed / comparisons_done * (comparisons_estimated - comparisons_done)
                 elif done > 0 and route_total > done:
-                    eta = int(elapsed / done * (route_total - done))
+                    raw_eta = elapsed / done * (route_total - done)
                 else:
-                    eta = None
+                    raw_eta = None
+                if raw_eta is not None:
+                    alpha = 0.15
+                    _eta_smoothed = raw_eta if _eta_smoothed is None else (
+                        alpha * raw_eta + (1 - alpha) * _eta_smoothed
+                    )
+                eta = int(_eta_smoothed) if _eta_smoothed is not None else None
                 pct = int(done / route_total * 100) if route_total > 0 else 0
                 _notify(
                     phase='grouping',

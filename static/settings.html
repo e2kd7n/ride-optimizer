@@ -273,7 +273,6 @@
                                          id="analysis-progress-bar" role="progressbar" style="width:100%"
                                          aria-valuenow="100" aria-valuemin="0" aria-valuemax="100"></div>
                                 </div>
-                                <div id="analysis-eta" class="small text-muted" style="display:none"></div>
                                 <div id="preview-ready-msg" class="small text-success" style="display:none">
                                     <i class="bi bi-check-circle-fill me-1" aria-hidden="true"></i>
                                     Preview ready —
@@ -730,22 +729,15 @@
 
         async function loadCacheInfo() {
             const el = document.getElementById('cache-info');
-            const reanalyzeRadio = document.getElementById('mode-cached');
-            const reanalyzeLabel = reanalyzeRadio.closest('.form-check');
             try {
                 const info = await window.apiClient.getCacheInfo();
                 if (info.status === 'no_cache') {
-                    el.innerHTML = '<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle"></i> No local cache</span> <span class="text-muted small">No activities downloaded yet — use "Fetch new Strava data" to populate.</span>';
-                    reanalyzeRadio.disabled = true;
-                    reanalyzeLabel.classList.add('text-muted');
-                    document.getElementById('mode-fetch').checked = true;
+                    el.innerHTML = '<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle"></i> No local cache</span> <span class="text-muted small">No activities downloaded yet — use "Fetch Activities" to populate.</span>';
                     updateSmartPresetLabels();
                     return;
                 }
                 _cacheEarliestDate = info.date_earliest || null;
                 updateSmartPresetLabels();
-                reanalyzeRadio.disabled = false;
-                reanalyzeLabel.classList.remove('text-muted');
                 const fmt = (iso) => iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : '?';
                 const ageText = info.cache_age_hours < 24
                     ? `${Math.round(info.cache_age_hours)}h ago`
@@ -795,7 +787,6 @@
             const spinnerEl = document.getElementById('analysis-spinner');
             const statusEl = document.getElementById('analysis-status');
             const progressBar = document.getElementById('analysis-progress-bar');
-            const etaEl = document.getElementById('analysis-eta');
             const previewMsg = document.getElementById('preview-ready-msg');
 
             const phaseLabels = {
@@ -822,22 +813,10 @@
                         progressBar.setAttribute('aria-valuenow', pct);
                         progressBar.style.animationDuration = '2s';
 
-                        if (job.eta_secs != null && job.eta_secs > 0) {
-                            const h = Math.floor(job.eta_secs / 3600);
-                            const m = Math.floor((job.eta_secs % 3600) / 60);
-                            const s = job.eta_secs % 60;
-                            etaEl.textContent = h > 0
-                                ? `~${h}h ${m}m remaining`
-                                : m > 0
-                                    ? `~${m}m ${s}s remaining`
-                                    : `~${s}s remaining`;
-                            etaEl.style.display = '';
-                        }
                     } else {
                         // Indeterminate for other phases
                         progressBar.style.width = '100%';
                         progressBar.setAttribute('aria-valuenow', 100);
-                        etaEl.style.display = 'none';
 
                         if (job.phase === 'fetching') {
                             progressBar.style.animationDuration = '0.75s';
@@ -858,7 +837,6 @@
                         progressBar.style.width = '100%';
                         progressBar.classList.remove('progress-bar-animated');
                         progressBar.style.animationDuration = '';
-                        etaEl.style.display = 'none';
                         btn.disabled = false;
                         updateRunBtnLabel();
                         const r = job.result || {};
@@ -872,7 +850,6 @@
                         spinnerEl.style.display = 'none';
                         progressBar.classList.remove('progress-bar-animated');
                         progressBar.style.animationDuration = '';
-                        etaEl.style.display = 'none';
                         btn.disabled = false;
                         updateRunBtnLabel();
                         statusEl.textContent = 'Analysis stopped.';
@@ -882,7 +859,6 @@
                         spinnerEl.style.display = 'none';
                         progressBar.classList.remove('progress-bar-animated');
                         progressBar.classList.replace('bg-success', 'bg-danger');
-                        etaEl.style.display = 'none';
                         btn.disabled = false;
                         updateRunBtnLabel();
                         const msg = (job.result || {}).message || 'Unknown error';
