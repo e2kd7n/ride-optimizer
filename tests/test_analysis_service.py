@@ -143,7 +143,7 @@ class TestRunFullAnalysis:
         
         # Mock route analyzer
         mock_route_analyzer = Mock()
-        mock_route_analyzer.analyze_routes = Mock(return_value=[mock_route_group])
+        mock_route_analyzer.group_similar_routes = Mock(return_value=[mock_route_group])
         mock_route_analyzer_class.return_value = mock_route_analyzer
         
         # Mock long ride analyzer
@@ -238,7 +238,7 @@ class TestRunFullAnalysis:
         })
 
         mock_location_finder_class.return_value.identify_home_work.return_value = (home, work)
-        mock_route_analyzer_class.return_value.analyze_routes.return_value = [Mock(routes=[])]
+        mock_route_analyzer_class.return_value.group_similar_routes.return_value = [Mock(routes=[])]
         mock_long_ride_analyzer_class.return_value.classify_activities.return_value = ([], [])
         mock_long_ride_analyzer_class.return_value.group_similar_rides.return_value = []
 
@@ -451,7 +451,7 @@ class TestAnalysisServiceIntegration:
         mock_location_finder_class.return_value = mock_location_finder
         
         mock_route_analyzer = Mock()
-        mock_route_analyzer.analyze_routes = Mock(return_value=[mock_route_group])
+        mock_route_analyzer.group_similar_routes = Mock(return_value=[mock_route_group])
         mock_route_analyzer_class.return_value = mock_route_analyzer
         
         mock_long_ride_analyzer = Mock()
@@ -508,7 +508,7 @@ class TestAnalysisServiceIntegration:
         mock_route_group.routes = []
         
         mock_route_analyzer = Mock()
-        mock_route_analyzer.analyze_routes = Mock(return_value=[mock_route_group])
+        mock_route_analyzer.group_similar_routes = Mock(return_value=[mock_route_group])
         mock_route_analyzer_class.return_value = mock_route_analyzer
         
         mock_long_ride_analyzer = Mock()
