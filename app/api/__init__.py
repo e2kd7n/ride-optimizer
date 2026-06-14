@@ -1,6 +1,5 @@
 """API package for map-related endpoints."""
 
-from app.api import map_api, maps_api
+from app.api import maps_api
 
-__all__ = ['map_api', 'maps_api']
-
+__all__ = ['maps_api']
