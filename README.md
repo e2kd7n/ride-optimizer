@@ -6,13 +6,12 @@ A web-based Python application that analyzes your Strava cycling activities to d
 
 ## Architecture
 
-This application uses a **Smart Static architecture**:
-- **Static HTML pages** (`static/*.html`) with client-side JavaScript
-- **Minimal Flask API** (`launch.py`) providing JSON endpoints
+- **Flask backend** (`launch.py` + `app/`) providing API endpoints and server-side rendered pages
 - **Service layer** (`app/services/`) for business logic
-- **No server-side templates** - all rendering happens in the browser
+- **Static HTML pages** (`static/*.html`) with client-side JavaScript for lightweight views
+- **Core analysis engine** (`src/`) for route similarity, caching, and Strava data fetching
 
-This design is optimized for single-user deployment on Raspberry Pi with minimal resource usage.
+Designed for single-user deployment on Raspberry Pi with minimal resource usage.
 
 ## 🔒 Security & Privacy
 
@@ -32,7 +31,7 @@ If you encounter this project hosted elsewhere without proper attribution or wit
 - 🌤️ **Real-Time Weather Analysis**: Considers wind speed and direction for optimal route selection
 - 🎯 **Personalized Recommendations**: Suggests optimal routes based on your preferences and current conditions
 
-### Long Rides Analysis (NEW in v0.9.0)
+### Long Rides Analysis
 - 🚵 **Comprehensive Statistics**: View total rides, average distance, longest ride, elevation gain, and more
 - 🏆 **Top 10 Longest Rides**: Table with Strava links showing your most epic adventures
 - 📅 **Monthly Breakdown**: Chart showing ride count and distance trends over time
@@ -49,7 +48,7 @@ If you encounter this project hosted elsewhere without proper attribution or wit
 - [Long Rides API Documentation](docs/api/LONG_RIDES_API.md) - Developer API reference
 
 ### General Features
-- 🗺️ **Interactive Maps**: Generates beautiful HTML reports with interactive route visualizations
+- 🗺️ **Interactive Maps**: Route visualizations on every page
 - ⚡ **Smart Caching**: Minimizes API calls by caching activity data locally
 - 📱 **Mobile Responsive**: Works seamlessly on desktop, tablet, and mobile devices
 
@@ -59,7 +58,7 @@ If you encounter this project hosted elsewhere without proper attribution or wit
 2. **Identifies Locations**: Uses clustering algorithms to find your home and work locations
 3. **Analyzes Routes**: Groups similar routes and calculates detailed metrics
 4. **Optimizes Selection**: Scores routes based on time, distance, and safety factors
-5. **Generates Report**: Creates an interactive HTML report with maps and recommendations
+5. **Serves the Dashboard**: Displays results and recommendations in the web interface
 
 ## Prerequisites
 
@@ -85,6 +84,7 @@ pip --version
 ```
 
 If Python is not installed, download it from [python.org](https://www.python.org/downloads/) and follow the installation instructions for your operating system.
+
 ## Cross-Platform Support
 
 This application works on **Windows, macOS, and Linux** (including Raspberry Pi).
@@ -95,10 +95,6 @@ This application works on **Windows, macOS, and Linux** (including Raspberry Pi)
 - Use Python wrappers for testing: `python scripts/run_tests.py`
 - For scheduled tasks, use: `python scripts/setup_windows_tasks.py --install`
 - Some shell scripts require Git Bash or WSL (see [Cross-Platform Guide](docs/CROSS_PLATFORM_COMPATIBILITY.md))
-
-**macOS Users:**
-- Shell scripts work natively
-- WeasyPrint requires Homebrew: `brew install weasyprint`
 
 **Linux/Raspberry Pi Users:**
 - All features fully supported
@@ -160,7 +156,6 @@ pip install -r requirements.txt
 
 This will install all necessary Python packages including:
 - `stravalib` - Strava API client
-- `folium` - Interactive maps
 - `pandas` - Data analysis
 - `scikit-learn` - Machine learning algorithms
 - `geopy` - Geocoding
@@ -172,7 +167,7 @@ This will install all necessary Python packages including:
   ```bash
   # macOS (using Homebrew)
   brew install python3
-  
+
   # Ubuntu/Debian
   sudo apt-get update
   sudo apt-get install python3 python3-pip python3-venv
@@ -218,7 +213,7 @@ python launch.py
 ```
 
 This will:
-- Start the Flask API server on port 8083
+- Start the Flask server on port 8083
 - Automatically open your browser to http://localhost:8083
 - Display the interactive dashboard
 
@@ -254,53 +249,58 @@ Open `output/reports/commute_analysis.html` in your browser.
 
 ### Web Application
 
-The web application provides four main pages:
+The web application provides the following pages:
 
-1. **Dashboard** (`/` or `/dashboard.html`)
+1. **Dashboard** (`/`)
    - Overview of all routes and statistics
    - Current weather conditions
    - Next commute recommendation
    - Interactive map with route visualization
 
-2. **Commute** (`/commute.html`)
+2. **Commute** (`/commute`)
    - Next commute recommendations (to work / to home)
    - Weather-aware route selection
    - Workout-fit integration (TrainerRoad)
    - Alternative route comparisons
-   - Interactive map with route overlays
 
-3. **Planner** (`/planner.html`)
+3. **Planner** (`/planner`)
    - Long ride planning with 7-day forecast
    - Route suggestions based on weather
-   - Calendar view of planned rides
-   - Distance and elevation profiles
 
-4. **Routes** (`/routes.html`)
+4. **Routes** (`/routes`)
    - Browse all routes (commute and long rides)
    - Search and filter functionality
    - Route details and statistics
-   - Favorite routes management
+
+5. **Additional pages**: Compare routes (`/compare`), route detail (`/route-detail`), settings (`/settings`), and first-time setup (`/setup`)
 
 ### API Endpoints
 
-The web application exposes JSON API endpoints for client-side rendering:
+The application exposes JSON API endpoints:
 
 ```
-GET /api/weather          - Current weather data
-GET /api/recommendation   - Next commute recommendation
-GET /api/routes           - All routes for library
-GET /api/status           - System health and data freshness
-GET /api/maps/<page_type> - Map data for client-side rendering
+GET  /api/weather                  - Current weather data
+GET  /api/weather/forecast         - 7-day forecast
+GET  /api/recommendation           - Next commute recommendation
+GET  /api/commute                  - Commute route data
+GET  /api/routes                   - All routes for library
+GET  /api/routes/search            - Route search
+GET  /api/routes/<route_id>        - Single route detail
+GET  /api/status                   - System health and data freshness
+POST /api/analyze                  - Trigger route analysis
+GET  /api/analyze/status           - Analysis progress
+POST /api/fetch                    - Trigger Strava sync
+GET  /api/fetch/status             - Sync progress
 ```
 
-See `launch.py` for complete API documentation.
+See `launch.py` for the complete API.
 
 ### CLI Usage
 
 ### Performance Options
 
-**Parallel Processing** (New!)
-The analyzer now supports parallel processing for faster route grouping:
+**Parallel Processing**
+The analyzer supports parallel processing for faster route grouping:
 
 ```bash
 # Use default 2 workers
@@ -336,7 +336,7 @@ python main.py --fetch --analyze
 
 ### Data Fetching Options
 
-The `--fetch` command now supports flexible data retrieval with automatic cache merging:
+The `--fetch` command supports flexible data retrieval with automatic cache merging:
 
 ```bash
 # Fetch most recent 100 activities
@@ -394,18 +394,6 @@ python main.py --analyze --output ~/Desktop/reports
 python main.py --fetch --from-date 2023-01-01 --analyze --output ./my_reports
 ```
 
-### 📱 Mobile Usage
-
-The generated HTML report is mobile-friendly! You can transfer it to your phone and view it there. Weather data will update automatically when you have an internet connection.
-
-**See [MOBILE_USAGE_GUIDE.md](docs/guides/MOBILE_USAGE_GUIDE.md) for detailed instructions on:**
-- How to transfer the report to your phone (AirDrop, email, cloud storage, USB)
-- Opening and viewing on iPhone or Android
-- What features work offline vs. require internet
-- Troubleshooting tips
-
-```
-
 ## Configuration
 
 Edit `config/config.yaml` to customize the analysis:
@@ -456,35 +444,38 @@ route_filtering:
   exclude_virtual: true
 ```
 
-## Understanding the Report
+## Project Structure
 
-### Executive Summary
-- **Recommended Route**: The optimal route based on your criteria
-- **Key Statistics**: Quick comparison of time and distance savings
-
-### Route Comparison Table
-- Lists all identified route variants
-- Shows metrics: distance, duration, speed, elevation, frequency
-- Displays composite scores for easy comparison
-
-### Interactive Map
-- **Red Route**: Optimal recommended route
-- **Colored Routes**: Alternative route variants
-- **Green Marker**: Home location
-- **Blue Marker**: Work location
-- **Heatmap**: Shows most frequently used paths
-- Click routes for detailed statistics
-
-### Detailed Analytics
-- Time-of-day patterns
-- Speed consistency analysis
-- Elevation profiles
-- Usage frequency trends
-
-### Recommendations
-- Primary route suggestion with rationale
-- Alternative routes for variety
-- Weather and traffic considerations
+```
+ride-optimizer/
+├── src/                      # Core analysis engine
+│   ├── auth_secure.py        # Strava authentication
+│   ├── data_fetcher.py       # Activity data retrieval
+│   ├── location_finder.py    # Home/work identification
+│   ├── route_analyzer.py     # Route analysis (Fréchet distance)
+│   ├── optimizer.py          # Route scoring
+│   ├── visualizer.py         # Map generation
+│   └── report_generator.py   # HTML report creation (CLI)
+├── app/                      # Flask application
+│   ├── routes/               # Blueprint routes (server-side rendered)
+│   ├── services/             # Business logic services
+│   ├── models/               # SQLAlchemy models
+│   └── scheduler/            # APScheduler background jobs
+├── static/                   # Static HTML pages + JS/CSS
+├── config/
+│   ├── config.yaml           # User configuration
+│   └── credentials.json      # API tokens (auto-generated)
+├── data/
+│   └── cache/                # Cached activity data
+├── cron/                     # Scheduled task scripts
+├── scripts/                  # Utility and setup scripts
+├── docs/                     # Documentation
+├── output/
+│   └── reports/              # Generated CLI reports
+├── launch.py                 # Flask server entry point
+├── main.py                   # CLI tool (deprecated for new features)
+└── requirements.txt
+```
 
 ## Troubleshooting
 
@@ -534,31 +525,25 @@ route_filtering:
 - Obtain valid credentials from https://www.strava.com/settings/api
 - Do not use placeholder values - you must use your actual Strava API credentials
 
-## Project Structure
+## Algorithm
 
-```
-commute/
-├── src/                      # Source code
-│   ├── auth.py              # Strava authentication
-│   ├── data_fetcher.py      # Activity data retrieval
-│   ├── location_finder.py   # Home/work identification
-│   ├── route_analyzer.py    # Route analysis
-│   ├── optimizer.py         # Route optimization
-│   ├── visualizer.py        # Map generation
-│   └── report_generator.py  # HTML report creation
-├── config/
-│   ├── config.yaml          # User configuration
-│   └── credentials.json     # API tokens (auto-generated)
-├── data/
-│   └── cache/               # Cached activity data
-├── output/
-│   └── reports/             # Generated reports
-├── tests/                   # Unit tests
-├── .env                     # Environment variables
-├── requirements.txt         # Python dependencies
-├── main.py                  # Entry point
-└── README.md               # This file
-```
+### Route Matching
+
+The system uses an advanced **Fréchet distance** algorithm for route similarity matching:
+
+**Key Features:**
+- **Path-aware matching**: Considers the order of GPS points (like walking a dog on a leash)
+- **Robust to GPS sampling**: Handles ~76m average spacing between GPS points
+- **Dual validation**: Uses Hausdorff distance as secondary check for spatial proximity
+- **Proven accuracy**: Validated on 9,251 route pairs with 100% agreement
+
+**Technical Details:**
+- Primary metric: Fréchet distance (300m threshold)
+- Secondary validation: Hausdorff distance (0.50 threshold)
+- Grouping threshold: 0.70 similarity score (configurable)
+- Library: `similaritymeasures` package
+
+See [SIMILARITY_ALGORITHM_CHANGE.md](archive/completed_analysis/SIMILARITY_ALGORITHM_CHANGE.md) for complete technical documentation.
 
 ## Data Privacy & Security
 
@@ -567,11 +552,6 @@ commute/
 - No data is sent to any third-party services
 - The application validates Strava API credentials at startup to prevent unauthorized use
 - Add `.env` and `config/credentials.json` to `.gitignore` if using version control
-
-**Security Features:**
-- Mandatory credential validation before any operations
-- Application exits immediately if credentials are missing or invalid
-- Protects against unauthorized redistribution and use
 
 ## Advanced Features
 
@@ -601,43 +581,10 @@ df = pd.DataFrame([vars(a) for a in activities])
 df.to_csv('my_activities.csv')
 ```
 
-### Batch Analysis
-
-Analyze multiple time periods:
-
-```bash
-# Analyze last 3 months
-python main.py --analyze --months 3
-
-# Analyze specific date range
-python main.py --analyze --start 2024-01-01 --end 2024-03-31
-```
-
-## Algorithm Improvements
-
-### Route Matching (March 2026)
-
-The system uses an advanced **Fréchet distance** algorithm for route similarity matching:
-
-**Key Features:**
-- **Path-aware matching**: Considers the order of GPS points (like walking a dog on a leash)
-- **Robust to GPS sampling**: Handles ~76m average spacing between GPS points
-- **Dual validation**: Uses Hausdorff distance as secondary check for spatial proximity
-- **Proven accuracy**: Validated on 9,251 route pairs with 100% agreement
-
-**Technical Details:**
-- Primary metric: Fréchet distance (300m threshold)
-- Secondary validation: Hausdorff distance (0.50 threshold)
-- Grouping threshold: 0.70 similarity score (configurable)
-- Library: `similaritymeasures` package
-
-See [SIMILARITY_ALGORITHM_CHANGE.md](archive/completed_analysis/SIMILARITY_ALGORITHM_CHANGE.md) for complete technical documentation.
-
 ## Contributing
 
 Contributions are welcome! Areas for improvement:
 
-- Weather data integration
 - Traffic pattern analysis
 - Mobile app version
 - Additional visualization options
@@ -654,72 +601,6 @@ A: Yes! Modify the location detection to identify any two frequent locations.
 **Q: Does this work with running activities?**
 A: The code is optimized for cycling, but can be adapted for running by changing activity types in config.
 
-**Q: How often should I re-run the analysis?**
-A: Run monthly or after accumulating 10+ new commute activities.
-
-**Q: Can I compare different time periods?**
-A: Yes, use the `--start` and `--end` flags to analyze specific date ranges.
-
-## Version History
-
-### v0.9.0 (2026-03-30)
-**Long Rides Feature & Polish**
-
-- 🚵 **NEW: Long Rides Analysis** - Comprehensive analysis of non-commute rides
-  - Statistics dashboard with total rides, average distance, longest ride, elevation gain
-  - Top 10 longest rides table with Strava links
-  - Monthly breakdown chart showing ride count and distance trends
-  - Interactive map visualizing all long rides (>15km) with color-coded routes
-  - Route filtering (loops vs. point-to-point)
-  - Detailed metrics for each ride (speed, elevation, duration, route type)
-- 📱 **Mobile Optimizations** - Enhanced mobile performance
-  - Lazy loading for maps and charts
-  - Canvas renderer for mobile maps
-  - Coordinate simplification on mobile devices
-  - Reduced animations and hover effects on touch devices
-- ✅ **Form Validation** - Real-time validation with visual feedback
-  - Bootstrap validation classes with colored borders
-  - Range validation for distance and time inputs
-  - Invalid/valid feedback messages
-- 🎨 **Animation Performance** - GPU-accelerated animations
-  - Smooth fade-in, slide-in, and scale-in animations
-  - Automatic cleanup of will-change hints
-  - Reduced motion support for accessibility
-  - Performance monitoring and adaptive animations
-- 📚 **Documentation** - Enhanced setup instructions for new users
-  - Detailed Python installation verification
-  - Step-by-step virtual environment setup
-  - Troubleshooting for common installation issues
-  - Platform-specific instructions (macOS/Linux/Windows)
-
-### v0.8.0 (2026-03-27)
-**Segment-Based Route Naming & Security Enhancements**
-
-- ✨ **NEW: Intelligent Route Naming** - Routes now show complete journey context
-  - Segment-based naming: "Start St → Main St → End St"
-  - Increased sampling density from 5 to 10 points
-  - Automatic segment identification and classification
-  - Configurable via `route_naming` section in config.yaml
-- 🔒 **Security: SHA256 Migration** - Replaced MD5 with SHA256 for all cache keys
-- 🛡️ **Code Quality: Exception Handling** - All bare `except:` statements replaced with specific exception types
-- 📚 **Documentation: Technical Spec Updates** - Comprehensive updates to reflect new implementations
-- ✅ **Testing: 100% Pass Rate** - All 43 tests passing
-
-### v0.7.0 (2026-03-27)
-**Test Infrastructure & Cache Separation**
-
-- ✅ Test suite remediation (43/43 tests passing)
-- 🔧 Separated test and production cache files
-- 📝 Comprehensive test documentation
-
-### v0.6.0 (2026-03-26)
-**Performance & Route Naming Improvements**
-
-- ⚡ Code cleanup and performance optimization
-- 🏷️ Improved route naming mechanism
-- 🗺️ Optimal route map preview at top of page
-- 💾 Fréchet distance caching
-
 ## Documentation
 
 ### 📚 Complete Documentation
@@ -729,13 +610,10 @@ All project documentation is organized in the [`docs/`](docs/) directory:
 - **[Documentation Index](docs/README.md)** - Complete documentation overview
 - **[User Guides](docs/guides/)** - Setup and feature guides
   - [Authentication Guide](docs/guides/AUTHENTICATION_GUIDE.md)
-  - [Mobile Usage Guide](docs/guides/MOBILE_USAGE_GUIDE.md)
   - [Weather Guide](docs/guides/WEATHER_GUIDE.md)
   - [Parallelism Guide](docs/guides/PARALLELISM_GUIDE.md)
   - [Implementation Guide](docs/guides/IMPLEMENTATION_GUIDE.md)
-- **[Release Notes](docs/releases/)** - Version history and changelogs
-  - [All Releases](docs/releases/HISTORICAL_RELEASES.md)
-  - [Time Tracking](docs/releases/TIME_TRACKING.md)
+- **[Release Notes](docs/releases/HISTORICAL_RELEASES.md)** - Version history and changelogs
 - **[Technical Specification](docs/TECHNICAL_SPEC.md)** - Complete technical details
 - **[Future TODOs](docs/FUTURE_TODOS.md)** - Planned features and improvements
 
@@ -763,7 +641,6 @@ For issues or questions:
 ## Acknowledgments
 
 - Built with [stravalib](https://github.com/stravalib/stravalib)
-- Maps powered by [Folium](https://python-visualization.github.io/folium/)
 - Inspired by the cycling community's love for data and optimization
 
 ---
