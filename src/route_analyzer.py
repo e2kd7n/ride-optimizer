@@ -81,10 +81,11 @@ class RouteAnalyzer:
     """Analyzes and groups routes between home and work."""
     
     def __init__(self, activities: List[Activity], home: Location,
-                 work: Location, config, n_workers=2, force_reanalysis=False):
+                 work: Location, config, n_workers=2, force_reanalysis=False,
+                 progress_callback=None):
         """
         Initialize route analyzer.
-        
+
         Args:
             activities: List of Activity objects
             home: Home location
@@ -92,12 +93,14 @@ class RouteAnalyzer:
             config: Configuration object
             n_workers: Number of parallel workers for route grouping (1-8)
             force_reanalysis: If True, clear cache and reprocess all routes
+            progress_callback: Optional callable(routes_done, routes_total, direction)
         """
         self.activities = activities
         self.home = home
         self.work = work
         self.config = config
         self.n_workers = max(1, min(8, n_workers))  # Clamp between 1 and 8
+        self.progress_callback = progress_callback
         self.similarity_threshold = config.get('route_analysis.similarity_threshold', 0.85)
         self.route_namer = RouteNamer(config)
         self.force_reanalysis = force_reanalysis
@@ -622,15 +625,19 @@ class RouteAnalyzer:
         # Sequential processing (parallel removed - adds overhead without benefit)
         groups = []
         
+        grand_total = len(home_to_work) + len(work_to_home)
+
         if home_to_work:
             tqdm.write(f"   → Processing {len(home_to_work)} home→work routes")
-            htw_groups = self._group_routes_by_similarity(home_to_work, 'home_to_work')
+            htw_groups = self._group_routes_by_similarity(
+                home_to_work, 'home_to_work', offset=0, total=grand_total)
             groups.extend(htw_groups)
             tqdm.write(f"   ✓ {len(htw_groups)} groups")
-        
+
         if work_to_home:
             tqdm.write(f"   → Processing {len(work_to_home)} work→home routes")
-            wth_groups = self._group_routes_by_similarity(work_to_home, 'work_to_home')
+            wth_groups = self._group_routes_by_similarity(
+                work_to_home, 'work_to_home', offset=len(home_to_work), total=grand_total)
             groups.extend(wth_groups)
             tqdm.write(f"   ✓ {len(wth_groups)} groups")
         
@@ -821,37 +828,49 @@ class RouteAnalyzer:
         
         return groups
     
-    def _group_routes_by_similarity(self, routes: List[Route], direction: str) -> List[RouteGroup]:
+    def _group_routes_by_similarity(self, routes: List[Route], direction: str,
+                                    offset: int = 0, total: int = 0) -> List[RouteGroup]:
         """
         Group routes by similarity using threshold-based clustering.
         Route naming is deferred to background thread for performance.
-        
+
         Args:
             routes: List of routes
             direction: Route direction
-            
+            offset: Number of routes already processed (for cross-direction progress)
+            total: Grand total of routes being processed (for percentage)
+
         Returns:
             List of RouteGroup objects (with temporary names)
         """
         # Get debug logger
         debug_logger = logging.getLogger('debug')
-        
+
         if not routes:
             return []
-        
+
         debug_logger.info(f"Starting similarity grouping for {len(routes)} {direction} routes")
         debug_logger.info(f"Similarity threshold: {self.similarity_threshold}")
-        
+
         groups = []
         ungrouped = routes.copy()
         group_id = 0
         total_comparisons = 0
-        
+        routes_consumed = 0
+        grand_total = total or len(routes)
+
         while ungrouped:
             # Start new group with first ungrouped route
             current = ungrouped.pop(0)
             group = [current]
-            
+            routes_consumed += 1
+
+            if self.progress_callback:
+                try:
+                    self.progress_callback(offset + routes_consumed, grand_total, direction)
+                except Exception:
+                    pass
+
             debug_logger.debug(f"Group {group_id}: Starting with route {current.activity_id}, {len(ungrouped)} routes remaining")
             
             # Find similar routes
