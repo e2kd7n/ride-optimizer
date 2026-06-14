@@ -28,27 +28,27 @@
         }
         .route-map-small {
             height: 200px;
-            border-radius: 0.5rem;
-            margin-bottom: 1rem;
+            border-radius: 8px;
+            margin-bottom: var(--space-3);
         }
         .metric-highlight {
-            font-size: 1.5rem;
+            font-size: var(--font-size-lg);
             font-weight: 700;
             color: var(--primary-color);
         }
         .winner-badge {
             background-color: #28a745;
             color: white;
-            padding: 0.25rem 0.5rem;
-            border-radius: 0.25rem;
-            font-size: 0.75rem;
+            padding: var(--space-1) var(--space-2);
+            border-radius: 4px;
+            font-size: var(--font-size-xs);
             font-weight: 600;
         }
     </style>
 </head>
 <body>
     <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+    <nav class="navbar navbar-expand-lg navbar-dark navbar-gradient">
         <div class="container">
             <a class="navbar-brand" href="/">
                 <i class="bi bi-bicycle"></i> Ride Optimizer
@@ -67,7 +67,7 @@
     </nav>
 
     <!-- Main Content -->
-    <main class="container mt-4">
+    <main id="main-content" class="container mt-4">
         <div class="row mb-3">
             <div class="col-12">
                 <a href="/routes.html" class="btn btn-outline-secondary">

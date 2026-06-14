@@ -11,11 +11,11 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         #route-map {
-            min-height: 280px;
-            border-radius: 0.5rem;
+            height: var(--map-height-standard);
+            border-radius: 8px;
         }
         @media (max-width: 991.98px) {
-            #route-map { height: 280px !important; }
+            #route-map { height: 320px; }
         }
         .metric-card {
             height: 100%;
@@ -23,16 +23,16 @@
         .detail-chip {
             display: inline-flex;
             align-items: center;
-            gap: 0.35rem;
-            padding: 0.35rem 0.65rem;
+            gap: var(--space-1);
+            padding: var(--space-1) var(--space-2);
             border-radius: 999px;
             background: #f8f9fa;
-            margin: 0 0.5rem 0.5rem 0;
+            margin: 0 var(--space-2) var(--space-2) 0;
         }
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+    <nav class="navbar navbar-expand-lg navbar-dark navbar-gradient">
         <div class="container">
             <a class="navbar-brand" href="/">
                 <i class="bi bi-bicycle"></i> Ride Optimizer
@@ -50,7 +50,7 @@
         </div>
     </nav>
 
-    <main class="container mt-4">
+    <main id="main-content" class="container mt-4">
         <div class="row mb-3">
             <div class="col-12">
                 <a href="/routes.html" class="btn btn-outline-secondary">
