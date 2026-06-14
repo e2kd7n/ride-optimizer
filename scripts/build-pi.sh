@@ -1,8 +1,40 @@
 #!/bin/bash
 # Raspberry Pi optimized build script for Podman
 # Addresses common ARM architecture and rootless networking issues
+#
+# ============================================================================
+# LAST-RESORT ONLY — DO NOT USE FOR NORMAL DEPLOYMENTS
+# ============================================================================
+# CI/CD (GitHub Actions) builds multi-arch images (amd64 + arm64) and pushes
+# them to ghcr.io/e2kd7n/ride-optimizer:latest.  Building locally on the Pi:
+#   - takes 15–30 minutes and pins one CPU core
+#   - produces an arm64-only local image tagged "ride-optimizer:latest"
+#   - WILL be silently overwritten by the next pi-auto-update.sh run
+#
+# Normal deploy workflow:
+#   git push  →  CI builds  →  ./scripts/pi-auto-update.sh [--force]
+#
+# Use this script ONLY when GHCR is unreachable or CI is broken and you need
+# an immediate local fix.  Remember to re-pull from GHCR once CI is restored.
+# ============================================================================
 
 set -e
+
+echo ""
+echo "========================================================================"
+echo " WARNING: local Pi build — bypasses CI/CD and GHCR."
+echo " This image will be overwritten by the next auto-update run."
+echo ""
+echo " Preferred workflow:"
+echo "   git push  ->  CI builds  ->  ./scripts/pi-auto-update.sh --force"
+echo "========================================================================"
+echo ""
+read -p "Build locally instead of pulling from GHCR? (y/N) " -n 1 -r
+echo
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo "Aborted.  Run: ./scripts/pi-auto-update.sh --force"
+    exit 1
+fi
 
 echo "🍓 Raspberry Pi Podman Build Script"
 echo "===================================="
