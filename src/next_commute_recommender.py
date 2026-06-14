@@ -33,6 +33,10 @@ class CommuteRecommendation:
     window_start: time
     window_end: time
 
+    @property
+    def duration_minutes(self) -> float:
+        return self.route_group.representative_route.duration / 60
+
 
 class NextCommuteRecommender:
     """Generates time-aware recommendations for next commutes."""
@@ -337,6 +341,60 @@ class NextCommuteRecommender:
         
         return (composite, breakdown)
     
+    def get_all_recommendations(self, direction: str,
+                               current_time: Optional[datetime] = None) -> List['CommuteRecommendation']:
+        """
+        Return all route options for a direction, ranked by score.
+
+        Args:
+            direction: "to_work" or "to_home"
+            current_time: Datetime used to fetch the forecast window (defaults to now)
+
+        Returns:
+            List of CommuteRecommendation sorted by score descending
+        """
+        if current_time is None:
+            current_time = datetime.now()
+
+        direction_key = "home_to_work" if direction == "to_work" else "work_to_home"
+        direction_routes = [g for g in self.route_groups if g.direction == direction_key]
+
+        if not direction_routes:
+            logger.warning(f"No routes found for direction: {direction_key}")
+            return []
+
+        window_start = self.morning_window_start if direction == "to_work" else self.evening_window_start
+        window_end = self.morning_window_end if direction == "to_work" else self.evening_window_end
+
+        mid_lat = (self.home_location[0] + self.work_location[0]) / 2
+        mid_lon = (self.home_location[1] + self.work_location[1]) / 2
+        forecast_weather = self.get_forecast_weather_for_window(
+            mid_lat, mid_lon, current_time, window_start, window_end
+        )
+
+        time_window = f"Today {window_start.strftime('%I:%M %p').lstrip('0')}-{window_end.strftime('%I:%M %p').lstrip('0')}"
+
+        scored = []
+        for route_group in direction_routes:
+            score, breakdown = self.calculate_route_score_with_forecast(route_group, forecast_weather)
+            scored.append((route_group, score, breakdown))
+        scored.sort(key=lambda x: x[1], reverse=True)
+
+        return [
+            CommuteRecommendation(
+                direction=direction,
+                time_window=time_window,
+                route_group=rg,
+                score=score,
+                breakdown=breakdown,
+                forecast_weather=forecast_weather,
+                is_today=True,
+                window_start=window_start,
+                window_end=window_end,
+            )
+            for rg, score, breakdown in scored
+        ]
+
     def get_next_commute_recommendations(self, current_time: Optional[datetime] = None) -> Dict[str, CommuteRecommendation]:
         """
         Get time-aware recommendations for next commutes.
