@@ -10,113 +10,106 @@
     <link rel="stylesheet" href="/css/main.css">
     <style>
         #routes-map {
-            height: var(--map-height-standard);
-            min-height: 320px;
-            border-radius: 8px;
-            transition: height 0.3s ease;
-        }
-        #routes-map.expanded {
             height: var(--map-height-large);
+            min-height: 400px;
+            border-radius: 0 0 8px 8px;
+        }
+
+        /* Force single-column cards inside the scrollable list panel */
+        #routes-container .row > [class*="col-"] {
+            flex: 0 0 100%;
+            max-width: 100%;
+        }
+
+        .route-list-scroll {
+            height: var(--map-height-large);
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        /* Map panel stays visible while the route list scrolls */
+        .map-panel-sticky {
+            position: sticky;
+            top: 72px;
+        }
+
+        #results-summary {
+            padding: var(--space-1) var(--space-2);
+            margin-bottom: var(--space-2);
+            font-size: var(--font-size-sm);
         }
     </style>
 </head>
 <body>
-    <!-- Skip Links for Accessibility -->
     <a href="#main-content" class="skip-link">Skip to main content</a>
 
-    <!-- Navigation -->
     <nav class="navbar navbar-expand-lg navbar-dark navbar-gradient">
         <div class="container">
-            <a class="navbar-brand" href="/">
-                <i class="bi bi-bicycle"></i> Ride Optimizer
-            </a>
+            <a class="navbar-brand" href="/"><i class="bi bi-bicycle"></i> Ride Optimizer</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav">
-                    <li class="nav-item">
-                        <a class="nav-link" href="/">
-                            <i class="bi bi-house-door"></i> Home
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link active" href="/routes.html">
-                            <i class="bi bi-map"></i> Routes
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/settings.html">
-                            <i class="bi bi-gear"></i> Settings
-                        </a>
-                    </li>
+                    <li class="nav-item"><a class="nav-link" href="/"><i class="bi bi-house-door"></i> Home</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/commute.html"><i class="bi bi-signpost-2"></i> Commute</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="/routes.html" aria-current="page"><i class="bi bi-map"></i> Routes</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/settings.html"><i class="bi bi-gear"></i> Settings</a></li>
                 </ul>
             </div>
         </div>
     </nav>
 
-    <!-- Main Content -->
-    <main id="main-content" class="container mt-4" role="main">
-        <div class="row mb-4">
-            <div class="col-12">
-                <h2>
-                    <i class="bi bi-map"></i> Route Library
-                </h2>
-                <p class="text-muted">Browse and manage your cycling routes</p>
-            </div>
+    <main id="main-content" class="container mt-4 mb-5" role="main">
+        <div class="d-flex align-items-center mb-3">
+            <h2 class="mb-0"><i class="bi bi-map" aria-hidden="true"></i> Route Library</h2>
         </div>
 
-        <!-- Filters Section -->
-        <div class="filters-section">
-            <h5 class="mb-3">
-                <i class="bi bi-funnel"></i> Filters
-            </h5>
-            
-            <!-- Quick Preset Buttons (Mobile-First) -->
-            <div class="mb-3">
-                <div class="d-flex flex-wrap gap-2" role="group" aria-label="Quick distance filters">
-                    <button type="button" class="btn btn-outline-primary btn-sm preset-filter" data-preset="short">
-                        <i class="bi bi-lightning"></i> Short (<10mi)
-                    </button>
-                    <button type="button" class="btn btn-outline-primary btn-sm preset-filter" data-preset="medium">
-                        <i class="bi bi-bicycle"></i> Medium (10-20mi)
-                    </button>
-                    <button type="button" class="btn btn-outline-primary btn-sm preset-filter" data-preset="long">
-                        <i class="bi bi-signpost-2"></i> Long (>20mi)
-                    </button>
-                    <button type="button" class="btn btn-outline-secondary btn-sm preset-filter" data-preset="all">
-                        <i class="bi bi-x-circle"></i> Clear
-                    </button>
+        <!-- Compact filter card: all controls visible above the fold -->
+        <div class="card mb-3">
+            <div class="card-body py-2 px-3">
+                <!-- Row 1: Quick presets + search -->
+                <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                    <div class="d-flex gap-1 flex-shrink-0" role="group" aria-label="Quick distance filters">
+                        <button type="button" class="btn btn-sm btn-outline-secondary preset-filter active" data-preset="all">All</button>
+                        <button type="button" class="btn btn-sm btn-outline-primary preset-filter" data-preset="short">
+                            <i class="bi bi-lightning" aria-hidden="true"></i> Short
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-primary preset-filter" data-preset="medium">
+                            <i class="bi bi-bicycle" aria-hidden="true"></i> Medium
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-primary preset-filter" data-preset="long">
+                            <i class="bi bi-signpost-2" aria-hidden="true"></i> Long
+                        </button>
+                    </div>
+                    <div class="flex-grow-1" style="min-width: 160px; max-width: 320px;">
+                        <input type="text" id="search-query" class="form-control form-control-sm"
+                               placeholder="Search routes…" aria-label="Search routes">
+                    </div>
                 </div>
-            </div>
-
-            <div class="row">
-                <div class="col-md-3">
-                    <div class="filter-group">
-                        <label for="filter-favorite">Favorites</label>
-                        <select id="filter-favorite" class="form-select">
+                <!-- Row 2: Dropdown filters + sort -->
+                <div class="d-flex flex-wrap gap-2 align-items-end">
+                    <div style="min-width: 112px;">
+                        <label for="filter-favorite" class="form-label mb-0 small">Favorites</label>
+                        <select id="filter-favorite" class="form-select form-select-sm">
                             <option value="">All Routes</option>
                             <option value="true">Favorites Only</option>
                             <option value="false">Non-Favorites</option>
                         </select>
                     </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="filter-group">
-                        <label for="filter-sport-type">Sport Type</label>
-                        <select id="filter-sport-type" class="form-select">
+                    <div style="min-width: 104px;">
+                        <label for="filter-sport-type" class="form-label mb-0 small">Type</label>
+                        <select id="filter-sport-type" class="form-select form-select-sm">
                             <option value="">All Types</option>
                             <option value="Ride">Ride</option>
-                            <option value="VirtualRide">Virtual Ride</option>
+                            <option value="VirtualRide">Virtual</option>
                             <option value="EBikeRide">E-Bike</option>
                             <option value="GravelRide">Gravel</option>
                         </select>
                     </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="filter-group">
-                        <label for="filter-difficulty">Difficulty</label>
-                        <select id="filter-difficulty" class="form-select">
+                    <div style="min-width: 112px;">
+                        <label for="filter-difficulty" class="form-label mb-0 small">Difficulty</label>
+                        <select id="filter-difficulty" class="form-select form-select-sm">
                             <option value="">All Levels</option>
                             <option value="easy">Easy</option>
                             <option value="moderate">Moderate</option>
@@ -124,172 +117,116 @@
                             <option value="very hard">Very Hard</option>
                         </select>
                     </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="filter-group">
-                        <label for="filter-min-distance" id="filter-min-distance-label">Min Distance (mi)</label>
-                        <input type="number" id="filter-min-distance" class="form-control" placeholder="0" min="0" step="0.1">
+                    <div style="width: 88px;">
+                        <label for="filter-min-distance" id="filter-min-distance-label" class="form-label mb-0 small">Min (mi)</label>
+                        <input type="number" id="filter-min-distance" class="form-control form-control-sm"
+                               placeholder="0" min="0" step="0.1">
                     </div>
-                </div>
-            </div>
-            <div class="row mt-3">
-                <div class="col-md-3">
-                    <div class="filter-group">
-                        <label for="filter-max-distance" id="filter-max-distance-label">Max Distance (mi)</label>
-                        <input type="number" id="filter-max-distance" class="form-control" placeholder="100" min="0" step="0.1">
+                    <div style="width: 88px;">
+                        <label for="filter-max-distance" id="filter-max-distance-label" class="form-label mb-0 small">Max (mi)</label>
+                        <input type="number" id="filter-max-distance" class="form-control form-control-sm"
+                               placeholder="∞" min="0" step="0.1">
                     </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="filter-group">
-                        <label for="sort-by">Sort By</label>
-                        <select id="sort-by" class="form-select">
-                            <option value="name">Name (A-Z)</option>
-                            <option value="name-desc">Name (Z-A)</option>
-                            <option value="distance">Distance (Low-High)</option>
-                            <option value="distance-desc">Distance (High-Low)</option>
-                            <option value="elevation">Elevation (Low-High)</option>
-                            <option value="elevation-desc">Elevation (High-Low)</option>
+                    <div style="min-width: 144px;">
+                        <label for="sort-by" class="form-label mb-0 small">Sort</label>
+                        <select id="sort-by" class="form-select form-select-sm">
+                            <option value="name">Name (A–Z)</option>
+                            <option value="name-desc">Name (Z–A)</option>
+                            <option value="distance">Distance ↑</option>
+                            <option value="distance-desc">Distance ↓</option>
+                            <option value="elevation">Elevation ↑</option>
+                            <option value="elevation-desc">Elevation ↓</option>
                             <option value="uses">Most Used</option>
                         </select>
                     </div>
                 </div>
-                <div class="col-md-3">
-                    <div class="filter-group">
-                        <label for="search-query">Search</label>
-                        <input type="text" id="search-query" class="form-control" placeholder="Search routes...">
-                    </div>
-                </div>
-                <div class="col-md-3 d-flex align-items-end">
-                    <button id="apply-filters" class="btn btn-primary w-100">
-                        <i class="bi bi-search"></i> Apply Filters
-                    </button>
-                </div>
             </div>
         </div>
 
-        <!-- Results Summary -->
-        <div class="row mb-3">
-            <div class="col-12">
-                <div id="results-summary" class="alert alert-info">
-                    <i class="bi bi-info-circle"></i> Loading routes...
-                </div>
-            </div>
+        <!-- Results summary -->
+        <div id="results-summary" class="alert alert-info">
+            <i class="bi bi-info-circle" aria-hidden="true"></i> Loading routes…
         </div>
 
-        <!-- Map Section -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h3 class="h5 mb-0">
-                                <i class="bi bi-map"></i> Map
-                            </h3>
-                            <div class="btn-group" role="group" aria-label="Map controls">
-                                <button type="button" id="fit-all-btn" class="btn btn-sm btn-outline-primary" title="Fit all routes in view">
-                                    <i class="bi bi-arrows-angle-contract"></i> Fit All
-                                </button>
-                                <button type="button" id="clear-map-btn" class="btn btn-sm btn-outline-secondary" title="Clear all routes from map">
-                                    <i class="bi bi-x-circle"></i> Clear
-                                </button>
+        <!-- Side-by-side: scrollable route list (left) + sticky map (right) -->
+        <div class="row g-3">
+            <!-- Route list -->
+            <div class="col-lg-5">
+                <div id="routes-container" class="route-list-scroll">
+                    <!-- Skeleton loaders -->
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <div class="skeleton-route-card" aria-busy="true" aria-label="Loading route">
+                                <div class="skeleton skeleton-route-card-rank"></div>
+                                <div class="skeleton skeleton-route-card-name"></div>
+                                <div class="skeleton-route-card-metrics">
+                                    <div class="skeleton skeleton-route-card-metric"></div>
+                                    <div class="skeleton skeleton-route-card-metric"></div>
+                                    <div class="skeleton skeleton-route-card-metric"></div>
+                                </div>
                             </div>
                         </div>
+                        <div class="col-12">
+                            <div class="skeleton-route-card" aria-busy="true" aria-label="Loading route">
+                                <div class="skeleton skeleton-route-card-rank"></div>
+                                <div class="skeleton skeleton-route-card-name"></div>
+                                <div class="skeleton-route-card-metrics">
+                                    <div class="skeleton skeleton-route-card-metric"></div>
+                                    <div class="skeleton skeleton-route-card-metric"></div>
+                                    <div class="skeleton skeleton-route-card-metric"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="skeleton-route-card" aria-busy="true" aria-label="Loading route">
+                                <div class="skeleton skeleton-route-card-rank"></div>
+                                <div class="skeleton skeleton-route-card-name"></div>
+                                <div class="skeleton-route-card-metrics">
+                                    <div class="skeleton skeleton-route-card-metric"></div>
+                                    <div class="skeleton skeleton-route-card-metric"></div>
+                                    <div class="skeleton skeleton-route-card-metric"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="routes-live-region" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
+                <div id="pagination-container" class="mt-3"></div>
+            </div>
+
+            <!-- Map (sticky) -->
+            <div class="col-lg-7">
+                <div class="card map-panel-sticky">
+                    <div class="card-header d-flex justify-content-between align-items-center py-2">
+                        <span class="small fw-semibold">
+                            <i class="bi bi-geo-alt" aria-hidden="true"></i> Map
+                        </span>
+                        <div class="btn-group btn-group-sm" role="group" aria-label="Map controls">
+                            <button type="button" id="fit-all-btn" class="btn btn-outline-secondary" title="Fit all routes in view">
+                                <i class="bi bi-arrows-angle-contract" aria-hidden="true"></i> Fit All
+                            </button>
+                            <button type="button" id="clear-map-btn" class="btn btn-outline-secondary" title="Clear all routes from map">
+                                <i class="bi bi-x-circle" aria-hidden="true"></i> Clear
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
                         <div id="routes-map" aria-label="Interactive routes map"></div>
-                        <div id="map-status" class="mt-2 text-muted small">
-                            Click on routes below to display them on the map
+                        <div id="map-status" class="px-3 py-1 text-muted small border-top">
+                            Click a route to display it on the map
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-
-        <!-- Routes Grid -->
-        <div id="routes-container">
-            <!-- Skeleton loaders for route cards -->
-            <div class="row">
-                <div class="col-md-6 col-lg-4 mb-3">
-                    <div class="skeleton-route-card" aria-busy="true" aria-label="Loading route">
-                        <div class="skeleton skeleton-route-card-rank"></div>
-                        <div class="skeleton skeleton-route-card-name"></div>
-                        <div class="skeleton-route-card-metrics">
-                            <div class="skeleton skeleton-route-card-metric"></div>
-                            <div class="skeleton skeleton-route-card-metric"></div>
-                            <div class="skeleton skeleton-route-card-metric"></div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-6 col-lg-4 mb-3">
-                    <div class="skeleton-route-card" aria-busy="true" aria-label="Loading route">
-                        <div class="skeleton skeleton-route-card-rank"></div>
-                        <div class="skeleton skeleton-route-card-name"></div>
-                        <div class="skeleton-route-card-metrics">
-                            <div class="skeleton skeleton-route-card-metric"></div>
-                            <div class="skeleton skeleton-route-card-metric"></div>
-                            <div class="skeleton skeleton-route-card-metric"></div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-6 col-lg-4 mb-3">
-                    <div class="skeleton-route-card" aria-busy="true" aria-label="Loading route">
-                        <div class="skeleton skeleton-route-card-rank"></div>
-                        <div class="skeleton skeleton-route-card-name"></div>
-                        <div class="skeleton-route-card-metrics">
-                            <div class="skeleton skeleton-route-card-metric"></div>
-                            <div class="skeleton skeleton-route-card-metric"></div>
-                            <div class="skeleton skeleton-route-card-metric"></div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-6 col-lg-4 mb-3">
-                    <div class="skeleton-route-card" aria-busy="true" aria-label="Loading route">
-                        <div class="skeleton skeleton-route-card-rank"></div>
-                        <div class="skeleton skeleton-route-card-name"></div>
-                        <div class="skeleton-route-card-metrics">
-                            <div class="skeleton skeleton-route-card-metric"></div>
-                            <div class="skeleton skeleton-route-card-metric"></div>
-                            <div class="skeleton skeleton-route-card-metric"></div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-6 col-lg-4 mb-3">
-                    <div class="skeleton-route-card" aria-busy="true" aria-label="Loading route">
-                        <div class="skeleton skeleton-route-card-rank"></div>
-                        <div class="skeleton skeleton-route-card-name"></div>
-                        <div class="skeleton-route-card-metrics">
-                            <div class="skeleton skeleton-route-card-metric"></div>
-                            <div class="skeleton skeleton-route-card-metric"></div>
-                            <div class="skeleton skeleton-route-card-metric"></div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-6 col-lg-4 mb-3">
-                    <div class="skeleton-route-card" aria-busy="true" aria-label="Loading route">
-                        <div class="skeleton skeleton-route-card-rank"></div>
-                        <div class="skeleton skeleton-route-card-name"></div>
-                        <div class="skeleton-route-card-metrics">
-                            <div class="skeleton skeleton-route-card-metric"></div>
-                            <div class="skeleton skeleton-route-card-metric"></div>
-                            <div class="skeleton skeleton-route-card-metric"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div id="routes-live-region" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
-
-        <!-- Pagination -->
-        <div id="pagination-container" class="mt-4"></div>
     </main>
 
-    <!-- Footer -->
     <footer class="mt-5 py-3 bg-light">
         <div class="container text-center text-muted">
-            <small>Ride Optimizer v0.11.0 - Smart Static Architecture</small>
+            <small>Ride Optimizer v0.13.0 - Smart Static Architecture</small>
         </div>
     </footer>
 
-    <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
     <script src="/js/common.js"></script>
@@ -297,47 +234,46 @@
     <script src="/js/api-client.js?v=4"></script>
     <script src="/js/routes.js?v=4"></script>
     <script>
-        // Update filter labels based on unit preference
         document.addEventListener('DOMContentLoaded', function() {
-            const unitSystem = window.getUnitSystem();
-            const distanceUnit = window.getDistanceUnit();
-            
-            // Update filter labels
+            const unitSystem = window.getUnitSystem ? window.getUnitSystem() : 'imperial';
+            const distanceUnit = window.getDistanceUnit ? window.getDistanceUnit() : 'mi';
+
             const minLabel = document.getElementById('filter-min-distance-label');
             const maxLabel = document.getElementById('filter-max-distance-label');
-            
-            if (minLabel) minLabel.textContent = `Min Distance (${distanceUnit})`;
-            if (maxLabel) maxLabel.textContent = `Max Distance (${distanceUnit})`;
-            
-            // Update preset button labels
+            if (minLabel) minLabel.textContent = `Min (${distanceUnit})`;
+            if (maxLabel) maxLabel.textContent = `Max (${distanceUnit})`;
+
             const presetButtons = document.querySelectorAll('.preset-filter');
             presetButtons.forEach(btn => {
                 const preset = btn.getAttribute('data-preset');
                 const icon = btn.querySelector('i');
-                const iconClass = icon ? icon.className : '';
-                
+                const iconHtml = icon ? icon.outerHTML + ' ' : '';
                 if (preset === 'short') {
-                    btn.innerHTML = `<i class="${iconClass}"></i> Short (<${unitSystem === 'imperial' ? '10mi' : '16km'})`;
+                    btn.innerHTML = `${iconHtml}Short (<${unitSystem === 'imperial' ? '10mi' : '16km'})`;
                 } else if (preset === 'medium') {
-                    btn.innerHTML = `<i class="${iconClass}"></i> Medium (${unitSystem === 'imperial' ? '10-20mi' : '16-32km'})`;
+                    btn.innerHTML = `${iconHtml}Medium (${unitSystem === 'imperial' ? '10–20mi' : '16–32km'})`;
                 } else if (preset === 'long') {
-                    btn.innerHTML = `<i class="${iconClass}"></i> Long (>${unitSystem === 'imperial' ? '20mi' : '32km'})`;
+                    btn.innerHTML = `${iconHtml}Long (>${unitSystem === 'imperial' ? '20mi' : '32km'})`;
                 }
             });
         });
     </script>
 
-    <!-- Bottom Navigation (Mobile) - Issue #277 -->
+    <!-- Bottom Navigation (Mobile) -->
     <nav id="bottom-nav" class="bottom-nav d-md-none" role="navigation" aria-label="Mobile navigation">
-        <button class="bottom-nav-item" data-target="home" aria-label="Home" onclick="window.location.href='/'">
+        <button class="bottom-nav-item" aria-label="Home" onclick="window.location.href='/'">
             <i class="bi bi-house-door" aria-hidden="true"></i>
             <span>Home</span>
         </button>
-        <button class="bottom-nav-item active" data-target="routes" aria-label="Routes" aria-current="page">
+        <button class="bottom-nav-item" aria-label="Commute" onclick="window.location.href='/commute.html'">
+            <i class="bi bi-signpost-2" aria-hidden="true"></i>
+            <span>Commute</span>
+        </button>
+        <button class="bottom-nav-item active" aria-label="Routes" aria-current="page">
             <i class="bi bi-map" aria-hidden="true"></i>
             <span>Routes</span>
         </button>
-        <button class="bottom-nav-item" data-target="settings" aria-label="Settings" onclick="window.location.href='/settings.html'">
+        <button class="bottom-nav-item" aria-label="Settings" onclick="window.location.href='/settings.html'">
             <i class="bi bi-gear" aria-hidden="true"></i>
             <span>Settings</span>
         </button>
