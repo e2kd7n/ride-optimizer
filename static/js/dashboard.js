@@ -369,12 +369,12 @@ function renderHeroCard(rec, isHero) {
                 </div>
                 ${transitBanner}
                 <div class="mt-3">
-                    <a href="/commute.html" class="btn btn-primary btn-sm">
-                        <i class="bi bi-map"></i> View on Map
-                    </a>
-                    <a href="/commute.html" class="btn btn-outline-secondary btn-sm ms-2">
-                        Full Details <i class="bi bi-arrow-right"></i>
-                    </a>
+                    <button type="button" class="btn btn-outline-secondary btn-sm"
+                            data-bs-toggle="collapse" data-bs-target="#commute-detail"
+                            aria-expanded="false" aria-controls="commute-detail">
+                        <i class="bi bi-list-ul"></i> Compare routes
+                        <i class="bi bi-chevron-down ms-1 commute-chevron"></i>
+                    </button>
                 </div>
             </div>`;
     }

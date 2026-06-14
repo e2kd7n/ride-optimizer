@@ -258,6 +258,10 @@
             border: none;
         }
 
+        /* Commute compare chevron rotation */
+        .commute-chevron { transition: transform 0.2s; display: inline-block; }
+        [data-bs-target="#commute-detail"][aria-expanded="true"] .commute-chevron { transform: rotate(180deg); }
+
         /* Card entrance animation (#280) */
         @keyframes cardFadeIn {
             from { opacity: 0; transform: translateY(8px); }
@@ -299,11 +303,6 @@
                     <li class="nav-item">
                         <a class="nav-link active" href="/" aria-current="page">
                             <i class="bi bi-house-door" aria-hidden="true"></i> Home
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/commute.html">
-                            <i class="bi bi-signpost-2" aria-hidden="true"></i> Commute
                         </a>
                     </li>
                     <li class="nav-item">
@@ -354,7 +353,7 @@
                             <h5 class="card-title mb-3">
                                 <i class="bi bi-signpost-2" aria-hidden="true"></i> Your Commute
                             </h5>
-                            <div id="commute-recommendation">
+                            <div id="commute-recommendation" class="mb-2">
                                 <!-- Loading skeletons -->
                                 <div class="skeleton-recommendation-card" aria-busy="true" aria-label="Loading commute recommendation">
                                     <div class="skeleton-recommendation-header">
@@ -367,6 +366,10 @@
                                         <div class="skeleton skeleton-recommendation-metric"></div>
                                     </div>
                                 </div>
+                            </div>
+                            <!-- Expanded commute detail (both directions) -->
+                            <div class="collapse" id="commute-detail">
+                                <div id="commute-cards" class="mt-2"></div>
                             </div>
                         </div>
                     </div>
@@ -437,10 +440,6 @@
             <i class="bi bi-house-door" aria-hidden="true"></i>
             <span>Home</span>
         </button>
-        <button class="bottom-nav-item" aria-label="Commute" onclick="window.location.href='/commute.html'">
-            <i class="bi bi-signpost-2" aria-hidden="true"></i>
-            <span>Commute</span>
-        </button>
         <button class="bottom-nav-item" aria-label="Routes" onclick="window.location.href='/routes.html'">
             <i class="bi bi-map" aria-hidden="true"></i>
             <span>Routes</span>
@@ -478,13 +477,9 @@
             // Load dashboard data
             await loadDashboard();
             
-            // Load commute data and map
-            await loadCommuteData();
-            
             // Refresh data every 5 minutes
             setInterval(async () => {
                 await loadDashboard();
-                await loadCommuteData();
             }, 5 * 60 * 1000);
             
             console.log('âœ“ Dashboard initialized');
