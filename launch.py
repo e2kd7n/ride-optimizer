@@ -145,6 +145,7 @@ _planner_service = None
 _route_library_service = None
 _analysis_job = {'status': 'idle', 'started_at': None, 'result': None}
 _analysis_stop_requested = False
+_fetch_job = {'status': 'idle', 'fetched': 0, 'label': '', 'started_at': None}
 
 
 def load_route_groups_from_json(json_path: Path) -> List[RouteGroup]:
@@ -1597,6 +1598,92 @@ def stop_analysis():
     _analysis_stop_requested = True
     _analysis_job['label'] = 'Stopping…'
     return jsonify({'status': 'stopping'})
+
+
+@app.route('/api/fetch', methods=['POST'])
+@limiter.limit("5 per minute")
+def trigger_fetch():
+    global _fetch_job
+    if _fetch_job.get('status') == 'running':
+        return jsonify({'status': 'already_running'}), 409
+
+    initialize_services()
+    data = request.get_json(silent=True) or {}
+
+    after_date = None
+    before_date = None
+    for key in ('after_date', 'before_date'):
+        raw = data.get(key)
+        if raw:
+            try:
+                val = datetime.fromisoformat(raw)
+                if key == 'after_date':
+                    after_date = val
+                else:
+                    before_date = val
+            except (ValueError, TypeError):
+                pass
+
+    limit = int(data.get('limit', 1000))
+
+    _fetch_job = {
+        'status': 'running',
+        'fetched': 0,
+        'label': 'Connecting to Strava…',
+        'started_at': datetime.now().isoformat(),
+        'total_in_cache': 0,
+    }
+
+    def _run():
+        global _fetch_job
+        try:
+            import time as _time
+            import json as _json
+            from pathlib import Path as _Path
+
+            def _progress(count):
+                # Sleep 2s every 30 activities (one Strava page) to stay gentle on the Pi
+                if count % 30 == 0 and count > 0:
+                    _time.sleep(2)
+                _fetch_job['fetched'] = count
+                _fetch_job['label'] = f'Fetching from Strava… {count:,} activities'
+
+            _analysis_service.data_fetcher.fetch_activities(
+                limit=limit,
+                after=after_date,
+                before=before_date,
+                use_cache=False,
+                progress_callback=_progress,
+                merge_cache=True,
+            )
+
+            cache_path = _Path('data/cache/activities.json')
+            total = _fetch_job['fetched']
+            if cache_path.exists():
+                with open(cache_path) as f:
+                    raw = _json.load(f)
+                total = raw.get('count', len(raw.get('activities', [])))
+
+            _fetch_job.update({
+                'status': 'done',
+                'label': f'Done — {total:,} activities in cache',
+                'total_in_cache': total,
+            })
+        except Exception as e:
+            logger.error(f"Background fetch failed: {e}", exc_info=True)
+            _fetch_job.update({
+                'status': 'error',
+                'label': f'Error: {e}',
+            })
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({'status': 'started'})
+
+
+@app.route('/api/fetch/status')
+@limiter.exempt
+def get_fetch_status():
+    return jsonify(_fetch_job)
 
 
 @app.errorhandler(404)
