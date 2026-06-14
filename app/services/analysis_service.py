@@ -373,13 +373,10 @@ class AnalysisService:
                         'errors': ['No cached activities'],
                     }
                 logger.info("Loading activities from local cache (no Strava auth required)...")
-                max_acts = self.config.get('data_fetching.max_activities', 1000)
                 with open(cache_path) as f:
                     raw = json.load(f)
                     acts = raw['activities'] if isinstance(raw, dict) else raw
-                    acts = acts[:max_acts]
                     self._activities = [Activity.from_dict(a) for a in acts]
-                logger.info(f"Capped to {len(self._activities)} most recent activities (limit: {max_acts})")
             else:
                 _notify(phase='fetching', fetched=0, label='Connecting to Strava…')
                 logger.info("Fetching activities from Strava...")
