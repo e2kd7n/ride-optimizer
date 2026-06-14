@@ -380,6 +380,25 @@
             setupFetchModeControls();
             document.getElementById('run-analysis-btn').addEventListener('click', runAnalysis);
 
+            // Restore progress UI if analysis is already running (e.g. after page reload)
+            (async () => {
+                try {
+                    const job = await window.apiClient.getAnalysisStatus();
+                    if (job.status === 'running') {
+                        const btn = document.getElementById('run-analysis-btn');
+                        const progressEl = document.getElementById('analysis-progress');
+                        const spinnerEl = document.getElementById('analysis-spinner');
+                        const statusEl = document.getElementById('analysis-status');
+                        btn.disabled = true;
+                        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Running…';
+                        progressEl.style.display = '';
+                        spinnerEl.style.display = '';
+                        statusEl.textContent = job.label || 'Analysis in progress…';
+                        pollAnalysisStatus();
+                    }
+                } catch (_) {}
+            })();
+
             // Handle OAuth redirect results
             const params = new URLSearchParams(window.location.search);
             if (params.get('strava_connected') === '1') {
