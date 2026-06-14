@@ -144,6 +144,7 @@ _weather_service = None
 _planner_service = None
 _route_library_service = None
 _analysis_job = {'status': 'idle', 'started_at': None, 'result': None}
+_analysis_stop_requested = False
 
 
 def load_route_groups_from_json(json_path: Path) -> List[RouteGroup]:
@@ -1545,8 +1546,14 @@ def trigger_analysis():
         for k, v in kwargs.items():
             _analysis_job[k] = v
 
+    global _analysis_stop_requested
+    _analysis_stop_requested = False
+
+    def _stop_check():
+        return _analysis_stop_requested
+
     def _run():
-        global _analysis_job, _services_initialized
+        global _analysis_job, _services_initialized, _analysis_stop_requested
         try:
             result = _analysis_service.run_full_analysis(
                 force_refresh=True,
@@ -1554,15 +1561,22 @@ def trigger_analysis():
                 after=after_date,
                 before=before_date,
                 on_progress=_update_job,
+                stop_check=_stop_check,
             )
-            _update_job(status='done', phase='done', result=result,
-                        label=f"Done — {result.get('activities_count', 0):,} activities")
+            if _analysis_stop_requested:
+                _update_job(status='stopped', phase='stopped',
+                            label='Analysis stopped by user')
+            else:
+                _update_job(status='done', phase='done', result=result,
+                            label=f"Done — {result.get('activities_count', 0):,} activities")
             _services_initialized = False
         except Exception as e:
             logger.error(f"Background analysis failed: {e}", exc_info=True)
             _update_job(status='error', phase='error',
                         result={'status': 'error', 'message': str(e)},
                         label=f'Error: {e}')
+        finally:
+            _analysis_stop_requested = False
 
     threading.Thread(target=_run, daemon=True).start()
     return jsonify({'status': 'started', 'fetch_new': fetch_new})
@@ -1572,6 +1586,17 @@ def trigger_analysis():
 @limiter.exempt
 def get_analyze_status():
     return jsonify(_analysis_job)
+
+
+@app.route('/api/analyze/stop', methods=['POST'])
+@limiter.exempt
+def stop_analysis():
+    global _analysis_stop_requested, _analysis_job
+    if _analysis_job.get('status') != 'running':
+        return jsonify({'status': 'not_running'}), 400
+    _analysis_stop_requested = True
+    _analysis_job['label'] = 'Stopping…'
+    return jsonify({'status': 'stopping'})
 
 
 @app.errorhandler(404)

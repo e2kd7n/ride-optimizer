@@ -330,7 +330,7 @@ class AnalysisService:
     
     def run_full_analysis(self, force_refresh: bool = False, skip_strava_fetch: bool = False,
                           after: Optional[datetime] = None, before: Optional[datetime] = None,
-                          on_progress=None) -> Dict[str, Any]:
+                          on_progress=None, stop_check=None) -> Dict[str, Any]:
         """
         Run complete analysis workflow.
 
@@ -345,6 +345,7 @@ class AnalysisService:
             force_refresh: If True, bypass cache and re-fetch data from Strava
             skip_strava_fetch: If True, load cached activities as-is without any Strava call
             on_progress: Optional callable(**kwargs) for live status updates
+            stop_check: Optional callable() → bool; returns True when caller wants early exit
         """
         def _notify(**kwargs):
             if on_progress:
@@ -352,6 +353,9 @@ class AnalysisService:
                     on_progress(**kwargs)
                 except Exception:
                     pass
+
+        def _should_stop():
+            return stop_check is not None and stop_check()
 
         logger.info(f"Starting full analysis (force_refresh={force_refresh}, skip_strava_fetch={skip_strava_fetch})")
         errors = []
@@ -471,10 +475,16 @@ class AnalysisService:
                 config=self.config,
                 force_reanalysis=force_refresh,
                 progress_callback=_route_progress,
+                stop_check=stop_check,
             )
 
             self._route_groups = route_analyzer.group_similar_routes()
             logger.info(f"Found {len(self._route_groups)} route groups")
+
+            if _should_stop():
+                return {'status': 'stopped', 'activities_count': total,
+                        'route_groups_count': len(self._route_groups),
+                        'long_rides_count': 0, 'errors': []}
 
             # Step 4: Analyze long rides
             _notify(phase='processing', fetched=total, label='Analyzing long rides…')
