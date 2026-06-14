@@ -1535,6 +1535,9 @@ def trigger_analysis():
         'label': 'Starting…',
         'started_at': datetime.now().isoformat(),
         'result': None,
+        'routes_done': 0,
+        'routes_total': 0,
+        'eta_secs': None,
     }
 
     def _update_job(**kwargs):
@@ -1566,6 +1569,7 @@ def trigger_analysis():
 
 
 @app.route('/api/analyze/status')
+@limiter.exempt
 def get_analyze_status():
     return jsonify(_analysis_job)
 

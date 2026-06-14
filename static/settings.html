@@ -268,6 +268,7 @@
                                          id="analysis-progress-bar" role="progressbar" style="width:100%"
                                          aria-valuenow="100" aria-valuemin="0" aria-valuemax="100"></div>
                                 </div>
+                                <div id="analysis-eta" class="small text-muted" style="display:none"></div>
                                 <div id="preview-ready-msg" class="small text-success" style="display:none">
                                     <i class="bi bi-check-circle-fill me-1" aria-hidden="true"></i>
                                     Preview ready —
@@ -768,6 +769,7 @@
             const spinnerEl = document.getElementById('analysis-spinner');
             const statusEl = document.getElementById('analysis-status');
             const progressBar = document.getElementById('analysis-progress-bar');
+            const etaEl = document.getElementById('analysis-eta');
             const previewMsg = document.getElementById('preview-ready-msg');
 
             const phaseLabels = {
@@ -776,6 +778,7 @@
                 fetching: 'Fetching activities from Strava…',
                 processing_preview: 'Processing first activities for preview…',
                 processing: 'Analyzing routes…',
+                grouping: 'Grouping routes…',
             };
 
             const poll = setInterval(async () => {
@@ -786,11 +789,32 @@
                     const label = job.label || phaseLabels[job.phase] || 'Running…';
                     statusEl.textContent = label;
 
-                    // Slow the progress bar animation during processing (fast during fetch)
-                    if (job.phase === 'fetching') {
-                        progressBar.style.animationDuration = '0.75s';
-                    } else {
+                    // Real progress bar during grouping phase
+                    if (job.phase === 'grouping' && job.routes_total > 0) {
+                        const pct = Math.round((job.routes_done / job.routes_total) * 100);
+                        progressBar.style.width = pct + '%';
+                        progressBar.setAttribute('aria-valuenow', pct);
                         progressBar.style.animationDuration = '2s';
+
+                        if (job.eta_secs != null && job.eta_secs > 0) {
+                            const m = Math.floor(job.eta_secs / 60);
+                            const s = job.eta_secs % 60;
+                            etaEl.textContent = m > 0
+                                ? `~${m}m ${s}s remaining`
+                                : `~${s}s remaining`;
+                            etaEl.style.display = '';
+                        }
+                    } else {
+                        // Indeterminate for other phases
+                        progressBar.style.width = '100%';
+                        progressBar.setAttribute('aria-valuenow', 100);
+                        etaEl.style.display = 'none';
+
+                        if (job.phase === 'fetching') {
+                            progressBar.style.animationDuration = '0.75s';
+                        } else {
+                            progressBar.style.animationDuration = '2s';
+                        }
                     }
 
                     // Show preview-ready link once (only when fetching from Strava)
@@ -802,8 +826,10 @@
                     if (job.status === 'done') {
                         clearInterval(poll);
                         spinnerEl.style.display = 'none';
+                        progressBar.style.width = '100%';
                         progressBar.classList.remove('progress-bar-animated');
                         progressBar.style.animationDuration = '';
+                        etaEl.style.display = 'none';
                         btn.disabled = false;
                         btn.innerHTML = '<i class="bi bi-play-fill" aria-hidden="true"></i> Run Analysis';
                         const r = job.result || {};
@@ -817,6 +843,7 @@
                         spinnerEl.style.display = 'none';
                         progressBar.classList.remove('progress-bar-animated');
                         progressBar.classList.replace('bg-success', 'bg-danger');
+                        etaEl.style.display = 'none';
                         btn.disabled = false;
                         btn.innerHTML = '<i class="bi bi-play-fill" aria-hidden="true"></i> Run Analysis';
                         const msg = (job.result || {}).message || 'Unknown error';
@@ -824,7 +851,7 @@
                         if (typeof showToast === 'function') showToast('Analysis failed: ' + msg, 'error');
                     }
                 } catch (_) { /* network hiccup — keep polling */ }
-            }, 1500);
+            }, 3000);
         }
     </script>
 </body>
