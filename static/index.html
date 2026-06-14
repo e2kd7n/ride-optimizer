@@ -235,14 +235,6 @@
             border-bottom: none;
         }
 
-        /* â”€â”€ Conditions card mobile collapse (#288) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-        @media (max-width: 767.98px) {
-            .conditions-full-rows { display: none; }
-            .conditions-full-rows.conditions-rows-open { display: block; }
-            .conditions-summary-toggle { cursor: pointer; }
-            .conditions-chevron { transition: transform 0.2s ease; }
-        }
-
         /* â”€â”€ Design system: purple gradient buttons (#280) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
         .btn-primary {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -375,24 +367,10 @@
                     </div>
                 </div>
 
-                <!-- Right: Conditions + Route Status panels above map -->
+                <!-- Right: Forecast + Route Status panels above map -->
                 <div class="col-lg-7 mb-3">
                     <div class="row mb-2">
-                        <div class="col-4">
-                            <div class="card">
-                                <div class="card-body p-3">
-                                    <h6 class="card-title mb-2">
-                                        <i class="bi bi-bar-chart-line" aria-hidden="true"></i> Today's Conditions
-                                    </h6>
-                                    <div id="conditions-card">
-                                        <div class="skeleton skeleton-card-line" style="height:var(--space-2);margin-bottom:var(--space-2)"></div>
-                                        <div class="skeleton skeleton-card-line" style="height:var(--space-2);margin-bottom:var(--space-2)"></div>
-                                        <div class="skeleton skeleton-card-line" style="height:var(--space-2)"></div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-4">
+                        <div class="col-6">
                             <div class="card">
                                 <div class="card-body p-3">
                                     <h6 class="card-title mb-2">
@@ -406,7 +384,7 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="col-4 route-status-col">
+                        <div class="col-6 route-status-col">
                             <div class="card">
                                 <div class="card-body p-3">
                                     <h6 class="card-title mb-2">
