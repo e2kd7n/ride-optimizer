@@ -1,6 +1,6 @@
 services:
   ride-optimizer:
-    image: ride-optimizer:latest
+    image: ghcr.io/e2kd7n/ride-optimizer:latest
     container_name: ride-optimizer
     restart: unless-stopped
 

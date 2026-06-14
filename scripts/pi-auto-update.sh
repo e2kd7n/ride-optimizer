@@ -14,7 +14,6 @@ cd "$SCRIPT_DIR/.."
 REGISTRY="ghcr.io"
 IMAGE_OWNER="e2kd7n"
 REMOTE_IMAGE="${REGISTRY}/${IMAGE_OWNER}/ride-optimizer:latest"
-LOCAL_IMAGE="ride-optimizer:latest"
 FORCE=false
 [ "${1:-}" = "--force" ] && FORCE=true
 
@@ -47,8 +46,8 @@ log "Cleaning up stale containers and dangling images..."
 podman container prune -f 2>/dev/null || true
 podman image prune -f 2>/dev/null || true
 
-# Record current local image ID so we can detect a real change after pull
-BEFORE_ID=$(podman inspect "$LOCAL_IMAGE" --format '{{.Id}}' 2>/dev/null || echo "")
+# Record current image ID so we can detect whether a new layer was actually pulled.
+BEFORE_ID=$(podman inspect "$REMOTE_IMAGE" --format '{{.Id}}' 2>/dev/null || echo "")
 
 log "Pulling ${REMOTE_IMAGE}..."
 if ! podman pull "$REMOTE_IMAGE"; then
@@ -56,11 +55,7 @@ if ! podman pull "$REMOTE_IMAGE"; then
     exit 1
 fi
 
-# Tag under the local alias used by docker-compose.yml, then drop the GHCR tag
-# so podman-compose does not attempt a second pull.
-podman tag "$REMOTE_IMAGE" "$LOCAL_IMAGE"
-AFTER_ID=$(podman inspect "$LOCAL_IMAGE" --format '{{.Id}}' 2>/dev/null || echo "")
-podman rmi "$REMOTE_IMAGE" 2>/dev/null || true
+AFTER_ID=$(podman inspect "$REMOTE_IMAGE" --format '{{.Id}}' 2>/dev/null || echo "")
 
 if [ "$BEFORE_ID" = "$AFTER_ID" ] && [ -n "$BEFORE_ID" ] && [ "$FORCE" = false ]; then
     log "Image unchanged (${AFTER_ID:0:12}) — containers not restarted."
@@ -69,8 +64,7 @@ fi
 
 log "New image: ${BEFORE_ID:0:12} → ${AFTER_ID:0:12}"
 
-# Remove the old image that was previously tagged as LOCAL_IMAGE (now superseded)
-# so it does not accumulate as an untagged layer on the Pi.
+# Remove the superseded image layer so it does not accumulate on the Pi.
 if [ -n "$BEFORE_ID" ] && [ "$BEFORE_ID" != "$AFTER_ID" ]; then
     podman rmi "$BEFORE_ID" 2>/dev/null || true
 fi
