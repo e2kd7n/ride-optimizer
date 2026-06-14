@@ -13,6 +13,7 @@ import hashlib
 import threading
 import subprocess
 import sys
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import List, Tuple, Dict, Any, Optional
 from dataclasses import dataclass, asdict
@@ -35,6 +36,54 @@ try:
 except ImportError:
     FRECHET_AVAILABLE = False
     logger.warning("similaritymeasures not available, using Hausdorff distance only")
+
+
+def _similarity_worker(args):
+    """
+    Module-level worker for ProcessPoolExecutor.
+
+    Computes Fréchet+Hausdorff similarity between a pivot route and a batch of
+    candidates. Must be a top-level function so it is picklable on all platforms.
+
+    args: (pivot_coords, candidates, frechet_available, hausdorff_percentile)
+      pivot_coords       – list of [lat, lon] pairs for the pivot route
+      candidates         – list of (original_idx, cache_key, candidate_coords)
+      frechet_available  – bool
+      hausdorff_percentile – float (e.g. 95.0)
+
+    Returns list of (original_idx, cache_key, similarity_score).
+    """
+    import numpy as np
+    from scipy.spatial.distance import cdist
+
+    pivot_coords, candidates, frechet_available, hausdorff_percentile = args
+    pivot = np.array(pivot_coords)
+    results = []
+
+    for (original_idx, cache_key, candidate_coords) in candidates:
+        candidate = np.array(candidate_coords)
+
+        def hausdorff_sim(c1, c2):
+            d12 = cdist(c1, c2).min(axis=1)
+            d21 = cdist(c2, c1).min(axis=1)
+            pct = max(np.percentile(d12, hausdorff_percentile),
+                      np.percentile(d21, hausdorff_percentile))
+            return 1 / (1 + pct * 111000 / 200)
+
+        try:
+            if frechet_available:
+                import similaritymeasures as sm
+                frechet_sim = 1 / (1 + sm.frechet_dist(pivot, candidate) * 111000 / 300)
+                h_sim = hausdorff_sim(pivot, candidate)
+                score = frechet_sim * 0.7 if h_sim < 0.50 else frechet_sim
+            else:
+                score = hausdorff_sim(pivot, candidate)
+        except Exception:
+            score = hausdorff_sim(pivot, candidate)
+
+        results.append((original_idx, cache_key, score))
+
+    return results
 
 
 @dataclass
@@ -621,26 +670,32 @@ class RouteAnalyzer:
         # Separate by direction
         home_to_work = [r for r in routes if r.direction == 'home_to_work']
         work_to_home = [r for r in routes if r.direction == 'work_to_home']
-        
-        # Sequential processing (parallel removed - adds overhead without benefit)
+
         groups = []
-        
         grand_total = len(home_to_work) + len(work_to_home)
 
-        if home_to_work:
-            tqdm.write(f"   → Processing {len(home_to_work)} home→work routes")
-            htw_groups = self._group_routes_by_similarity(
-                home_to_work, 'home_to_work', offset=0, total=grand_total)
-            groups.extend(htw_groups)
-            tqdm.write(f"   ✓ {len(htw_groups)} groups")
+        # Parallelise the inner comparison loop across n_workers processes.
+        # The outer (pivot) loop remains sequential because each iteration
+        # depends on which routes the previous one removed.
+        with ProcessPoolExecutor(max_workers=self.n_workers) as executor:
+            if home_to_work:
+                tqdm.write(f"   → Processing {len(home_to_work)} home→work routes "
+                           f"({self.n_workers} workers)")
+                htw_groups = self._group_routes_by_similarity(
+                    home_to_work, 'home_to_work',
+                    offset=0, total=grand_total, executor=executor)
+                groups.extend(htw_groups)
+                tqdm.write(f"   ✓ {len(htw_groups)} groups")
 
-        if work_to_home:
-            tqdm.write(f"   → Processing {len(work_to_home)} work→home routes")
-            wth_groups = self._group_routes_by_similarity(
-                work_to_home, 'work_to_home', offset=len(home_to_work), total=grand_total)
-            groups.extend(wth_groups)
-            tqdm.write(f"   ✓ {len(wth_groups)} groups")
-        
+            if work_to_home:
+                tqdm.write(f"   → Processing {len(work_to_home)} work→home routes "
+                           f"({self.n_workers} workers)")
+                wth_groups = self._group_routes_by_similarity(
+                    work_to_home, 'work_to_home',
+                    offset=len(home_to_work), total=grand_total, executor=executor)
+                groups.extend(wth_groups)
+                tqdm.write(f"   ✓ {len(wth_groups)} groups")
+
         tqdm.write(f"   Total: {len(groups)} groups")
         logger.info(f"Created {len(groups)} route groups from {len(routes)} routes")
         
@@ -829,100 +884,129 @@ class RouteAnalyzer:
         return groups
     
     def _group_routes_by_similarity(self, routes: List[Route], direction: str,
-                                    offset: int = 0, total: int = 0) -> List[RouteGroup]:
+                                    offset: int = 0, total: int = 0,
+                                    executor: Optional[Any] = None) -> List[RouteGroup]:
         """
         Group routes by similarity using threshold-based clustering.
         Route naming is deferred to background thread for performance.
 
-        Args:
-            routes: List of routes
-            direction: Route direction
-            offset: Number of routes already processed (for cross-direction progress)
-            total: Grand total of routes being processed (for percentage)
+        The outer loop is sequential (each pivot depends on prior removals).
+        The inner comparison loop is parallelised via the provided executor:
+        uncached pairs are split into n_workers chunks and dispatched as a
+        single round-trip per pivot, then results are merged back into the
+        instance similarity cache.
 
-        Returns:
-            List of RouteGroup objects (with temporary names)
+        Args:
+            routes:    Routes to group.
+            direction: Route direction label.
+            offset:    Routes already consumed in previous direction (for progress).
+            total:     Grand total across both directions (for progress percentage).
+            executor:  ProcessPoolExecutor to use for parallel comparisons, or None
+                       to run sequentially.
         """
-        # Get debug logger
         debug_logger = logging.getLogger('debug')
 
         if not routes:
             return []
 
-        debug_logger.info(f"Starting similarity grouping for {len(routes)} {direction} routes")
-        debug_logger.info(f"Similarity threshold: {self.similarity_threshold}")
+        n = len(routes)
+        debug_logger.info(f"Starting similarity grouping for {n} {direction} routes")
+
+        # Upper-bound on comparisons (worst case: no grouping occurs)
+        comparisons_estimated = n * (n - 1) // 2
+        hausdorff_percentile = self.config.get('route_analysis.outlier_tolerance_percentile', 95.0)
 
         groups = []
         ungrouped = routes.copy()
         group_id = 0
         total_comparisons = 0
         routes_consumed = 0
-        grand_total = total or len(routes)
+        grand_total = total or n
+
+        # Minimum uncached candidates per pivot to bother parallelising.
+        # Below this the IPC round-trip cost exceeds the compute savings.
+        MIN_PARALLEL = 8
 
         while ungrouped:
-            # Start new group with first ungrouped route
             current = ungrouped.pop(0)
             group = [current]
             routes_consumed += 1
 
+            # ---- Separate cached from uncached candidates ----
+            cached_similarities: Dict[int, float] = {}
+            uncached: List[Tuple[int, str, List]] = []  # (idx, cache_key, coords)
+
+            for i, route in enumerate(ungrouped):
+                cache_key = self._get_cache_key(current, route)
+                if cache_key in self.similarity_cache:
+                    cached_similarities[i] = self.similarity_cache[cache_key]
+                else:
+                    uncached.append((i, cache_key, route.coordinates))
+
+            # ---- Dispatch uncached comparisons ----
+            if executor is not None and len(uncached) >= MIN_PARALLEL:
+                # Split into n_workers chunks for a single round-trip per pivot
+                chunk_size = max(1, len(uncached) // self.n_workers)
+                chunks = [uncached[j:j + chunk_size]
+                          for j in range(0, len(uncached), chunk_size)]
+                pivot_coords = list(current.coordinates)
+                futures = [
+                    executor.submit(
+                        _similarity_worker,
+                        (pivot_coords, chunk, FRECHET_AVAILABLE, hausdorff_percentile)
+                    )
+                    for chunk in chunks
+                ]
+                for fut in futures:
+                    for (idx, ck, score) in fut.result():
+                        self.similarity_cache[ck] = score
+                        cached_similarities[idx] = score
+            else:
+                # Sequential fallback (small batches or no executor)
+                for (i, cache_key, _) in uncached:
+                    score = self.calculate_route_similarity(current, ungrouped[i])
+                    cached_similarities[i] = score
+
+            total_comparisons += len(ungrouped)
+
+            # ---- Find matches ----
+            to_remove = []
+            for i, similarity in cached_similarities.items():
+                if similarity >= self.similarity_threshold:
+                    group.append(ungrouped[i])
+                    to_remove.append(i)
+
+            for i in reversed(sorted(to_remove)):
+                ungrouped.pop(i)
+
+            debug_logger.info(
+                f"Group {group_id}: {len(group)} routes, "
+                f"{len(ungrouped)} remaining, {total_comparisons} total comparisons"
+            )
+
+            # ---- Emit progress ----
             if self.progress_callback:
                 try:
-                    self.progress_callback(offset + routes_consumed, grand_total, direction)
+                    self.progress_callback(
+                        offset + routes_consumed, grand_total, direction,
+                        total_comparisons, comparisons_estimated,
+                    )
                 except Exception:
                     pass
 
-            debug_logger.debug(f"Group {group_id}: Starting with route {current.activity_id}, {len(ungrouped)} routes remaining")
-            
-            # Find similar routes
-            to_remove = []
-            comparisons_this_group = 0
-            for i, route in enumerate(ungrouped):
-                similarity = self.calculate_route_similarity(current, route)
-                comparisons_this_group += 1
-                total_comparisons += 1
-                
-                if similarity >= self.similarity_threshold:
-                    group.append(route)
-                    to_remove.append(i)
-                    debug_logger.debug(f"  Route {route.activity_id} matched (similarity: {similarity:.3f})")
-                
-                # Log progress every 50 comparisons
-                if comparisons_this_group % 50 == 0:
-                    debug_logger.info(f"  Group {group_id}: {comparisons_this_group} comparisons, {len(group)} routes matched so far")
-            
-            debug_logger.info(f"Group {group_id}: Matched {len(group)} routes after {comparisons_this_group} comparisons")
-            
-            # Remove grouped routes
-            for i in reversed(to_remove):
-                ungrouped.pop(i)
-            
-            # Create route group
-            representative = self._select_representative_route(group)
-            
-            # Generate route ID
-            route_id = f"{direction}_{group_id}"
-            
-            debug_logger.info(f"Created group {route_id} with {len(group)} routes")
-            
-            # Use simple temporary name (geocoding deferred to background)
             direction_label = "to Work" if direction == "home_to_work" else "to Home"
-            route_name = f"Route {group_id} {direction_label}"
-            
             route_group = RouteGroup(
-                id=route_id,
+                id=f"{direction}_{group_id}",
                 direction=direction,
                 routes=group,
-                representative_route=representative,
+                representative_route=self._select_representative_route(group),
                 frequency=len(group),
-                name=route_name
+                name=f"Route {group_id} {direction_label}",
             )
-            
             groups.append(route_group)
             group_id += 1
-        
-        # Sort by frequency
+
         groups.sort(key=lambda g: g.frequency, reverse=True)
-        
         return groups
     
     @staticmethod
