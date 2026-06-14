@@ -797,11 +797,14 @@
                         progressBar.style.animationDuration = '2s';
 
                         if (job.eta_secs != null && job.eta_secs > 0) {
-                            const m = Math.floor(job.eta_secs / 60);
+                            const h = Math.floor(job.eta_secs / 3600);
+                            const m = Math.floor((job.eta_secs % 3600) / 60);
                             const s = job.eta_secs % 60;
-                            etaEl.textContent = m > 0
-                                ? `~${m}m ${s}s remaining`
-                                : `~${s}s remaining`;
+                            etaEl.textContent = h > 0
+                                ? `~${h}h ${m}m remaining`
+                                : m > 0
+                                    ? `~${m}m ${s}s remaining`
+                                    : `~${s}s remaining`;
                             etaEl.style.display = '';
                         }
                     } else {
