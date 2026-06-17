@@ -529,20 +529,22 @@ class RouteLibraryService:
         """
         # Handle both LongRide objects and dict from cache
         if isinstance(ride, dict):
+            distance_km = ride['distance'] / 1000  # stored in meters
+            duration_min = ride['duration'] / 60   # stored in seconds
             # Generate meaningful name with fallback
             meaningful_name = self._get_meaningful_route_name(
                 ride['name'],
-                ride['distance_km'],
+                distance_km,
                 ride.get('timestamp', ''),
                 ride.get('is_loop', False)
             )
-            
+
             return {
                 'id': str(ride['activity_id']),
                 'type': 'long_ride',
                 'name': meaningful_name,
-                'distance': ride['distance_km'],
-                'duration': ride['duration_hours'] * 60,  # minutes
+                'distance': distance_km,
+                'duration': duration_min,
                 'elevation': ride.get('elevation_gain', 0),
                 'uses': ride.get('uses', 1),
                 'is_loop': ride.get('is_loop', False),
