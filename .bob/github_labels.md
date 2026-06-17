@@ -1,6 +1,6 @@
 # GitHub Issue Labels Cache
 
-**Last Updated:** 2026-05-10  
+**Last Updated:** 2026-06-17  
 **Update Frequency:** Weekly maintenance
 
 ## Priority Labels
