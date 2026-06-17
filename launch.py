@@ -2299,7 +2299,8 @@ if __name__ == '__main__':
     import os
     import sys
     import subprocess
-    
+    import tempfile
+
     # Check if running as server subprocess
     if len(sys.argv) > 1 and sys.argv[1] == '--serve':
         port = int(sys.argv[2]) if len(sys.argv) > 2 else 8083
@@ -2322,16 +2323,17 @@ if __name__ == '__main__':
     logger.info(f"Server will run on port {port}")
     
     # Start server in background subprocess
-    with open('/tmp/ride-optimizer-server.log', 'a') as log_file:
+    log_path = os.path.join(tempfile.gettempdir(), 'ride-optimizer-server.log')
+    with open(log_path, 'a') as log_file:
         server_process = subprocess.Popen(
             [sys.executable, __file__, '--serve', str(port)],
             stdout=log_file,
             stderr=log_file,
             start_new_session=True
         )
-        
+
         logger.info(f"Server started with PID {server_process.pid}")
-        logger.info(f"Server logs: /tmp/ride-optimizer-server.log")
+        logger.info(f"Server logs: {log_path}")
     
     # Wait for server to start
     time.sleep(2)
