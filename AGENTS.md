@@ -1,7 +1,12 @@
 # AGENTS.md
 
 This file provides guidance to agents when working with code in this repository.
+
+Please also refer to CLAUDE.md for direction. In the event of a conflict - explain the conundrum and ask the user how to proceed. 
+
 ## ⚠️ CRITICAL ARCHITECTURE RULES ⚠️
+
+
 
 ### Product Vision: WEB APPLICATION (NOT CLI Tool)
 

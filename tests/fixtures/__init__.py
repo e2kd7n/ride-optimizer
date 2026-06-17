@@ -33,8 +33,8 @@ def load_route_groups() -> Dict[str, Any]:
 
 
 def load_weather() -> Dict[str, Any]:
-    """Load weather fixture including current conditions and multi-day forecast."""
-    return _load_json("sample_weather.json")
+    """Load weather fixture including current conditions, daily and hourly forecast."""
+    return _load_json("weather.json")
 
 
 def load_workouts() -> Dict[str, Any]:
