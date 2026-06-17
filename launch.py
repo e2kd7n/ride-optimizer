@@ -27,7 +27,6 @@ from typing import List, Dict, Any
 
 from src.config import Config
 from src.json_storage import JSONStorage
-from src.route_analyzer import Route, RouteGroup
 from src.location_finder import Location
 from app.services.analysis_service import AnalysisService
 from app.services.commute_service import CommuteService
@@ -148,85 +147,6 @@ _analysis_stop_requested = False
 _fetch_job = {'status': 'idle', 'fetched': 0, 'label': '', 'started_at': None}
 
 
-def load_route_groups_from_json(json_path: Path) -> List[RouteGroup]:
-    """
-    Load route groups from JSON file and convert to RouteGroup objects.
-    
-    Args:
-        json_path: Path to route_groups.json file
-        
-    Returns:
-        List of RouteGroup objects
-        
-    Raises:
-        FileNotFoundError: If JSON file doesn't exist
-        ValueError: If JSON structure is invalid
-    """
-    if not json_path.exists():
-        raise FileNotFoundError(f"Route groups file not found: {json_path}")
-    
-    try:
-        with open(json_path, 'r') as f:
-            data = json.load(f)
-        
-        route_groups_data = data.get('route_groups', [])
-        if not route_groups_data:
-            raise ValueError("No route groups found in JSON file")
-        
-        route_groups = []
-        for group_data in route_groups_data:
-            # Convert representative route
-            rep_route_data = group_data['representative_route']
-            representative_route = Route(
-                activity_id=rep_route_data['activity_id'],
-                direction=rep_route_data['direction'],
-                coordinates=[(lat, lon) for lat, lon in rep_route_data['coordinates']],
-                distance=rep_route_data['distance'],
-                duration=rep_route_data['duration'],
-                elevation_gain=rep_route_data['elevation_gain'],
-                timestamp=rep_route_data['timestamp'],
-                average_speed=rep_route_data['average_speed'],
-                is_plus_route=rep_route_data.get('is_plus_route', False)
-            )
-            
-            # Convert all routes in group
-            routes = []
-            for route_data in group_data.get('routes', []):
-                route = Route(
-                    activity_id=route_data['activity_id'],
-                    direction=route_data['direction'],
-                    coordinates=[(lat, lon) for lat, lon in route_data['coordinates']],
-                    distance=route_data['distance'],
-                    duration=route_data['duration'],
-                    elevation_gain=route_data['elevation_gain'],
-                    timestamp=route_data['timestamp'],
-                    average_speed=route_data['average_speed'],
-                    is_plus_route=route_data.get('is_plus_route', False)
-                )
-                routes.append(route)
-            
-            # Create RouteGroup
-            route_group = RouteGroup(
-                id=group_data['id'],
-                direction=group_data['direction'],
-                routes=routes,
-                representative_route=representative_route,
-                frequency=group_data['frequency'],
-                name=group_data.get('name'),
-                is_plus_route=group_data.get('is_plus_route', False),
-                difficulty=group_data.get('difficulty', 'easy')
-            )
-            route_groups.append(route_group)
-        
-        logger.info(f"Loaded {len(route_groups)} route groups from {json_path}")
-        return route_groups
-        
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Invalid JSON in route groups file: {e}")
-    except KeyError as e:
-        raise ValueError(f"Missing required field in route groups JSON: {e}")
-
-
 def get_locations_from_config(config: Config) -> tuple[Location, Location]:
     """
     Extract home and work locations from config.
@@ -279,7 +199,7 @@ def initialize_services():
         return
     
     logger.info("Initializing services...")
-    
+
     try:
         # Initialize core services
         _analysis_service = AnalysisService(config)
@@ -287,22 +207,21 @@ def initialize_services():
         _weather_service = WeatherService(config)
         _planner_service = PlannerService(config)
         _route_library_service = RouteLibraryService(config)
-        
-        # Load cached data if available
-        status_data = storage.read('status.json', default={})
-        if status_data.get('has_data', False):
+
+        # Load cached analysis data via AnalysisService (reads analysis_status.json,
+        # route_groups.json, long_rides.json written by _save_to_cache)
+        analysis_status = _analysis_service.get_analysis_status()
+        if analysis_status.get('has_data', False):
             logger.info("Loading cached analysis data...")
-            
-            # Initialize CommuteService with route groups and locations
+
             try:
-                # Load route groups from JSON
-                route_groups_path = Path('data/route_groups.json')
-                route_groups = load_route_groups_from_json(route_groups_path)
-                
-                # Extract locations from config
-                home_location, work_location = get_locations_from_config(config)
-                
-                # Initialize commute service
+                route_groups = _analysis_service.get_route_groups()
+                home_location, work_location = _analysis_service.get_locations()
+
+                # Fall back to config locations if analysis cache has none
+                if home_location is None or work_location is None:
+                    home_location, work_location = get_locations_from_config(config)
+
                 enable_weather = config.get('weather.enabled', True)
                 _commute_service.initialize(
                     route_groups=route_groups,
@@ -311,16 +230,14 @@ def initialize_services():
                     enable_weather=enable_weather
                 )
                 logger.info("CommuteService initialized successfully")
-                
-            except FileNotFoundError as e:
-                logger.warning(f"Route groups not found, commute service will not be available: {e}")
+
             except ValueError as e:
                 logger.warning(f"Invalid route data or config, commute service will not be available: {e}")
             except Exception as e:
                 logger.error(f"Failed to initialize commute service: {e}", exc_info=True)
         else:
             logger.info("No cached data available - run analysis first to enable commute recommendations")
-        
+
         _services_initialized = True
         logger.info("Services initialized successfully")
         
@@ -1214,6 +1131,15 @@ def get_status():
         # Get analysis status
         analysis_status = _analysis_service.get_analysis_status()
         
+        # Cache file stats
+        cache_files = {}
+        for name in ('analysis_status.json', 'route_groups.json', 'long_rides.json'):
+            path = Path('data') / name
+            if path.exists():
+                cache_files[name] = {'exists': True, 'size_bytes': path.stat().st_size}
+            else:
+                cache_files[name] = {'exists': False, 'size_bytes': 0}
+
         # Format for frontend (dashboard.js expects specific fields)
         status_data = {
             'status': 'success',
@@ -1226,7 +1152,11 @@ def get_status():
                 'planner': 'initialized' if _planner_service else 'not_initialized',
                 'route_library': 'initialized' if _route_library_service else 'not_initialized'
             },
-            'data': analysis_status
+            'data': analysis_status,
+            'cache': {
+                'files': cache_files,
+                'total_size_bytes': sum(f['size_bytes'] for f in cache_files.values()),
+            }
         }
         
         return jsonify(status_data)
