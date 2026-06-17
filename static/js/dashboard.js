@@ -367,7 +367,11 @@ function renderHeroCard(rec, isHero) {
                     ${departureTime ? `<span class="ms-3"><i class="bi bi-alarm"></i> ${departureTime}</span>` : ''}
                 </div>
                 ${transitBanner}
-                <div class="mt-3">
+                <div class="mt-3 d-flex gap-2 flex-wrap">
+                    ${route.id ? `
+                    <a href="route-detail.html?id=${encodeURIComponent(route.id)}" class="btn btn-primary btn-sm">
+                        <i class="bi bi-map me-1"></i>View route
+                    </a>` : ''}
                     <button type="button" class="btn btn-outline-secondary btn-sm"
                             data-bs-toggle="collapse" data-bs-target="#commute-detail"
                             aria-expanded="false" aria-controls="commute-detail">
