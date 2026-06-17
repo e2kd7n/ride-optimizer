@@ -494,7 +494,7 @@ class AnalysisService:
                         'long_rides_count': 0, 'errors': []}
 
             # Step 4: Analyze long rides
-            _notify(phase='processing', fetched=total, label='Analyzing long rides…')
+            _notify(phase='long_rides', fetched=total, label='Analyzing long rides…')
             logger.info("Analyzing long rides...")
             long_ride_analyzer = LongRideAnalyzer(
                 activities=self._activities,
@@ -513,7 +513,12 @@ class AnalysisService:
             ]
 
             _, long_ride_activities = long_ride_analyzer.classify_activities(commute_activities)
-            self._long_rides = long_ride_analyzer.group_similar_rides(long_ride_activities)
+
+            def _long_ride_progress(**kwargs):
+                _notify(phase='long_rides', fetched=total, **kwargs)
+
+            self._long_rides = long_ride_analyzer.group_similar_rides(
+                long_ride_activities, on_progress=_long_ride_progress)
             logger.info(f"Found {len(self._long_rides)} unique long rides")
 
             # Step 5: Update analysis time and persist results
