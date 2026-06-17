@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+Please also refer to AGENTS.md for direction. In the event of a conflict - explain the conundrum and ask the user how to proceed. 
+
 ## Commands
 
 **Development server:**

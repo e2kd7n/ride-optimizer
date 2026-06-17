@@ -530,3 +530,399 @@ class TestFetchActivities:
         result = fetcher.get_activity_details(999)
         assert result is None
 
+    def test_fetch_with_before_date_filters(self, fetcher):
+        strava_act = self._make_strava_activity(1)
+        strava_act.start_date = datetime(2026, 6, 1, 8, 0, tzinfo=timezone.utc)
+        fetcher.client.get_activities.return_value = [strava_act]
+        before_date = datetime(2026, 5, 1, 0, 0)
+        result = fetcher.fetch_activities(use_cache=False, before=before_date)
+        assert len(result) == 0
+
+    def test_fetch_with_before_date_includes(self, fetcher):
+        strava_act = self._make_strava_activity(1)
+        strava_act.start_date = datetime(2026, 4, 1, 8, 0, tzinfo=timezone.utc)
+        fetcher.client.get_activities.return_value = [strava_act]
+        before_date = datetime(2026, 5, 1, 0, 0)
+        result = fetcher.fetch_activities(use_cache=False, before=before_date)
+        assert len(result) == 1
+
+    def test_fetch_with_after_date(self, fetcher):
+        strava_act = self._make_strava_activity(1)
+        fetcher.client.get_activities.return_value = [strava_act]
+        after_date = datetime(2026, 1, 1, 0, 0)
+        result = fetcher.fetch_activities(use_cache=False, after=after_date)
+        assert len(result) == 1
+
+    def test_fetch_with_date_range(self, fetcher):
+        strava_act = self._make_strava_activity(1)
+        fetcher.client.get_activities.return_value = [strava_act]
+        result = fetcher.fetch_activities(
+            use_cache=False,
+            after=datetime(2026, 1, 1),
+            before=datetime(2026, 12, 31),
+        )
+        assert len(result) == 1
+
+    def test_fetch_expired_cache_fetches_from_api(self, fetcher, tmp_path):
+        cache_data = {
+            'timestamp': (datetime.now() - timedelta(days=30)).isoformat(),
+            'count': 1,
+            'activities': [
+                {'id': 99, 'name': 'Old', 'type': 'Ride', 'distance': 5000.0,
+                 'moving_time': 1200, 'elapsed_time': 1300,
+                 'total_elevation_gain': 50.0, 'average_speed': 4.0, 'max_speed': 8.0}
+            ]
+        }
+        fetcher.cache_path.write_text(json.dumps(cache_data))
+        strava_act = self._make_strava_activity(42)
+        fetcher.client.get_activities.return_value = [strava_act]
+        result = fetcher.fetch_activities(use_cache=True)
+        fetcher.client.get_activities.assert_called_once()
+        assert len(result) == 1
+
+
+class TestFromStravaToSecondsEdgeCases:
+    """Cover to_seconds branches: None, .seconds attribute, plain int."""
+
+    def _base_mock(self):
+        m = Mock()
+        m.id = 1
+        m.name = "Ride"
+        m.type = "Ride"
+        m.sport_type = None
+        m.start_date = datetime(2026, 1, 1, 8, 0, tzinfo=timezone.utc)
+        m.distance = 5000.0
+        m.total_elevation_gain = 50.0
+        m.average_speed = 4.0
+        m.max_speed = 8.0
+        m.start_latlng = None
+        m.end_latlng = None
+        m.map = None
+        return m
+
+    def test_moving_time_none(self):
+        m = self._base_mock()
+        m.moving_time = None
+        m.elapsed_time = 1300
+        act = Activity.from_strava_activity(m)
+        assert act.moving_time == 0
+
+    def test_time_with_seconds_attribute(self):
+        m = self._base_mock()
+        duration = Mock(spec=[])
+        duration.seconds = 2500
+        m.moving_time = duration
+        m.elapsed_time = 2600
+        act = Activity.from_strava_activity(m)
+        assert act.moving_time == 2500
+
+    def test_time_plain_int(self):
+        m = self._base_mock()
+        m.moving_time = 1800
+        m.elapsed_time = 1900
+        act = Activity.from_strava_activity(m)
+        assert act.moving_time == 1800
+
+
+class TestFromDictNestedLatlng:
+    """Cover nested latlng extraction: [['root', [lat, lon]]]."""
+
+    def _base_dict(self):
+        return {
+            'id': 1, 'name': 'Test', 'type': 'Ride',
+            'distance': 5000.0, 'moving_time': 1200, 'elapsed_time': 1300,
+            'total_elevation_gain': 50.0, 'average_speed': 4.0, 'max_speed': 8.0
+        }
+
+    def test_nested_latlng_structure(self):
+        d = self._base_dict()
+        d['start_latlng'] = [['root', [41.88, -87.63]]]
+        d['end_latlng'] = [['root', [41.89, -87.62]]]
+        act = Activity.from_dict(d)
+        assert act.start_latlng == (41.88, -87.63)
+        assert act.end_latlng == (41.89, -87.62)
+
+    def test_nested_latlng_invalid_inner(self):
+        d = self._base_dict()
+        d['start_latlng'] = [['root', 'invalid']]
+        act = Activity.from_dict(d)
+        assert act.start_latlng is None
+
+    def test_empty_list_latlng(self):
+        d = self._base_dict()
+        d['start_latlng'] = []
+        act = Activity.from_dict(d)
+        assert act.start_latlng == []
+
+
+class TestEnrichActivities:
+    """Test enrich_activities_with_detailed_polylines."""
+
+    @pytest.fixture
+    def fetcher(self, tmp_path):
+        client = Mock()
+        config = Mock()
+        config.get.side_effect = lambda key, default=None: {
+            'data_fetching.cache_duration_days': 7,
+            'data_fetching.max_activities': 500,
+        }.get(key, default)
+        f = StravaDataFetcher(client, config, use_test_cache=False)
+        f.cache_path = tmp_path / "activities.json"
+        return f
+
+    def _make_strava_act(self, aid=1):
+        m = Mock()
+        m.id = aid
+        m.name = "Ride"
+        m.type = "Ride"
+        m.sport_type = None
+        m.start_date = datetime(2026, 1, 1, 8, 0, tzinfo=timezone.utc)
+        m.distance = 5000.0
+        m.moving_time = 1200
+        m.elapsed_time = 1300
+        m.total_elevation_gain = 50.0
+        m.average_speed = 4.0
+        m.max_speed = 8.0
+        m.start_latlng = None
+        m.end_latlng = None
+        m.map = Mock()
+        m.map.polyline = "detailed_poly"
+        m.map.summary_polyline = "summary_poly"
+        return m
+
+    def test_enriches_polylines(self, fetcher):
+        activity = Activity(
+            id=1, name="Test", type="Ride",
+            start_date="2026-01-01T08:00:00+00:00",
+            distance=5000.0, moving_time=1200, elapsed_time=1300,
+            total_elevation_gain=50.0, average_speed=4.0, max_speed=8.0,
+            polyline="summary_only",
+        )
+        fetcher.client.get_activity.return_value = self._make_strava_act(1)
+        result = fetcher.enrich_activities_with_detailed_polylines([activity])
+        assert len(result) == 1
+        assert result[0].polyline == "detailed_poly"
+
+    def test_enrichment_failure_keeps_original(self, fetcher):
+        activity = Activity(
+            id=2, name="Test", type="Ride",
+            start_date="2026-01-01T08:00:00+00:00",
+            distance=5000.0, moving_time=1200, elapsed_time=1300,
+            total_elevation_gain=50.0, average_speed=4.0, max_speed=8.0,
+            polyline="original_poly",
+        )
+        fetcher.client.get_activity.side_effect = RuntimeError("API error")
+        result = fetcher.enrich_activities_with_detailed_polylines([activity])
+        assert len(result) == 1
+        assert result[0].polyline == "original_poly"
+
+
+class TestFilterCommuteEdgeCases:
+    """Cover filter_commute_activities edge cases."""
+
+    @pytest.fixture
+    def fetcher(self, tmp_path):
+        client = Mock()
+        config = Mock()
+        config.get.side_effect = lambda key, default=None: {
+            'data_fetching.cache_duration_days': 7,
+            'data_fetching.max_activities': 500,
+            'route_filtering.min_distance_km': 1.0,
+            'route_filtering.max_distance_km': 50.0,
+            'route_filtering.activity_types': ['Ride'],
+            'route_filtering.exclude_virtual': True,
+        }.get(key, default)
+        f = StravaDataFetcher(client, config, use_test_cache=False)
+        f.cache_path = tmp_path / "activities.json"
+        return f
+
+    def _make_act(self, **kwargs):
+        defaults = dict(
+            id=1, name="Commute", type="Ride",
+            start_date=datetime.now(timezone.utc).isoformat(),
+            distance=5000.0, moving_time=1200, elapsed_time=1300,
+            total_elevation_gain=50.0, average_speed=4.0, max_speed=8.0,
+            start_latlng=(41.88, -87.63), end_latlng=(41.89, -87.62),
+            polyline="poly",
+        )
+        defaults.update(kwargs)
+        return Activity(**defaults)
+
+    def test_excludes_non_ride_type(self, fetcher):
+        act = self._make_act(type="Run", name="Morning Commute")
+        result = fetcher.filter_commute_activities([act])
+        assert len(result) == 0
+
+    def test_excludes_too_short(self, fetcher):
+        act = self._make_act(distance=500.0, name="Morning Commute")
+        result = fetcher.filter_commute_activities([act])
+        assert len(result) == 0
+
+    def test_excludes_too_long(self, fetcher):
+        act = self._make_act(distance=60000.0, name="Morning Commute")
+        result = fetcher.filter_commute_activities([act])
+        assert len(result) == 0
+
+    def test_excludes_no_gps(self, fetcher):
+        act = self._make_act(start_latlng=None, end_latlng=None, name="Morning Commute")
+        result = fetcher.filter_commute_activities([act])
+        assert len(result) == 0
+
+    def test_excludes_no_polyline(self, fetcher):
+        act = self._make_act(polyline=None, name="Morning Commute")
+        result = fetcher.filter_commute_activities([act])
+        assert len(result) == 0
+
+    def test_excludes_virtual(self, fetcher):
+        act = self._make_act(name="Virtual Commute")
+        result = fetcher.filter_commute_activities([act])
+        assert len(result) == 0
+
+    def test_includes_valid_commute(self, fetcher):
+        act = self._make_act(name="Morning Commute")
+        result = fetcher.filter_commute_activities([act])
+        assert len(result) == 1
+
+
+class TestGearMethods:
+    """Test gear fetching, caching, and backfill."""
+
+    @pytest.fixture
+    def fetcher(self, tmp_path):
+        client = Mock()
+        config = Mock()
+        config.get.side_effect = lambda key, default=None: {
+            'data_fetching.cache_duration_days': 7,
+            'data_fetching.max_activities': 500,
+        }.get(key, default)
+        f = StravaDataFetcher(client, config, use_test_cache=False)
+        f.cache_path = tmp_path / "activities.json"
+        return f
+
+    def test_fetch_athlete_gear(self, fetcher):
+        bike = Mock()
+        bike.id = "b123"
+        bike.name = "Tarmac"
+        bike.brand_name = "Specialized"
+        bike.model_name = "SL7"
+        bike.primary = True
+        bike.distance = 5000.0
+        shoe = Mock()
+        shoe.id = "s456"
+        shoe.name = "Pegasus"
+        shoe.brand_name = "Nike"
+        shoe.model_name = "40"
+        shoe.primary = False
+        shoe.distance = 1000.0
+        athlete = Mock()
+        athlete.bikes = [bike]
+        athlete.shoes = [shoe]
+        fetcher.client.get_athlete.return_value = athlete
+        result = fetcher.fetch_athlete_gear()
+        assert len(result['bikes']) == 1
+        assert result['bikes'][0]['id'] == 'b123'
+        assert result['bikes'][0]['name'] == 'Tarmac'
+        assert result['bikes'][0]['primary'] is True
+        assert len(result['shoes']) == 1
+        assert result['shoes'][0]['id'] == 's456'
+
+    def test_fetch_athlete_gear_error(self, fetcher):
+        fetcher.client.get_athlete.side_effect = RuntimeError("Auth failed")
+        with pytest.raises(RuntimeError):
+            fetcher.fetch_athlete_gear()
+
+    def test_load_cached_gear_missing(self, fetcher):
+        result = fetcher.load_cached_gear()
+        assert result is None
+
+    def test_load_cached_gear_exists(self, fetcher):
+        gear_data = {'timestamp': '2026-01-01', 'bikes': [], 'shoes': []}
+        fetcher._gear_cache_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(fetcher._gear_cache_path, 'w') as f:
+            json.dump(gear_data, f)
+        result = fetcher.load_cached_gear()
+        assert result == gear_data
+
+    def test_load_cached_gear_corrupt(self, fetcher):
+        fetcher._gear_cache_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(fetcher._gear_cache_path, 'w') as f:
+            f.write("not json")
+        result = fetcher.load_cached_gear()
+        assert result is None
+
+    def test_backfill_gear_ids_no_cache(self, fetcher):
+        result = fetcher.backfill_gear_ids()
+        assert result == {'updated': 0, 'skipped': 0, 'total_cached': 0}
+
+    def test_backfill_gear_ids_all_have_gear(self, fetcher):
+        cache_data = {
+            'timestamp': datetime.now().isoformat(),
+            'count': 1,
+            'activities': [
+                {'id': 1, 'name': 'R', 'type': 'Ride', 'distance': 5000.0,
+                 'moving_time': 1200, 'elapsed_time': 1300,
+                 'total_elevation_gain': 50.0, 'average_speed': 4.0,
+                 'max_speed': 8.0, 'gear_id': 'b123'}
+            ]
+        }
+        fetcher.cache_path.write_text(json.dumps(cache_data))
+        result = fetcher.backfill_gear_ids()
+        assert result['updated'] == 0
+        assert result['skipped'] == 1
+
+    def test_backfill_gear_ids_updates_missing(self, fetcher):
+        cache_data = {
+            'timestamp': datetime.now().isoformat(),
+            'count': 1,
+            'activities': [
+                {'id': 1, 'name': 'R', 'type': 'Ride', 'distance': 5000.0,
+                 'moving_time': 1200, 'elapsed_time': 1300,
+                 'total_elevation_gain': 50.0, 'average_speed': 4.0,
+                 'max_speed': 8.0}
+            ]
+        }
+        fetcher.cache_path.write_text(json.dumps(cache_data))
+        strava_act = Mock()
+        strava_act.id = 1
+        strava_act.gear_id = "b456"
+        fetcher.client.get_activities.return_value = [strava_act]
+        result = fetcher.backfill_gear_ids()
+        assert result['updated'] == 1
+        assert result['total_cached'] == 1
+
+    def test_backfill_gear_ids_api_error(self, fetcher):
+        cache_data = {
+            'timestamp': datetime.now().isoformat(),
+            'count': 1,
+            'activities': [
+                {'id': 1, 'name': 'R', 'type': 'Ride', 'distance': 5000.0,
+                 'moving_time': 1200, 'elapsed_time': 1300,
+                 'total_elevation_gain': 50.0, 'average_speed': 4.0,
+                 'max_speed': 8.0}
+            ]
+        }
+        fetcher.cache_path.write_text(json.dumps(cache_data))
+        fetcher.client.get_activities.side_effect = RuntimeError("API error")
+        with pytest.raises(RuntimeError):
+            fetcher.backfill_gear_ids()
+
+    def test_backfill_progress_callback(self, fetcher):
+        cache_data = {
+            'timestamp': datetime.now().isoformat(),
+            'count': 1,
+            'activities': [
+                {'id': 1, 'name': 'R', 'type': 'Ride', 'distance': 5000.0,
+                 'moving_time': 1200, 'elapsed_time': 1300,
+                 'total_elevation_gain': 50.0, 'average_speed': 4.0,
+                 'max_speed': 8.0}
+            ]
+        }
+        fetcher.cache_path.write_text(json.dumps(cache_data))
+        strava_act = Mock()
+        strava_act.id = 1
+        strava_act.gear_id = "b789"
+        fetcher.client.get_activities.return_value = [strava_act]
+        calls = []
+        fetcher.backfill_gear_ids(progress_callback=lambda fetched, updated: calls.append((fetched, updated)))
+        assert len(calls) >= 1
+

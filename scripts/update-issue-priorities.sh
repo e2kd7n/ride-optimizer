@@ -535,8 +535,8 @@ echo "**Priority is now WITHIN a release** - P0/P1 issues in the current release
 echo ""
 
 # Get current release from RELEASE_ROADMAP.md
-CURRENT_RELEASE=$(grep -A 1 "^\*\*Current Release:\*\*" RELEASE_ROADMAP.md 2>/dev/null | tail -1 | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-NEXT_RELEASE=$(grep -A 1 "^\*\*Next Release:\*\*" RELEASE_ROADMAP.md 2>/dev/null | tail -1 | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+CURRENT_RELEASE=$(grep -A 1 "^\*\*Current Release:\*\*" RELEASE_ROADMAP.md 2>/dev/null | tail -1 | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1 | tr -d '\r')
+NEXT_RELEASE=$(grep -A 1 "^\*\*Next Release:\*\*" RELEASE_ROADMAP.md 2>/dev/null | tail -1 | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1 | tr -d '\r')
 
 if [ -z "$CURRENT_RELEASE" ]; then
   CURRENT_RELEASE="v0.10.0"
@@ -569,7 +569,7 @@ get_issue_count() {
 }
 
 # Get all unique milestones, sorted by version number
-MILESTONES=$(gh issue list --state open --json milestone --limit 200 2>/dev/null | jq -r '.[].milestone.title // empty' | sort -u -V)
+MILESTONES=$(gh issue list --state open --json milestone --limit 200 2>/dev/null | jq -r '.[].milestone.title // empty' | tr -d '\r' | sort -u -V)
 
 # Separate milestones into next and future
 # The FIRST milestone (lowest version) is the "next release"
