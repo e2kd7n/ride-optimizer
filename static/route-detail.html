@@ -300,6 +300,39 @@
                     `
                     : '';
 
+                // Long rides store uses as parallel arrays: activity_ids + activity_dates
+                const longRideUsesMarkup = route.type === 'long_ride' && Array.isArray(route.activity_ids) && route.activity_ids.length > 1
+                    ? `
+                        <div class="card mt-4">
+                            <div class="card-body">
+                                <h2 class="h5">All rides on this route (${route.activity_ids.length})</h2>
+                                <div class="table-responsive">
+                                    <table class="table table-sm align-middle mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th scope="col">Activity</th>
+                                                <th scope="col">Date</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${route.activity_ids.map((aid, i) => {
+                                                const date = route.activity_dates && route.activity_dates[i]
+                                                    ? new Date(route.activity_dates[i]).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+                                                    : '';
+                                                const label = aid === Number(route.id) || String(aid) === String(route.id) ? ' (this ride)' : '';
+                                                return `<tr>
+                                                    <td><a href="https://www.strava.com/activities/${aid}" target="_blank" rel="noopener">${aid}${label}</a></td>
+                                                    <td>${date}</td>
+                                                </tr>`;
+                                            }).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    `
+                    : '';
+
                 const routeHistoryMarkup = Array.isArray(route.routes) && route.routes.length
                     ? `
                         <div class="card mt-4">
@@ -318,7 +351,9 @@
                                         <tbody>
                                             ${route.routes.slice(0, 10).map(item => `
                                                 <tr>
-                                                    <td>${item.activity_name || item.activity_id || 'Route record'}</td>
+                                                    <td>${item.activity_id
+                                                        ? `<a href="https://www.strava.com/activities/${item.activity_id}" target="_blank" rel="noopener">${item.activity_name || item.activity_id}</a>`
+                                                        : (item.activity_name || 'Route record')}</td>
                                                     <td>${window.formatDistance(item.distance)}</td>
                                                     <td>${formatDuration(item.duration)}</td>
                                                     <td>${window.formatElevation(item.elevation)}</td>
@@ -345,8 +380,13 @@
                                     ${route.is_favorite ? `<span class="detail-chip"><i class="bi bi-star-fill text-warning"></i> Favorite</span>` : ''}
                                 </div>
                             </div>
-                            <div class="text-md-end text-muted">
-                                <div>${route.is_plus_route ? 'PLUS route' : ''}</div>
+                            <div class="text-md-end">
+                                ${route.is_plus_route ? '<div class="text-muted">PLUS route</div>' : ''}
+                                ${route.type === 'long_ride' && route.id
+                                    ? `<a href="https://www.strava.com/activities/${route.id}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-warning mt-1"><i class="bi bi-box-arrow-up-right"></i> View on Strava</a>`
+                                    : (Array.isArray(route.routes) && route.routes.length && route.routes[0].activity_id
+                                        ? `<a href="https://www.strava.com/activities/${route.routes[0].activity_id}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-warning mt-1"><i class="bi bi-box-arrow-up-right"></i> View on Strava</a>`
+                                        : '')}
                             </div>
                         </div>
 
@@ -404,6 +444,7 @@
                             <div class="col-lg-7">
                                 ${weatherMarkup}
                                 ${routeHistoryMarkup}
+                                ${longRideUsesMarkup}
 
                                 <!-- Performance Metrics Charts -->
                                 <div class="card mt-4" id="performance-metrics-card" style="display: none;">
