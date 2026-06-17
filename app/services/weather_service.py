@@ -183,55 +183,6 @@ class WeatherService:
             logger.error(f"Error getting current weather: {e}", exc_info=True)
             return self._get_degraded_weather(lat, lon, location_name)
     
-    def get_route_weather(self,
-                         coordinates: List[Tuple[float, float]],
-                         route_name: Optional[str] = None) -> Dict[str, Any]:
-        """
-        Get weather for a route with wind impact analysis.
-        
-        Args:
-            coordinates: List of (lat, lon) tuples along the route
-            route_name: Optional route name for display
-            
-        Returns:
-            Dictionary with weather data plus wind_impact analysis
-        """
-        if not coordinates:
-            logger.warning("No coordinates provided for route weather")
-            return {}
-        
-        try:
-            # Use route start location for weather
-            start_lat, start_lon = coordinates[0]
-            
-            # Get current weather
-            weather = self.get_current_weather(start_lat, start_lon, location_name=route_name)
-            
-            if not weather:
-                return {}
-            
-            # Add wind impact analysis if we have wind data
-            wind_speed = weather.get('wind_speed_kph', 0)
-            wind_direction = weather.get('wind_direction_degrees', 0)
-            
-            if wind_speed > 0 and wind_direction is not None:
-                try:
-                    wind_impact = self.wind_calculator.calculate_wind_impact(
-                        coordinates,
-                        wind_speed,
-                        wind_direction
-                    )
-                    weather['wind_impact'] = wind_impact
-                    logger.info(f"Added wind impact analysis for {route_name or 'route'}")
-                except Exception as e:
-                    logger.warning(f"Failed to calculate wind impact: {e}")
-            
-            return weather
-            
-        except Exception as e:
-            logger.error(f"Error getting route weather: {e}", exc_info=True)
-            return {}
-    
     def get_weather_summary(self,
                            lat: float,
                            lon: float,

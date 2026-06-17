@@ -152,7 +152,7 @@ class TestWeekendWarriorScenario:
             assert 'cycling_score' in day
             assert 0 <= day['cycling_score'] <= 100
     
-    @patch('app.services.route_library_service.RouteLibraryService.get_routes')
+    @patch('app.services.route_library_service.RouteLibraryService.get_all_routes')
     def test_step_3_filter_routes_by_distance(self, mock_routes, client, mock_long_routes):
         """Step 3: User filters routes by distance (45-55 miles)"""
         mock_routes.return_value = mock_long_routes
@@ -219,7 +219,7 @@ class TestWeekendWarriorScenario:
         assert len(analysis['recommendations']) > 0
     
     @patch('app.services.weather_service.WeatherService.get_daily_forecast')
-    @patch('app.services.route_library_service.RouteLibraryService.get_routes')
+    @patch('app.services.route_library_service.RouteLibraryService.get_all_routes')
     @patch('app.services.planner_service.PlannerService.analyze_long_ride')
     def test_complete_weekend_ride_planning_workflow(
         self,
@@ -374,7 +374,7 @@ class TestWeekendWarriorDataAccuracy:
             assert 0 <= day['cycling_score'] <= 100
             assert day['high_temp_f'] > day['low_temp_f']
     
-    @patch('app.services.route_library_service.RouteLibraryService.get_routes')
+    @patch('app.services.route_library_service.RouteLibraryService.get_all_routes')
     def test_route_filtering_accuracy(self, mock_routes, client, mock_long_routes):
         """Route filtering should return accurate results"""
         mock_routes.return_value = mock_long_routes
