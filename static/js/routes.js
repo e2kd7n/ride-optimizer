@@ -533,24 +533,27 @@
         return column;
     }
 
+    function syncCompareCheckboxes() {
+        document.querySelectorAll('.compare-checkbox').forEach(cb => {
+            cb.checked = state.selectedForComparison.some(r => String(r.id) === String(cb.dataset.routeId));
+        });
+    }
+
     function toggleRouteComparison(route) {
         const index = state.selectedForComparison.findIndex(r => r.id === route.id);
-        
+
         if (index > -1) {
-            // Remove from comparison
             state.selectedForComparison.splice(index, 1);
         } else {
-            // Add to comparison (max 3 routes)
             if (state.selectedForComparison.length >= 3) {
                 alert('You can compare up to 3 routes at a time. Please deselect one first.');
-                // Uncheck the checkbox
-                const checkbox = document.querySelector(`#compare-${route.id}`);
-                if (checkbox) checkbox.checked = false;
+                syncCompareCheckboxes();
                 return;
             }
             state.selectedForComparison.push(route);
         }
-        
+
+        syncCompareCheckboxes();
         updateCompareButton();
     }
 
