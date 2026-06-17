@@ -117,10 +117,12 @@ function renderWindowMetrics(windowData, contentId) {
             <i class="bi bi-wind"></i>
             <span>${windowData.avg_wind_mph} mph ${windowData.dominant_wind_direction || ''}</span>
         </div>
+        ${windowData.optimal_departure ? `
         <div class="window-metric text-success mt-1">
             <i class="bi bi-clock-history"></i>
             <span>Best departure: <strong>${windowData.optimal_departure}</strong></span>
         </div>
+        ` : ''}
     `;
 }
 

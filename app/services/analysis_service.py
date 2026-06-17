@@ -305,6 +305,7 @@ class AnalysisService:
             'uses': getattr(long_ride, 'uses', 1),
             'activity_ids': getattr(long_ride, 'activity_ids', None),
             'activity_dates': getattr(long_ride, 'activity_dates', None),
+            'activity_names': getattr(long_ride, 'activity_names', None),
         }
 
     def _deserialize_long_ride(self, data: Dict[str, Any]):
@@ -326,6 +327,7 @@ class AnalysisService:
             uses=data.get('uses', 1),
             activity_ids=data.get('activity_ids'),
             activity_dates=data.get('activity_dates'),
+            activity_names=data.get('activity_names'),
         )
     
     def run_full_analysis(self, force_refresh: bool = False, skip_strava_fetch: bool = False,
