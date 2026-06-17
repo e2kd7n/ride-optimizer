@@ -180,16 +180,19 @@
                 </div>
             </div>
         
-            <!-- Strava Analysis -->
+            <!-- Connections -->
             <div class="row mb-4">
                 <div class="col-12">
                     <div class="card">
                         <div class="card-header bg-primary text-white">
                             <h2 class="h5 mb-0">
-                                <i class="bi bi-arrow-repeat" aria-hidden="true"></i> Strava Analysis
+                                <i class="bi bi-plug" aria-hidden="true"></i> Connections
                             </h2>
                         </div>
                         <div class="card-body">
+
+                            <!-- Strava -->
+                            <h3 class="h6 fw-bold mb-2"><i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>Strava</h3>
                             <div class="mb-3 d-flex align-items-center gap-3 flex-wrap">
                                 <div id="strava-connection-status">
                                     <span class="text-muted small"><i class="bi bi-hourglass-split"></i> Checking Strava…</span>
@@ -198,8 +201,6 @@
                                     <i class="bi bi-link-45deg"></i> Connect to Strava
                                 </a>
                             </div>
-
-                            <hr class="my-2">
 
                             <div id="cache-info" class="mb-3">
                                 <span class="text-muted small"><i class="bi bi-hourglass-split"></i> Loading cache info…</span>
@@ -282,28 +283,16 @@
                                     <a href="/routes.html" class="text-success fw-medium">view routes →</a>
                                 </div>
                             </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
 
-            <!-- intervals.icu Connection -->
-            <div class="row mb-4">
-                <div class="col-12">
-                    <div class="card">
-                        <div class="card-header bg-primary text-white">
-                            <h2 class="h5 mb-0">
-                                <i class="bi bi-link-45deg" aria-hidden="true"></i> intervals.icu
-                            </h2>
-                        </div>
-                        <div class="card-body">
+                            <hr class="my-4">
+
+                            <!-- intervals.icu -->
+                            <h3 class="h6 fw-bold mb-2"><i class="bi bi-activity me-1" aria-hidden="true"></i>intervals.icu</h3>
                             <div class="mb-3 d-flex align-items-center gap-3 flex-wrap">
                                 <div id="icu-connection-status">
                                     <span class="text-muted small"><i class="bi bi-hourglass-split"></i> Checking intervals.icu…</span>
                                 </div>
                             </div>
-
-                            <hr class="my-2">
 
                             <p class="small text-muted mb-3">
                                 Connect intervals.icu to enable direct links from each activity to its intervals.icu page.
@@ -333,6 +322,7 @@
                                 </div>
                             </div>
                             <div id="icu-connect-feedback" class="mt-2" style="display:none"></div>
+
                         </div>
                     </div>
                 </div>
