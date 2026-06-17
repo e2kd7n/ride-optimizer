@@ -202,7 +202,8 @@ class LongRideAnalyzer:
         return coords_km[int(np.argmax(dists))]
 
     def consolidate_similar_named_groups(self, name_groups: Dict[str, List[Activity]],
-                                        similarity_threshold: float = 2.0) -> Dict[str, List[Activity]]:
+                                        similarity_threshold: float = 2.0,
+                                        on_progress=None) -> Dict[str, List[Activity]]:
         """
         Consolidate named groups that have similar routes despite different names.
         This helps group route variations like "Old School" vs "Old School / Lake Bluff return".
@@ -234,9 +235,16 @@ class LongRideAnalyzer:
         processed = set()
 
         group_names = list(group_representatives.keys())
+        n_groups = len(group_names)
         for i, name1 in enumerate(group_names):
             if name1 in processed:
                 continue
+
+            if on_progress and i % 5 == 0:
+                try:
+                    on_progress(label=f'Comparing named groups… {i}/{n_groups}')
+                except Exception:
+                    pass
 
             # Start a new merged group with this name as the primary
             merged_activities = list(name_groups[name1])
@@ -460,7 +468,8 @@ class LongRideAnalyzer:
                                      named_groups: Dict[str, List[Activity]],
                                      similarity_threshold: float = 2.0,
                                      use_parallel: bool = True,
-                                     max_workers: int = None) -> Tuple[Dict[str, List[Activity]], List[Activity]]:
+                                     max_workers: int = None,
+                                     on_progress=None) -> Tuple[Dict[str, List[Activity]], List[Activity]]:
         """
         Match unnamed/generic rides to existing named groups using route similarity.
         Uses Fréchet distance to validate if routes are similar enough to be grouped together.
@@ -541,7 +550,13 @@ class LongRideAnalyzer:
                         matches[activity_id] = (best_match, distance)
         else:
             # Use sequential processing for small datasets (<10 items)
-            for activity_id, activity_polyline, _ in activities_data:
+            n_unnamed = len(activities_data)
+            for seq_idx, (activity_id, activity_polyline, _) in enumerate(activities_data):
+                if on_progress and seq_idx % 10 == 0:
+                    try:
+                        on_progress(label=f'Matching unnamed rides… {seq_idx}/{n_unnamed}')
+                    except Exception:
+                        pass
                 result = self._compare_route_to_groups(
                     (activity_id, activity_polyline, None),
                     group_representatives,
@@ -999,7 +1014,8 @@ class LongRideAnalyzer:
 
         return recommendations
 
-    def group_similar_rides(self, long_ride_activities: List[Activity]) -> List[LongRide]:
+    def group_similar_rides(self, long_ride_activities: List[Activity],
+                            on_progress=None) -> List[LongRide]:
         """
         Full pipeline: group activities into unique LongRide objects.
 
@@ -1012,26 +1028,40 @@ class LongRideAnalyzer:
 
         Args:
             long_ride_activities: Activities already filtered to non-commute long rides
+            on_progress: Optional callable(label=str) for status updates
 
         Returns:
             List of unique LongRide objects
         """
+        def _notify(label):
+            if on_progress:
+                try:
+                    on_progress(label=label)
+                except Exception:
+                    pass
+
         if not long_ride_activities:
             return []
 
+        _notify(f'Grouping {len(long_ride_activities)} long rides by name…')
         name_groups, unnamed_rides = self.group_rides_by_name(long_ride_activities)
 
         if name_groups:
-            name_groups = self.consolidate_similar_named_groups(name_groups)
+            _notify(f'Comparing {len(name_groups)} named route groups…')
+            name_groups = self.consolidate_similar_named_groups(name_groups,
+                                                                on_progress=on_progress)
 
         if unnamed_rides and name_groups:
+            _notify(f'Matching {len(unnamed_rides)} unnamed rides to groups…')
             name_groups, unnamed_rides = self.match_unnamed_rides_to_groups(
-                unnamed_rides, name_groups, use_parallel=False
+                unnamed_rides, name_groups, use_parallel=False,
+                on_progress=on_progress,
             )
 
         fallback_groups = self.generate_fallback_names(unnamed_rides) if unnamed_rides else {}
         all_groups = {**name_groups, **fallback_groups}
 
+        _notify(f'Finalizing {len(all_groups)} long ride groups…')
         return self.consolidate_named_groups(all_groups)
 
 
