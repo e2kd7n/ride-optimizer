@@ -47,11 +47,11 @@ class APIClient {
         }
 
         // Network errors
-        if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        if (error && error.name === 'TypeError' && error.message.includes('fetch')) {
             return 'Unable to connect. Please check your internet connection.';
         }
 
-        if (error.name === 'AbortError') {
+        if (error && error.name === 'AbortError') {
             return 'Request timeout. The server took too long to respond.';
         }
 
@@ -93,7 +93,12 @@ class APIClient {
                 lastStatus = response.status;
 
                 if (!response.ok) {
-                    const errorMessage = this.getErrorMessage(response.status);
+                    let serverMessage = null;
+                    try {
+                        const body = await response.json();
+                        serverMessage = body.error || body.message || null;
+                    } catch (_) {}
+                    const errorMessage = serverMessage || this.getErrorMessage(response.status);
                     const error = new Error(errorMessage);
                     error.status = response.status;
                     error.statusText = response.statusText;
