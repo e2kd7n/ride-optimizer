@@ -444,115 +444,55 @@
             return row;
         }
         
-        // Full mode for routes page
+        // Full mode for routes page — compact 2-line row
         const column = document.createElement('div');
-        column.className = 'col-12 col-md-6 col-xl-4';
+        column.className = 'col-12';
 
         const card = document.createElement('div');
-        card.className = 'card h-100 shadow-sm route-library-card';
+        card.className = 'card route-library-card';
         card.setAttribute('data-route-id', route.id);
         card.setAttribute('data-route-type', route.type || '');
-        card.style.transition = 'transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease';
-        card.style.minHeight = '100%';
+        card.style.transition = 'background-color 0.1s ease, border-color 0.15s ease';
 
         const isSelected = state.selectedForComparison.some(r => r.id === route.id);
-        card.addEventListener('focus', () => {
-            card.classList.add('border-primary');
-        });
-        card.addEventListener('blur', () => {
-            card.classList.remove('border-primary');
-        });
-        card.addEventListener('mouseenter', () => {
-            card.style.transform = 'translateY(-2px)';
-            card.style.boxShadow = '0 0.5rem 1rem rgba(0,0,0,0.12)';
-        });
-        card.addEventListener('mouseleave', () => {
-            card.style.transform = 'translateY(0)';
-            card.style.boxShadow = '';
-        });
+        card.addEventListener('mouseenter', () => { card.style.backgroundColor = 'var(--bs-light, #f8f9fa)'; });
+        card.addEventListener('mouseleave', () => { card.style.backgroundColor = ''; });
 
-        const badge = route.is_favorite
-            ? '<span class="badge bg-warning text-dark"><i class="bi bi-star-fill"></i> Favorite</span>'
-            : '';
-
-        const plusBadge = route.is_plus_route
-            ? '<span class="badge bg-success-subtle text-success-emphasis">PLUS</span>'
-            : '';
-
-        // Difficulty badge with semantic colors (4 levels)
-        // Normalize difficulty to title case for consistency
         const rawDifficulty = route.difficulty || 'Easy';
         const difficulty = rawDifficulty.charAt(0).toUpperCase() + rawDifficulty.slice(1).toLowerCase();
         const difficultyColors = {
-            'Easy': 'bg-success',
-            'Moderate': 'bg-primary',
-            'Hard': 'bg-warning text-dark',
-            'Very hard': 'bg-danger'
+            'Easy': 'bg-success', 'Moderate': 'bg-primary',
+            'Hard': 'bg-warning text-dark', 'Very hard': 'bg-danger'
         };
         const difficultyIcons = {
-            'Easy': 'bi-check-circle',
-            'Moderate': 'bi-dash-circle',
-            'Hard': 'bi-exclamation-circle',
-            'Very hard': 'bi-exclamation-triangle-fill'
+            'Easy': 'bi-check-circle', 'Moderate': 'bi-dash-circle',
+            'Hard': 'bi-exclamation-circle', 'Very hard': 'bi-exclamation-triangle-fill'
         };
-        const difficultyBadge = `<span class="badge ${difficultyColors[difficulty]}" aria-label="Difficulty: ${difficulty}">
-            <i class="bi ${difficultyIcons[difficulty]}" aria-hidden="true"></i> ${difficulty}
-        </span>`;
+
+        const favIcon   = route.is_favorite  ? '<i class="bi bi-star-fill text-warning me-1" aria-hidden="true"></i>' : '';
+        const plusBadge = route.is_plus_route ? '<span class="badge bg-success-subtle text-success-emphasis me-1" style="font-size:.65em;vertical-align:middle">PLUS</span>' : '';
+        const diffBadge = `<span class="badge ${difficultyColors[difficulty]} flex-shrink-0" style="font-size:.7em" title="${difficulty}" aria-label="Difficulty: ${difficulty}"><i class="bi ${difficultyIcons[difficulty]}" aria-hidden="true"></i></span>`;
 
         card.innerHTML = `
-            <div class="card-body d-flex flex-column">
-                <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
-                    <div class="form-check">
-                        <input class="form-check-input compare-checkbox" type="checkbox"
-                               id="compare-${route.id}"
-                               data-route-id="${route.id}"
-                               ${isSelected ? 'checked' : ''}
-                               onclick="event.stopPropagation()">
-                        <label class="form-check-label small text-muted" for="compare-${route.id}">
-                            Compare
-                        </label>
-                    </div>
-                    <div class="d-flex flex-column align-items-end gap-1">
-                        ${badge}
-                        ${plusBadge}
-                        ${difficultyBadge}
-                    </div>
+            <div class="card-body py-2 px-3">
+                <div class="d-flex align-items-center gap-2">
+                    <input class="form-check-input compare-checkbox flex-shrink-0 mt-0" type="checkbox"
+                           id="compare-${route.id}" data-route-id="${route.id}"
+                           ${isSelected ? 'checked' : ''}
+                           onclick="event.stopPropagation()" title="Compare">
+                    <span class="fw-semibold text-truncate flex-grow-1" style="font-size:.875rem;cursor:pointer" title="${route.name}" data-route-link>
+                        ${favIcon}${plusBadge}${route.name}
+                    </span>
+                    ${diffBadge}
                 </div>
-                <div class="mb-3" style="cursor: pointer;" data-route-link>
-                    <h3 class="h5 mb-1 text-truncate" title="${route.name}">${route.name}</h3>
-                    <p class="text-muted mb-0 text-capitalize">${route.type || 'route'}</p>
-                </div>
-
-                <div class="row g-2 mb-3">
-                    <div class="col-6">
-                        <div class="border rounded p-2 h-100">
-                            <div class="small text-muted">Distance</div>
-                            <div class="fw-semibold">${window.formatDistance(route.distance)}</div>
-                        </div>
-                    </div>
-                    <div class="col-6">
-                        <div class="border rounded p-2 h-100">
-                            <div class="small text-muted">Duration</div>
-                            <div class="fw-semibold">${formatDuration(route.duration)}</div>
-                        </div>
-                    </div>
-                    <div class="col-6">
-                        <div class="border rounded p-2 h-100">
-                            <div class="small text-muted">Elevation</div>
-                            <div class="fw-semibold">${window.formatElevation(route.elevation_gain || route.elevation || 0)}</div>
-                        </div>
-                    </div>
-                    <div class="col-6">
-                        <div class="border rounded p-2 h-100">
-                            <div class="small text-muted">Uses</div>
-                            <div class="fw-semibold">${route.uses || 0}</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="mt-auto d-flex justify-content-between align-items-center" data-route-link>
-                    <span class="text-muted small">${route.sport_type || 'Ride'}</span>
-                    <span class="text-primary fw-semibold">View details <i class="bi bi-arrow-right" aria-hidden="true"></i></span>
+                <div class="d-flex align-items-center gap-3 mt-1 text-muted" style="font-size:.78rem;padding-left:1.65rem">
+                    <span title="Distance"><i class="bi bi-arrow-left-right" aria-hidden="true"></i> ${window.formatDistance(route.distance)}</span>
+                    <span title="Duration"><i class="bi bi-clock" aria-hidden="true"></i> ${formatDuration(route.duration)}</span>
+                    <span title="Elevation gain"><i class="bi bi-arrow-up" aria-hidden="true"></i> ${window.formatElevation(route.elevation_gain || route.elevation || 0)}</span>
+                    <span title="Times ridden"><i class="bi bi-repeat" aria-hidden="true"></i> ${route.uses || 0}</span>
+                    <span class="ms-auto text-primary" style="cursor:pointer" data-route-link title="View details">
+                        <i class="bi bi-arrow-right" aria-hidden="true"></i>
+                    </span>
                 </div>
             </div>
         `;
@@ -753,7 +693,7 @@
         }
 
         const row = document.createElement('div');
-        row.className = 'row g-3';
+        row.className = 'row g-1';
 
         routes.forEach(route => {
             row.appendChild(createRouteCard(route));
