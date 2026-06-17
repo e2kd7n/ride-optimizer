@@ -128,6 +128,7 @@ class LongRidesDataStore:
             "uses": ride.uses,
             "activity_ids": ride.activity_ids or [],
             "activity_dates": ride.activity_dates or [],
+            "activity_names": ride.activity_names or [],
         }
 
     @staticmethod
@@ -148,4 +149,5 @@ class LongRidesDataStore:
             uses=int(data.get("uses", 1)),
             activity_ids=data.get("activity_ids") or None,
             activity_dates=data.get("activity_dates") or None,
+            activity_names=data.get("activity_names") or None,
         )
