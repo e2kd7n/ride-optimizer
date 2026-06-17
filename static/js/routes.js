@@ -293,20 +293,72 @@
         }
     }
 
-    function fitAllRoutes() {
-        if (!state.mapInstance || state.displayedRoutes.size === 0) {
+    async function fitAllRoutes() {
+        if (!state.mapInstance) {
+            initializeMap();
+        }
+
+        const missing = state.filteredRoutes.filter(r => !state.displayedRoutes.has(r.id));
+
+        if (missing.length === 0 && state.displayedRoutes.size === 0) {
+            announce('No routes to show on map');
+            return;
+        }
+
+        const MAX_BULK = 20;
+        const toLoad = missing.slice(0, MAX_BULK);
+        if (toLoad.length > 0) {
+            const statusEl = byId('map-status');
+            if (statusEl) statusEl.textContent = `Loading ${toLoad.length} routes…`;
+
+            const colorBase = state.displayedRoutes.size;
+            await Promise.all(toLoad.map(async (route, i) => {
+                const color = getRouteColor(colorBase + i);
+                try {
+                    const response = await window.apiClient.getRouteDetails(route.id, route.type);
+                    if (!response?.route?.coordinates?.length) return;
+                    const coords = response.route.coordinates;
+
+                    const polyline = L.polyline(coords, { color, weight: 5, opacity: 0.8 }).addTo(state.mapInstance);
+                    polyline.bindPopup(`<strong>${route.name}</strong><br>${window.formatDistance(route.distance)}`);
+
+                    const mkIcon = c => L.divIcon({
+                        className: 'custom-marker',
+                        html: `<div style="background-color:${c};width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 0 4px rgba(0,0,0,.5)"></div>`,
+                        iconSize: [12, 12]
+                    });
+                    const startMarker = L.marker(coords[0], { icon: mkIcon(color) }).addTo(state.mapInstance);
+                    const endMarker   = L.marker(coords[coords.length - 1], { icon: mkIcon(color) }).addTo(state.mapInstance);
+
+                    state.displayedRoutes.set(route.id, { polyline, startMarker, endMarker, color, defaultWeight: 5, defaultOpacity: 0.8 });
+
+                    const card = document.querySelector(`[data-route-id="${route.id}"]`);
+                    if (card) {
+                        card.style.borderColor = color;
+                        card.style.borderWidth = '3px';
+                        const nameEl = card.querySelector('.route-name, h5, .card-title');
+                        if (nameEl) { nameEl.style.color = color; nameEl.style.fontWeight = '700'; }
+                    }
+                } catch (e) {
+                    console.warn('Fit All: failed to load route', route.name, e);
+                }
+            }));
+            updateMapStatus();
+        }
+
+        if (state.displayedRoutes.size === 0) {
+            announce('No route coordinates available');
             return;
         }
 
         const bounds = L.latLngBounds();
         state.displayedRoutes.forEach(mapObjects => {
-            if (mapObjects.polyline) {
-                bounds.extend(mapObjects.polyline.getBounds());
-            }
+            if (mapObjects.polyline) bounds.extend(mapObjects.polyline.getBounds());
         });
 
         if (bounds.isValid()) {
             state.mapInstance.fitBounds(bounds, { padding: [30, 30] });
+            announce(`Fitted ${state.displayedRoutes.size} routes in view`);
         }
     }
 
