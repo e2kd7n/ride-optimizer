@@ -313,31 +313,24 @@
     </nav>
     
     <!-- Main Content -->
-    <main id="main-content" class="container mt-4 mb-5 pb-5" role="main">
-            <!-- Header Row: Title + Weather Banner -->
-            <div class="row align-items-center mb-4">
-                <div class="col-md-3 mb-3 mb-md-0">
-                    <h1 class="mb-0">
-                        <i class="bi bi-house-door" aria-hidden="true"></i> Home
-                    </h1>
-                </div>
-                <div class="col-md-9">
-                    <div id="weather-banner" class="weather-banner">
-                        <!-- Skeleton loader -->
-                        <div class="skeleton-weather" aria-busy="true" aria-label="Loading weather">
-                            <div class="skeleton skeleton-weather-header"></div>
-                            <div class="skeleton-weather-metrics">
-                                <div class="skeleton skeleton-weather-metric"></div>
-                                <div class="skeleton skeleton-weather-metric"></div>
-                                <div class="skeleton skeleton-weather-metric"></div>
-                            </div>
+    <main id="main-content" class="container mt-2 mb-3" role="main">
+            <!-- Weather Banner (full-width) -->
+            <div class="mb-2">
+                <div id="weather-banner" class="weather-banner">
+                    <!-- Skeleton loader -->
+                    <div class="skeleton-weather" aria-busy="true" aria-label="Loading weather">
+                        <div class="skeleton skeleton-weather-header"></div>
+                        <div class="skeleton-weather-metrics">
+                            <div class="skeleton skeleton-weather-metric"></div>
+                            <div class="skeleton skeleton-weather-metric"></div>
+                            <div class="skeleton skeleton-weather-metric"></div>
                         </div>
                     </div>
                 </div>
             </div>
-            
+
             <!-- Decision Row: Hero Card (col-lg-5) + Map + Panels (col-lg-7) -->
-            <div class="row mb-4">
+            <div class="row mb-2">
                 <!-- Hero Decision Card -->
                 <div class="col-lg-5 mb-3">
                     <div class="card h-100 hero-card">
@@ -369,10 +362,10 @@
 
                 <!-- Right: Forecast + Route Status panels above map -->
                 <div class="col-lg-7 mb-3">
-                    <div class="row mb-2">
+                    <div class="row g-2 mb-2">
                         <div class="col-6">
                             <div class="card">
-                                <div class="card-body p-3">
+                                <div class="card-body p-2">
                                     <h6 class="card-title mb-2">
                                         <i class="bi bi-clock" aria-hidden="true"></i> Commute Forecast
                                     </h6>
@@ -386,7 +379,7 @@
                         </div>
                         <div class="col-6 route-status-col">
                             <div class="card">
-                                <div class="card-body p-3">
+                                <div class="card-body p-2">
                                     <h6 class="card-title mb-2">
                                         <i class="bi bi-map" aria-hidden="true"></i> Route Status
                                     </h6>
@@ -429,7 +422,7 @@
     </nav>
     
     <!-- Footer -->
-    <footer class="mt-5 py-3 bg-light">
+    <footer class="mt-3 bg-light">
         <div class="container text-center text-muted">
             <small>Ride Optimizer v0.13.0 - Smart Static Architecture</small>
         </div>
