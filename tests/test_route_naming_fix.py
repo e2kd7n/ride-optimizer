@@ -78,17 +78,17 @@ class TestRouteNamingFix:
         ride_dict = {
             'activity_id': 12345678,
             'name': 'Unnamed Activity',
-            'distance_km': 30.5,
-            'duration_hours': 1.5,
+            'distance': 30500,   # meters
+            'duration': 5400,    # seconds
             'elevation_gain': 250,
             'uses': 1,
             'is_loop': False,
             'timestamp': '2026-05-14T10:00:00Z',
             'type': 'Ride'
         }
-        
+
         result = service._format_long_ride(ride_dict)
-        
+
         assert result['name'] != 'Unnamed Activity'
         assert '30.5km' in result['name']
         assert 'Route' in result['name']
@@ -99,8 +99,8 @@ class TestRouteNamingFix:
         ride_dict = {
             'activity_id': 12345678,
             'name': 'Epic Mountain Ride',
-            'distance_km': 50.0,
-            'duration_hours': 3.0,
+            'distance': 50000,   # meters
+            'duration': 10800,   # seconds
             'elevation_gain': 1200,
             'uses': 2,
             'is_loop': True,
@@ -160,8 +160,8 @@ class TestRouteNamingFix:
         long_ride = {
             'activity_id': 123,
             'name': 'Test Ride',
-            'distance_km': 20.0,
-            'duration_hours': 1.0,
+            'distance': 20000,   # meters
+            'duration': 3600,    # seconds
             'elevation_gain': 100,
             'uses': 1,
             'is_loop': False,
