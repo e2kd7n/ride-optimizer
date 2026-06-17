@@ -631,6 +631,7 @@ class RouteLibraryService:
             'average_speed': ride.average_speed * 3.6,  # km/h
             'activity_ids': ride.activity_ids,
             'activity_dates': ride.activity_dates,
+            'activity_names': ride.activity_names,
             'ride_type': ride.type
         })
         return base
@@ -645,6 +646,7 @@ class RouteLibraryService:
             'average_speed': ride.get('average_speed', 0) * 3.6 if ride.get('average_speed') else 0,
             'activity_ids': ride.get('activity_ids', []),
             'activity_dates': ride.get('activity_dates', []),
+            'activity_names': ride.get('activity_names', []),
             'ride_type': ride.get('type'),
             'weather': ride.get('weather'),
             'difficulty': ride.get('difficulty')
