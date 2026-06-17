@@ -1688,6 +1688,425 @@ def get_fetch_status():
     return jsonify(_fetch_job)
 
 
+# ---------------------------------------------------------------------------
+# Reporting / statistics endpoints
+# ---------------------------------------------------------------------------
+
+def _load_activities_for_stats():
+    """Load raw activities from cache for stats computation."""
+    from src.data_fetcher import Activity as _Activity
+    cache_path = Path('data/cache/activities.json')
+    if not cache_path.exists():
+        return []
+    try:
+        with open(cache_path, 'r') as f:
+            raw = json.load(f)
+        return [_Activity.from_dict(a) for a in raw.get('activities', [])]
+    except Exception as e:
+        logger.warning(f"Could not load activities for stats: {e}")
+        return []
+
+
+def _meters_to_miles(m):
+    return m * 0.000621371
+
+
+def _meters_to_feet(m):
+    return m * 3.28084
+
+
+def _ms_to_mph(ms):
+    return ms * 2.23694
+
+
+def _seconds_to_hours(s):
+    return s / 3600.0
+
+
+def _filter_activities_by_period(activities, period):
+    """Return activities within the requested period."""
+    now = datetime.now()
+    if period == 'this_week':
+        start = now - timedelta(days=now.weekday())
+        start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif period == 'this_month':
+        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    elif period == 'this_year':
+        start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+    elif period == 'last_30d':
+        start = now - timedelta(days=30)
+    elif period == 'last_year':
+        start = now.replace(year=now.year - 1, month=1, day=1,
+                            hour=0, minute=0, second=0, microsecond=0)
+        end = now.replace(year=now.year - 1, month=12, day=31,
+                          hour=23, minute=59, second=59, microsecond=0)
+        result = []
+        for a in activities:
+            if not a.start_date:
+                continue
+            try:
+                d = datetime.fromisoformat(a.start_date.replace('Z', '+00:00')).replace(tzinfo=None)
+                if start <= d <= end:
+                    result.append(a)
+            except (ValueError, AttributeError):
+                pass
+        return result
+    else:
+        # all_time
+        return activities
+
+    result = []
+    for a in activities:
+        if not a.start_date:
+            continue
+        try:
+            d = datetime.fromisoformat(a.start_date.replace('Z', '+00:00')).replace(tzinfo=None)
+            if d >= start:
+                result.append(a)
+        except (ValueError, AttributeError):
+            pass
+    return result
+
+
+def _compute_summary(activities):
+    """Compute aggregate summary stats for a list of activities."""
+    if not activities:
+        return {
+            'total_rides': 0, 'total_distance_mi': 0, 'total_time_h': 0,
+            'total_elevation_ft': 0, 'avg_distance_mi': 0, 'avg_speed_mph': 0,
+            'avg_elevation_ft': 0, 'avg_heartrate': None, 'total_kudos': 0,
+            'total_kilojoules': 0,
+        }
+    total_dist = sum(a.distance for a in activities)
+    total_time = sum(a.moving_time for a in activities)
+    total_elev = sum(a.total_elevation_gain for a in activities)
+    n = len(activities)
+    hr_vals = [a.average_heartrate for a in activities if a.average_heartrate]
+    kj_vals = [a.kilojoules for a in activities if a.kilojoules]
+    speed_vals = [a.average_speed for a in activities if a.average_speed]
+    return {
+        'total_rides': n,
+        'total_distance_mi': round(_meters_to_miles(total_dist), 1),
+        'total_time_h': round(_seconds_to_hours(total_time), 1),
+        'total_elevation_ft': round(_meters_to_feet(total_elev)),
+        'avg_distance_mi': round(_meters_to_miles(total_dist / n), 1),
+        'avg_speed_mph': round(_ms_to_mph(sum(speed_vals) / len(speed_vals)), 1) if speed_vals else 0,
+        'avg_elevation_ft': round(_meters_to_feet(total_elev / n)),
+        'avg_heartrate': round(sum(hr_vals) / len(hr_vals), 1) if hr_vals else None,
+        'total_kudos': sum(a.kudos_count for a in activities),
+        'total_kilojoules': round(sum(kj_vals), 1) if kj_vals else 0,
+    }
+
+
+def _compute_records(activities):
+    """Personal records across activities."""
+    if not activities:
+        return {}
+
+    def _fmt(a):
+        return {
+            'id': a.id, 'name': a.name,
+            'date': (a.start_date or '')[:10],
+            'distance_mi': round(_meters_to_miles(a.distance), 1),
+            'speed_mph': round(_ms_to_mph(a.average_speed), 1),
+            'elevation_ft': round(_meters_to_feet(a.total_elevation_gain)),
+            'time_h': round(_seconds_to_hours(a.moving_time), 1),
+        }
+
+    longest = max(activities, key=lambda a: a.distance)
+    highest_elev = max(activities, key=lambda a: a.total_elevation_gain)
+    fastest = max(activities, key=lambda a: a.average_speed)
+    most_kj = max((a for a in activities if a.kilojoules), key=lambda a: a.kilojoules, default=None)
+    records = {
+        'longest_ride': _fmt(longest),
+        'most_elevation': _fmt(highest_elev),
+        'fastest_speed': _fmt(fastest),
+    }
+    if most_kj:
+        records['most_kilojoules'] = {**_fmt(most_kj), 'kilojoules': round(most_kj.kilojoules)}
+    return records
+
+
+@app.route('/api/stats')
+@limiter.limit("30 per minute")
+def get_stats():
+    """
+    Aggregate ride statistics.
+
+    Query params:
+    - period: all_time | this_year | last_year | this_month | this_week | last_30d (default: all_time)
+    """
+    period = request.args.get('period', 'all_time')
+    valid_periods = {'all_time', 'this_year', 'last_year', 'this_month', 'this_week', 'last_30d'}
+    if period not in valid_periods:
+        period = 'all_time'
+
+    all_activities = _load_activities_for_stats()
+    if not all_activities:
+        return jsonify({'status': 'no_data',
+                        'message': 'No activities cached. Fetch activities from Strava first.'})
+
+    activities = _filter_activities_by_period(all_activities, period)
+
+    # By-type breakdown
+    type_map: Dict[str, list] = {}
+    for a in activities:
+        t = a.sport_type or a.type or 'Unknown'
+        type_map.setdefault(t, []).append(a)
+    by_type = []
+    for t, acts in sorted(type_map.items(), key=lambda x: -len(x[1])):
+        s = _compute_summary(acts)
+        by_type.append({'sport_type': t, **s})
+
+    # Weekly trend — last 52 weeks (always from all activities for the chart)
+    week_buckets: Dict[str, list] = {}
+    for a in all_activities:
+        if not a.start_date:
+            continue
+        try:
+            d = datetime.fromisoformat(a.start_date.replace('Z', '+00:00')).replace(tzinfo=None)
+            # ISO week label YYYY-Www
+            label = d.strftime('%G-W%V')
+            week_buckets.setdefault(label, []).append(a)
+        except (ValueError, AttributeError):
+            pass
+    # Keep last 52 weeks
+    sorted_weeks = sorted(week_buckets.keys())[-52:]
+    by_week = []
+    for wk in sorted_weeks:
+        s = _compute_summary(week_buckets[wk])
+        by_week.append({'week': wk, **s})
+
+    # Monthly trend — last 24 months
+    month_buckets: Dict[str, list] = {}
+    for a in all_activities:
+        if not a.start_date:
+            continue
+        try:
+            d = datetime.fromisoformat(a.start_date.replace('Z', '+00:00')).replace(tzinfo=None)
+            label = d.strftime('%Y-%m')
+            month_buckets.setdefault(label, []).append(a)
+        except (ValueError, AttributeError):
+            pass
+    sorted_months = sorted(month_buckets.keys())[-24:]
+    by_month = []
+    for mo in sorted_months:
+        s = _compute_summary(month_buckets[mo])
+        by_month.append({'month': mo, **s})
+
+    return jsonify({
+        'status': 'success',
+        'data': {
+            'period': period,
+            'total_activities_in_cache': len(all_activities),
+            'summary': _compute_summary(activities),
+            'records': _compute_records(activities),
+            'by_type': by_type,
+            'by_week': by_week,
+            'by_month': by_month,
+        },
+        'timestamp': datetime.now().isoformat(),
+    })
+
+
+@app.route('/api/stats/gear')
+@limiter.limit("30 per minute")
+def get_gear_stats():
+    """
+    Per-gear (bike/shoe) statistics computed from cached activities.
+    Loads gear metadata from the gear cache (populated by POST /api/stats/refresh-gear).
+    """
+    initialize_services()
+    all_activities = _load_activities_for_stats()
+
+    # Load gear metadata from cache
+    gear_cache = _analysis_service.data_fetcher.load_cached_gear() if _analysis_service else None
+    gear_meta: Dict[str, dict] = {}
+    if gear_cache:
+        for g in gear_cache.get('bikes', []) + gear_cache.get('shoes', []):
+            gear_meta[g['id']] = g
+
+    # Bucket activities by gear_id
+    gear_buckets: Dict[str, list] = {}
+    unassigned = []
+    for a in all_activities:
+        if a.gear_id:
+            gear_buckets.setdefault(a.gear_id, []).append(a)
+        else:
+            unassigned.append(a)
+
+    gear_list = []
+    for gear_id, acts in gear_buckets.items():
+        meta = gear_meta.get(gear_id, {'id': gear_id, 'name': gear_id, 'type': 'unknown'})
+        s = _compute_summary(acts)
+        last_used = max((a.start_date or '' for a in acts), default='')[:10]
+        gear_list.append({
+            **meta,
+            **s,
+            'last_used': last_used,
+        })
+
+    # Sort: bikes first, then shoes; within each group by total distance desc
+    gear_list.sort(key=lambda g: (0 if g.get('type') == 'bike' else 1, -g.get('total_distance_mi', 0)))
+
+    return jsonify({
+        'status': 'success',
+        'data': {
+            'gear': gear_list,
+            'unassigned': _compute_summary(unassigned),
+            'gear_cache_available': gear_cache is not None,
+        },
+        'timestamp': datetime.now().isoformat(),
+    })
+
+
+@app.route('/api/stats/refresh-gear', methods=['POST'])
+@limiter.limit("5 per minute")
+def refresh_gear():
+    """Fetch athlete's bikes and shoes from Strava and update the gear cache."""
+    initialize_services()
+    if not _analysis_service:
+        return jsonify({'status': 'error', 'message': 'Services not initialized'}), 503
+    try:
+        data = _analysis_service.data_fetcher.fetch_athlete_gear()
+        bikes = len(data.get('bikes', []))
+        shoes = len(data.get('shoes', []))
+        return jsonify({
+            'status': 'success',
+            'message': f'Refreshed {bikes} bikes and {shoes} shoes',
+            'bikes': bikes,
+            'shoes': shoes,
+        })
+    except Exception as e:
+        logger.error(f"Failed to refresh gear: {e}", exc_info=True)
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+_backfill_job: Dict[str, Any] = {'status': 'idle'}
+
+
+@app.route('/api/stats/backfill-gear-ids', methods=['POST'])
+@limiter.limit("3 per minute")
+def backfill_gear_ids():
+    """
+    Patch gear_id on cached activities that are missing it.
+    Uses Strava's list endpoint (200 activities/page) — no per-activity detail calls.
+    Runs as a background job; poll /api/stats/backfill-gear-ids/status for progress.
+    """
+    global _backfill_job
+    if _backfill_job.get('status') == 'running':
+        return jsonify({'status': 'already_running'}), 409
+
+    initialize_services()
+    if not _analysis_service:
+        return jsonify({'status': 'error', 'message': 'Services not initialized'}), 503
+
+    _backfill_job = {'status': 'running', 'fetched': 0, 'updated': 0, 'label': 'Connecting to Strava…'}
+
+    def _run():
+        global _backfill_job
+        try:
+            def _progress(fetched, updated):
+                _backfill_job['fetched'] = fetched
+                _backfill_job['updated'] = updated
+                _backfill_job['label'] = f'Scanned {fetched:,} activities, patched {updated:,} gear IDs…'
+
+            result = _analysis_service.data_fetcher.backfill_gear_ids(progress_callback=_progress)
+            _backfill_job.update({
+                'status': 'done',
+                'label': f"Done — {result['updated']} activities updated, {result['skipped']} already had gear ID",
+                **result,
+            })
+        except Exception as e:
+            logger.error(f"Gear backfill failed: {e}", exc_info=True)
+            _backfill_job.update({'status': 'error', 'label': f'Error: {e}'})
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({'status': 'started'})
+
+
+@app.route('/api/stats/backfill-gear-ids/status')
+@limiter.exempt
+def backfill_gear_ids_status():
+    return jsonify(_backfill_job)
+
+
+@app.route('/api/activities')
+@limiter.limit("30 per minute")
+def get_activities():
+    """
+    Filterable list of raw activities from cache.
+
+    Query params:
+    - gear_id: filter by gear ID
+    - sport_type: filter by sport type (Ride, GravelRide, etc.)
+    - period: all_time | this_year | last_year | this_month | this_week | last_30d
+    - sort: date_desc (default) | date_asc | distance_desc | speed_desc | elevation_desc
+    - limit: max results (default 200)
+    - offset: pagination offset (default 0)
+    """
+    gear_id = request.args.get('gear_id', '').strip() or None
+    sport_type = request.args.get('sport_type', '').strip() or None
+    period = request.args.get('period', 'all_time')
+    sort = request.args.get('sort', 'date_desc')
+    try:
+        limit = min(int(request.args.get('limit', 200)), 1000)
+        offset = max(int(request.args.get('offset', 0)), 0)
+    except (ValueError, TypeError):
+        limit, offset = 200, 0
+
+    all_activities = _load_activities_for_stats()
+    activities = _filter_activities_by_period(all_activities, period)
+
+    if gear_id:
+        activities = [a for a in activities if a.gear_id == gear_id]
+    if sport_type:
+        activities = [a for a in activities if (a.sport_type or a.type) == sport_type]
+
+    sort_key_map = {
+        'date_desc': (lambda a: a.start_date or '', True),
+        'date_asc': (lambda a: a.start_date or '', False),
+        'distance_desc': (lambda a: a.distance, True),
+        'speed_desc': (lambda a: a.average_speed, True),
+        'elevation_desc': (lambda a: a.total_elevation_gain, True),
+    }
+    key_fn, reverse = sort_key_map.get(sort, sort_key_map['date_desc'])
+    activities.sort(key=key_fn, reverse=reverse)
+
+    total = len(activities)
+    page = activities[offset:offset + limit]
+
+    def _serialize(a):
+        return {
+            'id': a.id,
+            'name': a.name,
+            'sport_type': a.sport_type or a.type,
+            'date': (a.start_date or '')[:10],
+            'distance_mi': round(_meters_to_miles(a.distance), 1),
+            'time_h': round(_seconds_to_hours(a.moving_time), 1),
+            'elevation_ft': round(_meters_to_feet(a.total_elevation_gain)),
+            'speed_mph': round(_ms_to_mph(a.average_speed), 1),
+            'gear_id': a.gear_id,
+            'average_heartrate': a.average_heartrate,
+            'average_watts': a.average_watts,
+            'suffer_score': a.suffer_score,
+            'kudos_count': a.kudos_count,
+            'achievement_count': a.achievement_count,
+            'pr_count': a.pr_count,
+        }
+
+    return jsonify({
+        'status': 'success',
+        'data': {
+            'activities': [_serialize(a) for a in page],
+            'total': total,
+            'offset': offset,
+            'limit': limit,
+        },
+        'timestamp': datetime.now().isoformat(),
+    })
+
+
 @app.errorhandler(404)
 def not_found(error):
     """Handle 404 errors."""

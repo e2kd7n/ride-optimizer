@@ -260,6 +260,17 @@ class APIClient {
     async getAnalysisStatus() {
         return this.fetch('/analyze/status');
     }
+
+    async get(endpoint) {
+        return this.fetch(endpoint, { method: 'GET' });
+    }
+
+    async post(endpoint, body) {
+        return this.fetch(endpoint, {
+            method: 'POST',
+            body: JSON.stringify(body),
+        });
+    }
 }
 
 // Create global API client instance
