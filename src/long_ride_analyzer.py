@@ -195,6 +195,12 @@ class LongRideAnalyzer:
         result[:, 1] *= lon_km
         return result
 
+    @staticmethod
+    def _extent_point(coords_km: np.ndarray) -> np.ndarray:
+        """Return the point on the route that is farthest from the start (km coordinates)."""
+        dists = np.linalg.norm(coords_km - coords_km[0], axis=1)
+        return coords_km[int(np.argmax(dists))]
+
     def consolidate_similar_named_groups(self, name_groups: Dict[str, List[Activity]],
                                         similarity_threshold: float = 2.0) -> Dict[str, List[Activity]]:
         """
@@ -261,6 +267,15 @@ class LongRideAnalyzer:
                         coords1_km.mean(axis=0) - coords2_km.mean(axis=0)
                     ))
                     if centroid_dist > 5.0:
+                        continue
+
+                    # Pre-filter: extent point distance — the farthest-from-start point
+                    # of each route must be close; routes apexing in different directions
+                    # will fail even if their centroids are coincidentally similar
+                    extent_dist = float(np.linalg.norm(
+                        self._extent_point(coords1_km) - self._extent_point(coords2_km)
+                    ))
+                    if extent_dist > 10.0:
                         continue
 
                     frechet_distance = frechet_dist(coords1_km, coords2_km)
@@ -411,6 +426,13 @@ class LongRideAnalyzer:
                         route_coords.mean(axis=0) - rep_coords_km.mean(axis=0)
                     ))
                     if centroid_dist > 5.0:
+                        continue
+
+                    # Extent point pre-filter
+                    extent_dist = float(np.linalg.norm(
+                        LongRideAnalyzer._extent_point(route_coords) - LongRideAnalyzer._extent_point(rep_coords_km)
+                    ))
+                    if extent_dist > 10.0:
                         continue
 
                     frechet_distance = frechet_dist(route_coords, rep_coords_km)
