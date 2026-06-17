@@ -470,7 +470,7 @@ class CommuteService:
             folium.LayerControl(collapsed=True).add_to(map_obj)
             
             # Get the HTML and inject JavaScript for route highlighting
-            map_html = map_obj._repr_html_()
+            map_html = map_obj.get_root().render()
             
             # Inject JavaScript to handle postMessage for route highlighting
             highlight_script = """
