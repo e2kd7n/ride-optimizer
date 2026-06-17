@@ -89,7 +89,9 @@ def analysis_service(mock_config):
         mock_client = Mock()
         mock_auth.return_value = mock_client
         service = AnalysisService(mock_config)
-        # Mock the _load_from_cache to prevent it from loading cache during tests
+        # Prevent tests from writing Mock objects to the real data directory
+        service.storage.write = Mock(return_value=True)
+        # Skip loading real cache during tests
         service._cache_loaded = True
         return service
 
