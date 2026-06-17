@@ -287,6 +287,117 @@
                 }
             }
 
+            // Sort state for the two sortable tables
+            const usesSort = { key: 'date', dir: -1 };   // default: newest first
+            const historySort = { key: 'name', dir: 1 };
+
+            function sortIcon(state, key) {
+                if (state.key !== key) return ' <span style="opacity:0.35;font-size:10px;">↕</span>';
+                return state.dir === 1
+                    ? ' <span style="font-size:10px;">↑</span>'
+                    : ' <span style="font-size:10px;">↓</span>';
+            }
+
+            function thStyle(state, key) {
+                return `cursor:pointer; user-select:none;${state.key === key ? ' color:var(--bs-primary,#0d6efd);' : ''}`;
+            }
+
+            function renderUsesTable(route) {
+                const container = byId('uses-table-container');
+                if (!container) return;
+
+                const rows = (route.activity_ids || []).map((aid, i) => ({
+                    aid,
+                    name: (route.activity_names && route.activity_names[i]) ? route.activity_names[i] : (route.name || String(aid)),
+                    rawDate: (route.activity_dates && route.activity_dates[i]) || '',
+                    isPrimary: aid === Number(route.id) || String(aid) === String(route.id),
+                }));
+
+                rows.sort((a, b) => {
+                    if (usesSort.key === 'name') return usesSort.dir * a.name.localeCompare(b.name);
+                    return usesSort.dir * (a.rawDate < b.rawDate ? -1 : a.rawDate > b.rawDate ? 1 : 0);
+                });
+
+                container.innerHTML = `<table class="table table-sm align-middle mb-0">
+                    <thead><tr>
+                        <th scope="col" data-sort="name" style="${thStyle(usesSort, 'name')}">Activity${sortIcon(usesSort, 'name')}</th>
+                        <th scope="col" data-sort="date" style="${thStyle(usesSort, 'date')}">Date${sortIcon(usesSort, 'date')}</th>
+                    </tr></thead>
+                    <tbody>${rows.map(r => {
+                        const dateStr = r.rawDate
+                            ? new Date(r.rawDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+                            : '';
+                        const label = r.isPrimary ? ' ★' : '';
+                        return `<tr>
+                            <td><a href="https://www.strava.com/activities/${r.aid}" target="_blank" rel="noopener">${r.name}${label}</a></td>
+                            <td>${dateStr}</td>
+                        </tr>`;
+                    }).join('')}</tbody>
+                </table>`;
+
+                container.querySelectorAll('th[data-sort]').forEach(th => {
+                    th.addEventListener('click', () => {
+                        const key = th.dataset.sort;
+                        if (usesSort.key === key) usesSort.dir *= -1;
+                        else { usesSort.key = key; usesSort.dir = 1; }
+                        renderUsesTable(route);
+                    });
+                });
+            }
+
+            function renderHistoryTable(route) {
+                const container = byId('history-table-container');
+                if (!container) return;
+
+                const rows = (route.routes || []).slice(0, 20).map(item => ({
+                    name: item.activity_name || route.name || String(item.activity_id || ''),
+                    aid: item.activity_id || null,
+                    rawDate: item.timestamp || '',
+                    distance: item.distance,
+                    duration: item.duration,
+                    elevation: item.elevation,
+                }));
+
+                rows.sort((a, b) => {
+                    if (historySort.key === 'date') return historySort.dir * (a.rawDate < b.rawDate ? -1 : a.rawDate > b.rawDate ? 1 : 0);
+                    return historySort.dir * a.name.localeCompare(b.name);
+                });
+
+                container.innerHTML = `<table class="table table-sm align-middle mb-0">
+                    <thead><tr>
+                        <th scope="col" data-sort="name" style="${thStyle(historySort, 'name')}">Activity${sortIcon(historySort, 'name')}</th>
+                        <th scope="col" data-sort="date" style="${thStyle(historySort, 'date')}">Date${sortIcon(historySort, 'date')}</th>
+                        <th scope="col">Distance</th>
+                        <th scope="col">Duration</th>
+                        <th scope="col">Elevation</th>
+                    </tr></thead>
+                    <tbody>${rows.map(r => {
+                        const dateStr = r.rawDate
+                            ? new Date(r.rawDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+                            : '';
+                        const actCell = r.aid
+                            ? `<a href="https://www.strava.com/activities/${r.aid}" target="_blank" rel="noopener">${r.name}</a>`
+                            : r.name;
+                        return `<tr>
+                            <td>${actCell}</td>
+                            <td>${dateStr}</td>
+                            <td>${window.formatDistance(r.distance)}</td>
+                            <td>${formatDuration(r.duration)}</td>
+                            <td>${window.formatElevation(r.elevation)}</td>
+                        </tr>`;
+                    }).join('')}</tbody>
+                </table>`;
+
+                container.querySelectorAll('th[data-sort]').forEach(th => {
+                    th.addEventListener('click', () => {
+                        const key = th.dataset.sort;
+                        if (historySort.key === key) historySort.dir *= -1;
+                        else { historySort.key = key; historySort.dir = 1; }
+                        renderHistoryTable(route);
+                    });
+                });
+            }
+
             function renderRoute(route) {
                 document.title = `${route.name} - Route Details`;
 
@@ -303,72 +414,21 @@
 
                 // Long rides store uses as parallel arrays: activity_ids + activity_dates
                 const longRideUsesMarkup = route.type === 'long_ride' && Array.isArray(route.activity_ids) && route.activity_ids.length > 1
-                    ? `
-                        <div class="card mt-4">
+                    ? `<div class="card mt-4">
                             <div class="card-body">
                                 <h2 class="h5">All rides on this route (${route.activity_ids.length})</h2>
-                                <div class="table-responsive">
-                                    <table class="table table-sm align-middle mb-0">
-                                        <thead>
-                                            <tr>
-                                                <th scope="col">Activity</th>
-                                                <th scope="col">Date</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            ${route.activity_ids.map((aid, i) => {
-                                                const date = route.activity_dates && route.activity_dates[i]
-                                                    ? new Date(route.activity_dates[i]).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
-                                                    : '';
-                                                const actName = route.activity_names && route.activity_names[i]
-                                                    ? route.activity_names[i]
-                                                    : String(aid);
-                                                const label = aid === Number(route.id) || String(aid) === String(route.id) ? ' ★' : '';
-                                                return `<tr>
-                                                    <td><a href="https://www.strava.com/activities/${aid}" target="_blank" rel="noopener">${actName}${label}</a></td>
-                                                    <td>${date}</td>
-                                                </tr>`;
-                                            }).join('')}
-                                        </tbody>
-                                    </table>
-                                </div>
+                                <div class="table-responsive" id="uses-table-container"></div>
                             </div>
-                        </div>
-                    `
+                        </div>`
                     : '';
 
                 const routeHistoryMarkup = Array.isArray(route.routes) && route.routes.length
-                    ? `
-                        <div class="card mt-4">
+                    ? `<div class="card mt-4">
                             <div class="card-body">
                                 <h2 class="h5">Recent route records</h2>
-                                <div class="table-responsive">
-                                    <table class="table table-sm align-middle mb-0">
-                                        <thead>
-                                            <tr>
-                                                <th scope="col">Activity</th>
-                                                <th scope="col">Distance</th>
-                                                <th scope="col">Duration</th>
-                                                <th scope="col">Elevation</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            ${route.routes.slice(0, 10).map(item => `
-                                                <tr>
-                                                    <td>${item.activity_id
-                                                        ? `<a href="https://www.strava.com/activities/${item.activity_id}" target="_blank" rel="noopener">${item.activity_name || item.activity_id}</a>`
-                                                        : (item.activity_name || 'Route record')}</td>
-                                                    <td>${window.formatDistance(item.distance)}</td>
-                                                    <td>${formatDuration(item.duration)}</td>
-                                                    <td>${window.formatElevation(item.elevation)}</td>
-                                                </tr>
-                                            `).join('')}
-                                        </tbody>
-                                    </table>
-                                </div>
+                                <div class="table-responsive" id="history-table-container"></div>
                             </div>
-                        </div>
-                    `
+                        </div>`
                     : '';
 
                 byId('route-details').innerHTML = `
@@ -489,6 +549,10 @@
                         mapCard.outerHTML = '<div class="alert alert-warning mt-2 mb-0">Map unavailable for this route.</div>';
                     }
                 }
+
+                // Render sortable tables
+                renderUsesTable(route);
+                renderHistoryTable(route);
 
                 // Render performance charts
                 renderPerformanceCharts(route);
