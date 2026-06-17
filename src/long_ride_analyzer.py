@@ -255,6 +255,14 @@ class LongRideAnalyzer:
                     coords1_km = group_representatives[name1]
                     coords2_km = group_representatives[name2]
 
+                    # Pre-filter: centroid distance — loops going different places have
+                    # centroids far apart even when they share a start/end point
+                    centroid_dist = float(np.linalg.norm(
+                        coords1_km.mean(axis=0) - coords2_km.mean(axis=0)
+                    ))
+                    if centroid_dist > 5.0:
+                        continue
+
                     frechet_distance = frechet_dist(coords1_km, coords2_km)
                     hausdorff_dist = max(
                         directed_hausdorff(coords1_km, coords2_km)[0],
@@ -266,7 +274,7 @@ class LongRideAnalyzer:
                     if combined_distance < similarity_threshold:
                         merged_activities.extend(name_groups[name2])
                         processed.add(name2)
-                        logger.info(f"Consolidating '{name2}' into '{name1}' (similarity: {combined_distance:.3f} km)")
+                        logger.info(f"Consolidating '{name2}' into '{name1}' (similarity: {combined_distance:.3f} km, centroid: {centroid_dist:.3f} km)")
                         
                 except (ValueError, IndexError, TypeError) as e:
                     logger.debug(f"Failed to calculate similarity between '{name1}' and '{name2}': {e}")
@@ -398,6 +406,13 @@ class LongRideAnalyzer:
 
             for group_name, rep_coords_km in group_representatives.items():
                 try:
+                    # Centroid pre-filter
+                    centroid_dist = float(np.linalg.norm(
+                        route_coords.mean(axis=0) - rep_coords_km.mean(axis=0)
+                    ))
+                    if centroid_dist > 5.0:
+                        continue
+
                     frechet_distance = frechet_dist(route_coords, rep_coords_km)
                     hausdorff_dist = max(
                         directed_hausdorff(route_coords, rep_coords_km)[0],
