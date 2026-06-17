@@ -18,7 +18,6 @@ data_fetching:
   max_activities: 500
 
 long_rides:
-  cache_path: "data/cache/long_rides_store.json"  # Persistence store for LongRidesDataStore
 
 location_detection:
   clustering:
