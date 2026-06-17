@@ -20,6 +20,7 @@
     function getFilters() {
         return {
             favorite: byId('filter-favorite')?.value || '',
+            commute: byId('filter-commute')?.value || '',
             sport_type: byId('filter-sport-type')?.value || '',
             difficulty: byId('filter-difficulty')?.value || '',
             min_distance: byId('filter-min-distance')?.value || '',
@@ -594,6 +595,12 @@
             filtered = filtered.filter(route => !route.is_favorite);
         }
 
+        if (filters.commute === 'commute') {
+            filtered = filtered.filter(route => route.type === 'commute');
+        } else if (filters.commute === 'non-commute') {
+            filtered = filtered.filter(route => route.type !== 'commute');
+        }
+
         if (filters.sport_type) {
             filtered = filtered.filter(route => (route.sport_type || '') === filters.sport_type);
         }
@@ -801,7 +808,7 @@
 
     function bindEvents() {
         // Auto-apply: dropdowns fire immediately on change
-        ['filter-favorite', 'filter-sport-type', 'filter-difficulty', 'sort-by'].forEach(id => {
+        ['filter-favorite', 'filter-commute', 'filter-sport-type', 'filter-difficulty', 'sort-by'].forEach(id => {
             const el = byId(id);
             if (el) el.addEventListener('change', applyFilters);
         });
