@@ -615,3 +615,108 @@ class TestDashboardWeatherOverlays:
         assert html is not None
         assert 'folium-map' in html
 
+
+@pytest.mark.unit
+class TestCacheRoundTrip:
+    """Test that _save_to_cache → _load_from_cache round-trips correctly."""
+
+    def test_round_trip_preserves_all_data(self, mock_config, tmp_path):
+        """Save analysis results to cache, create fresh service, load, verify."""
+        route = Route(
+            activity_id=111,
+            direction='home_to_work',
+            coordinates=[(40.7128, -74.0060), (40.7589, -73.9851)],
+            distance=8500.0,
+            duration=1200,
+            elevation_gain=45.0,
+            timestamp='2026-06-01T08:00:00',
+            average_speed=7.08,
+            activity_name='Morning Ride',
+            is_plus_route=False,
+        )
+        group = RouteGroup(
+            id='htw_0',
+            direction='home_to_work',
+            routes=[route],
+            representative_route=route,
+            frequency=20,
+            name='Lakefront Commute',
+            is_plus_route=False,
+            difficulty='Medium',
+        )
+        ride = LongRide(
+            activity_id=222,
+            name='Century Loop',
+            coordinates=[(41.0, -87.0), (41.5, -87.5)],
+            distance=160000.0,
+            duration=21600,
+            elevation_gain=800.0,
+            timestamp='2026-05-15T07:00:00',
+            average_speed=7.4,
+            start_location=(41.0, -87.0),
+            end_location=(41.0, -87.0),
+            is_loop=True,
+            type='Ride',
+            uses=3,
+            activity_ids=[222, 223, 224],
+            activity_dates=['2026-05-15', '2026-04-20', '2026-03-10'],
+            activity_names=['Century', 'Century v2', 'Century v3'],
+        )
+        home = Location(name='Home', lat=40.7128, lon=-74.0060, activity_count=50)
+        work = Location(name='Office', lat=40.7589, lon=-73.9851, activity_count=50)
+
+        from src.json_storage import JSONStorage
+        storage = JSONStorage(str(tmp_path / 'data'))
+
+        # --- Save ---
+        svc = AnalysisService(mock_config)
+        svc.storage = storage
+        svc._cache_loaded = True
+        svc._route_groups = [group]
+        svc._long_rides = [ride]
+        svc._home_location = home
+        svc._work_location = work
+        svc._last_analysis_time = datetime(2026, 6, 17, 12, 0, 0)
+        svc._activities = []
+        svc._save_to_cache()
+
+        # --- Load in fresh service ---
+        svc2 = AnalysisService(mock_config)
+        svc2.storage = storage
+        svc2._load_from_cache()
+
+        # Route groups
+        assert len(svc2._route_groups) == 1
+        rg = svc2._route_groups[0]
+        assert isinstance(rg, RouteGroup)
+        assert rg.id == 'htw_0'
+        assert rg.name == 'Lakefront Commute'
+        assert rg.direction == 'home_to_work'
+        assert rg.frequency == 20
+        assert rg.difficulty == 'Medium'
+        assert len(rg.routes) == 1
+        assert rg.representative_route.activity_id == 111
+        assert rg.representative_route.coordinates == [(40.7128, -74.0060), (40.7589, -73.9851)]
+
+        # Long rides
+        assert len(svc2._long_rides) == 1
+        lr = svc2._long_rides[0]
+        assert isinstance(lr, LongRide)
+        assert lr.activity_id == 222
+        assert lr.name == 'Century Loop'
+        assert lr.is_loop is True
+        assert lr.uses == 3
+        assert lr.activity_ids == [222, 223, 224]
+        assert lr.activity_dates == ['2026-05-15', '2026-04-20', '2026-03-10']
+        assert lr.activity_names == ['Century', 'Century v2', 'Century v3']
+        assert lr.start_location == (41.0, -87.0)
+
+        # Locations
+        assert svc2._home_location.name == 'Home'
+        assert svc2._home_location.lat == 40.7128
+        assert svc2._work_location.name == 'Office'
+        assert svc2._work_location.activity_count == 50
+
+        # Analysis time
+        assert svc2._last_analysis_time == datetime(2026, 6, 17, 12, 0, 0)
+

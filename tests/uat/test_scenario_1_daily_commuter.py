@@ -102,7 +102,7 @@ class TestDailyCommuterScenario:
         # (In real implementation, measure actual response time)
         assert len(response.data) > 0
     
-    @patch('app.services.commute_service.CommuteService.get_recommendation')
+    @patch('app.services.commute_service.CommuteService.get_next_commute')
     def test_step_3_get_next_commute_recommendation(self, mock_recommend, client, mock_route_data):
         """Step 3: User gets route recommendation"""
         mock_recommend.return_value = mock_route_data
@@ -150,7 +150,7 @@ class TestDailyCommuterScenario:
         # Verify route details are displayed
         assert mock_route_data['route_name'] in html or 'route' in html.lower()
     
-    @patch('app.services.route_library_service.RouteLibraryService.get_routes')
+    @patch('app.services.route_library_service.RouteLibraryService.get_all_routes')
     def test_step_5_check_alternative_routes(self, mock_routes, client, mock_alternative_routes):
         """Step 5: User checks alternative route options"""
         mock_routes.return_value = mock_alternative_routes
@@ -172,8 +172,8 @@ class TestDailyCommuterScenario:
             assert 'weather_suitability' in route
     
     @patch('app.services.weather_service.WeatherService.get_current_weather')
-    @patch('app.services.commute_service.CommuteService.get_recommendation')
-    @patch('app.services.route_library_service.RouteLibraryService.get_routes')
+    @patch('app.services.commute_service.CommuteService.get_next_commute')
+    @patch('app.services.route_library_service.RouteLibraryService.get_all_routes')
     def test_complete_morning_commute_workflow(
         self, 
         mock_routes, 
@@ -276,7 +276,7 @@ class TestDailyCommuterPerformance:
         # Allow 2 seconds for test environment
         assert load_time < 2.0, f"Dashboard took {load_time:.2f}s to load"
     
-    @patch('app.services.commute_service.CommuteService.get_recommendation')
+    @patch('app.services.commute_service.CommuteService.get_next_commute')
     def test_recommendation_response_time(self, mock_recommend, client, mock_route_data):
         """Recommendation API should respond in < 3 seconds"""
         import time

@@ -263,7 +263,7 @@ async function loadWeather() {
         container.innerHTML = html;
     } catch (error) {
         console.error('Failed to load weather:', error);
-        container.innerHTML = '<span class="text-white opacity-75 small"><i class="bi bi-cloud-slash me-1"></i>Weather unavailable</span>';
+        container.innerHTML = '<span class="text-white small"><i class="bi bi-cloud-slash me-1"></i>Weather unavailable <button class="btn btn-sm btn-outline-light ms-2 py-0 px-1" onclick="loadWeather()">Retry</button></span>';
     }
 }
 
@@ -604,7 +604,6 @@ async function loadRouteStatus() {
  */
 async function loadRouteStats() {
     const container = document.getElementById('route-stats');
-    const recentContainer = document.getElementById('recent-routes');
     
     try {
         const data = await window.apiClient.getRoutes();
@@ -651,60 +650,9 @@ async function loadRouteStats() {
         `;
         
         container.innerHTML = statsHtml;
-        
-        // Recent routes (top 5)
-        const recentRoutes = routes.slice(0, 5);
-        
-        if (recentRoutes.length === 0) {
-            recentContainer.innerHTML = window.renderEmptyState('No rides synced yet.', 'Connect Strava and run analysis to see your routes.', 'bi-bicycle');
-            return;
-        }
-        
-        const esc = window.escapeHtml;
-        const routesHtml = `
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th>Route</th>
-                            <th>Distance</th>
-                            <th>Elevation</th>
-                            <th>Type</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${recentRoutes.map(route => `
-                            <tr>
-                                <td>
-                                    ${route.is_favorite ? '<i class="bi bi-star-fill text-warning"></i> ' : ''}
-                                    ${esc(route.name)}
-                                </td>
-                                <td>${route.distance} mi</td>
-                                <td>${route.elevation_gain} ft</td>
-                                <td><span class="badge bg-secondary">${esc(route.sport_type || 'Ride')}</span></td>
-                                <td>
-                                    <a href="/routes.html?id=${encodeURIComponent(route.id)}" class="btn btn-sm btn-outline-primary">
-                                        View
-                                    </a>
-                                </td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
-            </div>
-            <div class="text-center mt-3">
-                <a href="/routes.html" class="btn btn-primary">
-                    View All Routes <i class="bi bi-arrow-right"></i>
-                </a>
-            </div>
-        `;
-        
-        recentContainer.innerHTML = routesHtml;
     } catch (error) {
         console.error('Failed to load route stats:', error);
         container.innerHTML = window.renderErrorState('Failed to load route statistics.', { variant: 'danger', retry: 'loadRouteStats()' });
-        recentContainer.innerHTML = '';
     }
 }
 
