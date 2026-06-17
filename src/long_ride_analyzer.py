@@ -44,6 +44,7 @@ class LongRide:
     uses: int = 1  # Number of times this route has been ridden
     activity_ids: List[int] = None  # List of all activity IDs that make up this route
     activity_dates: List[str] = None  # List of dates for each activity
+    activity_names: List[str] = None  # Strava names for each activity
     
     @property
     def distance_km(self) -> float:
@@ -195,7 +196,7 @@ class LongRideAnalyzer:
         return result
 
     def consolidate_similar_named_groups(self, name_groups: Dict[str, List[Activity]],
-                                        similarity_threshold: float = 3.0) -> Dict[str, List[Activity]]:
+                                        similarity_threshold: float = 2.0) -> Dict[str, List[Activity]]:
         """
         Consolidate named groups that have similar routes despite different names.
         This helps group route variations like "Old School" vs "Old School / Lake Bluff return".
@@ -241,6 +242,15 @@ class LongRideAnalyzer:
                     continue
 
                 try:
+                    # Pre-filter: skip if average distances differ by more than 25%
+                    dists1 = [a.distance for a in name_groups[name1] if a.distance]
+                    dists2 = [a.distance for a in name_groups[name2] if a.distance]
+                    if dists1 and dists2:
+                        avg1 = sum(dists1) / len(dists1)
+                        avg2 = sum(dists2) / len(dists2)
+                        if avg1 > 0 and avg2 > 0 and max(avg1, avg2) / min(avg1, avg2) > 1.25:
+                            continue
+
                     # Calculate route similarity in km-scaled coordinates
                     coords1_km = group_representatives[name1]
                     coords2_km = group_representatives[name2]
@@ -321,10 +331,11 @@ class LongRideAnalyzer:
                 else:
                     is_loop = False
                 
-                # Collect all activity IDs and dates
+                # Collect all activity IDs, dates, and names
                 activity_ids = [act.id for act in sorted_activities]
                 activity_dates = [act.start_date[:10] if act.start_date else "Unknown" for act in sorted_activities]
-                
+                activity_names = [act.name or "" for act in sorted_activities]
+
                 long_ride = LongRide(
                     activity_id=representative.id,
                     name=route_name,  # Use the consistent route name
@@ -340,7 +351,8 @@ class LongRideAnalyzer:
                     type=representative.sport_type if representative.sport_type else representative.type,
                     uses=len(activities),  # Number of times this route has been ridden
                     activity_ids=activity_ids,  # All activity IDs
-                    activity_dates=activity_dates  # All activity dates
+                    activity_dates=activity_dates,  # All activity dates
+                    activity_names=activity_names  # All Strava activity names
                 )
                 
                 consolidated_rides.append(long_ride)
