@@ -612,11 +612,17 @@
         }
 
         if (filters.min_distance) {
-            filtered = filtered.filter(route => Number(route.distance || 0) >= Number(filters.min_distance));
+            const minKm = window.getUnitSystem() === 'imperial'
+                ? window.milesToKm(Number(filters.min_distance))
+                : Number(filters.min_distance);
+            filtered = filtered.filter(route => Number(route.distance || 0) >= minKm);
         }
 
         if (filters.max_distance) {
-            filtered = filtered.filter(route => Number(route.distance || 0) <= Number(filters.max_distance));
+            const maxKm = window.getUnitSystem() === 'imperial'
+                ? window.milesToKm(Number(filters.max_distance))
+                : Number(filters.max_distance);
+            filtered = filtered.filter(route => Number(route.distance || 0) <= maxKm);
         }
 
         if (filters.search) {
