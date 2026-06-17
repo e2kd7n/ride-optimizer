@@ -188,7 +188,7 @@
                 // Find best values for highlighting
                 const bestDistance = findBestValue(routes, 'distance', true);
                 const bestDuration = findBestValue(routes, 'duration', true);
-                const bestElevation = findBestValue(routes, 'elevation_gain', true);
+                const bestElevation = findBestValue(routes.map(r => ({...r, elevation_gain: r.elevation_gain ?? r.elevation})), 'elevation_gain', true);
                 const bestSpeed = findBestValue(routes, 'average_speed', false);
 
                 const content = `
@@ -325,13 +325,14 @@
                 }
 
                 try {
-                    // Fetch all routes
-                    const response = await window.apiClient.getRoutes();
-                    const allRoutes = Array.isArray(response.routes) ? response.routes : [];
-                    
-                    // Filter to selected routes
-                    const selectedRoutes = allRoutes.filter(r => routeIds.includes(r.id));
-                    
+                    // Fetch full route details (includes coordinates for maps)
+                    const detailResponses = await Promise.all(
+                        routeIds.map(id => window.apiClient.getRouteDetails(id).catch(() => null))
+                    );
+                    const selectedRoutes = detailResponses
+                        .filter(r => r && r.route)
+                        .map(r => r.route);
+
                     if (selectedRoutes.length === 0) {
                         throw new Error('Selected routes not found');
                     }
