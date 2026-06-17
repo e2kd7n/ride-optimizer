@@ -287,6 +287,57 @@
                 </div>
             </div>
 
+            <!-- intervals.icu Connection -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h2 class="h5 mb-0">
+                                <i class="bi bi-link-45deg" aria-hidden="true"></i> intervals.icu
+                            </h2>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3 d-flex align-items-center gap-3 flex-wrap">
+                                <div id="icu-connection-status">
+                                    <span class="text-muted small"><i class="bi bi-hourglass-split"></i> Checking intervals.icu…</span>
+                                </div>
+                            </div>
+
+                            <hr class="my-2">
+
+                            <p class="small text-muted mb-3">
+                                Connect intervals.icu to enable direct links from each activity to its intervals.icu page.
+                            </p>
+
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <label class="form-label fw-bold" for="icu-athlete-id">Athlete ID</label>
+                                    <input type="text" class="form-control" id="icu-athlete-id" placeholder="e.g. i12345"
+                                           autocomplete="off" spellcheck="false">
+                                    <div class="form-text">
+                                        Find it at intervals.icu → Settings → <strong>API</strong> — listed as "Athlete id".
+                                    </div>
+                                </div>
+                                <div class="col-md-5">
+                                    <label class="form-label fw-bold" for="icu-api-key">API Key</label>
+                                    <input type="password" class="form-control" id="icu-api-key" placeholder="your API key"
+                                           autocomplete="new-password" spellcheck="false">
+                                    <div class="form-text">
+                                        Find it at intervals.icu → Settings → <strong>API</strong> — copy the key shown there.
+                                    </div>
+                                </div>
+                                <div class="col-md-3 d-flex align-items-end">
+                                    <button type="button" class="btn btn-primary w-100" id="icu-connect-btn">
+                                        <i class="bi bi-link-45deg" aria-hidden="true"></i> Connect
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="icu-connect-feedback" class="mt-2" style="display:none"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- About Section -->
             <div class="row">
                 <div class="col-12">
@@ -383,6 +434,7 @@
 
             // Load cache info and wire analysis button
             loadStravaStatus();
+            loadIcuStatus();
             loadCacheInfo();
             setupFetchModeControls();
             document.getElementById('run-analysis-btn').addEventListener('click', runAnalysis);
@@ -709,6 +761,65 @@
                     break;
             }
             hint.textContent = msg;
+        }
+
+        async function loadIcuStatus() {
+            const statusEl = document.getElementById('icu-connection-status');
+            const athleteInput = document.getElementById('icu-athlete-id');
+            const keyInput = document.getElementById('icu-api-key');
+            try {
+                const s = await window.apiClient.fetch('/api/intervals/status');
+                if (s.connected) {
+                    statusEl.innerHTML = `<span class="badge bg-success"><i class="bi bi-check-circle"></i> intervals.icu connected</span> <span class="text-muted small">${s.athlete_name || s.athlete_id}</span>`;
+                    athleteInput.value = s.athlete_id || '';
+                    athleteInput.placeholder = s.athlete_id || 'e.g. i12345';
+                } else {
+                    statusEl.innerHTML = '<span class="badge bg-secondary"><i class="bi bi-x-circle"></i> Not connected</span>';
+                }
+            } catch (e) {
+                statusEl.innerHTML = '<span class="text-muted small">Not configured</span>';
+            }
+
+            document.getElementById('icu-connect-btn').addEventListener('click', async () => {
+                const btn = document.getElementById('icu-connect-btn');
+                const feedback = document.getElementById('icu-connect-feedback');
+                const athleteId = athleteInput.value.trim();
+                const apiKey = keyInput.value.trim();
+
+                if (!athleteId || !apiKey) {
+                    feedback.style.display = '';
+                    feedback.innerHTML = '<span class="text-danger small"><i class="bi bi-exclamation-triangle"></i> Both Athlete ID and API Key are required.</span>';
+                    return;
+                }
+
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Connecting…';
+                feedback.style.display = 'none';
+
+                try {
+                    const res = await window.apiClient.fetch('/api/intervals/connect', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ athlete_id: athleteId, api_key: apiKey })
+                    });
+                    if (res.success) {
+                        feedback.style.display = '';
+                        feedback.innerHTML = `<span class="text-success small"><i class="bi bi-check-circle"></i> Connected as <strong>${res.athlete_name || athleteId}</strong>.</span>`;
+                        keyInput.value = '';
+                        await loadIcuStatus();
+                        if (typeof showToast === 'function') showToast('intervals.icu connected!', 'success');
+                    } else {
+                        feedback.style.display = '';
+                        feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${res.error || 'Connection failed'}</span>`;
+                    }
+                } catch (e) {
+                    feedback.style.display = '';
+                    feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${e.message || 'Connection failed'}</span>`;
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-link-45deg"></i> Connect';
+                }
+            });
         }
 
         async function loadStravaStatus() {
