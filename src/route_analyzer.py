@@ -99,6 +99,24 @@ class Route:
     average_speed: float  # m/s
     activity_name: str = ""  # Name of the activity from Strava
     is_plus_route: bool = False  # True if distance is >25% above median
+    bbox: Optional[Tuple[float, float, float, float]] = None  # (min_lat, min_lon, max_lat, max_lon)
+    centroid: Optional[Tuple[float, float]] = None  # (lat, lon)
+    path_length_deg: Optional[float] = None  # sum of segment lengths in degrees (cheap proxy for distance)
+
+    def compute_geometry(self):
+        """Populate bbox, centroid, and path_length_deg from coordinates."""
+        coords = self.coordinates
+        if not coords:
+            return
+        arr = np.array(coords)
+        self.bbox = (float(arr[:, 0].min()), float(arr[:, 1].min()),
+                     float(arr[:, 0].max()), float(arr[:, 1].max()))
+        self.centroid = (float(arr[:, 0].mean()), float(arr[:, 1].mean()))
+        if len(arr) > 1:
+            diffs = np.diff(arr, axis=0)
+            self.path_length_deg = float(np.sqrt((diffs ** 2).sum(axis=1)).sum())
+        else:
+            self.path_length_deg = 0.0
 
 
 @dataclass
@@ -244,7 +262,10 @@ class RouteAnalyzer:
                         'elevation_gain': group.representative_route.elevation_gain,
                         'timestamp': group.representative_route.timestamp,
                         'average_speed': group.representative_route.average_speed,
-                        'is_plus_route': group.representative_route.is_plus_route
+                        'is_plus_route': group.representative_route.is_plus_route,
+                        'bbox': group.representative_route.bbox,
+                        'centroid': group.representative_route.centroid,
+                        'path_length_deg': group.representative_route.path_length_deg,
                     },
                     'routes': [
                         {
@@ -256,7 +277,10 @@ class RouteAnalyzer:
                             'elevation_gain': r.elevation_gain,
                             'timestamp': r.timestamp,
                             'average_speed': r.average_speed,
-                            'is_plus_route': r.is_plus_route
+                            'is_plus_route': r.is_plus_route,
+                            'bbox': r.bbox,
+                            'centroid': r.centroid,
+                            'path_length_deg': r.path_length_deg,
                         }
                         for r in group.routes
                     ]
@@ -277,39 +301,33 @@ class RouteAnalyzer:
         except Exception as e:
             logger.warning(f"Failed to save groups cache: {e}")
     
+    @staticmethod
+    def _deserialize_route(data: Dict) -> Route:
+        """Deserialize a single Route from JSON, recomputing geometry if absent."""
+        route = Route(
+            activity_id=data['activity_id'],
+            direction=data['direction'],
+            coordinates=[(lat, lon) for lat, lon in data['coordinates']],
+            distance=data['distance'],
+            duration=data['duration'],
+            elevation_gain=data['elevation_gain'],
+            timestamp=data['timestamp'],
+            average_speed=data['average_speed'],
+            is_plus_route=data.get('is_plus_route', False),
+            bbox=tuple(data['bbox']) if data.get('bbox') else None,
+            centroid=tuple(data['centroid']) if data.get('centroid') else None,
+            path_length_deg=data.get('path_length_deg'),
+        )
+        if route.bbox is None:
+            route.compute_geometry()
+        return route
+
     def _deserialize_groups(self, serialized_groups: List[Dict]) -> List[RouteGroup]:
         """Deserialize route groups from JSON format."""
         groups = []
         for sg in serialized_groups:
-            # Deserialize representative route
-            rep_data = sg['representative_route']
-            representative = Route(
-                activity_id=rep_data['activity_id'],
-                direction=rep_data['direction'],
-                coordinates=[(lat, lon) for lat, lon in rep_data['coordinates']],
-                distance=rep_data['distance'],
-                duration=rep_data['duration'],
-                elevation_gain=rep_data['elevation_gain'],
-                timestamp=rep_data['timestamp'],
-                average_speed=rep_data['average_speed'],
-                is_plus_route=rep_data['is_plus_route']
-            )
-            
-            # Deserialize routes
-            routes = []
-            for r_data in sg['routes']:
-                route = Route(
-                    activity_id=r_data['activity_id'],
-                    direction=r_data['direction'],
-                    coordinates=[(lat, lon) for lat, lon in r_data['coordinates']],
-                    distance=r_data['distance'],
-                    duration=r_data['duration'],
-                    elevation_gain=r_data['elevation_gain'],
-                    timestamp=r_data['timestamp'],
-                    average_speed=r_data['average_speed'],
-                    is_plus_route=r_data['is_plus_route']
-                )
-                routes.append(route)
+            representative = self._deserialize_route(sg['representative_route'])
+            routes = [self._deserialize_route(r_data) for r_data in sg['routes']]
             
             # Create route group
             group = RouteGroup(
@@ -386,7 +404,47 @@ class RouteAnalyzer:
         hash2 = self._get_route_hash(route2)
         # Sort hashes to ensure same key regardless of order
         return f"{min(hash1, hash2)}_{max(hash1, hash2)}"
-        
+
+    @staticmethod
+    def _passes_geometric_filter(route1: 'Route', route2: 'Route',
+                                 length_ratio_max: float = 2.0,
+                                 centroid_max_deg: float = 0.02,
+                                 bbox_overlap_min: float = 0.3) -> bool:
+        """Fast geometric pre-filter — returns False if routes are obviously dissimilar."""
+        if (route1.bbox is None or route2.bbox is None
+                or route1.path_length_deg is None or route2.path_length_deg is None):
+            return True  # no geometry available, can't reject
+
+        # 1) Path length ratio — reject if one route is far longer than the other
+        shorter = min(route1.path_length_deg, route2.path_length_deg)
+        longer = max(route1.path_length_deg, route2.path_length_deg)
+        if shorter > 0 and longer / shorter > length_ratio_max:
+            return False
+
+        # 2) Centroid distance — reject if centroids are far apart
+        c1, c2 = route1.centroid, route2.centroid
+        cdist_deg = ((c1[0] - c2[0]) ** 2 + (c1[1] - c2[1]) ** 2) ** 0.5
+        if cdist_deg > centroid_max_deg:
+            return False
+
+        # 3) Bounding box overlap ratio — reject if boxes barely intersect
+        min_lat1, min_lon1, max_lat1, max_lon1 = route1.bbox
+        min_lat2, min_lon2, max_lat2, max_lon2 = route2.bbox
+
+        inter_lat = max(0, min(max_lat1, max_lat2) - max(min_lat1, min_lat2))
+        inter_lon = max(0, min(max_lon1, max_lon2) - max(min_lon1, min_lon2))
+        intersection = inter_lat * inter_lon
+
+        if intersection == 0:
+            return False
+
+        area1 = (max_lat1 - min_lat1) * (max_lon1 - min_lon1)
+        area2 = (max_lat2 - min_lat2) * (max_lon2 - min_lon2)
+        smaller_area = min(area1, area2)
+        if smaller_area > 0 and intersection / smaller_area < bbox_overlap_min:
+            return False
+
+        return True
     def extract_routes(self, direction: str = 'both') -> List[Route]:
         """
         Extract routes between home and work.
@@ -431,7 +489,8 @@ class RouteAnalyzer:
                 average_speed=activity.average_speed,
                 activity_name=activity.name
             )
-            
+            route.compute_geometry()
+
             routes.append(route)
         
         logger.info(f"Extracted {len(routes)} routes (direction: {direction})")
@@ -793,6 +852,8 @@ class RouteAnalyzer:
             
             # Find best matching group
             for idx, group in enumerate(groups):
+                if not self._passes_geometric_filter(route, group.representative_route):
+                    continue
                 similarity = self.calculate_route_similarity(
                     route, group.representative_route
                 )
@@ -928,6 +989,7 @@ class RouteAnalyzer:
         # Minimum uncached candidates per pivot to bother parallelising.
         # Below this the IPC round-trip cost exceeds the compute savings.
         MIN_PARALLEL = 8
+        total_filtered = 0
 
         while ungrouped:
             current = ungrouped.pop(0)
@@ -937,11 +999,17 @@ class RouteAnalyzer:
             # ---- Separate cached from uncached candidates ----
             cached_similarities: Dict[int, float] = {}
             uncached: List[Tuple[int, str, List]] = []  # (idx, cache_key, coords)
+            skipped_by_filter = 0
 
             for i, route in enumerate(ungrouped):
                 cache_key = self._get_cache_key(current, route)
                 if cache_key in self.similarity_cache:
                     cached_similarities[i] = self.similarity_cache[cache_key]
+                elif not self._passes_geometric_filter(current, route):
+                    self.similarity_cache[cache_key] = 0.0
+                    cached_similarities[i] = 0.0
+                    skipped_by_filter += 1
+                    total_filtered += 1
                 else:
                     uncached.append((i, cache_key, route.coordinates))
 
@@ -984,6 +1052,7 @@ class RouteAnalyzer:
             debug_logger.info(
                 f"Group {group_id}: {len(group)} routes, "
                 f"{len(ungrouped)} remaining, {total_comparisons} total comparisons"
+                + (f" ({skipped_by_filter} skipped by geo filter)" if skipped_by_filter else "")
             )
 
             # ---- Emit progress ----
@@ -1012,6 +1081,16 @@ class RouteAnalyzer:
                 break
 
         groups.sort(key=lambda g: g.frequency, reverse=True)
+
+        expensive_comparisons = total_comparisons - total_filtered
+        filter_pct = (total_filtered / total_comparisons * 100) if total_comparisons else 0
+        debug_logger.info(
+            f"Grouping complete for {n} {direction} routes: "
+            f"{len(groups)} groups, {total_comparisons} comparisons "
+            f"({total_filtered} filtered [{filter_pct:.0f}%], "
+            f"{expensive_comparisons} expensive)"
+        )
+
         return groups
 
     @staticmethod
@@ -1083,6 +1162,8 @@ class RouteAnalyzer:
             # Find similar routes
             to_remove = []
             for i, route in enumerate(ungrouped):
+                if not RouteAnalyzer._passes_geometric_filter(current, route):
+                    continue
                 similarity = calc_similarity(current, route)
                 if similarity >= similarity_threshold:
                     group.append(route)
