@@ -1479,6 +1479,66 @@ def setup_verify():
         return jsonify({'valid': False, 'error': 'Could not reach Strava to verify'}), 503
 
 
+@app.route('/api/intervals/status')
+def intervals_status():
+    """Return whether intervals.icu credentials are configured and valid."""
+    env = _read_env()
+    athlete_id = os.getenv('INTERVALS_ATHLETE_ID') or env.get('INTERVALS_ATHLETE_ID', '')
+    api_key = os.getenv('INTERVALS_API_KEY') or env.get('INTERVALS_API_KEY', '')
+    if not athlete_id or not api_key:
+        return jsonify({'connected': False})
+    return jsonify({'connected': True, 'athlete_id': athlete_id})
+
+
+@app.route('/api/intervals/connect', methods=['POST'])
+@csrf.exempt
+def intervals_connect():
+    """Save intervals.icu credentials and verify them against the API."""
+    data = request.get_json(silent=True) or {}
+    athlete_id = str(data.get('athlete_id', '')).strip()
+    api_key = str(data.get('api_key', '')).strip()
+
+    if not athlete_id or not api_key:
+        return jsonify({'success': False, 'error': 'Athlete ID and API Key are required'}), 400
+
+    # Normalise athlete id — accept with or without leading 'i'
+    if not athlete_id.startswith('i'):
+        athlete_id = 'i' + athlete_id
+
+    # Verify against intervals.icu API
+    try:
+        import requests as http_req
+        from requests.auth import HTTPBasicAuth
+        resp = http_req.get(
+            f'https://intervals.icu/api/v1/athlete/{athlete_id}',
+            auth=HTTPBasicAuth('API_KEY', api_key),
+            timeout=10,
+        )
+        if resp.status_code == 401:
+            return jsonify({'success': False, 'error': 'Invalid API key — check your intervals.icu API settings'}), 400
+        if resp.status_code == 404:
+            return jsonify({'success': False, 'error': f'Athlete {athlete_id} not found — check your Athlete ID'}), 400
+        if not resp.ok:
+            return jsonify({'success': False, 'error': f'intervals.icu returned {resp.status_code}'}), 400
+
+        athlete_data = resp.json()
+        athlete_name = athlete_data.get('name') or athlete_data.get('username') or athlete_id
+    except Exception as exc:
+        logger.warning("intervals.icu connect error: %s", exc)
+        return jsonify({'success': False, 'error': 'Could not reach intervals.icu'}), 503
+
+    # Persist credentials
+    try:
+        _write_env({'INTERVALS_ATHLETE_ID': athlete_id, 'INTERVALS_API_KEY': api_key})
+        os.environ['INTERVALS_ATHLETE_ID'] = athlete_id
+        os.environ['INTERVALS_API_KEY'] = api_key
+        logger.info("intervals.icu credentials saved for athlete %s (%s)", athlete_id, athlete_name)
+        return jsonify({'success': True, 'athlete_id': athlete_id, 'athlete_name': athlete_name})
+    except OSError as exc:
+        logger.error("intervals.icu: failed to write .env: %s", exc)
+        return jsonify({'success': False, 'error': 'Could not save credentials'}), 500
+
+
 @app.route('/api/cache-info')
 def get_cache_info():
     cache_path = Path('data/cache/activities.json')
