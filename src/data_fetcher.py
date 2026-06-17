@@ -113,9 +113,9 @@ class Activity:
             average_watts=_opt_float(getattr(activity, 'average_watts', None)),
             kilojoules=_opt_float(getattr(activity, 'kilojoules', None)),
             suffer_score=_opt_int(getattr(activity, 'suffer_score', None)),
-            achievement_count=int(getattr(activity, 'achievement_count', 0) or 0),
-            pr_count=int(getattr(activity, 'pr_count', 0) or 0),
-            kudos_count=int(getattr(activity, 'kudos_count', 0) or 0),
+            achievement_count=_opt_int(getattr(activity, 'achievement_count', None)) or 0,
+            pr_count=_opt_int(getattr(activity, 'pr_count', None)) or 0,
+            kudos_count=_opt_int(getattr(activity, 'kudos_count', None)) or 0,
         )
     
     def to_dict(self) -> Dict[str, Any]:
