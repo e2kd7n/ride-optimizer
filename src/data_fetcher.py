@@ -38,7 +38,16 @@ class Activity:
     polyline: Optional[str] = None  # encoded polyline
     average_speed: float = 0.0  # m/s
     max_speed: float = 0.0  # m/s
-    
+    gear_id: Optional[str] = None
+    average_heartrate: Optional[float] = None
+    max_heartrate: Optional[float] = None
+    average_watts: Optional[float] = None
+    kilojoules: Optional[float] = None
+    suffer_score: Optional[int] = None
+    achievement_count: int = 0
+    pr_count: int = 0
+    kudos_count: int = 0
+
     @classmethod
     def from_strava_activity(cls, activity, use_detailed_polyline=False):
         """
@@ -71,6 +80,18 @@ class Activity:
         else:
             polyline_data = None
         
+        def _opt_float(val):
+            try:
+                return float(val) if val is not None else None
+            except (TypeError, ValueError):
+                return None
+
+        def _opt_int(val):
+            try:
+                return int(val) if val is not None else None
+            except (TypeError, ValueError):
+                return None
+
         return cls(
             id=activity.id,
             name=activity.name,
@@ -85,7 +106,16 @@ class Activity:
             end_latlng=tuple(activity.end_latlng) if activity.end_latlng else None,
             polyline=polyline_data,
             average_speed=float(activity.average_speed) if activity.average_speed else 0.0,
-            max_speed=float(activity.max_speed) if activity.max_speed else 0.0
+            max_speed=float(activity.max_speed) if activity.max_speed else 0.0,
+            gear_id=str(getattr(activity, 'gear_id', None)) if getattr(activity, 'gear_id', None) else None,
+            average_heartrate=_opt_float(getattr(activity, 'average_heartrate', None)),
+            max_heartrate=_opt_float(getattr(activity, 'max_heartrate', None)),
+            average_watts=_opt_float(getattr(activity, 'average_watts', None)),
+            kilojoules=_opt_float(getattr(activity, 'kilojoules', None)),
+            suffer_score=_opt_int(getattr(activity, 'suffer_score', None)),
+            achievement_count=int(getattr(activity, 'achievement_count', 0) or 0),
+            pr_count=int(getattr(activity, 'pr_count', 0) or 0),
+            kudos_count=int(getattr(activity, 'kudos_count', 0) or 0),
         )
     
     def to_dict(self) -> Dict[str, Any]:
@@ -528,12 +558,138 @@ class StravaDataFetcher:
     def decode_polyline(self, encoded: str) -> List[tuple]:
         """
         Decode polyline string to list of coordinates.
-        
+
         Args:
             encoded: Encoded polyline string
-            
+
         Returns:
             List of (lat, lon) tuples
         """
         return polyline.decode(encoded)
+
+    # ------------------------------------------------------------------
+    # Gear (bikes / shoes) — fetched from the athlete profile
+    # ------------------------------------------------------------------
+
+    @property
+    def _gear_cache_path(self) -> Path:
+        return self.cache_path.parent / 'gear.json'
+
+    def fetch_athlete_gear(self) -> Dict[str, Any]:
+        """
+        Fetch the authenticated athlete's bikes and shoes from Strava and cache.
+
+        Returns:
+            Dict with 'bikes' and 'shoes' lists, each item a gear dict.
+        """
+        try:
+            athlete = self.client.get_athlete()
+            bikes = []
+            for g in (athlete.bikes or []):
+                bikes.append({
+                    'id': str(g.id),
+                    'name': g.name or '',
+                    'type': 'bike',
+                    'brand_name': getattr(g, 'brand_name', '') or '',
+                    'model_name': getattr(g, 'model_name', '') or '',
+                    'primary': bool(getattr(g, 'primary', False)),
+                    'strava_distance_m': float(g.distance) if g.distance else 0.0,
+                })
+            shoes = []
+            for g in (athlete.shoes or []):
+                shoes.append({
+                    'id': str(g.id),
+                    'name': g.name or '',
+                    'type': 'shoe',
+                    'brand_name': getattr(g, 'brand_name', '') or '',
+                    'model_name': getattr(g, 'model_name', '') or '',
+                    'primary': bool(getattr(g, 'primary', False)),
+                    'strava_distance_m': float(g.distance) if g.distance else 0.0,
+                })
+            data = {
+                'timestamp': datetime.now().isoformat(),
+                'bikes': bikes,
+                'shoes': shoes,
+            }
+            self._gear_cache_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(self._gear_cache_path, 'w') as f:
+                json.dump(data, f, indent=2)
+            logger.info(f"Cached {len(bikes)} bikes and {len(shoes)} shoes")
+            return data
+        except Exception as e:
+            logger.error(f"Failed to fetch athlete gear: {e}")
+            raise
+
+    def load_cached_gear(self) -> Optional[Dict[str, Any]]:
+        """Load gear from cache. Returns None if cache doesn't exist."""
+        if not self._gear_cache_path.exists():
+            return None
+        try:
+            with open(self._gear_cache_path, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            logger.warning(f"Failed to load gear cache: {e}")
+            return None
+
+    def backfill_gear_ids(self, progress_callback=None) -> Dict[str, Any]:
+        """
+        Patch gear_id on cached activities that are missing it, without a full re-fetch.
+
+        Strava's list endpoint returns gear_id on every SummaryActivity, so we page
+        through get_activities() and update only the gear_id field for each matching
+        cached activity.  200 activities per API page — no per-activity detail calls.
+
+        Returns:
+            Dict with 'updated', 'skipped', 'total_cached' counts.
+        """
+        if not self.cache_path.exists():
+            return {'updated': 0, 'skipped': 0, 'total_cached': 0}
+
+        # Load cache into a mutable dict keyed by activity id
+        with open(self.cache_path, 'r') as f:
+            cache_data = json.load(f)
+
+        by_id: Dict[int, dict] = {a['id']: a for a in cache_data.get('activities', [])}
+        missing_ids = {aid for aid, a in by_id.items() if not a.get('gear_id')}
+
+        if not missing_ids:
+            logger.info("All cached activities already have gear_id — nothing to backfill")
+            return {'updated': 0, 'skipped': len(by_id), 'total_cached': len(by_id)}
+
+        logger.info(f"Backfilling gear_id for {len(missing_ids)} of {len(by_id)} cached activities")
+
+        updated = 0
+        fetched = 0
+
+        try:
+            # Page through list endpoint — gear_id is on SummaryActivity
+            for activity in self.client.get_activities(limit=len(by_id) + 50):
+                fetched += 1
+                aid = activity.id
+                raw_gear = getattr(activity, 'gear_id', None)
+                gear_id = str(raw_gear) if raw_gear else None
+
+                if aid in by_id and not by_id[aid].get('gear_id') and gear_id:
+                    by_id[aid]['gear_id'] = gear_id
+                    updated += 1
+
+                if progress_callback:
+                    progress_callback(fetched, updated)
+
+                # Stop once we've covered all activities in the cache
+                if fetched >= len(by_id) + 10:
+                    break
+
+        except Exception as e:
+            logger.error(f"Backfill failed after {fetched} activities: {e}")
+            raise
+
+        # Write updated cache back
+        cache_data['activities'] = list(by_id.values())
+        cache_data['timestamp'] = datetime.now().isoformat()
+        with open(self.cache_path, 'w') as f:
+            json.dump(cache_data, f, indent=2)
+
+        logger.info(f"Backfill complete: {updated} updated, {fetched} fetched from Strava")
+        return {'updated': updated, 'skipped': len(by_id) - updated, 'total_cached': len(by_id)}
 
