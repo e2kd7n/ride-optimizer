@@ -758,7 +758,7 @@
             const athleteInput = document.getElementById('icu-athlete-id');
             const keyInput = document.getElementById('icu-api-key');
             try {
-                const s = await window.apiClient.fetch('/api/intervals/status');
+                const s = await window.apiClient.fetch('/intervals/status');
                 if (s.connected) {
                     statusEl.innerHTML = `<span class="badge bg-success"><i class="bi bi-check-circle"></i> intervals.icu connected</span> <span class="text-muted small">${s.athlete_name || s.athlete_id}</span>`;
                     athleteInput.value = s.athlete_id || '';
@@ -787,7 +787,7 @@
                 feedback.style.display = 'none';
 
                 try {
-                    const res = await window.apiClient.fetch('/api/intervals/connect', {
+                    const res = await window.apiClient.fetch('/intervals/connect', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ athlete_id: athleteId, api_key: apiKey })
