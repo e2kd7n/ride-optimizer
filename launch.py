@@ -1185,7 +1185,9 @@ def get_route_detail(route_id):
                 'routes': route.get('routes', []),
                 'is_favorite': route.get('is_favorite', False),
                 'is_plus_route': route.get('is_plus_route', False),
-                'sport_type': route.get('sport_type', route.get('ride_type', route.get('type', 'Ride')))
+                'sport_type': route.get('sport_type', route.get('ride_type', route.get('type', 'Ride'))),
+                'activity_ids': route.get('activity_ids', []),
+                'activity_dates': route.get('activity_dates', [])
             }
         })
 
