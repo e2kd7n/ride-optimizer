@@ -1043,18 +1043,24 @@ class LongRideAnalyzer:
         if not long_ride_activities:
             return []
 
+        similarity_threshold = self.config.get('long_rides.similarity_threshold', 1.2)
+
         _notify(f'Grouping {len(long_ride_activities)} long rides by name…')
         name_groups, unnamed_rides = self.group_rides_by_name(long_ride_activities)
 
         if name_groups:
             _notify(f'Comparing {len(name_groups)} named route groups…')
-            name_groups = self.consolidate_similar_named_groups(name_groups,
-                                                                on_progress=on_progress)
+            name_groups = self.consolidate_similar_named_groups(
+                name_groups,
+                similarity_threshold=similarity_threshold,
+                on_progress=on_progress)
 
         if unnamed_rides and name_groups:
             _notify(f'Matching {len(unnamed_rides)} unnamed rides to groups…')
             name_groups, unnamed_rides = self.match_unnamed_rides_to_groups(
-                unnamed_rides, name_groups, use_parallel=False,
+                unnamed_rides, name_groups,
+                similarity_threshold=similarity_threshold,
+                use_parallel=False,
                 on_progress=on_progress,
             )
 
