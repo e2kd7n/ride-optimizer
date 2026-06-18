@@ -21,7 +21,7 @@ function createLiveRegion() {
     if (!ariaLiveRegion) {
         ariaLiveRegion = document.createElement('div');
         ariaLiveRegion.id = 'aria-live-region';
-        ariaLiveRegion.className = 'sr-only';
+        ariaLiveRegion.className = 'visually-hidden';
         ariaLiveRegion.setAttribute('aria-live', 'polite');
         ariaLiveRegion.setAttribute('aria-atomic', 'true');
         document.body.appendChild(ariaLiveRegion);
@@ -151,7 +151,7 @@ function enhanceFocusIndicators() {
     
     // Ensure all interactive elements are keyboard accessible
     const interactiveElements = document.querySelectorAll(
-        '.route-card-compact, .next-commute-card, .activity-item'
+        '.route-card-compact, .route-library-card, .next-commute-card, .activity-item'
     );
     
     interactiveElements.forEach(element => {
