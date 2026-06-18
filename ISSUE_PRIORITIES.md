@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-06-17 21:53:00 UTC / 2026-06-17 21:53:00 GMT
+**Last Updated:** 2026-06-18 03:14:30 UTC / 2026-06-17 22:14:30 CDT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -19,30 +19,18 @@ This file reflects the current state of GitHub issues organized by release miles
 **Priority within this release determines work order. Complete P0/P1 issues before moving to future releases.**
 
 ### 🔴 P0 - CRITICAL
-- #89 - Add Data Persistence Layer for API
+**No P0 issues** ✅
 
 ### 🔴 P1 - HIGH
-- #305 - bug: analysis results silently lost on restart — _save_to_cache() never called
-- #208 - Create test data fixtures for integration testing
-- #163 - Test Coverage: data_fetcher.py (49% → 80%)
-- #162 - Test Coverage: long_ride_analyzer.py (13% → 50%)
-- #161 - Test Coverage: route_analyzer.py (20% → 50%)
+**No P1 issues** ✅
 
 ### 🟡 P2 - MEDIUM
-- #322 - Unify route comparison pipelines between commute and long ride analyzers
 - #309 - SQLAlchemy models and scheduler never wired to production (relates to #131)
 - #308 - Dead blueprint cluster: app/routes/ never registered in production
-- #306 - chore: dead code cleanup — unused modules, methods, and imports
 - #272 - Add Hourly Weather Forecast
 - #264 - Dashboard and Route Library UX Review
-- #227 - Improve Test Coverage for New Features
 - #209 - Implement graceful degradation for unavailable services
 - #207 - Implement dependency injection pattern for better testability
-- #192 - Establish PR review requirements
-- #187 - Testing: Increase Route Namer coverage 15% → 50%
-- #186 - Testing: Increase Route Analyzer coverage 20% → 50%
-- #185 - Testing: Increase Data Fetcher coverage 49% → 80%
-- #184 - Testing: Increase Long Ride Analyzer coverage 13% → 50%
 - #183 - Code Quality: Add debug logging for exception handlers
 - #182 - Code Quality: Replace 4 bare except statements with specific exceptions
 - #136 - Implement settings and preferences page for home/work locations, units, time windows, and planner defaults
@@ -83,6 +71,7 @@ This file reflects the current state of GitHub issues organized by release miles
 - #172 - Add Marshmallow validation schemas for planner endpoints
 
 ### 🟡 P2 - MEDIUM
+- #322 - Unify route comparison pipelines between commute and long ride analyzers
 - #307 - perf: reduce startup cost and per-request overhead on Pi
 - #194 - Long Rides: Add accessibility features (WCAG 2.1 AA)
 - #193 - Long Rides: Implement skeleton loaders and error states
@@ -107,10 +96,8 @@ These issues need to be assigned to a release milestone and prioritized.
 ## 📝 Workspace TODOs & Tasks
 Code comments and inline tasks found in the workspace that may need attention.
 
-Found **4** code comments requiring attention:
+Found **2** code comments requiring attention:
 
-- `.claude/worktrees/pedantic-spence-1b1a3d/app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
-- `.claude/worktrees/pedantic-spence-1b1a3d/static/js/dashboard.js` - 7:// NOTE: Initialization is handled by inline script in index.html
 - `app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
 - `static/js/dashboard.js` - 7:// NOTE: Initialization is handled by inline script in index.html
 
