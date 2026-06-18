@@ -1104,7 +1104,8 @@ def get_route_detail(route_id):
                 'is_plus_route': route.get('is_plus_route', False),
                 'sport_type': route.get('sport_type', route.get('ride_type', route.get('type', 'Ride'))),
                 'activity_ids': route.get('activity_ids', []),
-                'activity_dates': route.get('activity_dates', [])
+                'activity_dates': route.get('activity_dates', []),
+                'activity_names': route.get('activity_names', [])
             }
         })
 
@@ -1504,6 +1505,7 @@ def trigger_analysis():
     initialize_services()
     data = request.get_json(silent=True) or {}
     fetch_new = bool(data.get('fetch_new', False))
+    force_refresh = bool(data.get('force_refresh', True))
 
     after_date = None
     before_date = None
@@ -1549,7 +1551,7 @@ def trigger_analysis():
         global _analysis_job, _services_initialized, _analysis_stop_requested
         try:
             result = _analysis_service.run_full_analysis(
-                force_refresh=True,
+                force_refresh=force_refresh,
                 skip_strava_fetch=not fetch_new,
                 after=after_date,
                 before=before_date,
@@ -1627,11 +1629,22 @@ def trigger_fetch():
     }
 
     def _run():
-        global _fetch_job
+        global _fetch_job, _services_initialized
         try:
             import time as _time
             import json as _json
             from pathlib import Path as _Path
+
+            # Snapshot pre-fetch activity count for incremental detection
+            cache_path = _Path('data/cache/activities.json')
+            pre_fetch_count = 0
+            if cache_path.exists():
+                try:
+                    with open(cache_path) as f:
+                        raw = _json.load(f)
+                    pre_fetch_count = raw.get('count', len(raw.get('activities', [])))
+                except Exception:
+                    pass
 
             def _progress(count):
                 # Sleep 2s every 30 activities (one Strava page) to stay gentle on the Pi
@@ -1649,18 +1662,35 @@ def trigger_fetch():
                 merge_cache=True,
             )
 
-            cache_path = _Path('data/cache/activities.json')
             total = _fetch_job['fetched']
             if cache_path.exists():
                 with open(cache_path) as f:
                     raw = _json.load(f)
                 total = raw.get('count', len(raw.get('activities', [])))
 
-            _fetch_job.update({
-                'status': 'done',
-                'label': f'Done — {total:,} activities in cache',
-                'total_in_cache': total,
-            })
+            new_count = total - pre_fetch_count
+            if new_count > 0:
+                _fetch_job.update({
+                    'label': f'Fetch done — {new_count:,} new activities. Running incremental analysis…',
+                    'total_in_cache': total,
+                })
+                logger.info(f"Fetch added {new_count} new activities, triggering incremental analysis")
+                result = _analysis_service.run_full_analysis(
+                    force_refresh=False,
+                    skip_strava_fetch=True,
+                )
+                _services_initialized = False
+                _fetch_job.update({
+                    'status': 'done',
+                    'label': f'Done — {total:,} activities, {new_count:,} new (analysis updated)',
+                    'total_in_cache': total,
+                })
+            else:
+                _fetch_job.update({
+                    'status': 'done',
+                    'label': f'Done — {total:,} activities in cache (no new activities)',
+                    'total_in_cache': total,
+                })
         except Exception as e:
             logger.error(f"Background fetch failed: {e}", exc_info=True)
             _fetch_job.update({
