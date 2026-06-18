@@ -448,150 +448,130 @@ class TestMetricsExtraction:
 
 class TestSyncWorkouts:
     """Test workout syncing."""
-    
+
     def test_sync_success(self, trainerroad_service, sample_ics_content):
         """Test successful workout sync."""
         trainerroad_service.fetch_ics_feed = Mock(return_value=sample_ics_content)
-        
-        with patch('app.services.trainerroad_service.WorkoutMetadata') as mock_workout, \
-             patch('app.services.trainerroad_service.db') as mock_db:
-            
-            mock_workout.query.filter_by.return_value.first.return_value = None
-            
+
+        with patch.object(trainerroad_service, '_load_workouts_cache', return_value={}), \
+             patch.object(trainerroad_service, '_save_workouts_cache'):
+
             result = trainerroad_service.sync_workouts(days_ahead=14)
-            
+
             assert result['status'] == 'success'
             assert result['workouts_synced'] >= 0
             assert 'last_sync' in result
-    
+
     def test_sync_skipped_recent(self, trainerroad_service):
         """Test skipping sync when recently synced."""
         trainerroad_service.last_sync = datetime.now() - timedelta(hours=1)
-        
+
         result = trainerroad_service.sync_workouts()
-        
+
         assert result['status'] == 'skipped'
         assert 'last_sync' in result
-    
+
     def test_sync_fetch_failure(self, trainerroad_service):
         """Test handling fetch failure during sync."""
         trainerroad_service.fetch_ics_feed = Mock(return_value=None)
-        
+
         result = trainerroad_service.sync_workouts()
-        
+
         assert result['status'] == 'error'
         assert result['workouts_synced'] == 0
-    
+
     def test_sync_no_workouts(self, trainerroad_service):
         """Test handling empty workout list."""
         trainerroad_service.fetch_ics_feed = Mock(return_value='BEGIN:VCALENDAR\nEND:VCALENDAR')
-        
+
         result = trainerroad_service.sync_workouts()
-        
+
         assert result['status'] == 'error'
         assert 'No workouts found' in result['message']
-    
+
     def test_sync_filters_by_date_range(self, trainerroad_service, sample_ics_content):
         """Test that sync filters workouts by date range."""
         trainerroad_service.fetch_ics_feed = Mock(return_value=sample_ics_content)
-        
-        with patch('app.services.trainerroad_service.WorkoutMetadata') as mock_workout, \
-             patch('app.services.trainerroad_service.db'):
-            
-            mock_workout.query.filter_by.return_value.first.return_value = None
-            
+
+        with patch.object(trainerroad_service, '_load_workouts_cache', return_value={}), \
+             patch.object(trainerroad_service, '_save_workouts_cache'):
+
             result = trainerroad_service.sync_workouts(days_ahead=7)
-            
-            # Should only sync workouts within the date range
+
             assert result['status'] in ['success', 'error']
+
+
+def _make_workout_cache(workout_type, name, duration=60, tss=None):
+    """Helper to create a workout cache entry for today's date."""
+    return {
+        'test_id': {
+            'workout_id': 'test_id',
+            'workout_name': name,
+            'workout_date': date.today().isoformat(),
+            'workout_type': workout_type,
+            'duration_minutes': duration,
+            'tss': tss,
+            'intensity_factor': None,
+            'status': 'scheduled',
+            'synced_at': datetime.utcnow().isoformat(),
+        }
+    }
 
 
 class TestGetWorkoutConstraints:
     """Test workout constraints generation."""
-    
+
     def test_constraints_endurance_workout(self, trainerroad_service):
         """Test constraints for endurance workout."""
-        with patch('app.services.trainerroad_service.WorkoutMetadata') as mock_workout:
-            mock_workout_obj = Mock()
-            mock_workout_obj.workout_name = 'Endurance Ride'
-            mock_workout_obj.workout_type = 'Endurance'
-            mock_workout_obj.duration_minutes = 60
-            mock_workout_obj.tss = 45
-            mock_workout.get_for_date.return_value = mock_workout_obj
-            
+        cache = _make_workout_cache('Endurance', 'Endurance Ride', duration=60, tss=45)
+        with patch.object(trainerroad_service, '_load_workouts_cache', return_value=cache):
             constraints = trainerroad_service.get_workout_constraints(date.today())
-            
+
             assert constraints['has_workout'] is True
             assert constraints['workout_type'] == 'Endurance'
             assert constraints['preferred_intensity'] == 'low'
             assert constraints['indoor_fallback'] is False
-    
+
     def test_constraints_threshold_workout(self, trainerroad_service):
         """Test constraints for threshold workout."""
-        with patch('app.services.trainerroad_service.WorkoutMetadata') as mock_workout:
-            mock_workout_obj = Mock()
-            mock_workout_obj.workout_name = 'Threshold Intervals'
-            mock_workout_obj.workout_type = 'Threshold'
-            mock_workout_obj.duration_minutes = 75
-            mock_workout_obj.tss = 85
-            mock_workout.get_for_date.return_value = mock_workout_obj
-            
+        cache = _make_workout_cache('Threshold', 'Threshold Intervals', duration=75, tss=85)
+        with patch.object(trainerroad_service, '_load_workouts_cache', return_value=cache):
             constraints = trainerroad_service.get_workout_constraints(date.today())
-            
+
             assert constraints['indoor_fallback'] is True
             assert constraints['preferred_intensity'] == 'high'
-    
+
     def test_constraints_vo2max_workout(self, trainerroad_service):
         """Test constraints for VO2Max workout."""
-        with patch('app.services.trainerroad_service.WorkoutMetadata') as mock_workout:
-            mock_workout_obj = Mock()
-            mock_workout_obj.workout_name = 'VO2Max Intervals'
-            mock_workout_obj.workout_type = 'VO2Max'
-            mock_workout_obj.duration_minutes = 60
-            mock_workout_obj.tss = 95
-            mock_workout.get_for_date.return_value = mock_workout_obj
-            
+        cache = _make_workout_cache('VO2Max', 'VO2Max Intervals', duration=60, tss=95)
+        with patch.object(trainerroad_service, '_load_workouts_cache', return_value=cache):
             constraints = trainerroad_service.get_workout_constraints(date.today())
-            
+
             assert constraints['indoor_fallback'] is True
             assert constraints['preferred_intensity'] == 'high'
-    
+
     def test_constraints_recovery_workout(self, trainerroad_service):
         """Test constraints for recovery workout."""
-        with patch('app.services.trainerroad_service.WorkoutMetadata') as mock_workout:
-            mock_workout_obj = Mock()
-            mock_workout_obj.workout_name = 'Recovery Spin'
-            mock_workout_obj.workout_type = 'Recovery'
-            mock_workout_obj.duration_minutes = 30
-            mock_workout_obj.tss = 20
-            mock_workout.get_for_date.return_value = mock_workout_obj
-            
+        cache = _make_workout_cache('Recovery', 'Recovery Spin', duration=30, tss=20)
+        with patch.object(trainerroad_service, '_load_workouts_cache', return_value=cache):
             constraints = trainerroad_service.get_workout_constraints(date.today())
-            
+
             assert constraints['max_duration_minutes'] == 45
             assert constraints['preferred_intensity'] == 'very_low'
-    
+
     def test_constraints_no_workout(self, trainerroad_service):
         """Test constraints when no workout scheduled."""
-        with patch('app.services.trainerroad_service.WorkoutMetadata') as mock_workout:
-            mock_workout.get_for_date.return_value = None
-            
+        with patch.object(trainerroad_service, '_load_workouts_cache', return_value={}):
             constraints = trainerroad_service.get_workout_constraints(date.today())
-            
+
             assert constraints is None
-    
+
     def test_constraints_high_tss_note(self, trainerroad_service):
         """Test that high TSS adds note."""
-        with patch('app.services.trainerroad_service.WorkoutMetadata') as mock_workout:
-            mock_workout_obj = Mock()
-            mock_workout_obj.workout_name = 'Hard Workout'
-            mock_workout_obj.workout_type = 'Threshold'
-            mock_workout_obj.duration_minutes = 120
-            mock_workout_obj.tss = 150
-            mock_workout.get_for_date.return_value = mock_workout_obj
-            
+        cache = _make_workout_cache('Threshold', 'Hard Workout', duration=120, tss=150)
+        with patch.object(trainerroad_service, '_load_workouts_cache', return_value=cache):
             constraints = trainerroad_service.get_workout_constraints(date.today())
-            
+
             assert any('High training load' in note for note in constraints['notes'])
             assert constraints['tss'] == 150
 

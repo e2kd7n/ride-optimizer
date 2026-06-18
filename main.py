@@ -180,9 +180,9 @@ def show_cache_stats():
                     earliest_date = start_date
                 if latest_date is None or start_date > latest_date:
                     latest_date = start_date
-            except:
+            except (ValueError, TypeError):
                 pass
-        
+
         # Commute detection
         name = activity.get('name', '').lower()
         if any(keyword in name for keyword in commute_keywords):

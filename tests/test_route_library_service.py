@@ -84,13 +84,9 @@ def mock_long_ride():
 
 
 @pytest.fixture
-@patch('app.models.favorites.FavoriteRoute')
-def route_library_service(mock_favorite_route, mock_config):
+def route_library_service(mock_config):
     """Create a RouteLibraryService instance."""
-    # Mock query to return empty list (no favorites in database)
-    mock_favorite_route.query.all.return_value = []
     service = RouteLibraryService(mock_config)
-    # Prevent cache loading during tests
     service._cache_loaded = True
     return service
 
