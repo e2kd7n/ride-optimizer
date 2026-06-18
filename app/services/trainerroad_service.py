@@ -279,6 +279,47 @@ class TrainerRoadService:
 
         return tss, intensity_factor
 
+    def get_status(self) -> Dict[str, Any]:
+        connected = self.feed_url is not None
+        cache = self._load_workouts_cache()
+        upcoming = [
+            w for w in cache.values()
+            if w.get('workout_date', '') >= date.today().isoformat()
+        ]
+        return {
+            'connected': connected,
+            'last_sync': self.last_sync.isoformat() if self.last_sync else None,
+            'workout_count': len(upcoming),
+        }
+
+    def get_upcoming_workouts(self, days_ahead: int = 7) -> List[Dict[str, Any]]:
+        cache = self._load_workouts_cache()
+        today = date.today()
+        end = today + timedelta(days=days_ahead)
+        workouts = [
+            w for w in cache.values()
+            if today.isoformat() <= w.get('workout_date', '') <= end.isoformat()
+        ]
+        workouts.sort(key=lambda w: w.get('workout_date', ''))
+        return workouts
+
+    def get_today_summary(self) -> Dict[str, Any]:
+        constraints = self.get_workout_constraints(date.today())
+        if not constraints:
+            return {'has_workout': False}
+
+        return {
+            'has_workout': True,
+            'workout': {
+                'name': constraints.get('workout_name', 'Workout'),
+                'type': constraints.get('workout_type'),
+                'duration_minutes': constraints.get('min_duration_minutes'),
+                'tss': constraints.get('tss'),
+                'indoor_fallback': constraints.get('indoor_fallback', False),
+                'notes': constraints.get('notes', []),
+            }
+        }
+
     def _load_workouts_cache(self) -> Dict[str, Any]:
         if not WORKOUTS_CACHE.exists():
             return {}
