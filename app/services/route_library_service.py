@@ -447,6 +447,9 @@ class RouteLibraryService:
             if name == "Unnamed Activity":
                 name = f"Commute Route {group['id']}"
 
+            routes_data = group.get('routes', [])
+            last_ridden = max((r.get('timestamp', '') for r in routes_data), default='') if routes_data else ''
+
             return {
                 'id': group['id'],
                 'type': 'commute',
@@ -459,7 +462,8 @@ class RouteLibraryService:
                 'is_plus_route': group.get('is_plus_route', False),
                 'is_favorite': group['id'] in self._favorites,
                 'difficulty': group.get('difficulty', 'Easy'),
-                'sport_type': rep_route.get('sport_type', 'Ride')
+                'sport_type': rep_route.get('sport_type', 'Ride'),
+                'last_ridden': last_ridden,
             }
         else:
             # RouteGroup object
@@ -468,6 +472,8 @@ class RouteLibraryService:
             name = group.name or f"Commute Route {group.id}"
             if name == "Unnamed Activity":
                 name = f"Commute Route {group.id}"
+
+            last_ridden = max((r.timestamp for r in group.routes if r.timestamp), default='') if group.routes else ''
 
             return {
                 'id': group.id,
@@ -481,7 +487,8 @@ class RouteLibraryService:
                 'is_plus_route': group.is_plus_route,
                 'is_favorite': group.id in self._favorites,
                 'difficulty': getattr(group, 'difficulty', 'Easy'),
-                'sport_type': getattr(rep_route, 'sport_type', 'Ride')
+                'sport_type': getattr(rep_route, 'sport_type', 'Ride'),
+                'last_ridden': last_ridden,
             }
 
     def _get_meaningful_route_name(self, name: str, distance_km: float, timestamp: str, is_loop: bool = False) -> str:
@@ -535,6 +542,9 @@ class RouteLibraryService:
                 ride.get('is_loop', False)
             )
 
+            dates = ride.get('activity_dates') or []
+            last_ridden = max(dates) if dates else ride.get('timestamp', '')
+
             return {
                 'id': str(ride['activity_id']),
                 'type': 'long_ride',
@@ -546,7 +556,8 @@ class RouteLibraryService:
                 'is_loop': ride.get('is_loop', False),
                 'is_favorite': str(ride['activity_id']) in self._favorites,
                 'difficulty': ride.get('difficulty', 'Easy'),
-                'sport_type': ride.get('type', 'Ride')
+                'sport_type': ride.get('type', 'Ride'),
+                'last_ridden': last_ridden,
             }
         else:
             # LongRide object
@@ -557,6 +568,9 @@ class RouteLibraryService:
                 ride.timestamp,
                 ride.is_loop
             )
+
+            dates = ride.activity_dates or []
+            last_ridden = max(dates) if dates else (ride.timestamp or '')
 
             return {
                 'id': str(ride.activity_id),
@@ -569,7 +583,8 @@ class RouteLibraryService:
                 'is_loop': ride.is_loop,
                 'is_favorite': str(ride.activity_id) in self._favorites,
                 'difficulty': getattr(ride, 'difficulty', 'Easy'),
-                'sport_type': ride.type
+                'sport_type': ride.type,
+                'last_ridden': last_ridden,
             }
 
     def _format_commute_route_detailed(self, group) -> Dict[str, Any]:
