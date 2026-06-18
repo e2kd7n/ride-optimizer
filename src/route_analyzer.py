@@ -1542,9 +1542,9 @@ end tell
                     f.write(f"• This prevents IP blocks and allows Nominatim to reset\n")
                     f.write(f"{'='*70}\n\n")
                     f.flush()
-            except:
-                pass
-            
+            except OSError as e:
+                logger.debug(f"Failed to write progress file header: {e}")
+
             geocoded_count = 0
             failed_count = 0
             
@@ -1553,9 +1553,9 @@ end tell
                 with open(progress_file, 'a') as f:
                     f.write(f"[{timestamp()}] Phase 1/2: Geocoding route names\n")
                     f.write(f"{'-'*70}\n")
-            except:
-                pass
-            
+            except OSError as e:
+                logger.debug(f"Failed to write progress file: {e}")
+
             for i, group in enumerate(groups_to_geocode, 1):
                 try:
                     # Generate descriptive route name using RouteNamer
@@ -1636,17 +1636,17 @@ end tell
                     f.write(f"\n{'-'*70}\n")
                     f.write(f"[{timestamp()}] Phase 2/4: Saving geocoding cache\n")
                     f.write(f"{'-'*70}\n")
-            except:
-                pass
-            
+            except OSError as e:
+                logger.debug(f"Failed to write progress file: {e}")
+
             self.route_namer._save_cache()
             logger.info("Geocoding cache saved to disk")
             
             try:
                 with open(progress_file, 'a') as f:
                     f.write(f"[{timestamp()}] ✓ Geocoding cache saved\n")
-            except:
-                pass
+            except OSError as e:
+                logger.debug(f"Failed to write progress file: {e}")
             
             # Phase 3: Save route groups cache with updated names
             try:
@@ -1654,8 +1654,8 @@ end tell
                     f.write(f"\n{'-'*70}\n")
                     f.write(f"[{timestamp()}] Phase 3/4: Saving route groups cache with updated names\n")
                     f.write(f"{'-'*70}\n")
-            except:
-                pass
+            except OSError as e:
+                logger.debug(f"Failed to write progress file: {e}")
             
             # Extract activity IDs from groups
             activity_ids = []
@@ -1671,8 +1671,8 @@ end tell
             try:
                 with open(progress_file, 'a') as f:
                     f.write(f"[{timestamp()}] ✓ Route groups cache saved with {geocoded_count} updated names\n")
-            except:
-                pass
+            except OSError as e:
+                logger.debug(f"Failed to write progress file: {e}")
             
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
@@ -1685,8 +1685,8 @@ end tell
                     f.write(f"\n{'-'*70}\n")
                     f.write(f"[{timestamp()}] Phase 4/4: Migrating to web app data directory\n")
                     f.write(f"{'-'*70}\n")
-            except:
-                pass
+            except OSError as e:
+                logger.debug(f"Failed to write progress file: {e}")
             
             migration_success = False
             try:
@@ -1705,22 +1705,22 @@ end tell
                     try:
                         with open(progress_file, 'a') as f:
                             f.write(f"[{timestamp()}] ✓ Data migrated to web app (data/route_groups.json)\n")
-                    except:
-                        pass
+                    except OSError as e:
+                        logger.debug(f"Failed to write progress file: {e}")
                 else:
                     logger.warning(f"Migration script failed: {result.stderr}")
                     try:
                         with open(progress_file, 'a') as f:
                             f.write(f"[{timestamp()}] ⚠️  Migration failed (see logs)\n")
-                    except:
-                        pass
+                    except OSError as e:
+                        logger.debug(f"Failed to write progress file: {e}")
             except Exception as e:
                 logger.warning(f"Failed to run migration script: {e}")
                 try:
                     with open(progress_file, 'a') as f:
                         f.write(f"[{timestamp()}] ⚠️  Migration error: {str(e)[:50]}\n")
-                except:
-                    pass
+                except OSError as write_err:
+                    logger.debug(f"Failed to write progress file: {write_err}")
             
             # Write completion summary with timezone
             try:
@@ -1751,9 +1751,9 @@ end tell
                         f.write(f"   • Re-run: python main.py --analyze\n")
                     f.write(f"\n💡 The cache has been updated, so the next run will be fast!\n")
                     f.write(f"{'='*70}\n")
-            except:
-                pass
-            
+            except OSError as e:
+                logger.debug(f"Failed to write progress file summary: {e}")
+
         except Exception as e:
             logger.error(f"Background geocoding thread failed: {e}", exc_info=True)
             error_msg = str(e)
