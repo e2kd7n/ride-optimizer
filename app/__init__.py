@@ -35,12 +35,4 @@ def create_app(config_name: str = 'default') -> Flask:
     from app.config import config as config_map
     app.config.from_object(config_map[config_name])
 
-    from app.models import db
-    db.init_app(app)
-    with app.app_context():
-        db.create_all()
-
-    from app.routes.planner import bp as planner_bp
-    app.register_blueprint(planner_bp)
-
     return app

@@ -510,7 +510,7 @@ class RouteLibraryService:
             from datetime import datetime
             date_obj = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
             date_str = date_obj.strftime('%b %d, %Y')
-        except:
+        except (ValueError, TypeError):
             date_str = timestamp[:10] if timestamp else 'Unknown Date'
 
         route_type = "Loop" if is_loop else "Route"
