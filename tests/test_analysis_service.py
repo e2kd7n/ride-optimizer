@@ -720,3 +720,235 @@ class TestCacheRoundTrip:
         # Analysis time
         assert svc2._last_analysis_time == datetime(2026, 6, 17, 12, 0, 0)
 
+
+@pytest.mark.unit
+class TestCacheLoadEdgeCases:
+    """Test _load_from_cache edge cases and fallback paths."""
+
+    def test_load_cache_failure_sets_loaded_flag(self, mock_config):
+        """Failed cache load still marks as loaded to avoid retry loops."""
+        service = AnalysisService(mock_config)
+        service._cache_loaded = False
+        service.storage = Mock()
+        service.storage.read = Mock(side_effect=Exception("disk error"))
+
+        service._load_from_cache()
+        assert service._cache_loaded is True
+
+    def test_deserialization_fallback_for_route_groups(self, mock_config, tmp_path):
+        """If route group deserialization fails, raw dicts are stored."""
+        from src.json_storage import JSONStorage
+        storage = JSONStorage(str(tmp_path / 'data'))
+
+        bad_route_groups_data = {
+            'route_groups': [{'id': 'x', 'bad_key': True}],
+            'updated_at': datetime.now().isoformat()
+        }
+        storage.write('route_groups.json', bad_route_groups_data)
+        storage.write('analysis_status.json', {})
+        storage.write('long_rides.json', {})
+
+        service = AnalysisService(mock_config)
+        service.storage = storage
+        service._load_from_cache()
+
+        assert service._route_groups is not None
+        assert isinstance(service._route_groups[0], dict)
+
+    def test_deserialization_fallback_for_long_rides(self, mock_config, tmp_path):
+        """If long ride deserialization fails, raw dicts are stored."""
+        from src.json_storage import JSONStorage
+        storage = JSONStorage(str(tmp_path / 'data'))
+
+        bad_long_rides_data = {
+            'long_rides': [{'id': 'x', 'bad_key': True}],
+            'updated_at': datetime.now().isoformat()
+        }
+        storage.write('long_rides.json', bad_long_rides_data)
+        storage.write('analysis_status.json', {})
+        storage.write('route_groups.json', {})
+
+        service = AnalysisService(mock_config)
+        service.storage = storage
+        service._load_from_cache()
+
+        assert service._long_rides is not None
+        assert isinstance(service._long_rides[0], dict)
+
+
+@pytest.mark.unit
+class TestRunFullAnalysisProgressCallbacks:
+    """Test run_full_analysis progress callbacks and stop_check."""
+
+    @patch('app.services.analysis_service.LocationFinder')
+    @patch('app.services.analysis_service.LongRideAnalyzer')
+    @patch('app.services.analysis_service.RouteAnalyzer')
+    def test_on_progress_is_called(self, mock_route_analyzer_class,
+                                    mock_long_ride_analyzer_class,
+                                    mock_location_finder_class,
+                                    analysis_service, mock_activity,
+                                    mock_location):
+        """on_progress callback should be invoked during analysis."""
+        home, work = mock_location
+        mock_data_fetcher = Mock()
+        mock_data_fetcher.fetch_activities = Mock(return_value=[mock_activity])
+        analysis_service._data_fetcher = mock_data_fetcher
+
+        mock_location_finder_class.return_value.identify_home_work.return_value = (home, work)
+        mock_route_analyzer_class.return_value.group_similar_routes.return_value = [Mock(routes=[])]
+        mock_long_ride_analyzer_class.return_value.classify_activities.return_value = ([], [])
+        mock_long_ride_analyzer_class.return_value.group_similar_rides.return_value = []
+
+        progress_calls = []
+        def on_progress(**kwargs):
+            progress_calls.append(kwargs)
+
+        result = analysis_service.run_full_analysis(on_progress=on_progress)
+        assert result['status'] == 'success'
+        assert len(progress_calls) > 0
+
+    @patch('app.services.analysis_service.LocationFinder')
+    @patch('app.services.analysis_service.LongRideAnalyzer')
+    @patch('app.services.analysis_service.RouteAnalyzer')
+    def test_stop_check_halts_analysis(self, mock_route_analyzer_class,
+                                        mock_long_ride_analyzer_class,
+                                        mock_location_finder_class,
+                                        analysis_service, mock_activity,
+                                        mock_location):
+        """stop_check returning True should produce stopped status."""
+        home, work = mock_location
+        mock_data_fetcher = Mock()
+        mock_data_fetcher.fetch_activities = Mock(return_value=[mock_activity])
+        analysis_service._data_fetcher = mock_data_fetcher
+
+        mock_location_finder_class.return_value.identify_home_work.return_value = (home, work)
+        mock_route_analyzer_class.return_value.group_similar_routes.return_value = [Mock(routes=[])]
+
+        result = analysis_service.run_full_analysis(stop_check=lambda: True)
+        assert result['status'] == 'stopped'
+
+
+@pytest.mark.unit
+class TestExtractLocationsFromRoutes:
+    """Test _extract_locations_from_routes."""
+
+    def test_extracts_home_and_work(self, analysis_service):
+        """Should extract locations from home_to_work and work_to_home routes."""
+        analysis_service._route_groups = [
+            {
+                'direction': 'home_to_work',
+                'representative_route': {
+                    'coordinates': [(40.7128, -74.0060), (40.7589, -73.9851)]
+                }
+            },
+            {
+                'direction': 'work_to_home',
+                'representative_route': {
+                    'coordinates': [(40.7589, -73.9851), (40.7128, -74.0060)]
+                }
+            }
+        ]
+
+        analysis_service._extract_locations_from_routes()
+
+        assert analysis_service._home_location is not None
+        assert analysis_service._work_location is not None
+        assert abs(analysis_service._home_location.lat - 40.7128) < 0.001
+        assert abs(analysis_service._work_location.lat - 40.7589) < 0.001
+
+    def test_no_routes_does_nothing(self, analysis_service):
+        analysis_service._route_groups = None
+        analysis_service._extract_locations_from_routes()
+        assert analysis_service._home_location is None
+
+    def test_routes_with_no_coords(self, analysis_service):
+        analysis_service._route_groups = [
+            {
+                'direction': 'home_to_work',
+                'representative_route': {'coordinates': []}
+            }
+        ]
+        analysis_service._extract_locations_from_routes()
+        assert analysis_service._home_location is None
+
+
+@pytest.mark.unit
+class TestWeatherHelpers:
+    """Test analysis service weather helper methods."""
+
+    def test_get_weather_icon_rain(self, analysis_service):
+        assert analysis_service._get_weather_icon({'conditions': 'Rain', 'precipitation_mm': 2}) == 'cloud-rain'
+
+    def test_get_weather_icon_wind(self, analysis_service):
+        assert analysis_service._get_weather_icon({'conditions': 'Clear', 'wind_speed_kph': 30}) == 'wind'
+
+    def test_get_weather_icon_cloud(self, analysis_service):
+        assert analysis_service._get_weather_icon({'conditions': 'Cloudy'}) == 'cloud'
+
+    def test_get_weather_icon_sun(self, analysis_service):
+        assert analysis_service._get_weather_icon({'conditions': 'Clear'}) == 'sun'
+
+    def test_get_weather_color_favorable(self, analysis_service):
+        assert analysis_service._get_weather_color({'cycling_favorability': 'favorable'}) == 'green'
+
+    def test_get_weather_color_neutral(self, analysis_service):
+        assert analysis_service._get_weather_color({'cycling_favorability': 'neutral'}) == 'orange'
+
+    def test_get_weather_color_unfavorable(self, analysis_service):
+        assert analysis_service._get_weather_color({'cycling_favorability': 'unfavorable'}) == 'red'
+
+    def test_get_weather_color_unknown(self, analysis_service):
+        assert analysis_service._get_weather_color({'cycling_favorability': ''}) == 'blue'
+
+    def test_get_forecast_color_good(self, analysis_service):
+        forecast = {'temp_c': 20, 'wind_speed_kph': 10, 'precipitation_prob': 10}
+        assert analysis_service._get_forecast_color(forecast) == '#28a745'
+
+    def test_get_forecast_color_moderate(self, analysis_service):
+        forecast = {'temp_c': 5, 'wind_speed_kph': 10, 'precipitation_prob': 10}
+        assert analysis_service._get_forecast_color(forecast) == '#ffc107'
+
+    def test_get_forecast_color_bad(self, analysis_service):
+        forecast = {'temp_c': -5, 'wind_speed_kph': 10, 'precipitation_prob': 10}
+        assert analysis_service._get_forecast_color(forecast) == '#dc3545'
+
+
+@pytest.mark.unit
+class TestWeatherPopups:
+    """Test _create_weather_popup and _create_forecast_popup."""
+
+    def test_create_weather_popup(self, analysis_service):
+        weather = {
+            'conditions': 'Clear',
+            'temperature_c': 22,
+            'wind_speed_kph': 15,
+            'wind_direction_cardinal': 'SW',
+            'precipitation_mm': 0
+        }
+        html = analysis_service._create_weather_popup('Home', weather)
+        assert 'Home' in html
+        assert 'Clear' in html
+        assert 'SW' in html
+
+    def test_create_weather_popup_stale(self, analysis_service):
+        weather = {
+            'conditions': 'Clear',
+            'temperature_c': 20,
+            'is_stale': True
+        }
+        html = analysis_service._create_weather_popup('Test', weather)
+        assert 'stale' in html.lower()
+
+    def test_create_forecast_popup(self, analysis_service):
+        forecast = {
+            'timestamp': '2026-06-17T12:00',
+            'temp_c': 25,
+            'wind_speed_kph': 12,
+            'wind_direction_deg': 270,
+            'precipitation_prob': 15
+        }
+        html = analysis_service._create_forecast_popup('Work', forecast)
+        assert 'Work' in html
+        assert '2026-06-17T12:00' in html
+        assert '15%' in html
+

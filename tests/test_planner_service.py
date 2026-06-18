@@ -587,12 +587,309 @@ class TestPlannerMapWeatherOverlays:
                 'is_loop': mock_long_ride.is_loop
             }]
         }]
-        
+
         html = initialized_service.generate_long_rides_map(
             recommendations,
             home_location=mock_long_ride.start_location
         )
-        
+
         assert html is not None
         assert 'Acceptable' in html
+
+
+@pytest.mark.unit
+class TestAnalyzeLongRide:
+    """Test analyze_long_ride method."""
+
+    def test_positive_distance_and_duration(self, planner_service):
+        """Normal ride analysis should succeed."""
+        planner_service.weather_service.get_daily_forecast = Mock(return_value=[])
+        result = planner_service.analyze_long_ride(distance=50.0, duration=2.0)
+        assert result['status'] == 'success'
+        assert result['distance_km'] == 50.0
+        assert result['duration_hours'] == 2.0
+        assert 'difficulty' in result
+        assert 'recommendations' in result
+        assert 'warnings' in result
+
+    def test_invalid_distance(self, planner_service):
+        result = planner_service.analyze_long_ride(distance=0, duration=2.0)
+        assert result['error'] == 'Distance must be positive'
+        assert result['status'] == 400
+
+    def test_invalid_duration(self, planner_service):
+        result = planner_service.analyze_long_ride(distance=50.0, duration=0)
+        assert result['error'] == 'Duration must be positive'
+        assert result['status'] == 400
+
+    def test_with_specific_date(self, planner_service):
+        planner_service.weather_service.get_daily_forecast = Mock(return_value=[])
+        target_date = date.today() + timedelta(days=3)
+        result = planner_service.analyze_long_ride(distance=80.0, duration=3.5, date=target_date)
+        assert result['status'] == 'success'
+        assert result['date'] == target_date.isoformat()
+
+    def test_exception_returns_error(self, planner_service):
+        """Force an error in the analysis pipeline."""
+        with patch.object(planner_service, '_calculate_ride_difficulty', side_effect=Exception("Boom")):
+            result = planner_service.analyze_long_ride(distance=50.0, duration=2.0)
+        assert result['status'] == 'error'
+        assert 'Boom' in result['message']
+
+
+@pytest.mark.unit
+class TestCalculateRideDifficulty:
+    """Test _calculate_ride_difficulty."""
+
+    def test_short_ride(self, planner_service):
+        """Short distance + short duration = minimum difficulty (0.3)."""
+        result = planner_service._calculate_ride_difficulty(20.0, 1.5)
+        assert result['score'] == pytest.approx(0.3, abs=0.01)
+        assert result['level'] == 'moderate'
+
+    def test_moderate_ride(self, planner_service):
+        """Medium distance + short duration = moderate difficulty."""
+        # 30-60km: +0.4, <2h: +0.1 = 0.5
+        result = planner_service._calculate_ride_difficulty(40.0, 1.5)
+        assert result['level'] == 'moderate'
+        assert 0.3 <= result['score'] < 0.6
+
+    def test_hard_ride(self, planner_service):
+        """Long distance + medium duration = hard difficulty."""
+        # 60-100km: +0.6, 2-4h: +0.2 = 0.8 → actually extreme!
+        # Need: 30-60km +0.4, 2-4h +0.2 = 0.6 → hard
+        result = planner_service._calculate_ride_difficulty(50.0, 3.0)
+        assert result['level'] == 'hard'
+        assert 0.6 <= result['score'] < 0.8
+
+    def test_extreme_ride(self, planner_service):
+        result = planner_service._calculate_ride_difficulty(150.0, 7.0)
+        assert result['level'] == 'extreme'
+        assert result['score'] >= 0.8
+
+    def test_fast_pace_adds_difficulty(self, planner_service):
+        result = planner_service._calculate_ride_difficulty(120.0, 3.5)
+        assert result['average_speed_kph'] > 30
+        assert any('Fast pace' in f for f in result['factors'])
+
+
+@pytest.mark.unit
+class TestAnalyzeRideWeather:
+    """Test _analyze_ride_weather."""
+
+    def test_past_date_returns_unavailable(self, planner_service):
+        past_date = date.today() - timedelta(days=5)
+        result = planner_service._analyze_ride_weather(50.0, 2.0, past_date)
+        assert result['available'] is False
+        assert 'past dates' in result['message']
+
+    def test_far_future_date_returns_unavailable(self, planner_service):
+        far_date = date.today() + timedelta(days=20)
+        result = planner_service._analyze_ride_weather(50.0, 2.0, far_date)
+        assert result['available'] is False
+        assert '14 days' in result['message']
+
+    def test_no_forecast_data(self, planner_service):
+        planner_service.weather_service.get_daily_forecast = Mock(return_value=None)
+        result = planner_service._analyze_ride_weather(50.0, 2.0, date.today())
+        assert result['available'] is False
+
+    def test_cold_weather_recommendation(self, planner_service):
+        cold_forecast = [{
+            'comfort_score': 0.4,
+            'cycling_favorability': 'neutral',
+            'temperature_c': 5,
+            'wind_speed_kph': 10,
+            'precipitation_mm': 0
+        }]
+        planner_service.weather_service.get_daily_forecast = Mock(return_value=cold_forecast)
+        result = planner_service._analyze_ride_weather(50.0, 2.0, date.today())
+        assert result['available'] is True
+        assert any('layers' in r.lower() for r in result['recommendations'])
+
+    def test_hot_weather_recommendation(self, planner_service):
+        hot_forecast = [{
+            'comfort_score': 0.5,
+            'cycling_favorability': 'neutral',
+            'temperature_c': 35,
+            'wind_speed_kph': 5,
+            'precipitation_mm': 0
+        }]
+        planner_service.weather_service.get_daily_forecast = Mock(return_value=hot_forecast)
+        result = planner_service._analyze_ride_weather(50.0, 2.0, date.today())
+        assert any('water' in r.lower() for r in result['recommendations'])
+
+    def test_windy_weather_recommendation(self, planner_service):
+        windy_forecast = [{
+            'comfort_score': 0.5,
+            'cycling_favorability': 'neutral',
+            'temperature_c': 20,
+            'wind_speed_kph': 30,
+            'precipitation_mm': 0
+        }]
+        planner_service.weather_service.get_daily_forecast = Mock(return_value=windy_forecast)
+        result = planner_service._analyze_ride_weather(50.0, 2.0, date.today())
+        assert any('wind' in r.lower() for r in result['recommendations'])
+
+    def test_rainy_weather_recommendation(self, planner_service):
+        rainy_forecast = [{
+            'comfort_score': 0.3,
+            'cycling_favorability': 'unfavorable',
+            'temperature_c': 15,
+            'wind_speed_kph': 10,
+            'precipitation_mm': 5
+        }]
+        planner_service.weather_service.get_daily_forecast = Mock(return_value=rainy_forecast)
+        result = planner_service._analyze_ride_weather(50.0, 2.0, date.today())
+        assert any('rain' in r.lower() for r in result['recommendations'])
+        assert any('reschedul' in r.lower() for r in result['recommendations'])
+
+    def test_exception_returns_unavailable(self, planner_service):
+        planner_service.weather_service.get_daily_forecast = Mock(side_effect=Exception("API fail"))
+        result = planner_service._analyze_ride_weather(50.0, 2.0, date.today())
+        assert result['available'] is False
+
+
+@pytest.mark.unit
+class TestGenerateRideRecommendations:
+    """Test _generate_ride_recommendations."""
+
+    def test_easy_ride_recommendations(self, planner_service):
+        difficulty = {'level': 'easy'}
+        weather = {'available': False}
+        recs = planner_service._generate_ride_recommendations(20.0, 1.5, difficulty, weather)
+        assert any('recovery' in r.lower() or 'social' in r.lower() for r in recs)
+
+    def test_extreme_ride_recommendations(self, planner_service):
+        difficulty = {'level': 'extreme'}
+        weather = {'available': False}
+        recs = planner_service._generate_ride_recommendations(200.0, 8.0, difficulty, weather)
+        assert any('segments' in r.lower() for r in recs)
+        assert any('rest stops' in r.lower() for r in recs)
+
+    def test_long_duration_recommendations(self, planner_service):
+        difficulty = {'level': 'moderate'}
+        weather = {'available': False}
+        recs = planner_service._generate_ride_recommendations(60.0, 5.0, difficulty, weather)
+        assert any('food' in r.lower() or 'water' in r.lower() for r in recs)
+
+    def test_very_long_duration_recommendations(self, planner_service):
+        difficulty = {'level': 'hard'}
+        weather = {'available': False}
+        recs = planner_service._generate_ride_recommendations(100.0, 7.0, difficulty, weather)
+        assert any('early' in r.lower() for r in recs)
+
+    def test_long_distance_recommendations(self, planner_service):
+        difficulty = {'level': 'hard'}
+        weather = {'available': False}
+        recs = planner_service._generate_ride_recommendations(100.0, 4.0, difficulty, weather)
+        assert any('mechanical' in r.lower() or 'tools' in r.lower() for r in recs)
+
+    def test_with_weather_recommendations(self, planner_service):
+        difficulty = {'level': 'moderate'}
+        weather = {'available': True, 'recommendations': ['Bring sunscreen']}
+        recs = planner_service._generate_ride_recommendations(60.0, 3.0, difficulty, weather)
+        assert 'Bring sunscreen' in recs
+
+
+@pytest.mark.unit
+class TestGenerateRideWarnings:
+    """Test _generate_ride_warnings."""
+
+    def test_extreme_difficulty_warning(self, planner_service):
+        difficulty = {'level': 'extreme'}
+        weather = {'available': False}
+        warnings = planner_service._generate_ride_warnings(200.0, 8.0, difficulty, weather)
+        assert any('challenging' in w.lower() or 'training' in w.lower() for w in warnings)
+
+    def test_long_duration_warning(self, planner_service):
+        difficulty = {'level': 'hard'}
+        weather = {'available': False}
+        warnings = planner_service._generate_ride_warnings(100.0, 7.0, difficulty, weather)
+        assert any('fatigue' in w.lower() for w in warnings)
+
+    def test_unfavorable_weather_warning(self, planner_service):
+        difficulty = {'level': 'moderate'}
+        weather = {'available': True, 'suitability': 'unfavorable', 'conditions': {}}
+        warnings = planner_service._generate_ride_warnings(60.0, 3.0, difficulty, weather)
+        assert any('unfavorable' in w.lower() for w in warnings)
+
+    def test_heavy_rain_warning(self, planner_service):
+        difficulty = {'level': 'moderate'}
+        weather = {
+            'available': True,
+            'suitability': 'neutral',
+            'conditions': {'precipitation_mm': 10, 'wind_speed_kph': 5}
+        }
+        warnings = planner_service._generate_ride_warnings(60.0, 3.0, difficulty, weather)
+        assert any('rain' in w.lower() or 'slippery' in w.lower() for w in warnings)
+
+    def test_strong_wind_warning(self, planner_service):
+        difficulty = {'level': 'moderate'}
+        weather = {
+            'available': True,
+            'suitability': 'neutral',
+            'conditions': {'precipitation_mm': 0, 'wind_speed_kph': 35}
+        }
+        warnings = planner_service._generate_ride_warnings(60.0, 3.0, difficulty, weather)
+        assert any('wind' in w.lower() for w in warnings)
+
+    def test_no_warnings_for_easy_good_weather(self, planner_service):
+        difficulty = {'level': 'easy'}
+        weather = {
+            'available': True,
+            'suitability': 'favorable',
+            'conditions': {'precipitation_mm': 0, 'wind_speed_kph': 5}
+        }
+        warnings = planner_service._generate_ride_warnings(20.0, 1.0, difficulty, weather)
+        assert len(warnings) == 0
+
+
+@pytest.mark.unit
+class TestWeatherScoreCalculation:
+    """Test _calculate_weather_score edge cases."""
+
+    def test_with_comfort_score(self, planner_service):
+        weather = {'comfort_score': 0.85}
+        assert planner_service._calculate_weather_score(weather) == 0.85
+
+    def test_empty_weather(self, planner_service):
+        assert planner_service._calculate_weather_score({}) == 0.5
+
+    def test_cold_weather_penalty(self, planner_service):
+        weather = {'temperature_c': -5, 'wind_speed': 0, 'precipitation': 0}
+        score = planner_service._calculate_weather_score(weather)
+        assert score < 0.7
+
+    def test_hot_weather_penalty(self, planner_service):
+        weather = {'temperature_c': 38, 'wind_speed': 0, 'precipitation': 0}
+        score = planner_service._calculate_weather_score(weather)
+        assert score <= 0.7
+
+    def test_high_wind_penalty(self, planner_service):
+        weather = {'temperature_c': 20, 'wind_speed_kph': 35, 'precipitation': 0}
+        score = planner_service._calculate_weather_score(weather)
+        assert score < 0.8
+
+    def test_heavy_rain_penalty(self, planner_service):
+        weather = {'temperature_c': 20, 'wind_speed': 0, 'precipitation_mm': 10}
+        score = planner_service._calculate_weather_score(weather)
+        assert score < 0.7
+
+
+@pytest.mark.unit
+class TestWeatherStatusAndColor:
+    """Test _get_weather_status and _get_weather_color."""
+
+    def test_favorable_status(self, planner_service):
+        assert planner_service._get_weather_status(0.8) == 'Favorable'
+        assert planner_service._get_weather_color(0.8) == '#28a745'
+
+    def test_acceptable_status(self, planner_service):
+        assert planner_service._get_weather_status(0.55) == 'Acceptable'
+        assert planner_service._get_weather_color(0.55) == '#ffc107'
+
+    def test_unfavorable_status(self, planner_service):
+        assert planner_service._get_weather_status(0.3) == 'Unfavorable'
+        assert planner_service._get_weather_color(0.3) == '#dc3545'
 
