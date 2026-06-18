@@ -7,7 +7,7 @@
 :root {
     --primary-color: #667eea;
     --primary-dark: #764ba2;
-    --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    --primary-gradient: linear-gradient(135deg, #4a5fd5 0%, #764ba2 100%);
     --success-color: #28a745;
     --danger-color: #dc3545;
     --warning-color: #ffc107;
@@ -85,7 +85,7 @@ body {
 
 /* ===== Navigation ===== */
 .navbar-gradient {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #4a5fd5 0%, #764ba2 100%);
 }
 
 .navbar-brand {
@@ -412,11 +412,6 @@ footer {
         font-size: var(--font-size-sm);
     }
 
-    .btn {
-        width: 100%;
-        margin-bottom: var(--space-2);
-    }
-
     .navbar-brand {
         font-size: var(--font-size-base);
     }
@@ -483,12 +478,13 @@ a.card,
     border: 0;
 }
 
-/* Focus styles for keyboard navigation */
+/* Focus styles for keyboard navigation — :focus-visible rules (3px, Issue #242) are primary;
+   this fallback matches them for older browsers that lack :focus-visible. */
 a:focus,
 button:focus,
 input:focus,
 select:focus {
-    outline: 2px solid var(--primary-color);
+    outline: 3px solid var(--primary-color);
     outline-offset: var(--space-1);
 }
 
@@ -571,7 +567,7 @@ select:focus {
 :root {
     --epic-primary: #667eea;
     --epic-secondary: #764ba2;
-    --epic-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    --epic-gradient: linear-gradient(135deg, #4a5fd5 0%, #764ba2 100%);
 }
 
 /* ===== Issue #242: Enhanced Focus Indicators (3px minimum, WCAG 2.4.7) ===== */
@@ -1081,8 +1077,21 @@ textarea {
 
 input[type="checkbox"],
 input[type="radio"] {
-    width: 16px;
-    height: 16px;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    min-height: 20px;
+    cursor: pointer;
+}
+
+/* Ensure 44px touch target around checkboxes via their form-check wrapper */
+.form-check,
+.compare-checkbox {
+    min-height: 44px;
+    min-width: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .form-check {
@@ -1393,7 +1402,7 @@ input[type="radio"] {
     display: flex;
     gap: var(--space-3);
     padding: var(--space-2) var(--space-3);
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #4a5fd5 0%, #764ba2 100%);
     color: white;
     border-radius: 8px;
     margin-bottom: var(--space-2);
@@ -1494,7 +1503,6 @@ input[type="radio"] {
 
 .card {
     animation: fadeIn 0.3s ease-out;
-    will-change: opacity, transform;
 }
 
 .card:nth-child(1) { animation-delay: 0s; }
@@ -1503,8 +1511,14 @@ input[type="radio"] {
 .card:nth-child(4) { animation-delay: 0.15s; }
 .card:nth-child(5) { animation-delay: 0.2s; }
 
-.card.animation-complete {
-    will-change: auto;
+/* ===== Conditions panel: collapse on mobile, expand on tap ===== */
+@media (max-width: 767.98px) {
+    .conditions-full-rows {
+        display: none;
+    }
+    .conditions-full-rows.conditions-rows-open {
+        display: block;
+    }
 }
 
 /* ===== Mobile Responsive Adjustments ===== */
@@ -1761,4 +1775,89 @@ h5.card-title {
 .leaflet-interactive:hover {
     cursor: pointer;
     filter: brightness(1.1);
+}
+
+/* ── TrainerRoad / Workout UI (#326) ───────────────────────── */
+
+.workout-strip {
+    background: white;
+    border-radius: 8px;
+    padding: var(--space-2) var(--space-3);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+    border: 1px solid rgba(0,0,0,0.07);
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+}
+
+.workout-strip-icon {
+    font-size: var(--font-size-lg);
+    color: var(--primary-color);
+    flex-shrink: 0;
+}
+
+.workout-strip-name {
+    font-weight: 700;
+    font-size: var(--font-size-base);
+}
+
+.workout-strip-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    font-size: var(--font-size-sm);
+    color: #6c757d;
+}
+
+.workout-strip-note {
+    font-size: var(--font-size-sm);
+    color: #555;
+    flex-grow: 1;
+}
+
+.workout-fit-badge {
+    font-weight: 600;
+    padding: var(--space-1) var(--space-2);
+    border-radius: 1rem;
+    font-size: var(--font-size-sm);
+    white-space: nowrap;
+}
+
+.workout-fit-badge.fit-good {
+    background-color: rgba(40, 167, 69, 0.12);
+    color: #1a7431;
+}
+
+.workout-fit-badge.fit-moderate {
+    background-color: rgba(255, 193, 7, 0.15);
+    color: #7a6000;
+}
+
+.workout-fit-badge.fit-poor {
+    background-color: rgba(220, 53, 69, 0.12);
+    color: #a71d2a;
+}
+
+.alert-workout-fit {
+    border-radius: 8px;
+    font-size: var(--font-size-sm);
+    border-left: 4px solid;
+}
+
+.alert-workout-fit.alert-success { border-left-color: var(--success-color); }
+.alert-workout-fit.alert-warning { border-left-color: var(--warning-color); }
+.alert-workout-fit.alert-danger  { border-left-color: var(--danger-color); }
+
+/* TrainerRoad settings chevron */
+[aria-expanded="true"] .tr-chevron { transform: rotate(90deg); }
+.tr-chevron { transition: transform 0.2s; display: inline-block; }
+
+@media (max-width: 767.98px) {
+    .workout-strip {
+        padding: var(--space-2);
+        gap: var(--space-2);
+    }
+    .workout-strip-icon { font-size: var(--font-size-base); }
+    .workout-strip-note { width: 100%; order: 10; }
 }

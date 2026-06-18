@@ -17,13 +17,128 @@
  */
 async function loadDashboard() {
     await Promise.all([
-        loadSystemStatus(),
         loadWeather(),
+        loadWorkoutStrip(),
         loadRecommendation(),
-        loadRouteStats(),
         loadRouteStatus(),
         loadCommuteWindows()
     ]);
+}
+
+/**
+ * Workout type badge class mapping for TrainerRoad integration.
+ */
+const WORKOUT_TYPE_BADGES = {
+    'Endurance':  'bg-info text-dark',
+    'Tempo':      'bg-primary',
+    'Threshold':  'bg-warning text-dark',
+    'VO2Max':     'bg-danger',
+    'Sprint':     'bg-danger',
+    'Anaerobic':  'bg-danger',
+    'Recovery':   'bg-success',
+};
+
+/**
+ * Load workout strip between weather banner and hero card.
+ * Only renders when TrainerRoad is configured and a workout exists today.
+ */
+async function loadWorkoutStrip() {
+    const container = document.getElementById('workout-strip');
+    if (!container) return;
+
+    try {
+        const data = await window.apiClient.getTrainerRoadToday();
+        if (!data.has_workout) {
+            container.style.display = 'none';
+            return;
+        }
+
+        const w = data.workout;
+        const esc = window.escapeHtml;
+        const typeBadgeClass = WORKOUT_TYPE_BADGES[w.type] || 'bg-secondary';
+
+        const fitScore = w.fit_score || 0;
+        const fitClass = w.indoor_fallback ? 'fit-poor'
+                       : fitScore >= 0.7 ? 'fit-good'
+                       : fitScore >= 0.4 ? 'fit-moderate'
+                       : 'fit-poor';
+        const fitLabel = w.indoor_fallback ? 'Indoor'
+                       : fitScore >= 0.7 ? 'Good fit'
+                       : fitScore >= 0.4 ? 'Moderate fit'
+                       : fitScore > 0 ? 'Poor fit' : '';
+        const fitIcon = w.indoor_fallback ? 'bi-house-door'
+                      : fitScore >= 0.7 ? 'bi-check-circle'
+                      : fitScore >= 0.4 ? 'bi-dash-circle'
+                      : 'bi-x-circle';
+
+        const noteText = w.notes && w.notes.length > 0 ? esc(w.notes[0]) : '';
+
+        container.innerHTML = `
+            <div class="workout-strip">
+                <i class="bi bi-lightning-charge workout-strip-icon" aria-hidden="true"></i>
+                <div>
+                    <div class="workout-strip-name">${esc(w.name)}</div>
+                    <div class="workout-strip-meta">
+                        <span class="badge ${typeBadgeClass}">${esc(w.type || 'Workout')}</span>
+                        ${w.duration_minutes ? `<span><i class="bi bi-clock" aria-hidden="true"></i> ${w.duration_minutes} min</span>` : ''}
+                        ${w.tss ? `<span><i class="bi bi-speedometer2" aria-hidden="true"></i> TSS ${w.tss}</span>` : ''}
+                    </div>
+                </div>
+                ${noteText ? `<div class="workout-strip-note">${noteText}</div>` : ''}
+                ${fitLabel ? `<span class="workout-fit-badge ${fitClass}"><i class="bi ${fitIcon}" aria-hidden="true"></i> ${fitLabel}</span>` : ''}
+            </div>`;
+        container.style.display = '';
+    } catch (error) {
+        console.warn('Workout strip unavailable:', error);
+        container.style.display = 'none';
+    }
+}
+
+/**
+ * Build workout fit alert HTML for the hero card.
+ */
+function renderWorkoutFitAlert(rec) {
+    const workoutFit = rec.workout_fit;
+    if (!workoutFit) return '';
+
+    const esc = window.escapeHtml;
+    const fitScore = workoutFit.fit_score || 0;
+    const isIndoor = workoutFit.indoor_fallback;
+
+    let alertClass, icon, headline;
+    if (isIndoor) {
+        alertClass = 'alert-danger';
+        icon = 'bi-exclamation-triangle';
+        headline = 'Indoor trainer recommended';
+    } else if (fitScore >= 0.7) {
+        alertClass = 'alert-success';
+        icon = 'bi-bicycle';
+        headline = 'Workout fit: Good';
+    } else if (fitScore >= 0.4) {
+        alertClass = 'alert-warning';
+        icon = 'bi-dash-circle';
+        headline = 'Workout fit: Moderate';
+    } else {
+        alertClass = 'alert-danger';
+        icon = 'bi-x-circle';
+        headline = 'Workout fit: Poor';
+    }
+
+    const wName = esc(workoutFit.workout_name || 'Workout');
+    const wType = esc(workoutFit.workout_type || '');
+    const reasons = (workoutFit.fit_reasons || []).map(r => esc(r)).join('. ');
+    const notes = (workoutFit.notes || []).map(n => esc(n)).join('. ');
+
+    return `
+        <div class="alert alert-workout-fit ${alertClass} mt-2 mb-2 py-2 px-3 d-flex align-items-start gap-2" role="status">
+            <i class="bi ${icon} mt-1 flex-shrink-0" aria-hidden="true"></i>
+            <div class="flex-grow-1 small">
+                <strong>${headline}</strong>
+                <div class="mt-1">${wName}${wType ? ` (${wType})` : ''}</div>
+                ${reasons ? `<div class="text-muted mt-1">${reasons}</div>` : ''}
+                ${notes ? `<div class="text-muted mt-1">${notes}</div>` : ''}
+            </div>
+        </div>`;
 }
 
 /**
@@ -361,6 +476,7 @@ function renderHeroCard(rec, isHero) {
                         ${reasons.map(r => `<li>${esc(r)}</li>`).join('')}
                     </ul>
                 ` : ''}
+                ${renderWorkoutFitAlert(rec)}
                 <div class="hero-meta small text-muted mt-2">
                     <span><i class="bi bi-signpost"></i> ${route.distance ? route.distance.toFixed(1) : '—'} mi</span>
                     <span class="ms-3"><i class="bi bi-graph-up"></i> ${route.elevation || '—'} ft</span>
