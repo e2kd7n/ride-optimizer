@@ -2048,6 +2048,14 @@ def get_activities():
     all_activities = _load_activities_for_stats()
     activities = _filter_activities_by_period(all_activities, period)
 
+    gear_cache = _analysis_service.data_fetcher.load_cached_gear() if _analysis_service else None
+    gear_names: Dict[str, str] = {}
+    gear_types: Dict[str, str] = {}
+    if gear_cache:
+        for g in gear_cache.get('bikes', []) + gear_cache.get('shoes', []):
+            gear_names[g['id']] = g.get('name', g['id'])
+            gear_types[g['id']] = g.get('type', 'unknown')
+
     if gear_id:
         activities = [a for a in activities if a.gear_id == gear_id]
     if sport_type:
@@ -2077,6 +2085,8 @@ def get_activities():
             'elevation_ft': round(_meters_to_feet(a.total_elevation_gain)),
             'speed_mph': round(_ms_to_mph(a.average_speed), 1),
             'gear_id': a.gear_id,
+            'gear_name': gear_names.get(a.gear_id, '') if a.gear_id else '',
+            'gear_type': gear_types.get(a.gear_id, '') if a.gear_id else '',
             'average_heartrate': a.average_heartrate,
             'average_watts': a.average_watts,
             'suffer_score': a.suffer_score,

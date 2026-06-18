@@ -369,13 +369,16 @@ async function loadActivities() {
         }
 
         tbody.innerHTML = list.map(a => {
-            const gearName = a.gear_id && gearMeta[a.gear_id] ? gearMeta[a.gear_id].name : '';
+            const gearName = a.gear_name || (a.gear_id && gearMeta[a.gear_id] ? gearMeta[a.gear_id].name : '');
+            const gearType = a.gear_type || (a.gear_id && gearMeta[a.gear_id] ? gearMeta[a.gear_id].type : '');
+            const gearIcon = gearType === 'bike' ? '🚲' : gearType === 'shoe' ? '👟' : gearType ? '⚙️' : '';
+            const gearLabel = gearName ? `${gearIcon} ${escapeHtml(gearName)}` : '';
             const hrCell = a.average_heartrate ? `${Math.round(a.average_heartrate)}` : '—';
             const typeBadge = typeBadgeHtml(a.sport_type);
             return `<tr class="activity-row">
                 <td class="ps-2">
                     <div class="activity-name" title="${escapeHtml(a.name)}">${escapeHtml(a.name)}</div>
-                    <div style="font-size:10px; color:var(--color-text-muted);">${a.date} ${typeBadge} ${gearName ? '· ' + escapeHtml(gearName) : ''}</div>
+                    <div style="font-size:10px; color:var(--color-text-muted);">${a.date} ${typeBadge} ${gearLabel ? '· ' + gearLabel : ''}</div>
                 </td>
                 <td class="text-end">${fmt(a.distance_mi)}</td>
                 <td class="text-end">${fmtTime(a.time_h)}</td>
