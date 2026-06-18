@@ -25,9 +25,63 @@
             difficulty: byId('filter-difficulty')?.value || '',
             min_distance: byId('filter-min-distance')?.value || '',
             max_distance: byId('filter-max-distance')?.value || '',
+            date_range: byId('filter-date-range')?.value || '',
             sort_by: byId('sort-by')?.value || 'name',
             search: (byId('search-query')?.value || '').trim().toLowerCase()
         };
+    }
+
+    function getColorBy() {
+        return byId('color-by')?.value || 'default';
+    }
+
+    function distanceColor(distanceKm) {
+        const mi = distanceKm * 0.621371;
+        if (mi < 10) return '#28a745';
+        if (mi < 20) return '#ffc107';
+        if (mi < 40) return '#fd7e14';
+        return '#dc3545';
+    }
+
+    function recencyColor(isoDate) {
+        if (!isoDate) return '#6c757d';
+        const days = (Date.now() - new Date(isoDate).getTime()) / 86400000;
+        if (days < 30) return '#007bff';
+        if (days < 90) return '#28a745';
+        if (days < 180) return '#ffc107';
+        if (days < 365) return '#fd7e14';
+        return '#6c757d';
+    }
+
+    function getColorForRoute(route, index) {
+        const mode = getColorBy();
+        if (mode === 'distance') return distanceColor(route.distance || 0);
+        if (mode === 'recency') return recencyColor(route.last_ridden);
+        return getRouteColor(index);
+    }
+
+    function renderLegend() {
+        const legendEl = byId('map-legend');
+        if (!legendEl) return;
+
+        const mode = getColorBy();
+        if (mode === 'default' || state.displayedRoutes.size === 0) {
+            legendEl.style.display = 'none';
+            return;
+        }
+
+        legendEl.style.display = '';
+        const unit = window.getDistanceUnit ? window.getDistanceUnit() : 'mi';
+
+        if (mode === 'distance') {
+            legendEl.innerHTML = '<span class="me-2 fw-semibold">Distance:</span>'
+                + ['#28a745|<10' + unit, '#ffc107|10–20' + unit, '#fd7e14|20–40' + unit, '#dc3545|>40' + unit]
+                    .map(s => { const [c, l] = s.split('|'); return `<span class="me-2"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${c};vertical-align:middle;"></span> ${l}</span>`; }).join('');
+        } else {
+            legendEl.innerHTML = '<span class="me-2 fw-semibold">Last ridden:</span>'
+                + ['#007bff|<30d', '#28a745|1–3mo', '#ffc107|3–6mo', '#fd7e14|6–12mo', '#6c757d|>1yr']
+                    .map(s => { const [c, l] = s.split('|'); return `<span class="me-2"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${c};vertical-align:middle;"></span> ${l}</span>`; }).join('');
+        }
     }
 
     function announce(message) {
@@ -35,6 +89,46 @@
         if (liveRegion) {
             liveRegion.textContent = message;
         }
+    }
+
+    function recolorDisplayedRoutes() {
+        let i = 0;
+        state.displayedRoutes.forEach((mapObjects, routeId) => {
+            const route = state.filteredRoutes.find(r => r.id === routeId) || state.routes.find(r => r.id === routeId);
+            const color = route ? getColorForRoute(route, i) : getRouteColor(i);
+            mapObjects.color = color;
+            if (mapObjects.polyline) {
+                const isSelected = routeId === state.selectedRouteId;
+                mapObjects.polyline.setStyle({ color: isSelected ? color : '#999999' });
+            }
+            if (mapObjects.startMarker) {
+                const icon = mapObjects.startMarker.getIcon();
+                if (icon.options && icon.options.html) {
+                    mapObjects.startMarker.setIcon(L.divIcon({
+                        className: 'custom-marker',
+                        html: `<div style="background-color:${color};width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 0 4px rgba(0,0,0,.5)"></div>`,
+                        iconSize: [12, 12]
+                    }));
+                }
+            }
+            if (mapObjects.endMarker) {
+                mapObjects.endMarker.setIcon(L.divIcon({
+                    className: 'custom-marker',
+                    html: `<div style="background-color:${color};width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 0 4px rgba(0,0,0,.5)"></div>`,
+                    iconSize: [12, 12]
+                }));
+            }
+            const card = document.querySelector(`[data-route-id="${routeId}"]`);
+            if (card) {
+                card.style.borderColor = color;
+                const nameEl = card.querySelector('.route-name, h5, .card-title');
+                if (nameEl) {
+                    nameEl.style.color = contrastOnWhite(color) >= 4.5 ? color : '';
+                }
+            }
+            i++;
+        });
+        if (state.selectedRouteId) selectRoute(state.selectedRouteId);
     }
 
     function initializeMap() {
@@ -134,7 +228,8 @@
             }
             
             updateMapStatus();
-            
+            renderLegend();
+
             // Reset card styling (Issue #121)
             const card = document.querySelector(`[data-route-id="${routeId}"]`);
             if (card) {
@@ -162,7 +257,7 @@
 
             const coordinates = response.route.coordinates;
             const colorIndex = state.displayedRoutes.size;
-            const color = getRouteColor(colorIndex);
+            const color = getColorForRoute(route, colorIndex);
 
             // Create polyline with default styling
             const polyline = L.polyline(coordinates, {
@@ -226,6 +321,7 @@
             });
 
             updateMapStatus();
+            renderLegend();
 
             const card = document.querySelector(`[data-route-id="${routeId}"]`);
             if (card) {
@@ -322,7 +418,7 @@
 
             const colorBase = state.displayedRoutes.size;
             await Promise.all(toLoad.map(async (route, i) => {
-                const color = getRouteColor(colorBase + i);
+                const color = getColorForRoute(route, colorBase + i);
                 try {
                     const response = await window.apiClient.getRouteDetails(route.id, route.type);
                     if (!response?.route?.coordinates?.length) return;
@@ -373,7 +469,14 @@
         if (bounds.isValid()) {
             state.mapInstance.fitBounds(bounds, { padding: [30, 30] });
             announce(`Fitted ${state.displayedRoutes.size} routes in view`);
+            renderLegend();
         }
+    }
+
+    async function showAllRoutes() {
+        clearAllRoutes();
+        await fitAllRoutes();
+        renderLegend();
     }
 
     function clearAllRoutes() {
@@ -409,6 +512,7 @@
 
         state.displayedRoutes.clear();
         updateMapStatus();
+        renderLegend();
         announce('Cleared all routes from map');
     }
 
@@ -647,6 +751,14 @@
             filtered = filtered.filter(route => Number(route.distance || 0) <= maxKm);
         }
 
+        if (filters.date_range) {
+            const cutoff = new Date(Date.now() - Number(filters.date_range) * 86400000);
+            filtered = filtered.filter(route => {
+                if (!route.last_ridden) return false;
+                return new Date(route.last_ridden) >= cutoff;
+            });
+        }
+
         if (filters.search) {
             filtered = filtered.filter(route =>
                 (route.name || '').toLowerCase().includes(filters.search)
@@ -674,6 +786,9 @@
                 break;
             case 'uses':
                 filtered.sort((a, b) => Number(b.uses || 0) - Number(a.uses || 0));
+                break;
+            case 'recent':
+                filtered.sort((a, b) => (b.last_ridden || '').localeCompare(a.last_ridden || ''));
                 break;
         }
 
@@ -828,7 +943,7 @@
 
     function bindEvents() {
         // Auto-apply: dropdowns fire immediately on change
-        ['filter-favorite', 'filter-commute', 'filter-sport-type', 'filter-difficulty', 'sort-by'].forEach(id => {
+        ['filter-favorite', 'filter-commute', 'filter-sport-type', 'filter-difficulty', 'filter-date-range', 'sort-by'].forEach(id => {
             const el = byId(id);
             if (el) el.addEventListener('change', applyFilters);
         });
@@ -851,6 +966,23 @@
                 if (preset) applyPreset(preset);
             });
         });
+
+        // Show All button
+        const showAllBtn = byId('show-all-btn');
+        if (showAllBtn) {
+            showAllBtn.addEventListener('click', () => {
+                showAllRoutes();
+            });
+        }
+
+        // Color-by selector: re-color existing routes on the map
+        const colorBySelect = byId('color-by');
+        if (colorBySelect) {
+            colorBySelect.addEventListener('change', () => {
+                recolorDisplayedRoutes();
+                renderLegend();
+            });
+        }
 
         // Bind map control buttons
         const fitAllBtn = byId('fit-all-btn');
