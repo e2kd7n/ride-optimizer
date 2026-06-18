@@ -34,6 +34,7 @@ from app.services.weather_service import WeatherService
 from src.weather_fetcher import WindImpactCalculator
 from app.services.planner_service import PlannerService
 from app.services.route_library_service import RouteLibraryService
+from app.services.trainerroad_service import TrainerRoadService
 from app.api import maps_api
 from src.secure_logger import SecureLogger
 from src.auth_secure import SecureTokenStorage
@@ -142,6 +143,7 @@ _commute_service = None
 _weather_service = None
 _planner_service = None
 _route_library_service = None
+_trainerroad_service = None
 _analysis_job = {'status': 'idle', 'started_at': None, 'result': None}
 _analysis_stop_requested = False
 _fetch_job = {'status': 'idle', 'fetched': 0, 'label': '', 'started_at': None}
@@ -193,7 +195,7 @@ def get_locations_from_config(config: Config) -> tuple[Location, Location]:
 def initialize_services():
     """Initialize all services (called on first API request)."""
     global _services_initialized, _analysis_service, _commute_service
-    global _weather_service, _planner_service, _route_library_service
+    global _weather_service, _planner_service, _route_library_service, _trainerroad_service
     
     if _services_initialized:
         return
@@ -207,6 +209,7 @@ def initialize_services():
         _weather_service = WeatherService(config)
         _planner_service = PlannerService(config)
         _route_library_service = RouteLibraryService(config)
+        _trainerroad_service = TrainerRoadService(config)
 
         # Load cached analysis data via AnalysisService (reads analysis_status.json,
         # route_groups.json, long_rides.json written by _save_to_cache)
@@ -775,13 +778,23 @@ def get_commute():
     initialize_services()
 
     try:
-        # Get recommendations for both directions
-        to_work = _enrich_commute_recommendation(
-            _commute_service.get_next_commute(direction='to_work')
-        )
-        to_home = _enrich_commute_recommendation(
-            _commute_service.get_next_commute(direction='to_home')
-        )
+        use_workout = (_trainerroad_service
+                       and _trainerroad_service.get_feed_url() is not None)
+
+        if use_workout:
+            to_work = _enrich_commute_recommendation(
+                _commute_service.get_workout_aware_commute(direction='to_work')
+            )
+            to_home = _enrich_commute_recommendation(
+                _commute_service.get_workout_aware_commute(direction='to_home')
+            )
+        else:
+            to_work = _enrich_commute_recommendation(
+                _commute_service.get_next_commute(direction='to_work')
+            )
+            to_home = _enrich_commute_recommendation(
+                _commute_service.get_next_commute(direction='to_home')
+            )
 
         return jsonify({
             'status': 'success',
@@ -789,7 +802,7 @@ def get_commute():
             'to_home': to_home,
             'timestamp': datetime.now().isoformat()
         })
-        
+
     except Exception as e:
         logger.error(f"Error getting commute data: {e}", exc_info=True)
         error_msg = str(e) if app.debug else 'Commute data temporarily unavailable'
@@ -1468,6 +1481,81 @@ def intervals_connect():
     except OSError as exc:
         logger.error("intervals.icu: failed to write .env: %s", exc)
         return jsonify({'success': False, 'error': 'Could not save credentials'}), 500
+
+
+# ── TrainerRoad Integration ───────────────────────────────────────
+
+@app.route('/api/trainerroad/status')
+@limiter.limit("30 per minute")
+def trainerroad_status():
+    """Return TrainerRoad connection status."""
+    initialize_services()
+    status = _trainerroad_service.get_status()
+    return jsonify(status)
+
+
+@app.route('/api/trainerroad/connect', methods=['POST'])
+@csrf.exempt
+def trainerroad_connect():
+    """Set ICS feed URL, validate, and trigger initial sync."""
+    initialize_services()
+    data = request.get_json(silent=True) or {}
+    feed_url = (data.get('feed_url') or '').strip()
+
+    if not feed_url:
+        return jsonify({'success': False, 'error': 'Feed URL is required'}), 400
+
+    if not _trainerroad_service.set_feed_url(feed_url):
+        return jsonify({'success': False, 'error': 'Invalid feed URL'}), 400
+
+    result = _trainerroad_service.sync_workouts()
+    return jsonify({
+        'success': result.get('status') == 'success',
+        'workouts_synced': result.get('workouts_synced', 0),
+        'error': result.get('message') if result.get('status') != 'success' else None,
+    })
+
+
+@app.route('/api/trainerroad/sync', methods=['POST'])
+@csrf.exempt
+def trainerroad_sync():
+    """Force a workout sync."""
+    initialize_services()
+    _trainerroad_service.last_sync = None
+    result = _trainerroad_service.sync_workouts()
+    return jsonify({
+        'success': result.get('status') == 'success',
+        'workouts_synced': result.get('workouts_synced', 0),
+        'created': result.get('workouts_created', 0),
+        'updated': result.get('workouts_updated', 0),
+    })
+
+
+@app.route('/api/trainerroad/disconnect', methods=['POST'])
+@csrf.exempt
+def trainerroad_disconnect():
+    """Remove TrainerRoad credentials and clear cached workouts."""
+    initialize_services()
+    _trainerroad_service.remove_credentials()
+    return jsonify({'success': True})
+
+
+@app.route('/api/trainerroad/workouts')
+@limiter.limit("30 per minute")
+def trainerroad_workouts():
+    """Return upcoming workouts for settings table."""
+    initialize_services()
+    workouts = _trainerroad_service.get_upcoming_workouts(days_ahead=7)
+    return jsonify({'workouts': workouts})
+
+
+@app.route('/api/trainerroad/today')
+@limiter.limit("30 per minute")
+def trainerroad_today():
+    """Return today's workout summary for dashboard."""
+    initialize_services()
+    summary = _trainerroad_service.get_today_summary()
+    return jsonify(summary)
 
 
 @app.route('/api/cache-info')

@@ -266,6 +266,35 @@ class APIClient {
         return this.fetch('/analyze/status');
     }
 
+    // ── TrainerRoad ────────────────────────────────────────────
+
+    async getTrainerRoadStatus() {
+        return this.fetch('/trainerroad/status');
+    }
+
+    async connectTrainerRoad(feedUrl) {
+        return this.fetch('/trainerroad/connect', {
+            method: 'POST',
+            body: JSON.stringify({ feed_url: feedUrl }),
+        });
+    }
+
+    async syncTrainerRoad() {
+        return this.fetch('/trainerroad/sync', { method: 'POST' });
+    }
+
+    async disconnectTrainerRoad() {
+        return this.fetch('/trainerroad/disconnect', { method: 'POST' });
+    }
+
+    async getTrainerRoadWorkouts() {
+        return this.fetch('/trainerroad/workouts');
+    }
+
+    async getTrainerRoadToday() {
+        return this.fetch('/trainerroad/today');
+    }
+
     async get(endpoint) {
         return this.fetch(endpoint, { method: 'GET' });
     }
