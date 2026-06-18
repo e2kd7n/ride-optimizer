@@ -11,7 +11,7 @@ Tests cover:
 
 import pytest
 from unittest.mock import Mock, MagicMock, patch
-from datetime import datetime, time, timezone
+from datetime import datetime, time, date, timezone
 
 from app.services.commute_service import CommuteService
 from src.next_commute_recommender import CommuteRecommendation
@@ -541,7 +541,499 @@ class TestCommuteMapWeatherOverlay:
         }]
         
         html = commute_service.generate_comparison_map(routes, home, work)
-        
+
         assert html is not None
         assert 'Main Commute Route' in html
+
+
+@pytest.mark.unit
+class TestGetNextCommuteTimeBasedDirection:
+    """Test time-based direction logic in get_next_commute."""
+
+    def _setup_recommender(self, commute_service, mock_route_group, directions):
+        """Helper to set up recommender with recommendations for given directions."""
+        recs = {}
+        for d in directions:
+            rec = Mock(spec=CommuteRecommendation)
+            rec.direction = d
+            rec.time_window = 'morning' if d == 'to_work' else 'evening'
+            rec.route_group = mock_route_group
+            rec.score = 0.8
+            rec.breakdown = {}
+            rec.is_today = True
+            rec.window_start = time(7, 0)
+            rec.window_end = time(9, 0)
+            rec.forecast_weather = None
+            recs[d] = rec
+        commute_service._recommender = Mock()
+        commute_service._recommender.get_next_commute_recommendations.return_value = recs
+        return recs
+
+    @patch('app.services.commute_service.datetime')
+    def test_morning_prefers_to_work(self, mock_dt, commute_service, mock_route_group):
+        """Before 10 AM, preferred direction should be to_work."""
+        mock_dt.now.return_value = datetime(2026, 6, 17, 8, 0)
+        mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+        self._setup_recommender(commute_service, mock_route_group, ['to_work', 'to_home'])
+
+        result = commute_service.get_next_commute()
+        assert result['direction'] == 'to_work'
+
+    @patch('app.services.commute_service.datetime')
+    def test_midday_prefers_to_home(self, mock_dt, commute_service, mock_route_group):
+        """Between 10 AM and 6 PM, preferred direction should be to_home."""
+        mock_dt.now.return_value = datetime(2026, 6, 17, 14, 0)
+        mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+        self._setup_recommender(commute_service, mock_route_group, ['to_work', 'to_home'])
+
+        result = commute_service.get_next_commute()
+        assert result['direction'] == 'to_home'
+
+    @patch('app.services.commute_service.datetime')
+    def test_evening_prefers_to_work(self, mock_dt, commute_service, mock_route_group):
+        """After 6 PM, preferred direction should be to_work (for tomorrow)."""
+        mock_dt.now.return_value = datetime(2026, 6, 17, 20, 0)
+        mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+        self._setup_recommender(commute_service, mock_route_group, ['to_work', 'to_home'])
+
+        result = commute_service.get_next_commute()
+        assert result['direction'] == 'to_work'
+
+    @patch('app.services.commute_service.datetime')
+    def test_fallback_when_preferred_missing(self, mock_dt, commute_service, mock_route_group):
+        """When preferred direction is not available, return first available."""
+        mock_dt.now.return_value = datetime(2026, 6, 17, 14, 0)
+        mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+        # Only to_work available, but midday prefers to_home
+        self._setup_recommender(commute_service, mock_route_group, ['to_work'])
+
+        result = commute_service.get_next_commute()
+        assert result['status'] == 'success'
+        assert result['direction'] == 'to_work'
+
+
+@pytest.mark.unit
+class TestGetAllCommuteOptionsDefaultDirection:
+    """Test default direction logic in get_all_commute_options."""
+
+    def test_default_direction_uses_time(self, commute_service):
+        """Default direction should be based on current time of day."""
+        commute_service._recommender = Mock()
+        commute_service._recommender.get_all_recommendations.return_value = []
+
+        from datetime import datetime as _dt
+        current_hour = _dt.now().hour
+        expected = 'to_work' if current_hour < 12 else 'to_home'
+
+        result = commute_service.get_all_commute_options()
+        assert result['direction'] == expected
+
+
+@pytest.mark.unit
+class TestRouteColorAndConfidence:
+    """Test _get_route_color and _get_confidence_label."""
+
+    def test_route_color_high_score(self, commute_service):
+        assert commute_service._get_route_color(0.90) == '#28a745'
+
+    def test_route_color_medium_score(self, commute_service):
+        assert commute_service._get_route_color(0.75) == '#007bff'
+
+    def test_route_color_low_score(self, commute_service):
+        assert commute_service._get_route_color(0.55) == '#ffc107'
+
+    def test_route_color_very_low_score(self, commute_service):
+        assert commute_service._get_route_color(0.30) == '#dc3545'
+
+    def test_confidence_high(self, commute_service):
+        assert commute_service._get_confidence_label(0.90) == 'high'
+
+    def test_confidence_medium(self, commute_service):
+        assert commute_service._get_confidence_label(0.70) == 'medium'
+
+    def test_confidence_low(self, commute_service):
+        assert commute_service._get_confidence_label(0.50) == 'low'
+
+
+@pytest.mark.unit
+class TestComparisonPopup:
+    """Test _create_comparison_popup HTML generation."""
+
+    def test_popup_includes_route_details(self, commute_service):
+        route_option = {
+            'route': {
+                'name': 'Test Route',
+                'distance': 10500,
+                'duration': 1800,
+                'elevation': 150
+            },
+            'score': 0.85,
+            'weather': {
+                'conditions': 'Clear',
+                'temperature': 72,
+                'wind_speed': 5,
+                'precipitation': 0,
+                'cycling_favorability': 'favorable'
+            }
+        }
+        html = commute_service._create_comparison_popup(route_option)
+        assert 'Test Route' in html
+        assert '85%' in html
+        assert 'Clear' in html
+        assert '72' in html
+        assert 'Favorable' in html
+
+    def test_popup_without_weather(self, commute_service):
+        route_option = {
+            'route': {
+                'name': 'No Weather Route',
+                'distance': 5000,
+                'duration': 900,
+                'elevation': 50
+            },
+            'score': 0.6,
+            'weather': None
+        }
+        html = commute_service._create_comparison_popup(route_option)
+        assert 'No Weather Route' in html
+        assert 'Unavailable' in html
+
+
+@pytest.mark.unit
+class TestWeatherMarkerStyle:
+    """Test _get_weather_marker_style."""
+
+    def test_rainy_conditions(self, commute_service):
+        weather = {'conditions': 'Light Rain', 'precipitation': 1.0}
+        icon, prefix, color = commute_service._get_weather_marker_style(weather)
+        assert icon == 'cloud-rain'
+        assert color == 'red'
+
+    def test_windy_conditions(self, commute_service):
+        weather = {'conditions': 'Clear', 'wind_speed_kph': 30}
+        icon, prefix, color = commute_service._get_weather_marker_style(weather)
+        assert icon == 'flag'
+        assert color == 'orange'
+
+    def test_cloudy_conditions(self, commute_service):
+        weather = {'conditions': 'Overcast', 'wind_speed_kph': 5}
+        icon, prefix, color = commute_service._get_weather_marker_style(weather)
+        assert icon == 'cloud'
+        assert color == 'blue'
+
+    def test_favorable_conditions(self, commute_service):
+        weather = {'conditions': 'Clear', 'wind_speed_kph': 5, 'cycling_favorability': 'favorable'}
+        icon, prefix, color = commute_service._get_weather_marker_style(weather)
+        assert icon == 'sun'
+        assert color == 'green'
+
+    def test_default_conditions(self, commute_service):
+        weather = {'conditions': 'Haze', 'wind_speed_kph': 10}
+        icon, prefix, color = commute_service._get_weather_marker_style(weather)
+        assert icon == 'cloud-sun'
+        assert color == 'lightgray'
+
+
+@pytest.mark.unit
+class TestWeatherPopup:
+    """Test _create_weather_popup HTML generation."""
+
+    def test_popup_with_all_fields(self, commute_service):
+        weather = {
+            'conditions': 'Clear',
+            'temperature': 72,
+            'wind_speed': 10,
+            'wind_direction_cardinal': 'NW',
+            'precipitation_probability': 20
+        }
+        html = commute_service._create_weather_popup('Home', weather)
+        assert 'Home' in html
+        assert 'Clear' in html
+        assert '72' in html
+        assert '10' in html
+        assert 'NW' in html
+        assert '20%' in html
+
+    def test_popup_with_celsius_conversion(self, commute_service):
+        weather = {
+            'conditions': 'Cloudy',
+            'temperature_c': 20,
+            'wind_speed_kph': 15,
+            'wind_direction': 'S',
+            'precipitation_mm': 2.5
+        }
+        html = commute_service._create_weather_popup('Work', weather)
+        assert 'Work' in html
+        assert '68' in html  # 20°C = 68°F
+        assert '2.5' in html
+
+    def test_popup_with_stale_data(self, commute_service):
+        weather = {
+            'conditions': 'Clear',
+            'temperature': 70,
+            'is_stale': True
+        }
+        html = commute_service._create_weather_popup('Test', weather)
+        assert 'stale' in html.lower()
+
+
+@pytest.mark.unit
+class TestWorkoutAwareCommute:
+    """Test get_workout_aware_commute."""
+
+    def test_no_workout_scheduled(self, commute_service, mock_route_group):
+        """When no workout, return base recommendation with workout_fit=None."""
+        commute_service.trainerroad_service.get_workout_constraints = Mock(return_value=None)
+        mock_rec = Mock(spec=CommuteRecommendation)
+        mock_rec.direction = 'to_work'
+        mock_rec.time_window = 'morning'
+        mock_rec.route_group = mock_route_group
+        mock_rec.score = 0.85
+        mock_rec.breakdown = {}
+        mock_rec.is_today = True
+        mock_rec.window_start = time(7, 0)
+        mock_rec.window_end = time(9, 0)
+        mock_rec.forecast_weather = None
+
+        commute_service._recommender = Mock()
+        commute_service._recommender.get_next_commute_recommendations.return_value = {'to_work': mock_rec}
+
+        result = commute_service.get_workout_aware_commute('to_work')
+        assert result['status'] == 'success'
+        assert result['workout_fit'] is None
+        assert result['is_workout_extended'] is False
+
+    def test_base_rec_error_returned(self, commute_service):
+        """When base recommendation is an error, return it directly."""
+        commute_service.trainerroad_service.get_workout_constraints = Mock(return_value={'workout_name': 'Test'})
+        commute_service._recommender = None
+
+        result = commute_service.get_workout_aware_commute()
+        assert result['status'] == 'error'
+
+    def test_with_workout_no_extension(self, commute_service, mock_route_group):
+        """Workout scheduled but no extension needed (non-endurance)."""
+        commute_service.trainerroad_service.get_workout_constraints = Mock(return_value={
+            'workout_name': 'Intervals',
+            'workout_type': 'VO2Max',
+            'min_duration_minutes': 30,
+            'max_duration_minutes': 60,
+            'indoor_fallback': True,
+            'notes': []
+        })
+        mock_rec = Mock(spec=CommuteRecommendation)
+        mock_rec.direction = 'to_work'
+        mock_rec.time_window = 'morning'
+        mock_rec.route_group = mock_route_group
+        mock_rec.score = 0.85
+        mock_rec.breakdown = {}
+        mock_rec.is_today = True
+        mock_rec.window_start = time(7, 0)
+        mock_rec.window_end = time(9, 0)
+        mock_rec.forecast_weather = None
+
+        commute_service._recommender = Mock()
+        commute_service._recommender.get_next_commute_recommendations.return_value = {'to_work': mock_rec}
+
+        result = commute_service.get_workout_aware_commute('to_work')
+        assert result['status'] == 'success'
+        assert result['workout_fit'] is not None
+        assert result['workout_fit']['workout_name'] == 'Intervals'
+        assert result['is_workout_extended'] is False
+
+
+@pytest.mark.unit
+class TestAnalyzeWorkoutFit:
+    """Test _analyze_workout_fit."""
+
+    def test_duration_matches(self, commute_service):
+        recommendation = {'route': {'duration': 45}}  # 45 "minutes" (code reads raw value)
+        constraints = {
+            'workout_name': 'Endurance',
+            'workout_type': 'Endurance',
+            'min_duration_minutes': 30,
+            'max_duration_minutes': 60,
+            'indoor_fallback': False,
+            'notes': ['Easy spin']
+        }
+        result = commute_service._analyze_workout_fit(recommendation, constraints)
+        assert result['fit_score'] == 1.0
+        assert 'Duration matches' in result['fit_reasons'][0]
+        assert result['indoor_fallback'] is False
+
+    def test_duration_too_short(self, commute_service):
+        recommendation = {'route': {'duration': 10}}
+        constraints = {
+            'workout_name': 'Long Ride',
+            'workout_type': 'Endurance',
+            'min_duration_minutes': 60,
+            'max_duration_minutes': None,
+            'indoor_fallback': False,
+            'notes': []
+        }
+        result = commute_service._analyze_workout_fit(recommendation, constraints)
+        assert result['fit_score'] < 0.5
+
+    def test_duration_too_long(self, commute_service):
+        recommendation = {'route': {'duration': 7200}}  # 120 min
+        constraints = {
+            'workout_name': 'Recovery',
+            'workout_type': 'Recovery',
+            'min_duration_minutes': None,
+            'max_duration_minutes': 30,
+            'indoor_fallback': False,
+            'notes': []
+        }
+        result = commute_service._analyze_workout_fit(recommendation, constraints)
+        assert 'longer than recommended' in result['fit_reasons'][0]
+
+    def test_indoor_fallback_penalty(self, commute_service):
+        recommendation = {'route': {'duration': 2400}}
+        constraints = {
+            'workout_name': 'Sprint Intervals',
+            'workout_type': 'VO2Max',
+            'min_duration_minutes': 30,
+            'max_duration_minutes': 50,
+            'indoor_fallback': True,
+            'notes': []
+        }
+        result = commute_service._analyze_workout_fit(recommendation, constraints)
+        assert result['indoor_fallback'] is True
+        assert any('indoor' in r.lower() for r in result['fit_reasons'])
+
+
+@pytest.mark.unit
+class TestShouldExtendForWorkout:
+    """Test _should_extend_for_workout."""
+
+    def test_extends_for_short_endurance_route(self, commute_service):
+        constraints = {
+            'workout_type': 'Endurance',
+            'indoor_fallback': False,
+            'min_duration_minutes': 60
+        }
+        recommendation = {'route': {'duration': 30}}  # 30 < 60
+        assert commute_service._should_extend_for_workout(constraints, recommendation) is True
+
+    def test_no_extend_for_non_endurance(self, commute_service):
+        constraints = {
+            'workout_type': 'VO2Max',
+            'indoor_fallback': False,
+            'min_duration_minutes': 60
+        }
+        recommendation = {'route': {'duration': 1800}}
+        assert commute_service._should_extend_for_workout(constraints, recommendation) is False
+
+    def test_no_extend_for_indoor_fallback(self, commute_service):
+        constraints = {
+            'workout_type': 'Endurance',
+            'indoor_fallback': True,
+            'min_duration_minutes': 60
+        }
+        recommendation = {'route': {'duration': 1800}}
+        assert commute_service._should_extend_for_workout(constraints, recommendation) is False
+
+    def test_no_extend_when_duration_sufficient(self, commute_service):
+        constraints = {
+            'workout_type': 'Endurance',
+            'indoor_fallback': False,
+            'min_duration_minutes': 30
+        }
+        recommendation = {'route': {'duration': 2400}}  # 40 min > 30 min
+        assert commute_service._should_extend_for_workout(constraints, recommendation) is False
+
+
+@pytest.mark.unit
+class TestExtendRouteForWorkout:
+    """Test _extend_route_for_workout."""
+
+    def test_no_recommender_returns_none(self, commute_service):
+        commute_service._recommender = None
+        result = commute_service._extend_route_for_workout(
+            {'direction': 'to_work'},
+            {'min_duration_minutes': 60}
+        )
+        assert result is None
+
+    def test_no_suitable_routes_returns_none(self, commute_service):
+        commute_service._recommender = Mock()
+        commute_service._recommender.get_all_recommendations.return_value = []
+
+        result = commute_service._extend_route_for_workout(
+            {'direction': 'to_work', 'route': {'duration': 1800}},
+            {'min_duration_minutes': 120, 'workout_name': 'Long Endurance'}
+        )
+        assert result is None
+
+    def test_extends_to_suitable_route(self, commute_service, mock_route_group):
+        extended_rec = Mock(spec=CommuteRecommendation)
+        extended_rec.direction = 'to_work'
+        extended_rec.time_window = 'morning'
+        extended_rec.route_group = mock_route_group
+        extended_rec.score = 0.75
+        extended_rec.breakdown = {}
+        extended_rec.is_today = True
+        extended_rec.window_start = time(7, 0)
+        extended_rec.window_end = time(9, 0)
+        extended_rec.forecast_weather = None
+        extended_rec.duration_minutes = 65
+
+        commute_service._recommender = Mock()
+        commute_service._recommender.get_all_recommendations.return_value = [extended_rec]
+
+        result = commute_service._extend_route_for_workout(
+            {'direction': 'to_work', 'route': {'duration': 1800}},
+            {'min_duration_minutes': 60, 'workout_name': 'Endurance Ride'}
+        )
+        assert result is not None
+        assert result['extension_reason'] is not None
+
+    def test_exception_returns_none(self, commute_service):
+        commute_service._recommender = Mock()
+        commute_service._recommender.get_all_recommendations.side_effect = Exception("Boom")
+
+        result = commute_service._extend_route_for_workout(
+            {'direction': 'to_work', 'route': {'duration': 1800}},
+            {'min_duration_minutes': 60, 'workout_name': 'Test'}
+        )
+        assert result is None
+
+
+@pytest.mark.unit
+class TestGenerateComparisonMapEmpty:
+    """Test generate_comparison_map edge cases."""
+
+    def test_empty_routes_returns_none(self, commute_service, mock_location):
+        home, work = mock_location
+        result = commute_service.generate_comparison_map([], home, work)
+        assert result is None
+
+    def test_map_with_direction_colors(self, commute_service, mock_route_group, mock_location):
+        """Routes should get direction-based colors."""
+        home, work = mock_location
+        mock_route_group.representative_route.coordinates = [
+            (40.7128, -74.0060),
+            (40.7589, -73.9851)
+        ]
+        commute_service._recommender = Mock()
+        commute_service._recommender.route_groups = [mock_route_group]
+        commute_service.weather_service.get_current_weather = Mock(return_value=None)
+
+        routes = [{
+            'route': {
+                'id': 'route_123',
+                'name': 'Test',
+                'coordinates': mock_route_group.representative_route.coordinates,
+                'distance': 10500,
+                'duration': 1800,
+                'elevation': 150
+            },
+            'direction': 'to_work',
+            'score': 0.9,
+            'weather': {}
+        }]
+
+        html = commute_service.generate_comparison_map(routes, home, work)
+        assert html is not None
+        assert '#28a745' in html  # Green for to_work
 

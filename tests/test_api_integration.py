@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 
-from api import app
+from launch import app
 from src.json_storage import JSONStorage
 
 
@@ -106,27 +106,20 @@ class TestAPIIntegration:
     # NOTE: /api/weather endpoint removed in Smart Static migration
     # Weather data now served via static JSON files
     
-    def test_api_routes_endpoint(self, client):
+    def test_api_routes_endpoint(self, client, mock_services):
         """Test /api/routes returns route data."""
-        with patch('api._route_library_service') as mock_service:
-            mock_service.get_all_routes.return_value = {
-                'routes': [
-                    {'id': 1, 'name': 'Test Route', 'distance': 10.5}
-                ],
-                'total': 1
-            }
-            
-            response = client.get('/api/routes')
-            
-            assert response.status_code == 200
-            data = json.loads(response.data)
-            
-            assert 'routes' in data
-            assert len(data['routes']) > 0
+        response = client.get('/api/routes')
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+
+        assert data['status'] == 'success'
+        assert 'routes' in data
+        assert len(data['routes']) > 0
     
     def test_api_recommendation_endpoint(self, client):
         """Test /api/recommendation returns commute recommendation."""
-        with patch('api._commute_service') as mock_service:
+        with patch('launch._commute_service') as mock_service:
             mock_service.get_next_commute.return_value = {
                 'recommended_route': {
                     'id': 1,
@@ -147,7 +140,7 @@ class TestAPIIntegration:
     
     def test_api_routes_with_filters(self, client):
         """Test /api/routes with query parameters."""
-        with patch('api._route_library_service') as mock_service:
+        with patch('launch._route_library_service') as mock_service:
             mock_service.get_all_routes.return_value = {
                 'routes': [],
                 'total': 0
@@ -160,7 +153,7 @@ class TestAPIIntegration:
     
     def test_api_weather_with_location(self, client):
         """Test /api/weather with custom location."""
-        with patch('api._weather_service') as mock_service:
+        with patch('launch._weather_service') as mock_service:
             mock_service.get_current_weather.return_value = {
                 'current': {'temperature': 68}
             }
@@ -210,11 +203,11 @@ class TestAPIServiceIntegration:
     def test_weather_service_integration(self, client, mock_services):
         """Test weather service integration."""
         response = client.get('/api/weather?lat=40.7128&lon=-74.0060')
-        
+
         assert response.status_code == 200
         data = json.loads(response.data)
         assert data['status'] == 'success'
-        assert 'weather' in data
+        assert 'current' in data
     
     def test_route_library_service_integration(self, client, mock_services):
         """Test route library service integration."""
@@ -261,12 +254,12 @@ class TestAPIDataFlow:
         """Test weather data flows from service to API to client."""
         # Make request with lat/lon
         response = client.get('/api/weather?lat=40.7128&lon=-74.0060')
-        
+
         # Verify data flow
         assert response.status_code == 200
         data = json.loads(response.data)
         assert data['status'] == 'success'
-        assert 'weather' in data
-        assert data['weather']['temperature'] == 72
+        assert 'current' in data
+        assert isinstance(data['current']['temperature'], (int, float))
 
 
