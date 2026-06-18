@@ -133,6 +133,16 @@
                         <input type="number" id="filter-max-distance" class="form-control form-control-sm"
                                placeholder="∞" min="0" step="0.1">
                     </div>
+                    <div style="min-width: 120px;">
+                        <label for="filter-date-range" class="form-label mb-0 small">Ridden</label>
+                        <select id="filter-date-range" class="form-select form-select-sm">
+                            <option value="">Any time</option>
+                            <option value="30">Last 30 days</option>
+                            <option value="90">Last 3 months</option>
+                            <option value="180">Last 6 months</option>
+                            <option value="365">Last 12 months</option>
+                        </select>
+                    </div>
                     <div style="min-width: 144px;">
                         <label for="sort-by" class="form-label mb-0 small">Sort</label>
                         <select id="sort-by" class="form-select form-select-sm">
@@ -143,6 +153,7 @@
                             <option value="elevation">Elevation ↑</option>
                             <option value="elevation-desc">Elevation ↓</option>
                             <option value="uses">Most Used</option>
+                            <option value="recent">Most Recent</option>
                         </select>
                     </div>
                 </div>
@@ -207,13 +218,23 @@
                         <span class="small fw-semibold">
                             <i class="bi bi-geo-alt" aria-hidden="true"></i> Map
                         </span>
-                        <div class="btn-group btn-group-sm" role="group" aria-label="Map controls">
-                            <button type="button" id="fit-all-btn" class="btn btn-outline-secondary" title="Fit all routes in view">
-                                <i class="bi bi-arrows-angle-contract" aria-hidden="true"></i> Fit All
-                            </button>
-                            <button type="button" id="clear-map-btn" class="btn btn-outline-secondary" title="Clear all routes from map">
-                                <i class="bi bi-x-circle" aria-hidden="true"></i> Clear
-                            </button>
+                        <div class="d-flex align-items-center gap-2">
+                            <select id="color-by" class="form-select form-select-sm" style="width: auto; min-width: 120px;" aria-label="Color routes by">
+                                <option value="default">Color: Default</option>
+                                <option value="distance">Color: Distance</option>
+                                <option value="recency">Color: Recency</option>
+                            </select>
+                            <div class="btn-group btn-group-sm" role="group" aria-label="Map controls">
+                                <button type="button" id="show-all-btn" class="btn btn-outline-primary" title="Show all filtered routes on map">
+                                    <i class="bi bi-layers" aria-hidden="true"></i> Show All
+                                </button>
+                                <button type="button" id="fit-all-btn" class="btn btn-outline-secondary" title="Fit all routes in view">
+                                    <i class="bi bi-arrows-angle-contract" aria-hidden="true"></i> Fit All
+                                </button>
+                                <button type="button" id="clear-map-btn" class="btn btn-outline-secondary" title="Clear all routes from map">
+                                    <i class="bi bi-x-circle" aria-hidden="true"></i> Clear
+                                </button>
+                            </div>
                         </div>
                     </div>
                     <div class="card-body p-0">
@@ -221,6 +242,7 @@
                         <div id="map-status" class="px-3 py-1 text-muted small border-top">
                             Click a route to display it on the map
                         </div>
+                        <div id="map-legend" class="px-3 py-1 small border-top" style="display: none;"></div>
                     </div>
                 </div>
             </div>
