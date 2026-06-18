@@ -94,6 +94,15 @@
         return state.routeColors[index % state.routeColors.length];
     }
 
+    function contrastOnWhite(hex) {
+        const r = parseInt(hex.slice(1, 3), 16) / 255;
+        const g = parseInt(hex.slice(3, 5), 16) / 255;
+        const b = parseInt(hex.slice(5, 7), 16) / 255;
+        const toLinear = c => c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+        const L = 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b);
+        return 1.05 / (L + 0.05);
+    }
+
     async function toggleRouteOnMap(route) {
         console.log('toggleRouteOnMap called for:', route.name, route.id);
         
@@ -218,17 +227,16 @@
 
             updateMapStatus();
 
-            // Update card styling to show it's on the map
-            // Issue #121: Color code route names to match map lines
             const card = document.querySelector(`[data-route-id="${routeId}"]`);
             if (card) {
                 card.style.borderColor = color;
                 card.style.borderWidth = '3px';
-                
-                // Color the route name to match the map line
+
                 const routeNameElement = card.querySelector('.route-name, h5, .card-title');
                 if (routeNameElement) {
-                    routeNameElement.style.color = color;
+                    if (contrastOnWhite(color) >= 4.5) {
+                        routeNameElement.style.color = color;
+                    }
                     routeNameElement.style.fontWeight = '700';
                 }
             }
@@ -338,7 +346,12 @@
                         card.style.borderColor = color;
                         card.style.borderWidth = '3px';
                         const nameEl = card.querySelector('.route-name, h5, .card-title');
-                        if (nameEl) { nameEl.style.color = color; nameEl.style.fontWeight = '700'; }
+                        if (nameEl) {
+                            if (contrastOnWhite(color) >= 4.5) {
+                                nameEl.style.color = color;
+                            }
+                            nameEl.style.fontWeight = '700';
+                        }
                     }
                 } catch (e) {
                     console.warn('Fit All: failed to load route', route.name, e);
@@ -453,6 +466,9 @@
         card.className = 'card route-library-card';
         card.setAttribute('data-route-id', route.id);
         card.setAttribute('data-route-type', route.type || '');
+        card.setAttribute('tabindex', '0');
+        card.setAttribute('role', 'button');
+        card.setAttribute('aria-label', `${route.name} — ${window.formatDistance(route.distance)}`);
         card.style.transition = 'background-color 0.1s ease, border-color 0.15s ease';
 
         const isSelected = state.selectedForComparison.some(r => r.id === route.id);
@@ -498,17 +514,19 @@
             </div>
         `;
 
-        // Add click handler for the card itself to toggle map display
         card.style.cursor = 'pointer';
-        card.addEventListener('click', (e) => {
-            console.log('Card clicked:', route.name);
-            // Don't trigger if clicking on checkbox or detail links
+        function handleCardActivation(e) {
             if (e.target.closest('.compare-checkbox') || e.target.closest('[data-route-link]')) {
-                console.log('Click was on checkbox or link, ignoring');
                 return;
             }
-            console.log('Calling toggleRouteOnMap');
             toggleRouteOnMap(route);
+        }
+        card.addEventListener('click', handleCardActivation);
+        card.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleCardActivation(e);
+            }
         });
 
         // Add click handler for route details (but not on checkbox)
@@ -547,7 +565,9 @@
             state.selectedForComparison.splice(index, 1);
         } else {
             if (state.selectedForComparison.length >= 3) {
-                alert('You can compare up to 3 routes at a time. Please deselect one first.');
+                if (window.showToast) {
+                    window.showToast('You can compare up to 3 routes at a time. Please deselect one first.', 'warning');
+                }
                 syncCompareCheckboxes();
                 return;
             }
@@ -567,7 +587,7 @@
             compareBtn = document.createElement('button');
             compareBtn.id = 'compare-routes-btn';
             compareBtn.className = 'btn btn-primary btn-lg position-fixed';
-            compareBtn.style.cssText = 'bottom: 2rem; right: 2rem; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.3);';
+            compareBtn.style.cssText = 'bottom: 5rem; right: 1.5rem; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.3);';
             document.body.appendChild(compareBtn);
             
             compareBtn.addEventListener('click', () => {

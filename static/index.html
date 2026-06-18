@@ -25,7 +25,7 @@
 
         /* Weather banner styles */
         .weather-banner {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #4a5fd5 0%, #764ba2 100%);
             color: white;
             border-radius: 8px;
             padding: var(--space-3) var(--space-4);
@@ -237,7 +237,7 @@
 
         /* â”€â”€ Design system: purple gradient buttons (#280) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
         .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #4a5fd5 0%, #764ba2 100%);
             border: none;
             transition: opacity 0.2s ease-out, transform 0.2s ease-out;
         }
@@ -246,7 +246,7 @@
         .btn-primary:focus {
             opacity: 0.9;
             transform: translateY(-1px);
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #4a5fd5 0%, #764ba2 100%);
             border: none;
         }
 
@@ -254,22 +254,11 @@
         .commute-chevron { transition: transform 0.2s; display: inline-block; }
         [data-bs-target="#commute-detail"][aria-expanded="true"] .commute-chevron { transform: rotate(180deg); }
 
-        /* Card entrance animation (#280) */
-        @keyframes cardFadeIn {
-            from { opacity: 0; transform: translateY(8px); }
-            to   { opacity: 1; transform: translateY(0); }
-        }
-
         .card {
             border-radius: 8px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-            animation: cardFadeIn 0.25s ease-out both;
             border: 1px solid rgba(0,0,0,0.07);
         }
-
-        .card:nth-child(2) { animation-delay: 0.05s; }
-        .card:nth-child(3) { animation-delay: 0.10s; }
-        .card:nth-child(4) { animation-delay: 0.15s; }
     </style>
 </head>
 <body>
@@ -343,6 +332,10 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Workout Strip (only when TrainerRoad configured + workout today) -->
+            <div id="workout-strip" class="mb-2" style="display:none"
+                 role="complementary" aria-label="Today's workout"></div>
 
             <!-- Decision Row: Hero Card (col-lg-5) + Map + Panels (col-lg-7) -->
             <div class="row mb-2">
@@ -439,7 +432,7 @@
     <!-- Footer -->
     <footer class="mt-3 bg-light">
         <div class="container text-center text-muted">
-            <small>Ride Optimizer v0.13.0 - Smart Static Architecture</small>
+            <small>Ride Optimizer v0.14.0 - Smart Static Architecture</small>
         </div>
     </footer>
     
