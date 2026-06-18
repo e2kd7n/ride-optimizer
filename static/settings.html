@@ -28,16 +28,22 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav">
                     <li class="nav-item">
-                        <a class="nav-link" href="/"><i class="bi bi-house-door"></i> Home</a>
+                        <a class="nav-link" href="/"><i class="bi bi-house-door" aria-hidden="true"></i> Home</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="/routes.html"><i class="bi bi-map"></i> Routes</a>
+                        <a class="nav-link" href="/commute.html"><i class="bi bi-signpost-2" aria-hidden="true"></i> Commute</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="/reports.html"><i class="bi bi-bar-chart-line"></i> Reports</a>
+                        <a class="nav-link" href="/routes.html"><i class="bi bi-map" aria-hidden="true"></i> Routes</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link active" href="/settings.html" aria-current="page"><i class="bi bi-gear"></i> Settings</a>
+                        <a class="nav-link" href="/reports.html"><i class="bi bi-bar-chart-line" aria-hidden="true"></i> Reports</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/weather.html"><i class="bi bi-cloud-sun" aria-hidden="true"></i> Weather</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/settings.html" aria-current="page"><i class="bi bi-gear" aria-hidden="true"></i> Settings</a>
                     </li>
                 </ul>
             </div>
@@ -323,6 +329,72 @@
                             </div>
                             <div id="icu-connect-feedback" class="mt-2" style="display:none"></div>
 
+                            <hr class="my-3">
+
+                            <!-- TrainerRoad -->
+                            <div class="d-flex align-items-start gap-2"
+                                 style="cursor:pointer"
+                                 data-bs-toggle="collapse" data-bs-target="#trainerroad-section"
+                                 aria-expanded="false" aria-controls="trainerroad-section"
+                                 role="button">
+                                <i class="bi bi-chevron-right tr-chevron" aria-hidden="true"></i>
+                                <div class="flex-grow-1">
+                                    <h3 class="h6 fw-bold mb-0">
+                                        <i class="bi bi-calendar-week me-1" aria-hidden="true"></i>TrainerRoad Calendar
+                                    </h3>
+                                    <p class="small text-muted mb-0">Sync structured workouts from your TrainerRoad plan</p>
+                                </div>
+                                <div id="tr-status-badge">
+                                    <span class="badge bg-secondary">Not connected</span>
+                                </div>
+                            </div>
+
+                            <div class="collapse mt-3" id="trainerroad-section">
+                                <!-- Connect form (shown when disconnected) -->
+                                <div id="tr-connect-form">
+                                    <div class="row g-3">
+                                        <div class="col-md-8">
+                                            <label class="form-label fw-bold" for="tr-feed-url">ICS Feed URL</label>
+                                            <input type="url" class="form-control" id="tr-feed-url"
+                                                   placeholder="https://www.trainerroad.com/calendar/ics/..."
+                                                   autocomplete="off" spellcheck="false">
+                                            <div class="form-text">
+                                                <i class="bi bi-info-circle" aria-hidden="true"></i>
+                                                Find it at TrainerRoad &rarr; Settings &rarr; <strong>Calendar Sync</strong> &mdash; copy the ICS link.
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4 d-flex align-items-end">
+                                            <button type="button" class="btn btn-primary w-100" id="tr-connect-btn">
+                                                <i class="bi bi-link-45deg" aria-hidden="true"></i> Connect
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div id="tr-connect-feedback" class="mt-2" style="display:none"></div>
+                                </div>
+
+                                <!-- Connected state (shown when connected) -->
+                                <div id="tr-connected-state" style="display:none">
+                                    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                                        <span class="badge bg-success" id="tr-conn-badge">
+                                            <i class="bi bi-check-circle" aria-hidden="true"></i> Connected
+                                        </span>
+                                        <span class="text-muted small" id="tr-sync-time">
+                                            <i class="bi bi-clock" aria-hidden="true"></i> Last sync: —
+                                        </span>
+                                    </div>
+                                    <div id="tr-workouts-table" class="mb-2"></div>
+                                    <div class="d-flex gap-2 flex-wrap">
+                                        <button type="button" class="btn btn-sm btn-outline-primary" id="tr-sync-btn">
+                                            <i class="bi bi-arrow-repeat" aria-hidden="true"></i> Sync Now
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" id="tr-disconnect-btn">
+                                            <i class="bi bi-x-lg" aria-hidden="true"></i> Disconnect
+                                        </button>
+                                    </div>
+                                    <div id="tr-sync-feedback" class="mt-2" style="display:none"></div>
+                                </div>
+                            </div>
+
                         </div>
                     </div>
                 </div>
@@ -425,6 +497,7 @@
             // Load cache info and wire analysis button
             loadStravaStatus();
             loadIcuStatus();
+            loadTrainerRoadStatus();
             loadCacheInfo();
             setupFetchModeControls();
             document.getElementById('run-analysis-btn').addEventListener('click', runAnalysis);
@@ -810,6 +883,159 @@
                     btn.innerHTML = '<i class="bi bi-link-45deg"></i> Connect';
                 }
             });
+        }
+
+        // ── TrainerRoad ─────────────────────────────────────────
+
+        const TR_TYPE_BADGES = {
+            'Endurance':  'bg-info text-dark',
+            'Tempo':      'bg-primary-subtle text-primary',
+            'Threshold':  'bg-warning-subtle text-dark',
+            'VO2Max':     'bg-danger-subtle text-danger',
+            'Sprint':     'bg-danger-subtle text-danger',
+            'Anaerobic':  'bg-danger-subtle text-danger',
+            'Recovery':   'bg-success-subtle text-success',
+        };
+
+        async function loadTrainerRoadStatus() {
+            const statusBadge = document.getElementById('tr-status-badge');
+            const connectForm = document.getElementById('tr-connect-form');
+            const connectedState = document.getElementById('tr-connected-state');
+
+            try {
+                const s = await window.apiClient.getTrainerRoadStatus();
+                if (s.connected) {
+                    statusBadge.innerHTML = '<span class="badge bg-success"><i class="bi bi-check-circle"></i> Connected</span>';
+                    connectForm.style.display = 'none';
+                    connectedState.style.display = '';
+
+                    if (s.last_sync) {
+                        const hours = Math.round((Date.now() - new Date(s.last_sync)) / 3600000);
+                        const syncEl = document.getElementById('tr-sync-time');
+                        if (hours > 24) {
+                            syncEl.innerHTML = `<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle"></i> Last sync: ${hours}h ago</span>`;
+                        } else {
+                            syncEl.innerHTML = `<i class="bi bi-clock"></i> Last sync: ${hours}h ago`;
+                        }
+                    }
+
+                    loadTrainerRoadWorkouts();
+                } else {
+                    statusBadge.innerHTML = '<span class="badge bg-secondary">Not connected</span>';
+                    connectForm.style.display = '';
+                    connectedState.style.display = 'none';
+                }
+            } catch (e) {
+                statusBadge.innerHTML = '<span class="text-muted small">Not configured</span>';
+            }
+
+            // Connect button
+            document.getElementById('tr-connect-btn').addEventListener('click', async () => {
+                const btn = document.getElementById('tr-connect-btn');
+                const feedback = document.getElementById('tr-connect-feedback');
+                const urlInput = document.getElementById('tr-feed-url');
+                const feedUrl = urlInput.value.trim();
+
+                if (!feedUrl) {
+                    feedback.style.display = '';
+                    feedback.innerHTML = '<span class="text-danger small"><i class="bi bi-exclamation-triangle"></i> Feed URL is required.</span>';
+                    return;
+                }
+
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Connecting…';
+                feedback.style.display = 'none';
+
+                try {
+                    const res = await window.apiClient.connectTrainerRoad(feedUrl);
+                    if (res.success) {
+                        if (typeof showToast === 'function') showToast(`TrainerRoad connected! ${res.workouts_synced} workouts synced.`, 'success');
+                        await loadTrainerRoadStatus();
+                    } else {
+                        feedback.style.display = '';
+                        feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${res.error || 'Connection failed'}</span>`;
+                    }
+                } catch (e) {
+                    feedback.style.display = '';
+                    feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${e.message || 'Connection failed'}</span>`;
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-link-45deg"></i> Connect';
+                }
+            });
+
+            // Sync button
+            document.getElementById('tr-sync-btn').addEventListener('click', async () => {
+                const btn = document.getElementById('tr-sync-btn');
+                const feedback = document.getElementById('tr-sync-feedback');
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Syncing…';
+                feedback.style.display = 'none';
+
+                try {
+                    const res = await window.apiClient.syncTrainerRoad();
+                    if (res.success) {
+                        feedback.style.display = '';
+                        feedback.innerHTML = `<span class="text-success small"><i class="bi bi-check-circle"></i> Synced ${res.workouts_synced} workouts (${res.created} new, ${res.updated} updated)</span>`;
+                        await loadTrainerRoadStatus();
+                    } else {
+                        feedback.style.display = '';
+                        feedback.innerHTML = '<span class="text-danger small"><i class="bi bi-x-circle"></i> Sync failed</span>';
+                    }
+                } catch (e) {
+                    feedback.style.display = '';
+                    feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${e.message || 'Sync failed'}</span>`;
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Sync Now';
+                }
+            });
+
+            // Disconnect button
+            document.getElementById('tr-disconnect-btn').addEventListener('click', async () => {
+                if (!confirm('Disconnect TrainerRoad? This will remove your feed URL and cached workouts.')) return;
+                try {
+                    await window.apiClient.disconnectTrainerRoad();
+                    if (typeof showToast === 'function') showToast('TrainerRoad disconnected', 'info');
+                    await loadTrainerRoadStatus();
+                } catch (e) {
+                    if (typeof showToast === 'function') showToast('Failed to disconnect', 'error');
+                }
+            });
+        }
+
+        async function loadTrainerRoadWorkouts() {
+            const container = document.getElementById('tr-workouts-table');
+            try {
+                const data = await window.apiClient.getTrainerRoadWorkouts();
+                const workouts = data.workouts || [];
+                if (workouts.length === 0) {
+                    container.innerHTML = '<p class="small text-muted mb-0">No workouts scheduled in the next 7 days.</p>';
+                    return;
+                }
+                const esc = window.escapeHtml;
+                const rows = workouts.map(w => {
+                    const d = new Date(w.workout_date + 'T00:00:00');
+                    const day = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                    const badgeClass = TR_TYPE_BADGES[w.workout_type] || 'bg-secondary';
+                    return `<tr>
+                        <td class="fw-semibold">${esc(day)}</td>
+                        <td>${esc(w.workout_name || '—')}</td>
+                        <td><span class="badge ${badgeClass}">${esc(w.workout_type || '—')}</span></td>
+                        <td>${w.duration_minutes ? w.duration_minutes + ' min' : '—'}</td>
+                        <td class="d-none d-md-table-cell">${w.tss || '—'}</td>
+                    </tr>`;
+                }).join('');
+                container.innerHTML = `
+                    <table class="table table-sm table-borderless mb-0">
+                        <thead><tr class="small text-muted">
+                            <th>Date</th><th>Name</th><th>Type</th><th>Duration</th><th class="d-none d-md-table-cell">TSS</th>
+                        </tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>`;
+            } catch (e) {
+                container.innerHTML = '<p class="small text-warning mb-0">Could not load workouts.</p>';
+            }
         }
 
         async function loadStravaStatus() {
