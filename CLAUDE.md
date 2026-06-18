@@ -28,6 +28,8 @@ podman-compose up   # pulls image from GHCR
 
 ## Environment Setup
 
+The local server where this is deployed can be accessed via ssh admin@pi4 . 
+
 Create a `.env` file with Strava API credentials (required — app exits at startup if missing):
 ```
 STRAVA_CLIENT_ID=your_client_id
