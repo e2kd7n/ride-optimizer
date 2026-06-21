@@ -16,6 +16,9 @@
  * Load all dashboard data
  */
 async function loadDashboard() {
+    // Fetch workout data first so weather pill and workout strip can render
+    await fetchTodayWorkout();
+
     await Promise.all([
         loadWeather(),
         loadWorkoutStrip(),
@@ -40,6 +43,34 @@ const WORKOUT_TYPE_BADGES = {
 };
 
 /**
+ * Shared workout data cache — fetched once per dashboard load,
+ * used by both the workout strip and the weather banner pill.
+ */
+let _todayWorkout = null;
+let _trainerRoadStatus = null;
+
+async function fetchTodayWorkout() {
+    try {
+        _trainerRoadStatus = await window.apiClient.getTrainerRoadStatus();
+        if (!_trainerRoadStatus.connected) {
+            _todayWorkout = null;
+            return;
+        }
+        const data = await window.apiClient.getTrainerRoadToday();
+        _todayWorkout = data.has_workout ? data.workout : null;
+    } catch (e) {
+        _todayWorkout = null;
+        _trainerRoadStatus = null;
+    }
+}
+
+function isWorkoutDataStale() {
+    if (!_trainerRoadStatus || !_trainerRoadStatus.last_sync) return false;
+    const hoursSinceSync = (Date.now() - new Date(_trainerRoadStatus.last_sync)) / 3600000;
+    return hoursSinceSync > 24;
+}
+
+/**
  * Load workout strip between weather banner and hero card.
  * Only renders when TrainerRoad is configured and a workout exists today.
  */
@@ -47,14 +78,13 @@ async function loadWorkoutStrip() {
     const container = document.getElementById('workout-strip');
     if (!container) return;
 
-    try {
-        const data = await window.apiClient.getTrainerRoadToday();
-        if (!data.has_workout) {
-            container.style.display = 'none';
-            return;
-        }
+    if (!_todayWorkout) {
+        container.style.display = 'none';
+        return;
+    }
 
-        const w = data.workout;
+    try {
+        const w = _todayWorkout;
         const esc = window.escapeHtml;
         const typeBadgeClass = WORKOUT_TYPE_BADGES[w.type] || 'bg-secondary';
 
@@ -73,12 +103,16 @@ async function loadWorkoutStrip() {
                       : 'bi-x-circle';
 
         const noteText = w.notes && w.notes.length > 0 ? esc(w.notes[0]) : '';
+        const stale = isWorkoutDataStale();
+        const staleBadge = stale
+            ? '<span class="badge bg-warning text-dark ms-2"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Stale</span>'
+            : '';
 
         container.innerHTML = `
             <div class="workout-strip">
                 <i class="bi bi-lightning-charge workout-strip-icon" aria-hidden="true"></i>
                 <div>
-                    <div class="workout-strip-name">${esc(w.name)}</div>
+                    <div class="workout-strip-name">${esc(w.name)}${staleBadge}</div>
                     <div class="workout-strip-meta">
                         <span class="badge ${typeBadgeClass}">${esc(w.type || 'Workout')}</span>
                         ${w.duration_minutes ? `<span><i class="bi bi-clock" aria-hidden="true"></i> ${w.duration_minutes} min</span>` : ''}
@@ -96,9 +130,10 @@ async function loadWorkoutStrip() {
 }
 
 /**
- * Build workout fit alert HTML for the hero card.
+ * Build workout fit row HTML for the hero card (Design B §2B).
+ * Inline annotation with burnt-orange left border, not a standalone alert.
  */
-function renderWorkoutFitAlert(rec) {
+function renderWorkoutFitRow(rec) {
     const workoutFit = rec.workout_fit;
     if (!workoutFit) return '';
 
@@ -106,39 +141,76 @@ function renderWorkoutFitAlert(rec) {
     const fitScore = workoutFit.fit_score || 0;
     const isIndoor = workoutFit.indoor_fallback;
 
-    let alertClass, icon, headline;
-    if (isIndoor) {
-        alertClass = 'alert-danger';
-        icon = 'bi-exclamation-triangle';
-        headline = 'Indoor trainer recommended';
-    } else if (fitScore >= 0.7) {
-        alertClass = 'alert-success';
-        icon = 'bi-bicycle';
-        headline = 'Workout fit: Good';
-    } else if (fitScore >= 0.4) {
-        alertClass = 'alert-warning';
-        icon = 'bi-dash-circle';
-        headline = 'Workout fit: Moderate';
-    } else {
-        alertClass = 'alert-danger';
-        icon = 'bi-x-circle';
-        headline = 'Workout fit: Poor';
-    }
+    const WORKOUT_TYPE_ICONS = {
+        'Endurance': 'bi-heart-pulse',
+        'Tempo':     'bi-speedometer',
+        'Threshold': 'bi-lightning',
+        'VO2Max':    'bi-fire',
+        'Sprint':    'bi-lightning-charge',
+        'Anaerobic': 'bi-lightning-charge-fill',
+        'Recovery':  'bi-heart',
+    };
+
+    const rating = fitScore >= 0.7 ? 'Good'
+                 : fitScore >= 0.4 ? 'Moderate' : 'Poor';
+    const ratingClass = rating === 'Good' ? 'bg-success-subtle text-success'
+                      : rating === 'Moderate' ? 'bg-warning-subtle text-dark'
+                      : 'bg-danger-subtle text-danger';
+    const typeIcon = WORKOUT_TYPE_ICONS[workoutFit.workout_type] || 'bi-activity';
 
     const wName = esc(workoutFit.workout_name || 'Workout');
     const wType = esc(workoutFit.workout_type || '');
-    const reasons = (workoutFit.fit_reasons || []).map(r => esc(r)).join('. ');
-    const notes = (workoutFit.notes || []).map(n => esc(n)).join('. ');
+    const reasons = (workoutFit.fit_reasons || []).map(r => esc(r)).join(' · ');
+
+    let html = `
+        <div class="workout-fit-row" role="status">
+            <div class="workout-fit-row-header">
+                <i class="bi ${typeIcon}" aria-hidden="true"></i>
+                <span class="fw-semibold">Workout fit:</span>
+                <span>${wName} (${wType})</span>
+                <span class="badge ${ratingClass} ms-auto">${rating}</span>
+            </div>
+            ${reasons ? `<div class="workout-fit-row-reasons">${reasons}</div>` : ''}`;
+
+    if (isIndoor) {
+        const indoorReason = workoutFit.indoor_reason
+            ? esc(workoutFit.indoor_reason) + '.'
+            : `${wType} efforts need controlled conditions for consistent target power.`;
+        html += `
+            <div class="alert alert-warning py-2 px-3 mb-2 d-flex align-items-start gap-2 small" role="alert">
+                <i class="bi bi-house-door mt-1 flex-shrink-0" aria-hidden="true"></i>
+                <div>
+                    <strong>Indoor trainer recommended.</strong>
+                    ${indoorReason}
+                </div>
+            </div>`;
+    }
+
+    html += '</div>';
+    return html;
+}
+
+/**
+ * Build compact workout fit line for secondary/compare cards (Design B §3).
+ */
+function renderWorkoutFitCompact(rec) {
+    const workoutFit = rec.workout_fit;
+    if (!workoutFit) return '';
+
+    const esc = window.escapeHtml;
+    const fitScore = workoutFit.fit_score || 0;
+    const rating = fitScore >= 0.7 ? 'Good'
+                 : fitScore >= 0.4 ? 'Moderate' : 'Poor';
+    const ratingClass = rating === 'Good' ? 'bg-success-subtle text-success'
+                      : rating === 'Moderate' ? 'bg-warning-subtle text-dark'
+                      : 'bg-danger-subtle text-danger';
+    const wName = esc(workoutFit.workout_name || 'Workout');
 
     return `
-        <div class="alert alert-workout-fit ${alertClass} mt-2 mb-2 py-2 px-3 d-flex align-items-start gap-2" role="status">
-            <i class="bi ${icon} mt-1 flex-shrink-0" aria-hidden="true"></i>
-            <div class="flex-grow-1 small">
-                <strong>${headline}</strong>
-                <div class="mt-1">${wName}${wType ? ` (${wType})` : ''}</div>
-                ${reasons ? `<div class="text-muted mt-1">${reasons}</div>` : ''}
-                ${notes ? `<div class="text-muted mt-1">${notes}</div>` : ''}
-            </div>
+        <div class="workout-fit-compact">
+            <i class="bi bi-heart-pulse" aria-hidden="true"></i>
+            <span>${wName} fit:</span>
+            <span class="badge ${ratingClass}">${rating}</span>
         </div>`;
 }
 
@@ -377,10 +449,46 @@ async function loadWeather() {
         `;
         
         container.innerHTML = html;
+
+        renderWeatherWorkoutPill(container);
     } catch (error) {
         console.error('Failed to load weather:', error);
         container.innerHTML = '<span class="text-white small"><i class="bi bi-cloud-slash me-1"></i>Weather unavailable <button class="btn btn-sm btn-outline-light ms-2 py-0 px-1" onclick="loadWeather()">Retry</button></span>';
     }
+}
+
+/**
+ * Render workout pill inside the weather banner (Design B §2A).
+ * Shows today's workout name, type, and duration at a glance.
+ * Links to settings.html#trainerroad-section.
+ */
+function renderWeatherWorkoutPill(bannerEl) {
+    if (!_todayWorkout) return;
+
+    const esc = window.escapeHtml;
+    const w = _todayWorkout;
+    const typeBadgeClass = WORKOUT_TYPE_BADGES[w.type] || 'bg-secondary';
+    const staleClass = isWorkoutDataStale() ? ' workout-pill-stale' : '';
+    const staleTitle = isWorkoutDataStale()
+        ? ' — workout data may be outdated'
+        : '';
+
+    const pill = document.createElement('a');
+    pill.href = 'settings.html#trainerroad-section';
+    pill.className = `workout-pill${staleClass}`;
+    pill.setAttribute('aria-label',
+        `Today's workout: ${w.name}, ${w.type || 'Workout'}, ${w.duration_minutes || '?'} minutes${staleTitle}`);
+    pill.title = `Today's workout${staleTitle}`;
+    pill.innerHTML = `
+        <i class="bi bi-calendar-week" aria-hidden="true"></i>
+        <span class="fw-semibold">${esc(w.name)}</span>
+        <span>&middot;</span>
+        <span class="badge ${typeBadgeClass}">${esc(w.type || 'Workout')}</span>
+        <span>&middot;</span>
+        <span>${w.duration_minutes || '?'} min</span>
+        ${isWorkoutDataStale() ? '<i class="bi bi-exclamation-circle ms-1" aria-hidden="true" title="Workout data stale"></i>' : ''}`;
+
+    bannerEl.appendChild(pill);
 }
 
 /**
@@ -423,7 +531,8 @@ function renderHeroCard(rec, isHero) {
                     : score >= 60 ? 'bi-hand-thumbs-up-fill text-info'
                     : score >= 40 ? 'bi-exclamation-triangle-fill text-warning'
                     : 'bi-x-circle-fill text-danger';
-    const routeName = esc(route.name || 'Route');
+    const isExtended = rec.is_workout_extended;
+    const routeName = esc(route.name || 'Route') + (isExtended ? ' <span class="text-muted fw-normal">(extended)</span>' : '');
     const confidence = esc(rec.confidence || 'Recommended');
     const weatherSummary = rec.weather_summary ? esc(rec.weather_summary) : '';
     const reasons = rec.reasons || [];
@@ -477,7 +586,7 @@ function renderHeroCard(rec, isHero) {
                         ${reasons.map(r => `<li>${esc(r)}</li>`).join('')}
                     </ul>
                 ` : ''}
-                ${renderWorkoutFitAlert(rec)}
+                ${renderWorkoutFitRow(rec)}
                 <div class="hero-meta small text-muted mt-2">
                     <span><i class="bi bi-signpost"></i> ${route.distance ? route.distance.toFixed(1) : '—'} mi</span>
                     <span class="ms-3"><i class="bi bi-graph-up"></i> ${route.elevation || '—'} ft</span>
@@ -499,7 +608,7 @@ function renderHeroCard(rec, isHero) {
             </div>`;
     }
 
-    // Compact secondary card
+    // Compact secondary card with optional workout fit annotation (Design B §3)
     return `
         <div class="secondary-commute-card border rounded p-2 mt-3">
             <div class="d-flex align-items-center justify-content-between">
@@ -513,6 +622,7 @@ function renderHeroCard(rec, isHero) {
                 ${estMins ? `<span><i class="bi bi-clock"></i> ${estMins} min</span>` : ''}
                 <span><i class="bi bi-signpost"></i> ${route.distance ? route.distance.toFixed(1) : '—'} mi</span>
             </div>
+            ${renderWorkoutFitCompact(rec)}
         </div>`;
 }
 
