@@ -538,7 +538,7 @@ class TestGetWorkoutConstraints:
         with patch.object(trainerroad_service, '_load_workouts_cache', return_value=cache):
             constraints = trainerroad_service.get_workout_constraints(date.today())
 
-            assert constraints['indoor_fallback'] is True
+            assert constraints['indoor_preferred'] is True
             assert constraints['preferred_intensity'] == 'high'
 
     def test_constraints_vo2max_workout(self, trainerroad_service):
@@ -547,7 +547,7 @@ class TestGetWorkoutConstraints:
         with patch.object(trainerroad_service, '_load_workouts_cache', return_value=cache):
             constraints = trainerroad_service.get_workout_constraints(date.today())
 
-            assert constraints['indoor_fallback'] is True
+            assert constraints['indoor_preferred'] is True
             assert constraints['preferred_intensity'] == 'high'
 
     def test_constraints_recovery_workout(self, trainerroad_service):
