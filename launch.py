@@ -192,27 +192,60 @@ def get_locations_from_config(config: Config) -> tuple[Location, Location]:
         raise ValueError(f"Invalid location coordinates in config: {e}")
 
 
+def _require_service(service, name):
+    """Return a 503 response if a service is unavailable, or None if available."""
+    if service is None:
+        return jsonify({'status': 'error', 'message': f'{name} is currently unavailable'}), 503
+    return None
+
+
 def initialize_services():
     """Initialize all services (called on first API request)."""
     global _services_initialized, _analysis_service, _commute_service
     global _weather_service, _planner_service, _route_library_service, _trainerroad_service
-    
+
     if _services_initialized:
         return
-    
+
     logger.info("Initializing services...")
 
     try:
-        # Initialize core services
         _analysis_service = AnalysisService(config)
-        _commute_service = CommuteService(config)
-        _weather_service = WeatherService(config)
-        _planner_service = PlannerService(config)
-        _route_library_service = RouteLibraryService(config)
-        _trainerroad_service = TrainerRoadService(config)
+    except Exception as e:
+        logger.error(f"AnalysisService failed to initialize: {e}", exc_info=True)
+        _analysis_service = None
 
-        # Load cached analysis data via AnalysisService (reads analysis_status.json,
-        # route_groups.json, long_rides.json written by _save_to_cache)
+    try:
+        _commute_service = CommuteService(config)
+    except Exception as e:
+        logger.error(f"CommuteService failed to initialize: {e}", exc_info=True)
+        _commute_service = None
+
+    try:
+        _weather_service = WeatherService(config)
+    except Exception as e:
+        logger.error(f"WeatherService failed to initialize: {e}", exc_info=True)
+        _weather_service = None
+
+    try:
+        _planner_service = PlannerService(config)
+    except Exception as e:
+        logger.error(f"PlannerService failed to initialize: {e}", exc_info=True)
+        _planner_service = None
+
+    try:
+        _route_library_service = RouteLibraryService(config)
+    except Exception as e:
+        logger.error(f"RouteLibraryService failed to initialize: {e}", exc_info=True)
+        _route_library_service = None
+
+    try:
+        _trainerroad_service = TrainerRoadService(config)
+    except Exception as e:
+        logger.error(f"TrainerRoadService failed to initialize: {e}", exc_info=True)
+        _trainerroad_service = None
+
+    if _analysis_service and _commute_service:
         analysis_status = _analysis_service.get_analysis_status()
         if analysis_status.get('has_data', False):
             logger.info("Loading cached analysis data...")
@@ -221,7 +254,6 @@ def initialize_services():
                 route_groups = _analysis_service.get_route_groups()
                 home_location, work_location = _analysis_service.get_locations()
 
-                # Fall back to config locations if analysis cache has none
                 if home_location is None or work_location is None:
                     home_location, work_location = get_locations_from_config(config)
 
@@ -241,12 +273,8 @@ def initialize_services():
         else:
             logger.info("No cached data available - run analysis first to enable commute recommendations")
 
-        _services_initialized = True
-        logger.info("Services initialized successfully")
-        
-    except Exception as e:
-        logger.error(f"Failed to initialize services: {e}", exc_info=True)
-        raise
+    _services_initialized = True
+    logger.info("Services initialized successfully")
 
 
 @app.route('/')
@@ -277,7 +305,11 @@ def get_weather():
         JSON with weather data including comfort_score and cycling_favorability
     """
     initialize_services()
-    
+
+    err = _require_service(_weather_service, 'Weather')
+    if err:
+        return err
+
     try:
         # Get location from query params or use home location
         lat = request.args.get('lat', type=float)
@@ -356,6 +388,10 @@ def get_commute_windows():
     """
     initialize_services()
 
+    err = _require_service(_weather_service, 'Weather')
+    if err:
+        return err
+
     try:
         lat = config.get('location.home.latitude')
         lon = config.get('location.home.longitude')
@@ -425,6 +461,65 @@ def get_commute_windows():
         return jsonify({'status': 'error', 'message': error_msg}), 500
 
 
+@app.route('/api/weather/hourly')
+@limiter.limit("30 per minute")
+def get_hourly_forecast():
+    """Get 12-hour hourly weather forecast with commute hours highlighted."""
+    initialize_services()
+
+    if not _weather_service:
+        return jsonify({'status': 'error', 'message': 'Weather service unavailable'}), 503
+
+    try:
+        lat = request.args.get('lat') or config.get('location.home.latitude')
+        lon = request.args.get('lon') or config.get('location.home.longitude')
+        if not lat or not lon:
+            return jsonify({'status': 'error', 'message': 'Home location not configured'}), 400
+
+        lat, lon = float(lat), float(lon)
+        hourly = _weather_service.fetcher.get_hourly_forecast(lat, lon, hours=12)
+        if not hourly:
+            return jsonify({'status': 'error', 'message': 'Forecast unavailable'}), 503
+
+        morning_commute = {7, 8}
+        evening_commute = {16, 17, 18}
+
+        hours = []
+        for h in hourly:
+            ts = h.get('timestamp', '')
+            try:
+                hour_int = int(ts[11:13])
+            except (ValueError, IndexError):
+                continue
+            temp_f = round(h['temp_c'] * 9 / 5 + 32)
+            wind_mph = round(h['wind_speed_kph'] * 0.621371)
+            hours.append({
+                'time': ts[11:16],
+                'hour': hour_int,
+                'temp_f': temp_f,
+                'temp_c': round(h['temp_c']),
+                'wind_speed_mph': wind_mph,
+                'wind_speed_kph': round(h['wind_speed_kph']),
+                'precipitation_prob': h.get('precipitation_prob', 0),
+                'is_commute_hour': hour_int in morning_commute or hour_int in evening_commute,
+            })
+
+        return jsonify({
+            'status': 'success',
+            'hours': hours,
+            'commute_hours': {
+                'morning': sorted(morning_commute),
+                'evening': sorted(evening_commute),
+            },
+            'timestamp': datetime.now().isoformat(),
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting hourly forecast: {e}", exc_info=True)
+        error_msg = str(e) if app.debug else 'Forecast data temporarily unavailable'
+        return jsonify({'status': 'error', 'message': error_msg}), 500
+
+
 @app.route('/api/weather/forecast')
 @limiter.limit("20 per minute")
 def get_weather_forecast():
@@ -435,6 +530,10 @@ def get_weather_forecast():
     covering issues #109 and #54 (7-day forecast card data).
     """
     initialize_services()
+
+    err = _require_service(_weather_service, 'Weather')
+    if err:
+        return err
 
     try:
         lat = config.get('location.home.latitude')
@@ -524,10 +623,14 @@ def get_recommendation():
         JSON with commute recommendation including route, score, weather, alternatives
     """
     initialize_services()
-    
+
+    err = _require_service(_commute_service, 'Commute')
+    if err:
+        return err
+
     try:
         direction = request.args.get('direction')
-        
+
         # Get recommendation
         recommendation = _commute_service.get_next_commute(direction)
         
@@ -777,6 +880,10 @@ def get_commute():
     """
     initialize_services()
 
+    err = _require_service(_commute_service, 'Commute')
+    if err:
+        return err
+
     try:
         use_workout = (_trainerroad_service
                        and _trainerroad_service.get_feed_url() is not None)
@@ -821,7 +928,11 @@ def get_commute_map():
         HTML string with Folium map showing both routes
     """
     initialize_services()
-    
+
+    err = _require_service(_commute_service, 'Commute')
+    if err:
+        return err
+
     try:
         # Get both commute recommendations
         to_work = _commute_service.get_next_commute(direction='to_work')
@@ -887,6 +998,10 @@ def get_routes():
     """
     initialize_services()
 
+    err = _require_service(_route_library_service, 'Route Library')
+    if err:
+        return err
+
     try:
         search_query = request.args.get('search', '').strip()
         route_type = request.args.get('type', 'all')
@@ -949,6 +1064,13 @@ def get_routes_status():
         JSON with commute routes list, each with condition_score and condition_note.
     """
     initialize_services()
+
+    err = _require_service(_route_library_service, 'Route Library')
+    if err:
+        return err
+    err = _require_service(_weather_service, 'Weather')
+    if err:
+        return err
 
     try:
         routes_data = _route_library_service.get_all_routes(
@@ -1038,6 +1160,10 @@ def search_routes():
     """
     initialize_services()
 
+    err = _require_service(_route_library_service, 'Route Library')
+    if err:
+        return err
+
     query = request.args.get('q', '').strip()
     if not query:
         return jsonify({
@@ -1074,6 +1200,10 @@ def search_routes():
 def get_route_detail(route_id):
     """Get a single route detail payload by route ID with validation."""
     initialize_services()
+
+    err = _require_service(_route_library_service, 'Route Library')
+    if err:
+        return err
 
     try:
         # Validate route_id format to prevent injection
@@ -1206,7 +1336,11 @@ def get_status():
         JSON with system status, data freshness, last analysis time, etc.
     """
     initialize_services()
-    
+
+    err = _require_service(_analysis_service, 'Analysis')
+    if err:
+        return err
+
     try:
         # Get analysis status
         analysis_status = _analysis_service.get_analysis_status()
@@ -1226,11 +1360,12 @@ def get_status():
             'timestamp': datetime.now().isoformat(),
             'last_update': analysis_status.get('last_analysis'),
             'services': {
-                'analysis': 'initialized' if _analysis_service else 'not_initialized',
-                'commute': 'initialized' if _commute_service else 'not_initialized',
-                'weather': 'initialized' if _weather_service else 'not_initialized',
-                'planner': 'initialized' if _planner_service else 'not_initialized',
-                'route_library': 'initialized' if _route_library_service else 'not_initialized'
+                'analysis': 'available' if _analysis_service else 'unavailable',
+                'commute': 'available' if _commute_service else 'unavailable',
+                'weather': 'available' if _weather_service else 'unavailable',
+                'planner': 'available' if _planner_service else 'unavailable',
+                'route_library': 'available' if _route_library_service else 'unavailable',
+                'trainerroad': 'available' if _trainerroad_service else 'unavailable'
             },
             'data': analysis_status,
             'cache': {
@@ -1556,6 +1691,11 @@ def intervals_connect():
 def trainerroad_status():
     """Return TrainerRoad connection status."""
     initialize_services()
+
+    err = _require_service(_trainerroad_service, 'TrainerRoad')
+    if err:
+        return err
+
     status = _trainerroad_service.get_status()
     return jsonify(status)
 
@@ -1565,6 +1705,11 @@ def trainerroad_status():
 def trainerroad_connect():
     """Set ICS feed URL, validate, and trigger initial sync."""
     initialize_services()
+
+    err = _require_service(_trainerroad_service, 'TrainerRoad')
+    if err:
+        return err
+
     data = request.get_json(silent=True) or {}
     feed_url = (data.get('feed_url') or '').strip()
 
@@ -1587,6 +1732,11 @@ def trainerroad_connect():
 def trainerroad_sync():
     """Force a workout sync."""
     initialize_services()
+
+    err = _require_service(_trainerroad_service, 'TrainerRoad')
+    if err:
+        return err
+
     _trainerroad_service.last_sync = None
     result = _trainerroad_service.sync_workouts()
     return jsonify({
@@ -1602,6 +1752,11 @@ def trainerroad_sync():
 def trainerroad_disconnect():
     """Remove TrainerRoad credentials and clear cached workouts."""
     initialize_services()
+
+    err = _require_service(_trainerroad_service, 'TrainerRoad')
+    if err:
+        return err
+
     _trainerroad_service.remove_credentials()
     return jsonify({'success': True})
 
@@ -1611,6 +1766,11 @@ def trainerroad_disconnect():
 def trainerroad_workouts():
     """Return upcoming workouts for settings table."""
     initialize_services()
+
+    err = _require_service(_trainerroad_service, 'TrainerRoad')
+    if err:
+        return err
+
     workouts = _trainerroad_service.get_upcoming_workouts(days_ahead=7)
     return jsonify({'workouts': workouts})
 
@@ -1620,6 +1780,11 @@ def trainerroad_workouts():
 def trainerroad_today():
     """Return today's workout summary for dashboard."""
     initialize_services()
+
+    err = _require_service(_trainerroad_service, 'TrainerRoad')
+    if err:
+        return err
+
     summary = _trainerroad_service.get_today_summary()
     return jsonify(summary)
 
@@ -1657,6 +1822,11 @@ def trigger_analysis():
         return jsonify({'status': 'already_running', 'message': 'Analysis is already in progress'}), 409
 
     initialize_services()
+
+    err = _require_service(_analysis_service, 'Analysis')
+    if err:
+        return err
+
     data = request.get_json(silent=True) or {}
     fetch_new = bool(data.get('fetch_new', False))
     force_refresh = bool(data.get('force_refresh', True))
@@ -1756,6 +1926,11 @@ def trigger_fetch():
         return jsonify({'status': 'already_running'}), 409
 
     initialize_services()
+
+    err = _require_service(_analysis_service, 'Analysis')
+    if err:
+        return err
+
     data = request.get_json(silent=True) or {}
 
     after_date = None
@@ -2091,6 +2266,11 @@ def get_gear_stats():
     Loads gear metadata from the gear cache (populated by POST /api/stats/refresh-gear).
     """
     initialize_services()
+
+    err = _require_service(_analysis_service, 'Analysis')
+    if err:
+        return err
+
     all_activities = _load_activities_for_stats()
 
     # Load gear metadata from cache
@@ -2139,8 +2319,11 @@ def get_gear_stats():
 def refresh_gear():
     """Fetch athlete's bikes and shoes from Strava and update the gear cache."""
     initialize_services()
-    if not _analysis_service:
-        return jsonify({'status': 'error', 'message': 'Services not initialized'}), 503
+
+    err = _require_service(_analysis_service, 'Analysis')
+    if err:
+        return err
+
     try:
         data = _analysis_service.data_fetcher.fetch_athlete_gear()
         bikes = len(data.get('bikes', []))
@@ -2172,8 +2355,10 @@ def backfill_gear_ids():
         return jsonify({'status': 'already_running'}), 409
 
     initialize_services()
-    if not _analysis_service:
-        return jsonify({'status': 'error', 'message': 'Services not initialized'}), 503
+
+    err = _require_service(_analysis_service, 'Analysis')
+    if err:
+        return err
 
     _backfill_job = {'status': 'running', 'fetched': 0, 'updated': 0, 'label': 'Connecting to Strava…'}
 

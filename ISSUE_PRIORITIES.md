@@ -8,15 +8,22 @@ This file reflects the current state of GitHub issues organized by release miles
 
 ## 📍 Release Context
 
-- **Current Release:** v0.14.0 (deployed — includes #264 UX audit, #326 TrainerRoad UI, #107 interactive route map)
-- **Next Release:** v0.15.0 (in development)
+- **Current Release:** v0.14.0 (in development — 26 open issues, 39 closed)
+- **Next Release:** v0.15.0
 - **Future Releases:** v0.16.0
 
 ---
 
-## 🎯 v0.15.0 (Next Release - IN DEVELOPMENT)
+## 🎯 v0.14.0 (Current Release - IN DEVELOPMENT)
 
 **Priority within this release determines work order. Complete P0/P1 issues before moving to future releases.**
+
+### 📋 Release Plan (2026-06-21)
+
+**Wave 1 (parallel):** #298 (in progress, other session), #272 (hourly forecast), #94 (accessibility) — all independent, can run as parallel subagent branches
+**Wave 2 (sequential after wave 1):** #209 (graceful degradation) — touches `launch.py` + all services, overlaps with #207
+**Defer to v0.15.0:** #207 (DI refactor) — large refactor, overlaps #209; #136 (settings page) — requires SQLite, too large for this release
+**Close / re-scope:** #108 — targets deprecated `main.py`; re-scope to web app or close as won't-fix
 
 ### 🔴 P0 - CRITICAL
 **No P0 issues** ✅
@@ -25,21 +32,16 @@ This file reflects the current state of GitHub issues organized by release miles
 **No P1 issues** ✅
 
 ### 🟡 P2 - MEDIUM
-- #330 - Complete ntfy.sh push notification integration
-- #322 - Unify route comparison pipelines between commute and long ride analyzers
-- #307 - perf: reduce startup cost and per-request overhead on Pi
-- #272 - Add Hourly Weather Forecast
-- #209 - Implement graceful degradation for unavailable services
-- #207 - Implement dependency injection pattern for better testability
-- #194 - Long Rides: Add accessibility features (WCAG 2.1 AA)
-- #180 - Add planner-specific API client methods
-- #136 - Implement settings and preferences page for home/work locations, units, time windows, and planner defaults
-- #108 - Integrate forecast generator into main.py workflow
-- #106 - Add average speed and elevation gain metrics
-- #94 - Implement Accessibility Improvements
+- #298 - chore: bump GitHub Actions to Node.js 24 (actions v5) ⚙️ *in progress — other session*
+- #272 - Add Hourly Weather Forecast ⬅️ *wave 1*
+- #94 - Implement Accessibility Improvements ⬅️ *wave 1*
+- #209 - Implement graceful degradation for unavailable services ⬅️ *wave 2*
+- #207 - Implement dependency injection pattern for better testability — *defer to v0.15.0*
+- #136 - Implement settings and preferences page — *defer to v0.15.0*
+- #108 - Integrate forecast generator into main.py workflow — *re-scope or close (main.py deprecated)*
 
 ### 🟢 P3 - LOW
-- #321 - feat: Garmin Connect integration — graceful FTUE for connecting and harvesting
+- #261 - Senior Engineer Code Review Request
 - #200 - Route naming improvements (Start → Main → End format)
 - #199 - Design: Test on real iOS/Android devices
 - #195 - Design: Verify mobile-first responsive design (320px viewport)
@@ -63,14 +65,34 @@ This file reflects the current state of GitHub issues organized by release miles
 
 ---
 
+## 📅 v0.15.0 (Next Release)
+
+### 🔴 P1 - HIGH
+- #260 - Implement guided FTUE for Strava API key setup with in-app configuration
+- #254 - Implement Animated GIF Tutorials for Key Features
+- #172 - Add Marshmallow validation schemas for planner endpoints
+
+### 🟡 P2 - MEDIUM
+- #330 - Complete ntfy.sh push notification integration
+- #322 - Unify route comparison pipelines between commute and long ride analyzers
+- #307 - perf: reduce startup cost and per-request overhead on Pi
+- #194 - Long Rides: Add accessibility features (WCAG 2.1 AA)
+- #193 - Long Rides: Implement skeleton loaders and error states
+- #180 - Add planner-specific API client methods
+- #141 - Add repeat-a-past-ride flow and saved plan support
+- #106 - Add average speed and elevation gain metrics
+
+### 🟢 P3 - LOW
+- #321 - feat: Garmin Connect integration — graceful FTUE for connecting and harvesting
+
+---
+
 ## 📅 v0.16.0 (Future Release)
 
 ### 🟡 P2 - MEDIUM
-- #298 - chore: bump GitHub Actions to Node.js 24 (actions v5)
 - #275 - Major refactor: Centralize configuration and extract monolithic services
 - #284 - Long Rides: build new v0.15.0 implementation plan
 - #282 - 🚴 Epic: Long Rides feature re-planning and implementation
-- #261 - Senior Engineer Code Review Request
 
 ---
 
