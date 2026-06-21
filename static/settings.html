@@ -574,24 +574,40 @@
             }
         }
         
-        function loadUserPreferences() {
-            const settings = JSON.parse(localStorage.getItem('rideOptimizerSettings') || '{}');
-            
-            if (settings.unitSystem) {
-                document.getElementById('unit-system').value = settings.unitSystem;
+        function applySettingsToForm(settings) {
+            if (settings.unit_system || settings.unitSystem) {
+                document.getElementById('unit-system').value = settings.unit_system || settings.unitSystem;
             }
-            if (settings.defaultView) {
-                document.getElementById('default-view').value = settings.defaultView;
+            if (settings.default_view || settings.defaultView) {
+                document.getElementById('default-view').value = settings.default_view || settings.defaultView;
             }
-            if (settings.showWeatherDetails !== undefined) {
-                document.getElementById('show-weather-details').checked = settings.showWeatherDetails;
+            if (settings.show_weather_details !== undefined || settings.showWeatherDetails !== undefined) {
+                document.getElementById('show-weather-details').checked =
+                    settings.show_weather_details !== undefined ? settings.show_weather_details : settings.showWeatherDetails;
             }
-            if (settings.showElevation !== undefined) {
-                document.getElementById('show-elevation').checked = settings.showElevation;
+            if (settings.show_elevation !== undefined || settings.showElevation !== undefined) {
+                document.getElementById('show-elevation').checked =
+                    settings.show_elevation !== undefined ? settings.show_elevation : settings.showElevation;
             }
-            if (settings.autoSave !== undefined) {
-                document.getElementById('auto-save').checked = settings.autoSave;
+            if (settings.auto_save !== undefined || settings.autoSave !== undefined) {
+                document.getElementById('auto-save').checked =
+                    settings.auto_save !== undefined ? settings.auto_save : settings.autoSave;
             }
+        }
+
+        async function loadUserPreferences() {
+            // Try server first, fall back to localStorage
+            try {
+                const res = await window.apiClient.fetch('/settings');
+                if (res.status === 'success' && res.settings) {
+                    applySettingsToForm(res.settings);
+                    return;
+                }
+            } catch (_) {
+                // Server unavailable — fall back to localStorage
+            }
+            const local = JSON.parse(localStorage.getItem('rideOptimizerSettings') || '{}');
+            applySettingsToForm(local);
         }
         
         function setupEventListeners() {
@@ -630,20 +646,38 @@
             document.getElementById('unsaved-indicator').style.display = 'none';
         }
         
-        function saveSettings() {
-            const settings = {
-                unitSystem: document.getElementById('unit-system').value,
-                defaultView: document.getElementById('default-view').value,
-                showWeatherDetails: document.getElementById('show-weather-details').checked,
-                showElevation: document.getElementById('show-elevation').checked,
-                autoSave: document.getElementById('auto-save').checked,
+        async function saveSettings() {
+            const serverPayload = {
+                unit_system: document.getElementById('unit-system').value,
+                default_view: document.getElementById('default-view').value,
+                show_weather_details: document.getElementById('show-weather-details').checked,
+                show_elevation: document.getElementById('show-elevation').checked,
+                auto_save: document.getElementById('auto-save').checked,
+            };
+
+            // Always update localStorage as offline fallback
+            const localPayload = {
+                unitSystem: serverPayload.unit_system,
+                defaultView: serverPayload.default_view,
+                showWeatherDetails: serverPayload.show_weather_details,
+                showElevation: serverPayload.show_elevation,
+                autoSave: serverPayload.auto_save,
                 savedAt: new Date().toISOString()
             };
-            
-            localStorage.setItem('rideOptimizerSettings', JSON.stringify(settings));
+            localStorage.setItem('rideOptimizerSettings', JSON.stringify(localPayload));
+
+            // Persist to server
+            try {
+                await window.apiClient.fetch('/settings', {
+                    method: 'PUT',
+                    body: JSON.stringify(serverPayload),
+                });
+            } catch (_) {
+                // Server save failed — localStorage still has the data
+            }
+
             clearUnsavedChanges();
-            
-            // Show toast if available
+
             if (typeof showToast === 'function') {
                 showToast('Settings saved successfully!', 'success');
             } else {
@@ -651,17 +685,26 @@
             }
         }
         
-        function resetSettings() {
+        async function resetSettings() {
             if (confirm('Are you sure you want to reset all settings to defaults?')) {
                 localStorage.removeItem('rideOptimizerSettings');
-                
+
+                // Reset on server
+                try {
+                    await window.apiClient.fetch('/settings', { method: 'DELETE' });
+                } catch (_) {
+                    // Server reset failed — local is already cleared
+                }
+
                 // Reset form to defaults
                 document.getElementById('unit-system').value = 'imperial';
                 document.getElementById('default-view').value = 'home';
                 document.getElementById('show-weather-details').checked = true;
                 document.getElementById('show-elevation').checked = true;
                 document.getElementById('auto-save').checked = true;
-                
+
+                clearUnsavedChanges();
+
                 if (typeof showToast === 'function') {
                     showToast('Settings reset to defaults', 'info');
                 } else {
