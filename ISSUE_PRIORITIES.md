@@ -8,37 +8,24 @@ This file reflects the current state of GitHub issues organized by release miles
 
 ## 📍 Release Context
 
-- **Current Release:** v0.14.0 (in development — 26 open issues, 39 closed)
+- **Current Release:** v0.14.0 (21 open issues, 44 closed — P2 complete, P3/P4 remain)
 - **Next Release:** v0.15.0
 - **Future Releases:** v0.16.0
 
 ---
 
-## 🎯 v0.14.0 (Current Release - IN DEVELOPMENT)
+## 🎯 v0.14.0 (Current Release)
 
-**Priority within this release determines work order. Complete P0/P1 issues before moving to future releases.**
+**All P2 issues complete.** Remaining issues are P3 (nice-to-have) and P4 (deferred).
 
-### 📋 Release Plan (2026-06-21)
-
-**Wave 1 (parallel):** #298 (in progress, other session), #272 (hourly forecast), #94 (accessibility) — all independent, can run as parallel subagent branches
-**Wave 2 (sequential after wave 1):** #209 (graceful degradation) — touches `launch.py` + all services, overlaps with #207
-**Defer to v0.15.0:** #207 (DI refactor) — large refactor, overlaps #209; #136 (settings page) — requires SQLite, too large for this release
-**Close / re-scope:** #108 — targets deprecated `main.py`; re-scope to web app or close as won't-fix
-
-### 🔴 P0 - CRITICAL
-**No P0 issues** ✅
-
-### 🔴 P1 - HIGH
-**No P1 issues** ✅
-
-### 🟡 P2 - MEDIUM
-- #298 - chore: bump GitHub Actions to Node.js 24 (actions v5) ⚙️ *in progress — other session*
-- #272 - Add Hourly Weather Forecast ⬅️ *wave 1*
-- #94 - Implement Accessibility Improvements ⬅️ *wave 1*
-- #209 - Implement graceful degradation for unavailable services ⬅️ *wave 2*
-- #207 - Implement dependency injection pattern for better testability — *defer to v0.15.0*
-- #136 - Implement settings and preferences page — *defer to v0.15.0*
-- #108 - Integrate forecast generator into main.py workflow — *re-scope or close (main.py deprecated)*
+### 🟡 P2 - MEDIUM ✅ COMPLETE
+- ~~#298~~ - ✅ Bumped GitHub Actions to Node.js 24 (v5/v4/v6/v7)
+- ~~#272~~ - ✅ Added hourly weather forecast endpoint + dashboard UI
+- ~~#94~~ - ✅ Accessibility audit, ARIA fixes, 75 new tests
+- ~~#209~~ - ✅ Graceful degradation — individual service init, 503 guards on all endpoints
+- ~~#108~~ - ✅ Closed (targets deprecated main.py CLI)
+- #207 - Deferred to v0.15.0 (DI refactor)
+- #136 - Deferred to v0.15.0 (settings persistence)
 
 ### 🟢 P3 - LOW
 - #261 - Senior Engineer Code Review Request
