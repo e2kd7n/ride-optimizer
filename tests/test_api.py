@@ -188,6 +188,61 @@ class TestLaunchAPIEndpoints:
         assert 'not found' in data['message'].lower()
 
 
+@pytest.mark.unit
+class TestSavedPlansAPI:
+    """Tests for saved plans CRUD endpoints."""
+
+    def test_get_plans_empty(self, client):
+        response = client.get('/api/plans')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['status'] == 'success'
+        assert isinstance(data['plans'], list)
+
+    def test_save_plan(self, client):
+        response = client.post('/api/plans', json={
+            'route_id': 'test-route-1',
+            'route_name': 'Morning Loop',
+            'route_type': 'commute',
+            'distance': 15.5,
+            'duration': 45,
+            'elevation': 120,
+        })
+        assert response.status_code == 201
+        data = response.get_json()
+        assert data['status'] == 'success'
+        assert data['plan']['route_id'] == 'test-route-1'
+        assert data['plan']['route_name'] == 'Morning Loop'
+        assert 'id' in data['plan']
+        assert 'created_at' in data['plan']
+
+    def test_save_plan_requires_route_id(self, client):
+        response = client.post('/api/plans', json={'route_name': 'No ID'})
+        assert response.status_code == 400
+
+    def test_save_and_delete_plan(self, client):
+        create_resp = client.post('/api/plans', json={
+            'route_id': 'delete-me',
+            'route_name': 'Temp Plan',
+        })
+        plan_id = create_resp.get_json()['plan']['id']
+
+        delete_resp = client.delete(f'/api/plans/{plan_id}')
+        assert delete_resp.status_code == 200
+        assert delete_resp.get_json()['status'] == 'success'
+
+    def test_delete_nonexistent_plan(self, client):
+        response = client.delete('/api/plans/nonexistent123')
+        assert response.status_code == 404
+
+    def test_save_plan_note_too_long(self, client):
+        response = client.post('/api/plans', json={
+            'route_id': 'test',
+            'note': 'x' * 501,
+        })
+        assert response.status_code == 400
+
+
 @pytest.mark.integration
 class TestLaunchInitialization:
     """Light integration coverage for launch service initialization."""

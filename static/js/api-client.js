@@ -295,6 +295,25 @@ class APIClient {
         return this.fetch('/trainerroad/today');
     }
 
+    // ── Saved Plans ────────────────────────────────────────
+
+    async getPlans() {
+        return this.fetch('/plans');
+    }
+
+    async savePlan(planData) {
+        return this.fetch('/plans', {
+            method: 'POST',
+            body: JSON.stringify(planData),
+        });
+    }
+
+    async deletePlan(planId) {
+        return this.fetch(`/plans/${planId}`, {
+            method: 'DELETE',
+        });
+    }
+
     async get(endpoint) {
         return this.fetch(endpoint, { method: 'GET' });
     }
