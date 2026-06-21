@@ -465,13 +465,18 @@
                                     ${route.is_favorite ? `<span class="detail-chip"><i class="bi bi-star-fill text-warning"></i> Favorite</span>` : ''}
                                 </div>
                             </div>
-                            <div class="text-md-end">
+                            <div class="text-md-end d-flex flex-column align-items-md-end gap-1">
                                 ${route.is_plus_route ? '<div class="text-muted">PLUS route</div>' : ''}
-                                ${route.type === 'long_ride' && route.id
-                                    ? `<a href="https://www.strava.com/activities/${route.id}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-warning mt-1"><i class="bi bi-box-arrow-up-right"></i> View on Strava</a>`
-                                    : (Array.isArray(route.routes) && route.routes.length && route.routes[0].activity_id
-                                        ? `<a href="https://www.strava.com/activities/${route.routes[0].activity_id}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-warning mt-1"><i class="bi bi-box-arrow-up-right"></i> View on Strava</a>`
-                                        : '')}
+                                <div class="d-flex gap-2 flex-wrap justify-content-md-end">
+                                    <button class="btn btn-sm btn-primary" id="save-plan-btn" title="Save this route as a plan to ride again">
+                                        <i class="bi bi-calendar-plus"></i> Ride Again
+                                    </button>
+                                    ${route.type === 'long_ride' && route.id
+                                        ? `<a href="https://www.strava.com/activities/${route.id}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-warning"><i class="bi bi-box-arrow-up-right"></i> View on Strava</a>`
+                                        : (Array.isArray(route.routes) && route.routes.length && route.routes[0].activity_id
+                                            ? `<a href="https://www.strava.com/activities/${route.routes[0].activity_id}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-warning"><i class="bi bi-box-arrow-up-right"></i> View on Strava</a>`
+                                            : '')}
+                                </div>
                             </div>
                         </div>
 
@@ -579,6 +584,31 @@
                 renderPerformanceCharts(route);
 
                 announce(`Loaded route details for ${route.name}`);
+
+                const savePlanBtn = byId('save-plan-btn');
+                if (savePlanBtn) {
+                    savePlanBtn.addEventListener('click', async () => {
+                        savePlanBtn.disabled = true;
+                        savePlanBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving…';
+                        try {
+                            await window.apiClient.savePlan({
+                                route_id: route.id,
+                                route_name: route.name,
+                                route_type: route.type,
+                                distance: route.distance,
+                                duration: route.duration,
+                                elevation: route.elevation,
+                            });
+                            savePlanBtn.innerHTML = '<i class="bi bi-check-lg"></i> Saved';
+                            savePlanBtn.classList.replace('btn-primary', 'btn-success');
+                            announce('Plan saved');
+                        } catch (err) {
+                            savePlanBtn.disabled = false;
+                            savePlanBtn.innerHTML = '<i class="bi bi-calendar-plus"></i> Ride Again';
+                            announce('Failed to save plan');
+                        }
+                    });
+                }
             }
 
             async function loadRouteDetails() {

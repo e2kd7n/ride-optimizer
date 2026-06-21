@@ -52,6 +52,27 @@ Flask dev config lives in `.flaskenv`. Encrypted OAuth tokens are auto-generated
 
 **Config:** `config/config.yaml` controls optimization weights, feature flags, and location detection thresholds.
 
+## Unexposed Backend Capabilities
+
+These backend components are fully implemented but have no API endpoints or frontend UI yet. Wire them up before building new versions of the same functionality.
+
+### PlannerService (`app/services/planner_service.py`)
+
+Weather-optimized long ride recommendation engine. Initialized at startup (`_planner_service` in `launch.py`) but never called from any route.
+
+**Available methods:**
+- `get_recommendations(forecast_days, min_distance, max_distance, location)` — Scores all long rides against a multi-day weather forecast and returns ranked recommendations per day. Each ride gets a composite score from weather (50%), route variety/freshness (30%), and location proximity (20%). Returns the best day and top 5 rides per day.
+- `get_rides_near_location(lat, lon, radius_miles, limit)` — Spatial search for rides near a point. Requires `geopy`.
+- `get_ride_details(ride_id)` — Full ride detail lookup from the in-memory long ride list.
+- `analyze_long_ride(distance, duration, date)` — Standalone ride analysis: difficulty scoring, weather suitability, and actionable recommendations/warnings for a planned ride.
+- `generate_long_rides_map(long_rides, home_location)` — Generates a Folium HTML map with weather-segmented route coloring, forecast markers, and layer controls.
+
+**To wire up:** Add endpoints in `launch.py` that call `_planner_service.<method>()` (follows the same pattern as `_route_library_service` or `_weather_service`). The service needs `.initialize(long_rides)` called with the analyzed long ride list — check how `_analysis_service` feeds data to other services after analysis completes.
+
+### `/api/routes/search` endpoint (`launch.py`)
+
+A server-side route search endpoint exists but the frontend ignores it — the routes page fetches all routes via `/api/routes` and filters client-side in `routes.js`. The endpoint works and is rate-limited, but is redundant unless the route count grows large enough to justify server-side filtering.
+
 ## Key Patterns
 
 - When editing UI: touch `static/*.html`, `static/js/*.js`, `static/css/main.css`, and API endpoints in `launch.py`.
