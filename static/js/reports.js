@@ -162,6 +162,12 @@ async function loadGear() {
     }
 }
 
+function gearDisplayName(g) {
+    if (g.name && g.name !== g.id) return g.name;
+    const typeLabel = g.type === 'bike' ? 'Bike' : g.type === 'shoe' ? 'Shoes' : 'Gear';
+    return `${typeLabel} (${g.id.slice(-4)})`;
+}
+
 function renderGearCards(data) {
     const container = document.getElementById('gear-cards');
     const statusEl = document.getElementById('gear-cache-status');
@@ -176,13 +182,14 @@ function renderGearCards(data) {
         const typeIcon = g.type === 'bike' ? '🚲' : g.type === 'shoe' ? '👟' : '⚙️';
         const primary = g.primary ? '<span class="badge bg-success ms-1" style="font-size:9px;">Primary</span>' : '';
         const lastUsed = g.last_used ? `Last used ${g.last_used}` : '';
+        const displayName = gearDisplayName(g);
         return `<div class="col-12 col-md-6">
             <div class="card gear-card p-2" data-gear-id="${escapeHtml(g.id)}" role="button"
-                 tabindex="0" aria-label="Filter by ${escapeHtml(g.name || g.id)}">
+                 tabindex="0" aria-label="Filter by ${escapeHtml(displayName)}">
                 <div class="d-flex justify-content-between align-items-start">
                     <div>
                         <span style="font-size:14px;">${typeIcon}</span>
-                        <span class="gear-name ms-1">${escapeHtml(g.name || g.id)}</span>${primary}
+                        <span class="gear-name ms-1">${escapeHtml(displayName)}</span>${primary}
                     </div>
                 </div>
                 <div class="gear-meta">${escapeHtml(g.brand_name || '')} ${escapeHtml(g.model_name || '')} ${escapeHtml(lastUsed)}</div>
@@ -356,7 +363,7 @@ async function loadActivities() {
         let gearLabel = '';
         if (currentGearId && currentGearId !== '__unassigned__') {
             const g = gearMeta[currentGearId];
-            gearLabel = g ? `— ${g.name || currentGearId}` : `— ${currentGearId}`;
+            gearLabel = g ? `— ${gearDisplayName(g)}` : `— ${currentGearId}`;
         } else if (currentGearId === '__unassigned__') {
             gearLabel = '— No Gear Assigned';
         }
@@ -369,8 +376,10 @@ async function loadActivities() {
         }
 
         tbody.innerHTML = list.map(a => {
-            const gearName = a.gear_name || (a.gear_id && gearMeta[a.gear_id] ? gearMeta[a.gear_id].name : '');
-            const gearType = a.gear_type || (a.gear_id && gearMeta[a.gear_id] ? gearMeta[a.gear_id].type : '');
+            const gearObj = a.gear_id && gearMeta[a.gear_id] ? gearMeta[a.gear_id] : null;
+            const rawName = a.gear_name || (gearObj ? gearObj.name : '');
+            const gearName = (rawName && rawName !== a.gear_id) ? rawName : (gearObj ? gearDisplayName(gearObj) : '');
+            const gearType = a.gear_type || (gearObj ? gearObj.type : '');
             const gearIcon = gearType === 'bike' ? '🚲' : gearType === 'shoe' ? '👟' : gearType ? '⚙️' : '';
             const gearLabel = gearName ? `${gearIcon} ${escapeHtml(gearName)}` : '';
             const hrCell = a.average_heartrate ? `${Math.round(a.average_heartrate)}` : '—';
