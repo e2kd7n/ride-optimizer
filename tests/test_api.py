@@ -307,6 +307,91 @@ class TestHourlyForecastAPI:
 
 
 @pytest.mark.unit
+class TestDeleteUserData:
+    """Tests for GDPR-compliant data deletion endpoint."""
+
+    def test_delete_requires_confirmation(self, client):
+        response = client.delete('/api/user/data', json={})
+        assert response.status_code == 400
+        data = response.get_json()
+        assert 'confirm' in data['message'].lower()
+
+    def test_delete_rejects_false_confirmation(self, client):
+        response = client.delete('/api/user/data', json={'confirm': False})
+        assert response.status_code == 400
+
+    def test_delete_succeeds_with_confirmation(self, client, tmp_path, monkeypatch):
+        import launch
+        from src.json_storage import JSONStorage
+        test_storage = JSONStorage(str(tmp_path))
+        test_storage.write('test_data.json', {'key': 'value'})
+        monkeypatch.setattr(launch, 'storage', test_storage)
+        response = client.delete('/api/user/data', json={'confirm': True})
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['status'] == 'success'
+        assert isinstance(data['deleted'], list)
+
+    def test_delete_no_body_returns_400(self, client):
+        response = client.delete('/api/user/data')
+        assert response.status_code == 400
+
+
+@pytest.mark.unit
+class TestSettingsAPI:
+    """Tests for user settings CRUD endpoints."""
+
+    @pytest.fixture(autouse=True)
+    def reset_settings(self, client):
+        client.delete('/api/settings')
+        yield
+
+    def test_get_settings_returns_defaults(self, client):
+        response = client.get('/api/settings')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['status'] == 'success'
+        assert data['settings']['unit_system'] == 'imperial'
+        assert data['settings']['show_elevation'] is True
+
+    def test_put_settings_partial_update(self, client):
+        response = client.put('/api/settings', json={
+            'unit_system': 'metric',
+            'show_elevation': False,
+        })
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['settings']['unit_system'] == 'metric'
+        assert data['settings']['show_elevation'] is False
+        assert data['settings']['default_view'] == 'home'
+
+    def test_put_settings_ignores_unknown_keys(self, client):
+        response = client.put('/api/settings', json={
+            'unit_system': 'metric',
+            'evil_key': 'hacked',
+        })
+        assert response.status_code == 200
+        assert 'evil_key' not in response.get_json()['settings']
+
+    def test_put_settings_validates_types(self, client):
+        client.delete('/api/settings')
+        response = client.put('/api/settings', json={'show_elevation': 'not-a-bool'})
+        assert response.status_code == 200
+        assert response.get_json()['settings']['show_elevation'] is True
+
+    def test_delete_settings_resets(self, client):
+        client.put('/api/settings', json={'unit_system': 'metric'})
+        response = client.delete('/api/settings')
+        assert response.status_code == 200
+        assert response.get_json()['settings']['unit_system'] == 'imperial'
+
+    def test_put_settings_empty_body_noop(self, client):
+        response = client.put('/api/settings', data='not json', content_type='text/plain')
+        assert response.status_code == 200
+        assert response.get_json()['settings']['unit_system'] == 'imperial'
+
+
+@pytest.mark.unit
 class TestGracefulDegradation:
     """Test that endpoints return 503 when their service is unavailable."""
 

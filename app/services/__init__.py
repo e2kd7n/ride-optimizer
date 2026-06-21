@@ -26,6 +26,7 @@ from .planner_service import PlannerService
 from .route_library_service import RouteLibraryService
 from .weather_service import WeatherService
 from .trainerroad_service import TrainerRoadService
+from .settings_service import SettingsService
 
 __all__ = [
     'AnalysisService',
@@ -34,6 +35,7 @@ __all__ = [
     'RouteLibraryService',
     'WeatherService',
     'TrainerRoadService',
+    'SettingsService',
 ]
 
 

@@ -38,17 +38,20 @@ class CommuteService:
     - Departure time optimization
     """
     
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, weather_service: Optional['WeatherService'] = None,
+                 trainerroad_service: Optional['TrainerRoadService'] = None):
         """
         Initialize commute service.
-        
+
         Args:
             config: Configuration object
+            weather_service: Optional pre-built WeatherService instance for dependency injection
+            trainerroad_service: Optional pre-built TrainerRoadService instance for dependency injection
         """
         self.config = config
         self._recommender: Optional[NextCommuteRecommender] = None
-        self.trainerroad_service = TrainerRoadService(config)
-        self.weather_service = WeatherService(config)
+        self.trainerroad_service = trainerroad_service or TrainerRoadService(config)
+        self.weather_service = weather_service or WeatherService(config)
     
     def initialize(self, route_groups: List[RouteGroup],
                    home_location: Location,

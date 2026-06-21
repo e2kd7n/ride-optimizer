@@ -37,24 +37,25 @@ class AnalysisService:
     - Managing cache and data lifecycle
     """
     
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, weather_service: Optional['WeatherService'] = None):
         """
         Initialize analysis service.
-        
+
         Args:
             config: Configuration object
+            weather_service: Optional pre-built WeatherService instance for dependency injection
         """
         self.config = config
-        
+
         # Initialize JSON storage
         from src.json_storage import JSONStorage
         self.storage = JSONStorage()
         self._cache_loaded = False
-        
+
         # Lazy initialization - don't authenticate until needed
         self._strava_client = None
         self._data_fetcher = None
-        
+
         # Cached analysis results
         self._activities: Optional[List[Activity]] = None
         self._route_groups: Optional[List[RouteGroup]] = None
@@ -62,7 +63,7 @@ class AnalysisService:
         self._home_location: Optional[Location] = None
         self._work_location: Optional[Location] = None
         self._last_analysis_time: Optional[datetime] = None
-        self.weather_service = WeatherService(config)
+        self.weather_service = weather_service or WeatherService(config)
     
     def _ensure_authenticated(self):
         """

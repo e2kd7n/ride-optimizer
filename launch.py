@@ -35,6 +35,7 @@ from src.weather_fetcher import WindImpactCalculator
 from app.services.planner_service import PlannerService
 from app.services.route_library_service import RouteLibraryService
 from app.services.trainerroad_service import TrainerRoadService
+from app.services.settings_service import SettingsService
 from app.api import maps_api
 from src.secure_logger import SecureLogger
 from src.auth_secure import SecureTokenStorage
@@ -144,6 +145,7 @@ _weather_service = None
 _planner_service = None
 _route_library_service = None
 _trainerroad_service = None
+_settings_service = SettingsService()
 _analysis_job = {'status': 'idle', 'started_at': None, 'result': None}
 _analysis_stop_requested = False
 _fetch_job = {'status': 'idle', 'fetched': 0, 'label': '', 'started_at': None}
@@ -209,18 +211,7 @@ def initialize_services():
 
     logger.info("Initializing services...")
 
-    try:
-        _analysis_service = AnalysisService(config)
-    except Exception as e:
-        logger.error(f"AnalysisService failed to initialize: {e}", exc_info=True)
-        _analysis_service = None
-
-    try:
-        _commute_service = CommuteService(config)
-    except Exception as e:
-        logger.error(f"CommuteService failed to initialize: {e}", exc_info=True)
-        _commute_service = None
-
+    # Shared dependencies first
     try:
         _weather_service = WeatherService(config)
     except Exception as e:
@@ -228,10 +219,10 @@ def initialize_services():
         _weather_service = None
 
     try:
-        _planner_service = PlannerService(config)
+        _trainerroad_service = TrainerRoadService(config)
     except Exception as e:
-        logger.error(f"PlannerService failed to initialize: {e}", exc_info=True)
-        _planner_service = None
+        logger.error(f"TrainerRoadService failed to initialize: {e}", exc_info=True)
+        _trainerroad_service = None
 
     try:
         _route_library_service = RouteLibraryService(config)
@@ -239,11 +230,24 @@ def initialize_services():
         logger.error(f"RouteLibraryService failed to initialize: {e}", exc_info=True)
         _route_library_service = None
 
+    # Dependent services receive shared instances
     try:
-        _trainerroad_service = TrainerRoadService(config)
+        _analysis_service = AnalysisService(config, weather_service=_weather_service)
     except Exception as e:
-        logger.error(f"TrainerRoadService failed to initialize: {e}", exc_info=True)
-        _trainerroad_service = None
+        logger.error(f"AnalysisService failed to initialize: {e}", exc_info=True)
+        _analysis_service = None
+
+    try:
+        _commute_service = CommuteService(config, weather_service=_weather_service, trainerroad_service=_trainerroad_service)
+    except Exception as e:
+        logger.error(f"CommuteService failed to initialize: {e}", exc_info=True)
+        _commute_service = None
+
+    try:
+        _planner_service = PlannerService(config, weather_service=_weather_service)
+    except Exception as e:
+        logger.error(f"PlannerService failed to initialize: {e}", exc_info=True)
+        _planner_service = None
 
     if _analysis_service and _commute_service:
         analysis_status = _analysis_service.get_analysis_status()
@@ -1324,6 +1328,89 @@ def delete_plan(plan_id):
 
     storage.write('saved_plans.json', plans)
     return jsonify({'status': 'success'})
+
+
+# ── User Settings ─────────────────────────────────────────────
+
+@app.route('/api/settings', methods=['GET'])
+@limiter.limit("30 per minute")
+def get_settings():
+    """Return current user settings merged with defaults."""
+    try:
+        settings = _settings_service.get_settings()
+        return jsonify({'status': 'success', 'settings': settings})
+    except Exception as e:
+        logger.error(f"Error reading settings: {e}", exc_info=True)
+        return jsonify({'status': 'error', 'message': 'Failed to read settings'}), 500
+
+
+@app.route('/api/settings', methods=['PUT'])
+@limiter.limit("10 per minute")
+def update_settings():
+    """Partial-update user settings. Only known keys are accepted."""
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({'status': 'error', 'message': 'Request body must be a JSON object'}), 400
+
+    try:
+        settings = _settings_service.update_settings(data)
+        return jsonify({'status': 'success', 'settings': settings})
+    except Exception as e:
+        logger.error(f"Error updating settings: {e}", exc_info=True)
+        return jsonify({'status': 'error', 'message': 'Failed to update settings'}), 500
+
+
+@app.route('/api/settings', methods=['DELETE'])
+@limiter.limit("10 per minute")
+def reset_settings():
+    """Reset user settings to defaults."""
+    try:
+        settings = _settings_service.reset_settings()
+        return jsonify({'status': 'success', 'settings': settings})
+    except Exception as e:
+        logger.error(f"Error resetting settings: {e}", exc_info=True)
+        return jsonify({'status': 'error', 'message': 'Failed to reset settings'}), 500
+
+
+@app.route('/api/user/data', methods=['DELETE'])
+@limiter.limit("5 per hour")
+def delete_user_data():
+    """GDPR-compliant endpoint to delete all user data."""
+    data = request.get_json(silent=True) or {}
+    if data.get('confirm') is not True:
+        return jsonify({
+            'status': 'error',
+            'message': 'Confirmation required. Send {"confirm": true} to delete all data.'
+        }), 400
+
+    deleted = []
+
+    for filename in storage.list_files():
+        if storage.delete(filename):
+            deleted.append(f'data/{filename}')
+
+    cache_path = Path('data/cache/activities.json')
+    if cache_path.exists():
+        try:
+            cache_path.unlink()
+            deleted.append('data/cache/activities.json')
+        except Exception as e:
+            logger.error(f"Failed to delete activity cache: {e}")
+
+    credentials_path = Path('config/credentials.json')
+    if credentials_path.exists():
+        try:
+            credentials_path.unlink()
+            deleted.append('config/credentials.json')
+        except Exception as e:
+            logger.error(f"Failed to delete credentials: {e}")
+
+    logger.info(f"GDPR data deletion completed. Deleted: {deleted}")
+
+    return jsonify({
+        'status': 'success',
+        'deleted': deleted
+    })
 
 
 @app.route('/api/status')

@@ -522,45 +522,58 @@
                             </div>
                         </div>
 
-                        <!-- Sticky map + detail content two-column layout (#280) -->
-                        <div class="row mt-4 g-3">
-                            <div class="col-lg-5">
-                                <div style="position: sticky; top: var(--space-3);">
-                                    <div class="card">
-                                        <div class="card-body">
-                                            <h2 class="h5">Map</h2>
-                                            <div id="route-map" style="height: var(--map-height-standard);" aria-label="Interactive route map"></div>
+                        <!-- Toggle for secondary metrics (#64) -->
+                        <div class="text-center mt-3">
+                            <button class="btn btn-outline-secondary btn-sm" type="button"
+                                    id="toggle-secondary-metrics"
+                                    data-bs-toggle="collapse" data-bs-target="#secondary-metrics"
+                                    aria-expanded="false" aria-controls="secondary-metrics">
+                                <i class="bi bi-chevron-down me-1" aria-hidden="true"></i>
+                                <span>Show more</span>
+                            </button>
+                        </div>
+
+                        <div class="collapse" id="secondary-metrics">
+                            <!-- Sticky map + detail content two-column layout (#280) -->
+                            <div class="row mt-4 g-3">
+                                <div class="col-lg-5">
+                                    <div style="position: sticky; top: var(--space-3);">
+                                        <div class="card">
+                                            <div class="card-body">
+                                                <h2 class="h5">Map</h2>
+                                                <div id="route-map" style="height: var(--map-height-standard);" aria-label="Interactive route map"></div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-                            <div class="col-lg-7">
-                                ${weatherMarkup}
-                                ${routeHistoryMarkup}
-                                ${longRideUsesMarkup}
+                                <div class="col-lg-7">
+                                    ${weatherMarkup}
+                                    ${routeHistoryMarkup}
+                                    ${longRideUsesMarkup}
 
-                                <!-- Performance Metrics Charts -->
-                                <div class="card mt-4" id="performance-metrics-card" style="display: none;">
-                                    <div class="card-body">
-                                        <h2 class="h5 mb-4">
-                                            <i class="bi bi-graph-up"></i> Performance Trends
-                                        </h2>
-                                        <div class="row g-4">
-                                            <div class="col-12 col-lg-6">
-                                                <h3 class="h6 text-muted mb-3">Average Speed Over Time</h3>
-                                                <canvas id="speed-chart" style="max-height: var(--chart-height);"></canvas>
-                                            </div>
-                                            <div class="col-12 col-lg-6">
-                                                <h3 class="h6 text-muted mb-3">Duration Trends</h3>
-                                                <canvas id="duration-chart" style="max-height: var(--chart-height);"></canvas>
-                                            </div>
-                                            <div class="col-12 col-lg-6">
-                                                <h3 class="h6 text-muted mb-3">Heart Rate (if available)</h3>
-                                                <canvas id="heartrate-chart" style="max-height: var(--chart-height);"></canvas>
-                                            </div>
-                                            <div class="col-12 col-lg-6">
-                                                <h3 class="h6 text-muted mb-3">Power Output (if available)</h3>
-                                                <canvas id="power-chart" style="max-height: var(--chart-height);"></canvas>
+                                    <!-- Performance Metrics Charts -->
+                                    <div class="card mt-4" id="performance-metrics-card" style="display: none;">
+                                        <div class="card-body">
+                                            <h2 class="h5 mb-4">
+                                                <i class="bi bi-graph-up"></i> Performance Trends
+                                            </h2>
+                                            <div class="row g-4">
+                                                <div class="col-12 col-lg-6">
+                                                    <h3 class="h6 text-muted mb-3">Average Speed Over Time</h3>
+                                                    <canvas id="speed-chart" style="max-height: var(--chart-height);"></canvas>
+                                                </div>
+                                                <div class="col-12 col-lg-6">
+                                                    <h3 class="h6 text-muted mb-3">Duration Trends</h3>
+                                                    <canvas id="duration-chart" style="max-height: var(--chart-height);"></canvas>
+                                                </div>
+                                                <div class="col-12 col-lg-6">
+                                                    <h3 class="h6 text-muted mb-3">Heart Rate (if available)</h3>
+                                                    <canvas id="heartrate-chart" style="max-height: var(--chart-height);"></canvas>
+                                                </div>
+                                                <div class="col-12 col-lg-6">
+                                                    <h3 class="h6 text-muted mb-3">Power Output (if available)</h3>
+                                                    <canvas id="power-chart" style="max-height: var(--chart-height);"></canvas>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -570,21 +583,53 @@
                     </section>
                 `;
 
-                if (Array.isArray(route.coordinates) && route.coordinates.length > 1) {
-                    renderMap(route.coordinates);
-                } else {
-                    const mapCard = byId('route-map');
-                    if (mapCard) {
-                        mapCard.outerHTML = '<div class="alert alert-warning mt-2 mb-0">Map unavailable for this route.</div>';
+                // ── Progressive disclosure toggle (#64) ──
+                const collapseEl = byId('secondary-metrics');
+                const toggleBtn = byId('toggle-secondary-metrics');
+                let secondaryRendered = false;
+
+                function renderSecondaryContent() {
+                    if (secondaryRendered) {
+                        // Invalidate Leaflet size after re-show
+                        if (mapInstance) mapInstance.invalidateSize();
+                        return;
                     }
+                    secondaryRendered = true;
+
+                    if (Array.isArray(route.coordinates) && route.coordinates.length > 1) {
+                        renderMap(route.coordinates);
+                    } else {
+                        const mapCard = byId('route-map');
+                        if (mapCard) {
+                            mapCard.outerHTML = '<div class="alert alert-warning mt-2 mb-0">Map unavailable for this route.</div>';
+                        }
+                    }
+
+                    renderUsesTable(route);
+                    renderHistoryTable(route);
+                    renderPerformanceCharts(route);
                 }
 
-                // Render sortable tables
-                renderUsesTable(route);
-                renderHistoryTable(route);
+                if (collapseEl && toggleBtn) {
+                    collapseEl.addEventListener('shown.bs.collapse', function() {
+                        toggleBtn.querySelector('span').textContent = 'Show less';
+                        toggleBtn.querySelector('i').classList.replace('bi-chevron-down', 'bi-chevron-up');
+                        toggleBtn.setAttribute('aria-expanded', 'true');
+                        localStorage.setItem('showSecondaryMetrics', '1');
+                        renderSecondaryContent();
+                    });
+                    collapseEl.addEventListener('hidden.bs.collapse', function() {
+                        toggleBtn.querySelector('span').textContent = 'Show more';
+                        toggleBtn.querySelector('i').classList.replace('bi-chevron-up', 'bi-chevron-down');
+                        toggleBtn.setAttribute('aria-expanded', 'false');
+                        localStorage.setItem('showSecondaryMetrics', '0');
+                    });
 
-                // Render performance charts
-                renderPerformanceCharts(route);
+                    // Restore preference
+                    if (localStorage.getItem('showSecondaryMetrics') === '1') {
+                        const bsCollapse = new bootstrap.Collapse(collapseEl, { toggle: true });
+                    }
+                }
 
                 announce(`Loaded route details for ${route.name}`);
 
