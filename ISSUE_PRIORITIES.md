@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-06-21 19:33:43 UTC / 2026-06-21 14:33:43 CDT
+**Last Updated:** 2026-06-21 21:15:00 UTC / 2026-06-21 16:15:00 CDT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -22,9 +22,12 @@ This file reflects the current state of GitHub issues organized by release miles
 **No P0 issues** ✅
 
 ### 🔴 P1 - HIGH
-**No P1 issues** ✅
+- #340 - TrainerRoad frontend UI: settings, dashboard workout strip, hero card fit alert ✅ **DEPLOYED**
+- #338 - Weather-aware indoor/outdoor workout preference with user-settable thresholds ✅ **DEPLOYED**
+- #339 - Suggest non-commute routes for structured outdoor workouts
 
 ### 🟡 P2 - MEDIUM
+- #341 - Dashboard shows commute, workout ride, and indoor options when workout is scheduled (depends on #339)
 - #330 - Complete ntfy.sh push notification integration
 - #322 - Unify route comparison pipelines between commute and long ride analyzers
 - #307 - perf: reduce startup cost and per-request overhead on Pi
