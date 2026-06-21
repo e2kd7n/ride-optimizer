@@ -1861,3 +1861,44 @@ h5.card-title {
     .workout-strip-icon { font-size: var(--font-size-base); }
     .workout-strip-note { width: 100%; order: 10; }
 }
+
+/* Hourly Forecast Strip */
+.hourly-strip {
+    display: flex;
+    gap: var(--space-1);
+    overflow-x: auto;
+    padding-bottom: var(--space-1);
+    -webkit-overflow-scrolling: touch;
+}
+
+.hourly-cell {
+    flex: 0 0 auto;
+    min-width: 56px;
+    text-align: center;
+    padding: var(--space-1) var(--space-2);
+    border-radius: 6px;
+    background: var(--light-gray);
+    font-size: var(--font-size-xs);
+    line-height: 1.4;
+}
+
+.hourly-cell.hourly-commute {
+    background: rgba(74, 95, 213, 0.1);
+    border: 1px solid rgba(74, 95, 213, 0.3);
+}
+
+.hourly-time {
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 2px;
+}
+
+.hourly-temp {
+    font-weight: 700;
+    font-size: var(--font-size-sm);
+}
+
+.hourly-wind,
+.hourly-precip {
+    font-size: 0.65rem;
+}

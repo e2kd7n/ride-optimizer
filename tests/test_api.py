@@ -243,6 +243,135 @@ class TestSavedPlansAPI:
         assert response.status_code == 400
 
 
+@pytest.mark.unit
+class TestHourlyForecastAPI:
+    """Tests for /api/weather/hourly endpoint."""
+
+    def test_hourly_forecast_returns_expected_structure(self, client, mock_services):
+        mock_services['weather'].fetcher.get_hourly_forecast.return_value = [
+            {
+                'timestamp': '2026-06-21T07:00',
+                'temp_c': 20.0,
+                'wind_speed_kph': 15.0,
+                'wind_gust_kph': 20.0,
+                'wind_direction_deg': 180,
+                'precipitation_prob': 10,
+            },
+            {
+                'timestamp': '2026-06-21T08:00',
+                'temp_c': 22.0,
+                'wind_speed_kph': 12.0,
+                'wind_gust_kph': 16.0,
+                'wind_direction_deg': 200,
+                'precipitation_prob': 5,
+            },
+            {
+                'timestamp': '2026-06-21T12:00',
+                'temp_c': 28.0,
+                'wind_speed_kph': 10.0,
+                'wind_gust_kph': 14.0,
+                'wind_direction_deg': 220,
+                'precipitation_prob': 0,
+            },
+        ]
+
+        response = client.get('/api/weather/hourly')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['status'] == 'success'
+        assert len(data['hours']) == 3
+        assert data['commute_hours']['morning'] == [7, 8]
+        assert data['commute_hours']['evening'] == [16, 17, 18]
+
+        h0 = data['hours'][0]
+        assert h0['time'] == '07:00'
+        assert h0['hour'] == 7
+        assert h0['temp_f'] == 68
+        assert h0['is_commute_hour'] is True
+
+        h2 = data['hours'][2]
+        assert h2['hour'] == 12
+        assert h2['is_commute_hour'] is False
+
+    def test_hourly_forecast_unavailable(self, client, mock_services):
+        mock_services['weather'].fetcher.get_hourly_forecast.return_value = None
+        response = client.get('/api/weather/hourly')
+        assert response.status_code == 503
+
+    def test_hourly_forecast_with_explicit_coords(self, client, mock_services):
+        mock_services['weather'].fetcher.get_hourly_forecast.return_value = []
+        response = client.get('/api/weather/hourly?lat=51.5&lon=-0.1')
+        mock_services['weather'].fetcher.get_hourly_forecast.assert_called_once_with(
+            51.5, -0.1, hours=12
+        )
+
+
+@pytest.mark.unit
+class TestGracefulDegradation:
+    """Test that endpoints return 503 when their service is unavailable."""
+
+    def _mock_init_with_null_service(self, monkeypatch, service_attr):
+        monkeypatch.setattr('launch.initialize_services', lambda: None)
+        monkeypatch.setattr('launch._services_initialized', True)
+        monkeypatch.setattr(f'launch.{service_attr}', None)
+
+    def test_status_reports_service_health(self, client, mock_services):
+        response = client.get('/api/status')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert 'services' in data
+        for svc in ('analysis', 'commute', 'weather', 'planner', 'route_library', 'trainerroad'):
+            assert svc in data['services']
+            assert data['services'][svc] in ('available', 'unavailable')
+
+    def test_status_reports_available_services(self, client, mock_services):
+        response = client.get('/api/status')
+        data = response.get_json()
+        assert data['services']['analysis'] == 'available'
+        assert data['services']['weather'] == 'available'
+        assert data['services']['commute'] == 'available'
+
+    def test_weather_503_when_service_unavailable(self, client, mock_services, monkeypatch):
+        self._mock_init_with_null_service(monkeypatch, '_weather_service')
+        response = client.get('/api/weather?lat=40.7&lon=-74.0')
+        assert response.status_code == 503
+        data = response.get_json()
+        assert data['status'] == 'error'
+        assert 'Weather' in data['message']
+
+    def test_recommendation_503_when_service_unavailable(self, client, mock_services, monkeypatch):
+        self._mock_init_with_null_service(monkeypatch, '_commute_service')
+        response = client.get('/api/recommendation')
+        assert response.status_code == 503
+        data = response.get_json()
+        assert data['status'] == 'error'
+        assert 'Commute' in data['message']
+
+    def test_routes_503_when_service_unavailable(self, client, mock_services, monkeypatch):
+        self._mock_init_with_null_service(monkeypatch, '_route_library_service')
+        response = client.get('/api/routes')
+        assert response.status_code == 503
+        data = response.get_json()
+        assert data['status'] == 'error'
+        assert 'Route Library' in data['message']
+
+    def test_trainerroad_503_when_service_unavailable(self, client, mock_services, monkeypatch):
+        self._mock_init_with_null_service(monkeypatch, '_trainerroad_service')
+        response = client.get('/api/trainerroad/status')
+        assert response.status_code == 503
+        data = response.get_json()
+        assert data['status'] == 'error'
+        assert 'TrainerRoad' in data['message']
+
+    def test_analysis_503_when_unavailable(self, client, mock_services, monkeypatch):
+        self._mock_init_with_null_service(monkeypatch, '_analysis_service')
+        response = client.get('/api/status')
+        assert response.status_code == 503
+        data = response.get_json()
+        assert data['status'] == 'error'
+        assert 'Analysis' in data['message']
+
+
 @pytest.mark.integration
 class TestLaunchInitialization:
     """Light integration coverage for launch service initialization."""

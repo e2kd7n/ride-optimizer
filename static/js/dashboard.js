@@ -21,7 +21,8 @@ async function loadDashboard() {
         loadWorkoutStrip(),
         loadRecommendation(),
         loadRouteStatus(),
-        loadCommuteWindows()
+        loadCommuteWindows(),
+        loadHourlyForecast()
     ]);
 }
 
@@ -850,6 +851,48 @@ async function loadCommuteWindows() {
     } catch (error) {
         console.error('Failed to load commute windows:', error);
         container.innerHTML = window.renderErrorState('Forecast unavailable.', { small: true, retry: 'loadCommuteWindows()' });
+    }
+}
+
+async function loadHourlyForecast() {
+    const container = document.getElementById('hourly-forecast');
+    if (!container) return;
+
+    try {
+        const data = await window.apiClient.getHourlyForecast();
+
+        if (data.status !== 'success' || !data.hours || data.hours.length === 0) {
+            container.innerHTML = window.renderEmptyState('Hourly forecast unavailable.', '', 'bi-clock');
+            return;
+        }
+
+        const esc = window.escapeHtml;
+
+        const hourCells = data.hours.map(h => {
+            const tempClass = getTempColorClass(h.temp_f);
+            const windInfo = getWindInfo(h.wind_speed_mph);
+            const precipColor = h.precipitation_prob >= 60 ? 'text-danger'
+                              : h.precipitation_prob >= 30 ? 'text-warning'
+                              : 'text-muted';
+            const commuteClass = h.is_commute_hour ? 'hourly-commute' : '';
+
+            return `
+                <div class="hourly-cell ${commuteClass}">
+                    <div class="hourly-time">${esc(h.time)}</div>
+                    <div class="hourly-temp ${tempClass}">${h.temp_f}°</div>
+                    <div class="hourly-wind ${windInfo.color}">
+                        <i class="bi bi-wind" aria-hidden="true"></i> ${h.wind_speed_mph}
+                    </div>
+                    ${h.precipitation_prob > 0
+                        ? `<div class="hourly-precip ${precipColor}"><i class="bi bi-droplet" aria-hidden="true"></i> ${h.precipitation_prob}%</div>`
+                        : '<div class="hourly-precip text-muted">-</div>'}
+                </div>`;
+        }).join('');
+
+        container.innerHTML = `<div class="hourly-strip">${hourCells}</div>`;
+    } catch (error) {
+        console.error('Failed to load hourly forecast:', error);
+        container.innerHTML = window.renderErrorState('Hourly forecast unavailable.', { small: true, retry: 'loadHourlyForecast()' });
     }
 }
 
