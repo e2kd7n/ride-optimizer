@@ -1037,16 +1037,18 @@
                     ? new Date(plan.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
                     : '';
                 const dist = plan.distance ? window.formatDistance(plan.distance) : '';
-                return `<div class="d-flex align-items-center justify-content-between py-1 border-bottom" data-plan-id="${plan.id}">
+                const safeName = escapeHtml(plan.route_name || plan.route_id);
+                const safeId = escapeHtml(plan.id);
+                return `<div class="d-flex align-items-center justify-content-between py-1 border-bottom" data-plan-id="${safeId}">
                     <div class="d-flex align-items-center gap-2 flex-grow-1 overflow-hidden">
                         <a href="/route-detail.html?id=${encodeURIComponent(plan.route_id)}${plan.route_type ? '&type=' + encodeURIComponent(plan.route_type) : ''}"
-                           class="text-decoration-none text-truncate fw-medium">${plan.route_name || plan.route_id}</a>
+                           class="text-decoration-none text-truncate fw-medium">${safeName}</a>
                         ${dist ? `<span class="text-muted small">${dist}</span>` : ''}
-                        ${plan.note ? `<span class="text-muted small fst-italic text-truncate">${plan.note}</span>` : ''}
+                        ${plan.note ? `<span class="text-muted small fst-italic text-truncate">${escapeHtml(plan.note)}</span>` : ''}
                     </div>
                     <div class="d-flex align-items-center gap-2 flex-shrink-0">
                         <span class="text-muted small">${date}</span>
-                        <button class="btn btn-sm btn-outline-danger py-0 px-1 delete-plan-btn" data-plan-id="${plan.id}" title="Remove plan">
+                        <button class="btn btn-sm btn-outline-danger py-0 px-1 delete-plan-btn" data-plan-id="${safeId}" title="Remove plan">
                             <i class="bi bi-x"></i>
                         </button>
                     </div>
