@@ -80,7 +80,7 @@
                             <i class="bi bi-signpost-2" aria-hidden="true"></i> Long
                         </button>
                     </div>
-                    <div class="flex-grow-1" style="min-width: 160px; max-width: 320px;">
+                    <div class="flex-grow-1" style="min-width: 120px; max-width: 320px;">
                         <input type="text" id="search-query" class="form-control form-control-sm"
                                placeholder="Search routes…" aria-label="Search routes">
                     </div>
@@ -229,25 +229,25 @@
             <!-- Map (sticky) -->
             <div class="col-lg-7">
                 <div class="card map-panel-sticky">
-                    <div class="card-header d-flex justify-content-between align-items-center py-2">
+                    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2 py-2">
                         <span class="small fw-semibold">
                             <i class="bi bi-geo-alt" aria-hidden="true"></i> Map
                         </span>
-                        <div class="d-flex align-items-center gap-2">
-                            <select id="color-by" class="form-select form-select-sm" style="width: auto; min-width: 120px;" aria-label="Color routes by">
+                        <div class="d-flex flex-wrap align-items-center gap-2">
+                            <select id="color-by" class="form-select form-select-sm" style="width: auto; min-width: 100px;" aria-label="Color routes by">
                                 <option value="default">Color: Default</option>
                                 <option value="distance">Color: Distance</option>
                                 <option value="recency">Color: Recency</option>
                             </select>
                             <div class="btn-group btn-group-sm" role="group" aria-label="Map controls">
                                 <button type="button" id="show-all-btn" class="btn btn-outline-primary" title="Show all filtered routes on map">
-                                    <i class="bi bi-layers" aria-hidden="true"></i> Show All
+                                    <i class="bi bi-layers" aria-hidden="true"></i><span class="d-none d-sm-inline"> Show All</span>
                                 </button>
                                 <button type="button" id="fit-all-btn" class="btn btn-outline-secondary" title="Fit all routes in view">
-                                    <i class="bi bi-arrows-angle-contract" aria-hidden="true"></i> Fit All
+                                    <i class="bi bi-arrows-angle-contract" aria-hidden="true"></i><span class="d-none d-sm-inline"> Fit All</span>
                                 </button>
                                 <button type="button" id="clear-map-btn" class="btn btn-outline-secondary" title="Clear all routes from map">
-                                    <i class="bi bi-x-circle" aria-hidden="true"></i> Clear
+                                    <i class="bi bi-x-circle" aria-hidden="true"></i><span class="d-none d-sm-inline"> Clear</span>
                                 </button>
                             </div>
                         </div>
@@ -283,6 +283,26 @@
             <span>Settings</span>
         </button>
     </nav>
+
+    <!-- Route Uses Modal -->
+    <div class="modal fade" id="route-uses-modal" tabindex="-1" aria-labelledby="route-uses-modal-title" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="route-uses-modal-title">Activities</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="route-uses-modal-body">
+                    <div class="text-center py-3">
+                        <div class="spinner-border spinner-border-sm text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <span class="ms-2 text-muted">Loading activities...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <footer class="mt-3 bg-light">
         <div class="container text-center text-muted">

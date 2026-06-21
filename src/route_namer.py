@@ -175,9 +175,14 @@ class RouteNamer:
         try:
             print(f"  Naming route {route_id} ({direction})...", end='', flush=True)
             
+            # Detect route type (loop, out-and-back, point-to-point)
+            route_type = self._detect_route_type(coordinates)
+
             # Multi-strategy naming approach
             route_info = self._analyze_route_geography(coordinates)
-            
+            route_info['route_type'] = route_type
+            route_info['coordinates'] = coordinates
+
             # Generate name based on available information
             name = self._generate_descriptive_name(route_info, route_id, direction)
             
@@ -326,6 +331,80 @@ class RouteNamer:
         
         return turn_points
     
+    def _calculate_distance_km(self, point1: Tuple[float, float],
+                              point2: Tuple[float, float]) -> float:
+        """
+        Calculate approximate distance between two GPS points in kilometers
+        using the Haversine formula.
+
+        Args:
+            point1: (lat, lon) tuple
+            point2: (lat, lon) tuple
+
+        Returns:
+            Distance in kilometers
+        """
+        import math
+
+        R = 6371  # Earth's radius in km
+        lat1, lon1 = math.radians(point1[0]), math.radians(point1[1])
+        lat2, lon2 = math.radians(point2[0]), math.radians(point2[1])
+
+        dlat = lat2 - lat1
+        dlon = lon2 - lon1
+
+        a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+        return R * c
+
+    def _detect_route_type(self, coordinates: List[Tuple[float, float]],
+                           loop_threshold_km: float = 0.5) -> str:
+        """
+        Classify a route as 'loop', 'out-and-back', or 'point-to-point'.
+
+        Args:
+            coordinates: List of (lat, lon) tuples
+            loop_threshold_km: Max distance between start and end to consider a loop
+
+        Returns:
+            One of 'loop', 'out-and-back', 'point-to-point'
+        """
+        if len(coordinates) < 4:
+            return 'point-to-point'
+
+        start = coordinates[0]
+        end = coordinates[-1]
+        start_end_dist = self._calculate_distance_km(start, end)
+
+        # If start and end are close, it's either a loop or out-and-back
+        if start_end_dist <= loop_threshold_km:
+            # Check for out-and-back: compare first half to reversed second half
+            mid_idx = len(coordinates) // 2
+            midpoint = coordinates[mid_idx]
+
+            # Out-and-back routes reach a far point then retrace
+            # Check if midpoint is significantly farther from start than start-end distance
+            mid_dist = self._calculate_distance_km(start, midpoint)
+
+            if mid_dist > 1.0:
+                # Check if the second half roughly retraces the first half
+                # Sample a few points from each half and compare
+                quarter_idx = len(coordinates) // 4
+                three_quarter_idx = 3 * len(coordinates) // 4
+
+                q1_point = coordinates[quarter_idx]
+                q3_point = coordinates[three_quarter_idx]
+
+                # If the quarter and three-quarter points are close, it's out-and-back
+                retrace_dist = self._calculate_distance_km(q1_point, q3_point)
+                if retrace_dist < mid_dist * 0.3:
+                    return 'out-and-back'
+
+            return 'loop'
+
+        return 'point-to-point'
+
     def _calculate_bearing(self, point1: Tuple[float, float],
                           point2: Tuple[float, float]) -> float:
         """
@@ -606,16 +685,23 @@ class RouteNamer:
     
     def _generate_descriptive_name(self, route_info: Dict, route_id: str, direction: str) -> str:
         """
-        Generate descriptive name from route segments.
-        
-        Priority:
-        1. Full path (3+ segments): "Start → Main → End"
-        2. Main + connection (2 segments): "Main via Connection"
-        3. Single route: "Via Main"
-        4. Fallback to legacy naming strategies
+        Generate descriptive name from route segments using Start -> Main -> End format.
+
+        Naming rules by route type:
+        - Loop (start near end): "Loop via Main" or "Loop via Main + Secondary"
+        - Out-and-back: "Main to Turnaround and back"
+        - Point-to-point with 3+ segments: "Start -> Main -> End"
+        - Point-to-point with 2 segments: "Start -> End" or "Main via Connection"
+        - Single segment: "Via Main"
+        - Fallback: legacy naming strategies
+
+        Edge cases:
+        - If main street equals start or end, it is omitted to avoid repetition
+        - Short/unnamed/access-path segments are filtered out
         """
         segments = route_info.get('segments', [])
-        
+        route_type = route_info.get('route_type', 'point-to-point')
+
         # Try segment-based naming first (if enabled)
         if self.enable_segment_naming and segments:
             # Filter out segments that are:
@@ -626,52 +712,113 @@ class RouteNamer:
                                    if s.get('street')
                                    and s.get('length_pct', 0) >= self.min_segment_length_pct
                                    and not self._is_access_path(s.get('street', ''))]
-            
-            if len(significant_segments) >= 3:
-                # Strategy 1: Full path - but avoid duplicates
-                # Get unique streets in order, preserving the path
-                unique_streets = []
-                seen = set()
-                for seg in significant_segments:
-                    street = seg['street']
-                    if street not in seen:
-                        unique_streets.append(seg)
-                        seen.add(street)
-                
-                # If we have 3+ unique streets, show start → middle → end
-                if len(unique_streets) >= 3:
-                    start = unique_streets[0]['street']
-                    # Pick the longest middle segment
-                    main = max(unique_streets[1:-1], key=lambda s: s['length_pct'])['street']
-                    end = unique_streets[-1]['street']
-                    return f"{start} → {main} → {end}"
-                elif len(unique_streets) == 2:
-                    # Only 2 unique streets, use simpler format
-                    return f"{unique_streets[0]['street']} → {unique_streets[1]['street']}"
-                else:
-                    # Only 1 unique street
-                    return f"Via {unique_streets[0]['street']}"
-            
-            elif len(significant_segments) == 2:
-                # Strategy 2: Main + connection
-                # Check if they're the same street (duplicate)
-                if significant_segments[0]['street'] == significant_segments[1]['street']:
-                    return f"Via {significant_segments[0]['street']}"
-                
-                main = max(significant_segments, key=lambda s: s['length_pct'])
-                connection = min(significant_segments, key=lambda s: s['length_pct'])
-                
-                if main['length_pct'] > 60:
-                    return f"{main['street']} via {connection['street']}"
-                else:
-                    return f"{significant_segments[0]['street']} → {significant_segments[1]['street']}"
-            
-            elif len(significant_segments) == 1:
-                # Strategy 3: Single route
-                return f"Via {significant_segments[0]['street']}"
-        
+
+            # Get unique streets in order, preserving the path
+            unique_streets = []
+            seen: Set[str] = set()
+            for seg in significant_segments:
+                street = seg['street']
+                if street not in seen:
+                    unique_streets.append(seg)
+                    seen.add(street)
+
+            if unique_streets:
+                # Handle loop routes (start ~= end)
+                if route_type == 'loop':
+                    return self._format_loop_name(unique_streets)
+
+                # Handle out-and-back routes
+                if route_type == 'out-and-back':
+                    return self._format_out_and_back_name(unique_streets)
+
+                # Point-to-point naming
+                return self._format_point_to_point_name(unique_streets, significant_segments)
+
         # Fallback to legacy naming strategies
         return self._generate_descriptive_name_legacy(route_info, route_id, direction)
+
+    def _format_loop_name(self, unique_streets: List[Dict]) -> str:
+        """
+        Format name for a loop route (start near end).
+
+        Returns "Loop via Main" or "Loop via Main + Secondary" when there are
+        multiple significant streets.
+        """
+        if len(unique_streets) == 1:
+            return f"Loop via {unique_streets[0]['street']}"
+
+        # Pick the longest street as the main feature
+        main = max(unique_streets, key=lambda s: s['length_pct'])
+        others = [s for s in unique_streets if s['street'] != main['street']]
+
+        if others:
+            # Add the second-longest street for context
+            secondary = max(others, key=lambda s: s['length_pct'])
+            return f"Loop via {main['street']} + {secondary['street']}"
+
+        return f"Loop via {main['street']}"
+
+    def _format_out_and_back_name(self, unique_streets: List[Dict]) -> str:
+        """
+        Format name for an out-and-back route.
+
+        Returns "Main to Turnaround and back" using the dominant street and
+        the street at the turnaround point (last unique street encountered
+        before the route retraces).
+        """
+        if len(unique_streets) == 1:
+            return f"Via {unique_streets[0]['street']} and back"
+
+        # The turnaround point is roughly the last unique street in the first half
+        # (since the second half retraces, its streets duplicate the first half)
+        main = max(unique_streets, key=lambda s: s['length_pct'])
+        turnaround = unique_streets[-1]
+
+        if turnaround['street'] == main['street']:
+            # Turnaround is on the main street itself
+            if len(unique_streets) >= 2:
+                turnaround = unique_streets[-2] if unique_streets[-2]['street'] != main['street'] else unique_streets[0]
+            else:
+                return f"Via {main['street']} and back"
+
+        return f"{main['street']} to {turnaround['street']} and back"
+
+    def _format_point_to_point_name(self, unique_streets: List[Dict],
+                                     significant_segments: List[Dict]) -> str:
+        """
+        Format name for a point-to-point route using Start -> Main -> End.
+
+        Handles deduplication: if the main street is the same as start or end,
+        it falls back to "Start -> End".
+        """
+        if len(unique_streets) >= 3:
+            start = unique_streets[0]['street']
+            # Pick the longest middle segment as the main street
+            main = max(unique_streets[1:-1], key=lambda s: s['length_pct'])['street']
+            end = unique_streets[-1]['street']
+
+            # Deduplicate: if main equals start or end, use simpler format
+            if main == start or main == end:
+                return f"{start} → {end}"
+
+            return f"{start} → {main} → {end}"
+
+        elif len(unique_streets) == 2:
+            # Check if they're the same street (shouldn't happen after dedup, but safety)
+            if unique_streets[0]['street'] == unique_streets[1]['street']:
+                return f"Via {unique_streets[0]['street']}"
+
+            main = max(significant_segments, key=lambda s: s['length_pct'])
+            connection = min(significant_segments, key=lambda s: s['length_pct'])
+
+            if main['length_pct'] > 60:
+                return f"{main['street']} via {connection['street']}"
+            else:
+                return f"{unique_streets[0]['street']} → {unique_streets[1]['street']}"
+
+        else:
+            # Single unique street
+            return f"Via {unique_streets[0]['street']}"
     
     def _generate_descriptive_name_legacy(self, route_info: Dict, route_id: str, direction: str) -> str:
         """
