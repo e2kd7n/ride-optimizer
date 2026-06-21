@@ -442,6 +442,7 @@ class TrainerRoadService:
             'min_duration_minutes': None,
             'max_duration_minutes': None,
             'preferred_intensity': None,
+            'indoor_preferred': False,
             'indoor_fallback': False,
             'notes': []
         }
@@ -450,11 +451,11 @@ class TrainerRoadService:
             constraints['min_duration_minutes'] = duration or 60
             constraints['max_duration_minutes'] = (duration or 60) + 30
             constraints['preferred_intensity'] = 'low'
-            constraints['indoor_fallback'] = False
+            constraints['indoor_preferred'] = False
             constraints['notes'].append('Can extend commute for endurance work')
 
         elif wtype in ['Threshold', 'VO2Max']:
-            constraints['indoor_fallback'] = True
+            constraints['indoor_preferred'] = True
             constraints['preferred_intensity'] = 'high'
             constraints['notes'].append('High-intensity workout - consider indoor trainer')
 

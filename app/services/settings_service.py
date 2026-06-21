@@ -24,6 +24,8 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     'show_elevation': True,
     'auto_save': True,
     'show_secondary_metrics': True,
+    'outdoor_min_temp_f': 40,
+    'outdoor_allow_rain': False,
 }
 
 
@@ -64,9 +66,12 @@ class SettingsService:
         for key, default_val in DEFAULT_SETTINGS.items():
             if key in partial:
                 value = partial[key]
-                # Type-check: bool fields must be bool, string fields must be str
+                # Type-check: bool before int (bool is subclass of int in Python)
                 if isinstance(default_val, bool):
                     if isinstance(value, bool):
+                        current[key] = value
+                elif isinstance(default_val, int):
+                    if isinstance(value, int) and not isinstance(value, bool):
                         current[key] = value
                 elif isinstance(default_val, str):
                     if isinstance(value, str) and len(value) <= 50:
