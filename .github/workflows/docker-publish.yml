@@ -13,6 +13,8 @@ on:
       - 'wsgi.py'
       - 'gunicorn.conf.py'
       - 'requirements.txt'
+      - 'requirements-dev.txt'
+      - 'tests/**'
       - 'Dockerfile'
       - '.github/workflows/docker-publish.yml'
   pull_request:
