@@ -315,9 +315,45 @@
             </div>
         </div>
     </nav>
-    
+
+    <!-- How It Works Modal -->
+    <div class="modal fade" id="howItWorksModal" tabindex="-1"
+         aria-labelledby="howItWorksModalLabel" aria-modal="true" role="dialog">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="howItWorksModalLabel">
+                        <i class="bi bi-info-circle me-2" aria-hidden="true"></i>How It Works
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Ride Optimizer analyzes your Strava cycling activities to find your best commute routes and recommend rides based on weather, wind, and your history.</p>
+                    <h6 class="mt-3 mb-2">Key Features</h6>
+                    <ul class="list-unstyled">
+                        <li class="mb-2"><i class="bi bi-graph-up text-primary me-2" aria-hidden="true"></i><strong>Route Analysis</strong> &mdash; Automatically groups your rides by similarity and surfaces your best options.</li>
+                        <li class="mb-2"><i class="bi bi-cloud-sun text-primary me-2" aria-hidden="true"></i><strong>Weather-Aware Recommendations</strong> &mdash; Factors in temperature, wind, and precipitation to pick the ideal route for today.</li>
+                        <li class="mb-2"><i class="bi bi-signpost-2 text-primary me-2" aria-hidden="true"></i><strong>Commute Optimization</strong> &mdash; Recommends the best commute route and departure window based on current conditions.</li>
+                        <li class="mb-2"><i class="bi bi-bicycle text-primary me-2" aria-hidden="true"></i><strong>Long Ride Planning</strong> &mdash; Scores weekend and long rides against multi-day forecasts to find the best day to ride.</li>
+                    </ul>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Main Content -->
     <main id="main-content" class="container mt-2 mb-3" role="main">
+            <div class="d-flex justify-content-end mb-1">
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        data-bs-toggle="modal" data-bs-target="#howItWorksModal"
+                        aria-label="How It Works">
+                    <i class="bi bi-info-circle me-1" aria-hidden="true"></i>How It Works
+                </button>
+            </div>
+
             <!-- Weather Banner (full-width) -->
             <div class="mb-2">
                 <div id="weather-banner" class="weather-banner">
@@ -485,8 +521,38 @@
             setInterval(async () => {
                 await loadDashboard();
             }, 5 * 60 * 1000);
-            
-            console.log('âœ“ Dashboard initialized');
+
+            // “What's New” toast on first visit
+            (function showWhatsNew() {
+                var WHATS_NEW_KEY = 'rideOptimizer_whatsNew_v0.14.0';
+                if (localStorage.getItem(WHATS_NEW_KEY)) return;
+                localStorage.setItem(WHATS_NEW_KEY, '1');
+                var toastEl = document.createElement('div');
+                toastEl.className = 'toast show position-fixed bottom-0 end-0 m-3';
+                toastEl.setAttribute('role', 'alert');
+                toastEl.setAttribute('aria-live', 'polite');
+                toastEl.style.zIndex = '1090';
+                toastEl.style.maxWidth = '340px';
+                toastEl.innerHTML =
+                    '<div class=”toast-header”>' +
+                        '<i class=”bi bi-stars text-primary me-2” aria-hidden=”true”></i>' +
+                        '<strong class=”me-auto”>What\'s New in v0.14.0</strong>' +
+                        '<button type=”button” class=”btn-close” aria-label=”Close”></button>' +
+                    '</div>' +
+                    '<div class=”toast-body”>' +
+                        '<ul class=”mb-0 ps-3 small”>' +
+                            '<li>Hourly forecast on dashboard</li>' +
+                            '<li>Saved plans for favorite rides</li>' +
+                            '<li>Route comparison side-by-side</li>' +
+                            '<li>Accessibility improvements</li>' +
+                        '</ul>' +
+                    '</div>';
+                document.body.appendChild(toastEl);
+                toastEl.querySelector('.btn-close').addEventListener('click', function () { toastEl.remove(); });
+                setTimeout(function () { if (toastEl.parentNode) toastEl.remove(); }, 12000);
+            })();
+
+            console.log('âœ” Dashboard initialized');
         });
     </script>
 </body>

@@ -16,7 +16,6 @@ from datetime import datetime, timedelta
 import folium
 
 from src.long_ride_analyzer import LongRideAnalyzer, LongRide, RideRecommendation
-from src.weather_fetcher import WeatherFetcher
 from src.config import Config
 from src.location_finder import Location
 from app.services.weather_service import WeatherService
@@ -91,16 +90,17 @@ class PlannerService:
     - Interactive map-based ride discovery
     """
     
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, weather_service: Optional['WeatherService'] = None):
         """
         Initialize planner service.
-        
+
         Args:
             config: Configuration object
+            weather_service: Optional pre-built WeatherService instance for dependency injection
         """
         self.config = config
-        self.weather_fetcher = WeatherFetcher()
-        self.weather_service = WeatherService(config)
+        self.weather_service = weather_service or WeatherService(config)
+        self.weather_fetcher = self.weather_service.fetcher
         self._long_rides: Optional[List[LongRide]] = None
     
     def initialize(self, long_rides: List[LongRide]):
