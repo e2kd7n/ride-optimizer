@@ -43,7 +43,6 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav">
                     <li class="nav-item"><a class="nav-link" href="/"><i class="bi bi-house-door" aria-hidden="true"></i> Home</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/commute.html"><i class="bi bi-signpost-2" aria-hidden="true"></i> Commute</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/routes.html" aria-current="page"><i class="bi bi-map" aria-hidden="true"></i> Routes</a></li>
                     <li class="nav-item"><a class="nav-link" href="/reports.html"><i class="bi bi-bar-chart-line" aria-hidden="true"></i> Reports</a></li>
                     <li class="nav-item"><a class="nav-link" href="/weather.html"><i class="bi bi-cloud-sun" aria-hidden="true"></i> Weather</a></li>
@@ -457,7 +456,7 @@
 
                 byId('route-details').innerHTML = `
                     <section aria-labelledby="route-title">
-                        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3 mb-4">
+                        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3 mb-3">
                             <div>
                                 <h1 id="route-title" class="mb-2">${route.name}</h1>
                                 <div>
@@ -484,98 +483,86 @@
                         </div>
 
                         <div class="row g-3">
-                            <div class="col-6 col-lg-3">
-                                <div class="card metric-card">
-                                    <div class="card-body text-center">
-                                        <i class="bi bi-rulers fs-2 text-primary"></i>
-                                        <div class="small text-muted mt-2">Distance</div>
-                                        <div class="fw-semibold">${window.formatDistance(route.distance)}</div>
+                            <div class="col-lg-5">
+                                <div class="card">
+                                    <div class="card-body">
+                                        <div class="row g-2 mb-3">
+                                            <div class="col-6">
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <i class="bi bi-rulers text-primary"></i>
+                                                    <div>
+                                                        <div class="small text-muted">Distance</div>
+                                                        <div class="fw-semibold">${window.formatDistance(route.distance)}</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="col-6">
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <i class="bi bi-clock text-info"></i>
+                                                    <div>
+                                                        <div class="small text-muted">Duration</div>
+                                                        <div class="fw-semibold">${formatDuration(route.duration)}</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="col-6">
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <i class="bi bi-graph-up-arrow text-success"></i>
+                                                    <div>
+                                                        <div class="small text-muted">Elevation</div>
+                                                        <div class="fw-semibold">${window.formatElevation(route.elevation)}</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="col-6">
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <i class="bi bi-arrow-repeat text-warning"></i>
+                                                    <div>
+                                                        <div class="small text-muted">Uses</div>
+                                                        <div class="fw-semibold">${route.uses || 0}</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        ${weatherMarkup ? `<hr class="my-2"><div class="small"><strong>Weather</strong><pre class="mb-0 small mt-1">${route.weather ? JSON.stringify(route.weather, null, 2) : ''}</pre></div>` : ''}
                                     </div>
                                 </div>
+                                ${routeHistoryMarkup}
+                                ${longRideUsesMarkup}
                             </div>
-                            <div class="col-6 col-lg-3">
-                                <div class="card metric-card">
-                                    <div class="card-body text-center">
-                                        <i class="bi bi-clock fs-2 text-info"></i>
-                                        <div class="small text-muted mt-2">Duration</div>
-                                        <div class="fw-semibold">${formatDuration(route.duration)}</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-6 col-lg-3">
-                                <div class="card metric-card">
-                                    <div class="card-body text-center">
-                                        <i class="bi bi-graph-up-arrow fs-2 text-success"></i>
-                                        <div class="small text-muted mt-2">Elevation</div>
-                                        <div class="fw-semibold">${window.formatElevation(route.elevation)}</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-6 col-lg-3">
-                                <div class="card metric-card">
-                                    <div class="card-body text-center">
-                                        <i class="bi bi-arrow-repeat fs-2 text-warning"></i>
-                                        <div class="small text-muted mt-2">Uses</div>
-                                        <div class="fw-semibold">${route.uses || 0}</div>
+                            <div class="col-lg-7">
+                                <div style="position: sticky; top: var(--space-3);">
+                                    <div class="card">
+                                        <div class="card-body p-0">
+                                            <div id="route-map" style="height: var(--map-height-standard); border-radius: 8px;" aria-label="Interactive route map"></div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Toggle for secondary metrics (#64) -->
-                        <div class="text-center mt-3">
-                            <button class="btn btn-outline-secondary btn-sm" type="button"
-                                    id="toggle-secondary-metrics"
-                                    data-bs-toggle="collapse" data-bs-target="#secondary-metrics"
-                                    aria-expanded="false" aria-controls="secondary-metrics">
-                                <i class="bi bi-chevron-down me-1" aria-hidden="true"></i>
-                                <span>Show more</span>
-                            </button>
-                        </div>
-
-                        <div class="collapse" id="secondary-metrics">
-                            <!-- Sticky map + detail content two-column layout (#280) -->
-                            <div class="row mt-4 g-3">
-                                <div class="col-lg-5">
-                                    <div style="position: sticky; top: var(--space-3);">
-                                        <div class="card">
-                                            <div class="card-body">
-                                                <h2 class="h5">Map</h2>
-                                                <div id="route-map" style="height: var(--map-height-standard);" aria-label="Interactive route map"></div>
-                                            </div>
-                                        </div>
+                        <!-- Performance Metrics Charts -->
+                        <div class="card mt-3" id="performance-metrics-card" style="display: none;">
+                            <div class="card-body">
+                                <h2 class="h5 mb-4">
+                                    <i class="bi bi-graph-up"></i> Performance Trends
+                                </h2>
+                                <div class="row g-4">
+                                    <div class="col-12 col-lg-6">
+                                        <h3 class="h6 text-muted mb-3">Average Speed Over Time</h3>
+                                        <canvas id="speed-chart" style="max-height: var(--chart-height);"></canvas>
                                     </div>
-                                </div>
-                                <div class="col-lg-7">
-                                    ${weatherMarkup}
-                                    ${routeHistoryMarkup}
-                                    ${longRideUsesMarkup}
-
-                                    <!-- Performance Metrics Charts -->
-                                    <div class="card mt-4" id="performance-metrics-card" style="display: none;">
-                                        <div class="card-body">
-                                            <h2 class="h5 mb-4">
-                                                <i class="bi bi-graph-up"></i> Performance Trends
-                                            </h2>
-                                            <div class="row g-4">
-                                                <div class="col-12 col-lg-6">
-                                                    <h3 class="h6 text-muted mb-3">Average Speed Over Time</h3>
-                                                    <canvas id="speed-chart" style="max-height: var(--chart-height);"></canvas>
-                                                </div>
-                                                <div class="col-12 col-lg-6">
-                                                    <h3 class="h6 text-muted mb-3">Duration Trends</h3>
-                                                    <canvas id="duration-chart" style="max-height: var(--chart-height);"></canvas>
-                                                </div>
-                                                <div class="col-12 col-lg-6">
-                                                    <h3 class="h6 text-muted mb-3">Heart Rate (if available)</h3>
-                                                    <canvas id="heartrate-chart" style="max-height: var(--chart-height);"></canvas>
-                                                </div>
-                                                <div class="col-12 col-lg-6">
-                                                    <h3 class="h6 text-muted mb-3">Power Output (if available)</h3>
-                                                    <canvas id="power-chart" style="max-height: var(--chart-height);"></canvas>
-                                                </div>
-                                            </div>
-                                        </div>
+                                    <div class="col-12 col-lg-6">
+                                        <h3 class="h6 text-muted mb-3">Duration Trends</h3>
+                                        <canvas id="duration-chart" style="max-height: var(--chart-height);"></canvas>
+                                    </div>
+                                    <div class="col-12 col-lg-6">
+                                        <h3 class="h6 text-muted mb-3">Heart Rate (if available)</h3>
+                                        <canvas id="heartrate-chart" style="max-height: var(--chart-height);"></canvas>
+                                    </div>
+                                    <div class="col-12 col-lg-6">
+                                        <h3 class="h6 text-muted mb-3">Power Output (if available)</h3>
+                                        <canvas id="power-chart" style="max-height: var(--chart-height);"></canvas>
                                     </div>
                                 </div>
                             </div>
@@ -583,53 +570,19 @@
                     </section>
                 `;
 
-                // ── Progressive disclosure toggle (#64) ──
-                const collapseEl = byId('secondary-metrics');
-                const toggleBtn = byId('toggle-secondary-metrics');
-                let secondaryRendered = false;
-
-                function renderSecondaryContent() {
-                    if (secondaryRendered) {
-                        // Invalidate Leaflet size after re-show
-                        if (mapInstance) mapInstance.invalidateSize();
-                        return;
-                    }
-                    secondaryRendered = true;
-
-                    if (Array.isArray(route.coordinates) && route.coordinates.length > 1) {
-                        renderMap(route.coordinates);
-                    } else {
-                        const mapCard = byId('route-map');
-                        if (mapCard) {
-                            mapCard.outerHTML = '<div class="alert alert-warning mt-2 mb-0">Map unavailable for this route.</div>';
-                        }
-                    }
-
-                    renderUsesTable(route);
-                    renderHistoryTable(route);
-                    renderPerformanceCharts(route);
-                }
-
-                if (collapseEl && toggleBtn) {
-                    collapseEl.addEventListener('shown.bs.collapse', function() {
-                        toggleBtn.querySelector('span').textContent = 'Show less';
-                        toggleBtn.querySelector('i').classList.replace('bi-chevron-down', 'bi-chevron-up');
-                        toggleBtn.setAttribute('aria-expanded', 'true');
-                        localStorage.setItem('showSecondaryMetrics', '1');
-                        renderSecondaryContent();
-                    });
-                    collapseEl.addEventListener('hidden.bs.collapse', function() {
-                        toggleBtn.querySelector('span').textContent = 'Show more';
-                        toggleBtn.querySelector('i').classList.replace('bi-chevron-up', 'bi-chevron-down');
-                        toggleBtn.setAttribute('aria-expanded', 'false');
-                        localStorage.setItem('showSecondaryMetrics', '0');
-                    });
-
-                    // Restore preference
-                    if (localStorage.getItem('showSecondaryMetrics') === '1') {
-                        const bsCollapse = new bootstrap.Collapse(collapseEl, { toggle: true });
+                // Render map and detail content immediately
+                if (Array.isArray(route.coordinates) && route.coordinates.length > 1) {
+                    renderMap(route.coordinates);
+                } else {
+                    const mapEl = byId('route-map');
+                    if (mapEl) {
+                        mapEl.outerHTML = '<div class="alert alert-warning mt-2 mb-0">Map unavailable for this route.</div>';
                     }
                 }
+
+                renderUsesTable(route);
+                renderHistoryTable(route);
+                renderPerformanceCharts(route);
 
                 announce(`Loaded route details for ${route.name}`);
 
