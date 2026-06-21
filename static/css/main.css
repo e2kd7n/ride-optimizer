@@ -415,6 +415,41 @@ footer {
     .navbar-brand {
         font-size: var(--font-size-base);
     }
+
+    .home-recent-routes {
+        height: auto;
+        max-height: 592px;
+    }
+
+    .toast-item {
+        min-width: 0;
+        width: 100%;
+    }
+}
+
+/* Extra-small devices (320px viewport) */
+@media (max-width: 359.98px) {
+    .container {
+        padding-left: var(--space-2);
+        padding-right: var(--space-2);
+    }
+
+    .preset-filter {
+        flex: 1 1 calc(50% - var(--space-1));
+        min-width: 0;
+        font-size: var(--font-size-xs);
+        padding: var(--space-1);
+    }
+
+    .route-card-compact-metrics {
+        flex-direction: column;
+    }
+
+    .stat-card .stat-value,
+    .stat-card h3 {
+        font-size: var(--font-size-base);
+        word-break: break-word;
+    }
 }
 
 /* Medium devices (tablets, 576px and up) */

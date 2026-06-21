@@ -70,7 +70,11 @@ function initializeBottomNav() {
     });
     
     /**
-     * Handle navigation item activation
+     * Handle navigation item activation.
+     * Bottom-nav items already carry onclick handlers that navigate via
+     * window.location.href, so this only manages visual state and
+     * screen-reader announcements.
+     *
      * @param {HTMLElement} item - The navigation item to activate
      * @param {NodeList} allItems - All navigation items
      */
@@ -80,17 +84,11 @@ function initializeBottomNav() {
             i.classList.remove('active');
             i.removeAttribute('aria-current');
         });
-        
+
         // Add active class to clicked item
         item.classList.add('active');
         item.setAttribute('aria-current', 'page');
-        
-        // Navigate to target
-        const target = item.getAttribute('data-target');
-        if (target) {
-            navigateToTab(target);
-        }
-        
+
         // Announce to screen readers
         const label = item.getAttribute('aria-label');
         if (label && window.announceToScreenReader) {
@@ -102,45 +100,26 @@ function initializeBottomNav() {
 }
 
 /**
- * Navigate to a specific tab
- * @param {string} tabId - ID of tab to navigate to
+ * Page routes used by mobile navigation.
+ * The app uses separate HTML pages (not Bootstrap tab panes), so
+ * navigation is handled via page loads rather than tab switching.
  */
-function navigateToTab(tabId) {
-    // Manual tab switching (works on both mobile and desktop)
-    // Hide all tab panes
-    const panes = document.querySelectorAll('.tab-pane');
-    panes.forEach(pane => {
-        pane.classList.remove('show', 'active');
-        pane.setAttribute('aria-hidden', 'true');
-    });
-    
-    // Deactivate all desktop tabs (if they exist)
-    const desktopTabs = document.querySelectorAll('.nav-tabs .nav-link');
-    desktopTabs.forEach(tab => {
-        tab.classList.remove('active');
-        tab.setAttribute('aria-selected', 'false');
-    });
-    
-    // Show target pane
-    const targetPane = document.getElementById(tabId);
-    if (targetPane) {
-        targetPane.classList.add('show', 'active');
-        targetPane.setAttribute('aria-hidden', 'false');
-        
-        // Activate corresponding desktop tab (if it exists)
-        const correspondingTab = document.getElementById(`${tabId}-tab`);
-        if (correspondingTab) {
-            correspondingTab.classList.add('active');
-            correspondingTab.setAttribute('aria-selected', 'true');
-        }
+const PAGE_ROUTES = {
+    home:     '/',
+    routes:   '/routes.html',
+    weather:  '/weather.html',
+    settings: '/settings.html'
+};
+
+/**
+ * Navigate to a page by its short name (e.g. 'home', 'routes').
+ * @param {string} pageId - Key in PAGE_ROUTES
+ */
+function navigateToTab(pageId) {
+    const href = PAGE_ROUTES[pageId];
+    if (href) {
+        window.location.href = href;
     }
-    
-    // Scroll to top
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    
-    // Update page title
-    const pageTitle = tabId.charAt(0).toUpperCase() + tabId.slice(1);
-    document.title = `${pageTitle} - Ride Optimizer`;
 }
 
 /**
@@ -198,52 +177,46 @@ function initializeSwipeGestures() {
 }
 
 /**
- * Navigate to next tab
+ * Ordered page list for swipe navigation.
+ */
+const PAGE_ORDER = Object.keys(PAGE_ROUTES); // ['home', 'routes', 'weather', 'settings']
+
+/**
+ * Detect which page we are currently on based on the URL path.
+ * @returns {number} index into PAGE_ORDER, or -1
+ */
+function getCurrentPageIndex() {
+    const path = window.location.pathname;
+    return PAGE_ORDER.findIndex(key => {
+        const route = PAGE_ROUTES[key];
+        // Match either exact path or path ending with the route
+        return path === route || path.endsWith(route);
+    });
+}
+
+/**
+ * Navigate to next page (swipe left)
  */
 function navigateToNextTab() {
-    const tabs = ['home', 'routes', 'settings'];
-    const activeTab = document.querySelector('.bottom-nav-item.active');
-    
-    if (!activeTab) return;
-    
-    const currentTarget = activeTab.getAttribute('data-target');
-    const currentIndex = tabs.indexOf(currentTarget);
-    
-    if (currentIndex < tabs.length - 1) {
-        const nextTab = tabs[currentIndex + 1];
-        const nextNavItem = document.querySelector(`.bottom-nav-item[data-target="${nextTab}"]`);
-        
-        if (nextNavItem) {
-            nextNavItem.click();
-            
-            // Visual feedback
-            showSwipeFeedback('left');
-        }
+    const currentIndex = getCurrentPageIndex();
+    if (currentIndex < 0) return;
+
+    if (currentIndex < PAGE_ORDER.length - 1) {
+        showSwipeFeedback('left');
+        navigateToTab(PAGE_ORDER[currentIndex + 1]);
     }
 }
 
 /**
- * Navigate to previous tab
+ * Navigate to previous page (swipe right)
  */
 function navigateToPreviousTab() {
-    const tabs = ['home', 'routes', 'settings'];
-    const activeTab = document.querySelector('.bottom-nav-item.active');
-    
-    if (!activeTab) return;
-    
-    const currentTarget = activeTab.getAttribute('data-target');
-    const currentIndex = tabs.indexOf(currentTarget);
-    
+    const currentIndex = getCurrentPageIndex();
+    if (currentIndex < 0) return;
+
     if (currentIndex > 0) {
-        const prevTab = tabs[currentIndex - 1];
-        const prevNavItem = document.querySelector(`.bottom-nav-item[data-target="${prevTab}"]`);
-        
-        if (prevNavItem) {
-            prevNavItem.click();
-            
-            // Visual feedback
-            showSwipeFeedback('right');
-        }
+        showSwipeFeedback('right');
+        navigateToTab(PAGE_ORDER[currentIndex - 1]);
     }
 }
 
