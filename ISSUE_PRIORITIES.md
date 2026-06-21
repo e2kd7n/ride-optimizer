@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-06-21
+**Last Updated:** 2026-06-21 19:33:43 UTC / 2026-06-21 14:33:43 CDT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -8,78 +8,42 @@ This file reflects the current state of GitHub issues organized by release miles
 
 ## 📍 Release Context
 
-- **Current Release:** v0.14.0 (21 open issues, 44 closed — P2 complete, P3/P4 remain)
-- **Next Release:** v0.15.0
+- **Current Release:** v0.14.0 (deployed)
+- **Next Release:** v0.15.0 (in development)
 - **Future Releases:** v0.16.0
 
 ---
 
-## 🎯 v0.14.0 (Current Release)
+## 🎯 v0.15.0 (Next Release - IN DEVELOPMENT)
 
-**All P2 issues complete.** Remaining issues are P3 (nice-to-have) and P4 (deferred).
+**Priority within this release determines work order. Complete P0/P1 issues before moving to future releases.**
 
-### 🟡 P2 - MEDIUM ✅ COMPLETE
-- ~~#298~~ - ✅ Bumped GitHub Actions to Node.js 24 (v5/v4/v6/v7)
-- ~~#272~~ - ✅ Added hourly weather forecast endpoint + dashboard UI
-- ~~#94~~ - ✅ Accessibility audit, ARIA fixes, 75 new tests
-- ~~#209~~ - ✅ Graceful degradation — individual service init, 503 guards on all endpoints
-- ~~#108~~ - ✅ Closed (targets deprecated main.py CLI)
-- #207 - Deferred to v0.15.0 (DI refactor)
-- #136 - Deferred to v0.15.0 (settings persistence)
-
-### 🟢 P3 - LOW
-- #261 - Senior Engineer Code Review Request
-- #200 - Route naming improvements (Start → Main → End format)
-- #199 - Design: Test on real iOS/Android devices
-- #195 - Design: Verify mobile-first responsive design (320px viewport)
-- #177 - UI/UX: Add clickable 'Uses' column with modal
-- #170 - Design: Test keyboard navigation and screen reader support
-- #145 - 🌤️ EPIC: Weather Dashboard & Forecast Integration
-- #120 - [LOW PRIORITY] Debug and fix Bootstrap tab switching functionality
-
-### 📋 P4 - FUTURE
-- #203 - Implement GDPR-compliant data deletion endpoint
-- #79 - Add "How It Works" Modal
-- #68 - ✨ Visual Hierarchy & Polish
-- #66 - 🎓 Feature Discovery & Onboarding
-- #64 - 📊 Progressive Disclosure for Metrics
-- #62 - 🎨 EPIC: Mobile-First UI/UX Redesign & Accessibility
-- #47 - Add Side-by-Side Route Comparison Feature
-- #39 - Evaluate Photon API as Nominatim alternative
-- #38 - Add social features (compare with other commuters)
-- #37 - Add real-time route suggestions
-- #35 - Add integration with other fitness platforms
-
----
-
-## 📅 v0.15.0 (Next Release)
+### 🔴 P0 - CRITICAL
+**No P0 issues** ✅
 
 ### 🔴 P1 - HIGH
-- #260 - Implement guided FTUE for Strava API key setup with in-app configuration
-- #254 - Implement Animated GIF Tutorials for Key Features
-- #172 - Add Marshmallow validation schemas for planner endpoints
+**No P1 issues** ✅
 
 ### 🟡 P2 - MEDIUM
 - #330 - Complete ntfy.sh push notification integration
 - #322 - Unify route comparison pipelines between commute and long ride analyzers
 - #307 - perf: reduce startup cost and per-request overhead on Pi
 - #194 - Long Rides: Add accessibility features (WCAG 2.1 AA)
-- #193 - Long Rides: Implement skeleton loaders and error states
 - #180 - Add planner-specific API client methods
-- #141 - Add repeat-a-past-ride flow and saved plan support
 - #106 - Add average speed and elevation gain metrics
 
 ### 🟢 P3 - LOW
 - #321 - feat: Garmin Connect integration — graceful FTUE for connecting and harvesting
 
+### 📋 P4 - FUTURE
+**No P4 issues** ✅
+
 ---
 
 ## 📅 v0.16.0 (Future Release)
 
-### 🟡 P2 - MEDIUM
-- #275 - Major refactor: Centralize configuration and extract monolithic services
-- #284 - Long Rides: build new v0.15.0 implementation plan
-- #282 - 🚴 Epic: Long Rides feature re-planning and implementation
+### 🔴 P1 - HIGH
+- #331 - Epic: Exploration Route Generator
 
 ---
 
@@ -94,9 +58,32 @@ These issues need to be assigned to a release milestone and prioritized.
 ## 📝 Workspace TODOs & Tasks
 Code comments and inline tasks found in the workspace that may need attention.
 
-Found **1** code comment requiring attention:
+Found **24** code comments requiring attention:
 
+- `.claude/worktrees/agent-a039b0bc70465bc21/app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
+- `.claude/worktrees/agent-a039b0bc70465bc21/static/js/dashboard.js` - 7:// NOTE: Initialization is handled by inline script in index.html
+- `.claude/worktrees/agent-a1cf7832d2e55e023/app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
+- `.claude/worktrees/agent-a1cf7832d2e55e023/static/js/dashboard.js` - 7:// NOTE: Initialization is handled by inline script in index.html
+- `.claude/worktrees/agent-a260dcd623739a407/app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
+- `.claude/worktrees/agent-a260dcd623739a407/static/js/dashboard.js` - 7:// NOTE: Initialization is handled by inline script in index.html
+- `.claude/worktrees/agent-a32b4f7cc79e6fdad/app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
+- `.claude/worktrees/agent-a32b4f7cc79e6fdad/static/js/dashboard.js` - 7:// NOTE: Initialization is handled by inline script in index.html
+- `.claude/worktrees/agent-a580b433240d8d227/app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
+- `.claude/worktrees/agent-a580b433240d8d227/static/js/dashboard.js` - 7:// NOTE: Initialization is handled by inline script in index.html
+- `.claude/worktrees/agent-a62dd708f4abfbafa/app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
+- `.claude/worktrees/agent-a62dd708f4abfbafa/static/js/dashboard.js` - 7:// NOTE: Initialization is handled by inline script in index.html
+- `.claude/worktrees/agent-a7905a0b3216bd919/app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
+- `.claude/worktrees/agent-a7905a0b3216bd919/static/js/dashboard.js` - 7:// NOTE: Initialization is handled by inline script in index.html
+- `.claude/worktrees/agent-a8407d4f64334e0cf/app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
+- `.claude/worktrees/agent-a8407d4f64334e0cf/static/js/dashboard.js` - 7:// NOTE: Initialization is handled by inline script in index.html
+- `.claude/worktrees/agent-aca1efd51cd5ad499/app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
+- `.claude/worktrees/agent-aca1efd51cd5ad499/static/js/dashboard.js` - 7:// NOTE: Initialization is handled by inline script in index.html
+- `.claude/worktrees/agent-ae19632342a95b7ee/app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
+- `.claude/worktrees/agent-ae19632342a95b7ee/static/js/dashboard.js` - 7:// NOTE: Initialization is handled by inline script in index.html
+- `.claude/worktrees/agent-ae27c24a569424fd2/app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
+- `.claude/worktrees/agent-ae27c24a569424fd2/static/js/dashboard.js` - 7:// NOTE: Initialization is handled by inline script in index.html
 - `app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
+- `static/js/dashboard.js` - 7:// NOTE: Initialization is handled by inline script in index.html
 
 ## 📖 Priority System (Release-Aware)
 

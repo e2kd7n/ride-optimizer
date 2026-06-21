@@ -238,7 +238,7 @@ def initialize_services():
         _analysis_service = None
 
     try:
-        _commute_service = CommuteService(config, weather_service=_weather_service, trainerroad_service=_trainerroad_service)
+        _commute_service = CommuteService(config, weather_service=_weather_service, trainerroad_service=_trainerroad_service, settings_service=_settings_service)
     except Exception as e:
         logger.error(f"CommuteService failed to initialize: {e}", exc_info=True)
         _commute_service = None
@@ -1865,7 +1865,7 @@ def trainerroad_workouts():
 @app.route('/api/trainerroad/today')
 @limiter.limit("30 per minute")
 def trainerroad_today():
-    """Return today's workout summary for dashboard."""
+    """Return today's workout summary with weather-aware indoor/outdoor decision."""
     initialize_services()
 
     err = _require_service(_trainerroad_service, 'TrainerRoad')
@@ -1873,6 +1873,16 @@ def trainerroad_today():
         return err
 
     summary = _trainerroad_service.get_today_summary()
+
+    if summary.get('has_workout') and _commute_service:
+        from datetime import date as _date
+        constraints = _trainerroad_service.get_workout_constraints(_date.today())
+        if constraints:
+            _commute_service._apply_weather_indoor_decision(constraints)
+            summary['workout']['indoor_fallback'] = constraints.get('indoor_fallback', False)
+            summary['workout']['indoor_reason'] = constraints.get('indoor_reason')
+            summary['workout']['notes'] = constraints.get('notes', [])
+
     return jsonify(summary)
 
 

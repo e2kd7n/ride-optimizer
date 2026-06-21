@@ -397,6 +397,59 @@
                 </div>
             </div>
 
+            <!-- Outdoor Workout Preferences (#338) -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h2 class="h5 mb-0">
+                                <i class="bi bi-sun" aria-hidden="true"></i> Outdoor Workout Preferences
+                            </h2>
+                        </div>
+                        <div class="card-body">
+                            <p class="small text-muted mb-3">
+                                When a TrainerRoad workout is scheduled, these thresholds determine whether
+                                to recommend riding outdoors or on the trainer.
+                            </p>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold" for="outdoor-min-temp">
+                                        Minimum temperature for outdoor workouts
+                                    </label>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <input type="range" class="form-range flex-grow-1"
+                                               id="outdoor-min-temp" min="0" max="80" step="5" value="40"
+                                               aria-describedby="outdoor-min-temp-value">
+                                        <span id="outdoor-min-temp-value" class="badge bg-secondary"
+                                              style="min-width: 48px">40°F</span>
+                                    </div>
+                                    <div class="form-text">
+                                        <i class="bi bi-info-circle" aria-hidden="true"></i>
+                                        Below this temperature, indoor trainer is recommended regardless of workout type.
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold d-block">
+                                        Precipitation
+                                    </label>
+                                    <div class="form-check mt-2">
+                                        <input class="form-check-input" type="checkbox"
+                                               id="outdoor-allow-rain">
+                                        <label class="form-check-label" for="outdoor-allow-rain">
+                                            Allow outdoor workouts in light rain
+                                        </label>
+                                    </div>
+                                    <div class="form-text">
+                                        <i class="bi bi-info-circle" aria-hidden="true"></i>
+                                        When unchecked, any active precipitation triggers indoor recommendation.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- About Section -->
             <div class="row">
                 <div class="col-12">
@@ -590,6 +643,17 @@
                 document.getElementById('auto-save').checked =
                     settings.auto_save !== undefined ? settings.auto_save : settings.autoSave;
             }
+
+            // Outdoor workout preferences
+            if (settings.outdoor_min_temp_f !== undefined) {
+                const slider = document.getElementById('outdoor-min-temp');
+                const label = document.getElementById('outdoor-min-temp-value');
+                slider.value = settings.outdoor_min_temp_f;
+                label.textContent = settings.outdoor_min_temp_f + '°F';
+            }
+            if (settings.outdoor_allow_rain !== undefined) {
+                document.getElementById('outdoor-allow-rain').checked = settings.outdoor_allow_rain;
+            }
         }
 
         async function loadUserPreferences() {
@@ -610,6 +674,15 @@
         function setupEventListeners() {
             // Settings reset button (save is handled by form submit)
             document.getElementById('reset-settings').addEventListener('click', resetSettings);
+
+            // Outdoor temp slider live display
+            const tempSlider = document.getElementById('outdoor-min-temp');
+            const tempLabel = document.getElementById('outdoor-min-temp-value');
+            if (tempSlider && tempLabel) {
+                tempSlider.addEventListener('input', function() {
+                    tempLabel.textContent = this.value + '°F';
+                });
+            }
             
             // Export buttons
             document.getElementById('export-preferences').addEventListener('click', exportPreferences);
@@ -650,6 +723,8 @@
                 show_weather_details: document.getElementById('show-weather-details').checked,
                 show_elevation: document.getElementById('show-elevation').checked,
                 auto_save: document.getElementById('auto-save').checked,
+                outdoor_min_temp_f: parseInt(document.getElementById('outdoor-min-temp').value, 10),
+                outdoor_allow_rain: document.getElementById('outdoor-allow-rain').checked,
             };
 
             // Always update localStorage as offline fallback
@@ -699,6 +774,9 @@
                 document.getElementById('show-weather-details').checked = true;
                 document.getElementById('show-elevation').checked = true;
                 document.getElementById('auto-save').checked = true;
+                document.getElementById('outdoor-min-temp').value = 40;
+                document.getElementById('outdoor-min-temp-value').textContent = '40°F';
+                document.getElementById('outdoor-allow-rain').checked = false;
 
                 clearUnsavedChanges();
 

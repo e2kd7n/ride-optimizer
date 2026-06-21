@@ -53,6 +53,11 @@
     --color-border: #dee2e6;
     --color-bg-hover: rgba(102, 126, 234, 0.06);
     --color-bg-selected: rgba(102, 126, 234, 0.1);
+
+    /* Workout color tokens (#340) */
+    --workout-color: #e85d04;
+    --workout-bg: rgba(232, 93, 4, 0.08);
+    --workout-border: rgba(232, 93, 4, 0.3);
 }
 
 body {
@@ -1824,13 +1829,6 @@ h5.card-title {
 
 /* ── TrainerRoad / Workout UI (#326, #340) ────────────────── */
 
-/* Design B token: distinct from all existing palette */
-:root {
-    --workout-color: #e85d04;
-    --workout-bg: rgba(232, 93, 4, 0.08);
-    --workout-border: rgba(232, 93, 4, 0.3);
-}
-
 /* Weather banner workout pill (Design B §2A) */
 .workout-pill {
     display: flex;
@@ -1865,7 +1863,7 @@ h5.card-title {
 
 /* Workout fit row for hero card (Design B §2B) */
 .workout-fit-row {
-    border-left: 3px solid var(--workout-color);
+    border-left: var(--space-1) solid var(--workout-color);
     padding-left: var(--space-2);
     margin: var(--space-2) 0;
 }
@@ -1877,10 +1875,14 @@ h5.card-title {
     font-size: var(--font-size-sm);
 }
 
+.workout-fit-row-header i:first-child {
+    color: var(--workout-color);
+}
+
 .workout-fit-row-reasons {
     font-size: var(--font-size-xs);
-    color: #6c757d;
-    padding-left: calc(var(--space-2) + 3px);
+    color: var(--bs-secondary-color, #6c757d);
+    padding-left: var(--space-3);
     margin-bottom: var(--space-2);
 }
 
@@ -1925,12 +1927,12 @@ h5.card-title {
     flex-wrap: wrap;
     gap: var(--space-2);
     font-size: var(--font-size-sm);
-    color: #6c757d;
+    color: var(--bs-secondary-color, #6c757d);
 }
 
 .workout-strip-note {
     font-size: var(--font-size-sm);
-    color: #555;
+    color: var(--bs-secondary-color, #6c757d);
     flex-grow: 1;
 }
 

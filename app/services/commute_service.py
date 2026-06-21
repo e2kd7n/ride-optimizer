@@ -22,6 +22,7 @@ from src.config import Config
 from src.visualizer import RouteVisualizer
 from app.services.trainerroad_service import TrainerRoadService
 from app.services.weather_service import WeatherService
+from app.services.settings_service import SettingsService
 from src.secure_logger import SecureLogger
 
 logger = SecureLogger(__name__)
@@ -39,7 +40,8 @@ class CommuteService:
     """
     
     def __init__(self, config: Config, weather_service: Optional['WeatherService'] = None,
-                 trainerroad_service: Optional['TrainerRoadService'] = None):
+                 trainerroad_service: Optional['TrainerRoadService'] = None,
+                 settings_service: Optional['SettingsService'] = None):
         """
         Initialize commute service.
 
@@ -47,11 +49,13 @@ class CommuteService:
             config: Configuration object
             weather_service: Optional pre-built WeatherService instance for dependency injection
             trainerroad_service: Optional pre-built TrainerRoadService instance for dependency injection
+            settings_service: Optional pre-built SettingsService instance for dependency injection
         """
         self.config = config
         self._recommender: Optional[NextCommuteRecommender] = None
         self.trainerroad_service = trainerroad_service or TrainerRoadService(config)
         self.weather_service = weather_service or WeatherService(config)
+        self.settings_service = settings_service or SettingsService()
     
     def initialize(self, route_groups: List[RouteGroup],
                    home_location: Location,
@@ -713,19 +717,22 @@ class CommuteService:
         # Get today's workout constraints
         today = date.today()
         workout_constraints = self.trainerroad_service.get_workout_constraints(today)
-        
+
         # Get base commute recommendation
         base_rec = self.get_next_commute(direction)
-        
+
         if base_rec['status'] != 'success':
             return base_rec
-        
+
         # If no workout scheduled, return base recommendation
         if not workout_constraints:
             base_rec['workout_fit'] = None
             base_rec['is_workout_extended'] = False
             return base_rec
-        
+
+        # Apply weather-aware indoor/outdoor decision
+        self._apply_weather_indoor_decision(workout_constraints)
+
         # Analyze workout fit
         workout_fit = self._analyze_workout_fit(
             base_rec,
@@ -748,16 +755,65 @@ class CommuteService:
         base_rec['is_workout_extended'] = False
         return base_rec
     
-    def _analyze_workout_fit(self, 
+    def _apply_weather_indoor_decision(self, constraints: Dict[str, Any]) -> None:
+        """
+        Set indoor_fallback based on current weather vs user thresholds.
+
+        Overrides the workout type's inherent indoor_preferred flag when
+        weather is suitable for outdoor riding.
+        """
+        settings = self.settings_service.get_settings()
+        min_temp = settings.get('outdoor_min_temp_f', 40)
+        allow_rain = settings.get('outdoor_allow_rain', False)
+
+        try:
+            home = self._recommender.home_location if self._recommender else None
+            if home:
+                weather = self.weather_service.get_current_weather(
+                    home.lat, home.lon, location_name='Home')
+            else:
+                weather = None
+        except Exception as e:
+            logger.warning(f"Could not fetch weather for indoor decision: {e}")
+            weather = None
+
+        if not weather:
+            constraints['indoor_fallback'] = constraints.get('indoor_preferred', False)
+            return
+
+        temp_f = weather.get('temperature_f', weather.get('temperature', 70))
+        precip_mm = weather.get('precipitation_mm', weather.get('precipitation', 0))
+        is_raining = isinstance(precip_mm, (int, float)) and precip_mm > 0
+
+        too_cold = temp_f < min_temp
+        too_wet = is_raining and not allow_rain
+
+        if too_cold or too_wet:
+            constraints['indoor_fallback'] = True
+            reasons = []
+            if too_cold:
+                reasons.append(f'{temp_f:.0f}°F is below your {min_temp}°F minimum')
+            if too_wet:
+                reasons.append('precipitation detected')
+            constraints['indoor_reason'] = ' and '.join(reasons)
+            constraints['notes'].append(f'Indoor recommended: {constraints["indoor_reason"]}')
+        else:
+            constraints['indoor_fallback'] = False
+            if constraints.get('indoor_preferred'):
+                constraints['notes'].append(
+                    f'Weather is suitable for outdoor riding ({temp_f:.0f}°F, '
+                    f'{"light rain" if is_raining else "dry"})')
+
+    def _analyze_workout_fit(self,
                             recommendation: Dict[str, Any],
                             constraints: Dict[str, Any]) -> Dict[str, Any]:
         """
         Analyze how well the commute fits the workout.
-        
+
         Args:
             recommendation: Commute recommendation
             constraints: Workout constraints
-            
+
         Returns:
             Dictionary with fit analysis
         """
@@ -785,19 +841,24 @@ class CommuteService:
             fit_score += 0.3
             fit_reasons.append("Duration matches workout target")
         
+        indoor_reason = constraints.get('indoor_reason')
         if indoor_fallback:
             fit_score -= 0.2
-            fit_reasons.append("High-intensity workout - indoor trainer recommended")
+            if indoor_reason:
+                fit_reasons.append(f"Indoor recommended: {indoor_reason}")
+            else:
+                fit_reasons.append("High-intensity workout - indoor trainer recommended")
         else:
             fit_score += 0.2
             fit_reasons.append("Suitable for outdoor completion")
-        
+
         return {
             'workout_name': workout_name,
             'workout_type': workout_type,
             'fit_score': max(0.0, min(1.0, fit_score)),
             'fit_reasons': fit_reasons,
             'indoor_fallback': indoor_fallback,
+            'indoor_reason': indoor_reason,
             'notes': notes,
             'duration_target': {
                 'min': min_duration,
