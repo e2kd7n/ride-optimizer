@@ -516,6 +516,83 @@
         announce('Cleared all routes from map');
     }
 
+    async function showUsesModal(route) {
+        const modalEl = document.getElementById('route-uses-modal');
+        if (!modalEl) return;
+
+        const titleEl = document.getElementById('route-uses-modal-title');
+        const bodyEl = document.getElementById('route-uses-modal-body');
+
+        if (titleEl) titleEl.textContent = route.name;
+        if (bodyEl) {
+            bodyEl.innerHTML = `
+                <div class="text-center py-3">
+                    <div class="spinner-border spinner-border-sm text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <span class="ms-2 text-muted">Loading activities...</span>
+                </div>`;
+        }
+
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+
+        try {
+            const response = await window.apiClient.getRouteDetails(route.id, route.type);
+            const detail = response && response.route ? response.route : {};
+
+            const activityIds = detail.activity_ids || [];
+            const activityDates = detail.activity_dates || [];
+            const activityNames = detail.activity_names || [];
+            const count = Math.max(activityIds.length, activityDates.length, activityNames.length);
+
+            if (count === 0) {
+                bodyEl.innerHTML = '<p class="text-muted mb-0">No activity details available for this route.</p>';
+                return;
+            }
+
+            let html = '<ul class="list-group list-group-flush">';
+            for (let i = 0; i < count; i++) {
+                const actId = activityIds[i] || null;
+                const rawDate = activityDates[i] || '';
+                const rawName = activityNames[i] || '';
+
+                let dateStr = '';
+                if (rawDate) {
+                    const d = new Date(rawDate);
+                    if (!isNaN(d.getTime())) {
+                        dateStr = d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+                    } else {
+                        dateStr = escapeHtml(rawDate);
+                    }
+                }
+
+                const nameStr = rawName ? escapeHtml(rawName) : (dateStr || 'Activity ' + (i + 1));
+
+                html += '<li class="list-group-item d-flex justify-content-between align-items-center"><div>';
+                if (actId) {
+                    html += `<a href="https://www.strava.com/activities/${escapeHtml(String(actId))}" target="_blank" rel="noopener noreferrer" class="text-decoration-none">`;
+                    html += `<i class="bi bi-box-arrow-up-right me-1" aria-hidden="true"></i>${nameStr}</a>`;
+                } else {
+                    html += nameStr;
+                }
+                html += '</div>';
+                if (dateStr && rawName) {
+                    html += `<span class="text-muted small">${dateStr}</span>`;
+                }
+                html += '</li>';
+            }
+            html += '</ul>';
+            bodyEl.innerHTML = html;
+        } catch (err) {
+            console.error('Failed to load activity details:', err);
+            bodyEl.innerHTML = `<div class="alert alert-warning mb-0">
+                <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
+                Unable to load activity details. Please try again.
+            </div>`;
+        }
+    }
+
     function navigateToRouteDetail(routeId, routeType) {
         const params = new URLSearchParams({ id: routeId });
         if (routeType) {
@@ -610,7 +687,9 @@
                     <span title="Distance"><i class="bi bi-arrow-left-right" aria-hidden="true"></i> ${window.formatDistance(route.distance)}</span>
                     <span title="Duration"><i class="bi bi-clock" aria-hidden="true"></i> ${formatDuration(route.duration)}</span>
                     <span title="Elevation gain"><i class="bi bi-arrow-up" aria-hidden="true"></i> ${window.formatElevation(route.elevation_gain || route.elevation || 0)}</span>
-                    <span title="Times ridden"><i class="bi bi-repeat" aria-hidden="true"></i> ${route.uses || 0}</span>
+                    <span class="uses-link" role="button" tabindex="0" title="View activities" data-route-uses
+                          style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted"
+                          ><i class="bi bi-repeat" aria-hidden="true"></i> ${route.uses || 0}</span>
                     <span class="ms-auto text-primary" style="cursor:pointer" data-route-link title="View details">
                         <i class="bi bi-arrow-right" aria-hidden="true"></i>
                     </span>
@@ -620,7 +699,7 @@
 
         card.style.cursor = 'pointer';
         function handleCardActivation(e) {
-            if (e.target.closest('.compare-checkbox') || e.target.closest('[data-route-link]')) {
+            if (e.target.closest('.compare-checkbox') || e.target.closest('[data-route-link]') || e.target.closest('[data-route-uses]')) {
                 return;
             }
             toggleRouteOnMap(route);
@@ -643,7 +722,21 @@
             });
         });
 
-        // Add checkbox handler
+        const usesLink = card.querySelector('[data-route-uses]');
+        if (usesLink) {
+            function handleUsesClick(e) {
+                e.stopPropagation();
+                e.preventDefault();
+                showUsesModal(route);
+            }
+            usesLink.addEventListener('click', handleUsesClick);
+            usesLink.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    handleUsesClick(e);
+                }
+            });
+        }
+
         const checkbox = card.querySelector('.compare-checkbox');
         if (checkbox) {
             checkbox.addEventListener('change', (e) => {

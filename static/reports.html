@@ -189,7 +189,7 @@
 
         <!-- Period selector + loading indicator -->
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
-            <div class="btn-group btn-group-sm" role="group" aria-label="Time period">
+            <div class="btn-group btn-group-sm flex-wrap" role="group" aria-label="Time period">
                 <button type="button" class="btn btn-outline-primary period-btn active" data-period="this_year">This Year</button>
                 <button type="button" class="btn btn-outline-primary period-btn" data-period="last_year">Last Year</button>
                 <button type="button" class="btn btn-outline-primary period-btn" data-period="this_month">This Month</button>
@@ -335,9 +335,9 @@
                 <!-- Gear breakdown -->
                 <div class="card mb-2">
                     <div class="card-body py-2 px-3">
-                        <div class="section-header">
+                        <div class="section-header flex-wrap">
                             <h6><i class="bi bi-bicycle" aria-hidden="true"></i> Gear</h6>
-                            <div class="d-flex gap-1 align-items-center">
+                            <div class="d-flex flex-wrap gap-1 align-items-center">
                                 <span id="gear-cache-status" class="text-muted" style="font-size:10px;"></span>
                                 <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-1"
                                         id="refresh-gear-btn" title="Fetch gear names from Strava" style="font-size:11px;">
@@ -362,11 +362,11 @@
                 <!-- Activity list (filtered by selected gear) -->
                 <div class="card">
                     <div class="card-body py-2 px-3">
-                        <div class="section-header">
+                        <div class="section-header flex-wrap">
                             <h6><i class="bi bi-list-ul" aria-hidden="true"></i> Activities
                                 <span id="activity-list-title" class="fw-normal text-muted ms-1" style="font-size:11px;"></span>
                             </h6>
-                            <div class="d-flex gap-1">
+                            <div class="d-flex flex-wrap gap-1">
                                 <select id="activity-type-filter" class="form-select form-select-sm" style="width:auto; font-size:11px;" aria-label="Filter by activity type">
                                     <option value="">All Types</option>
                                     <option value="Ride">Ride</option>
@@ -384,7 +384,7 @@
                                 </select>
                             </div>
                         </div>
-                        <div id="activity-table-container">
+                        <div id="activity-table-container" class="table-responsive">
                             <table class="table table-sm table-hover mb-0" id="activity-table">
                                 <thead class="sticky-top bg-white" style="z-index:1;">
                                     <tr style="font-size:10px; text-transform:uppercase; color:var(--color-text-muted);">

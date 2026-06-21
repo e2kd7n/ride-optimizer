@@ -707,3 +707,219 @@ class TestAnalyzeRouteGeography:
             result = namer._analyze_route_geography(coords)
         assert result['major_streets'] == []
         assert result['neighborhoods'] == []
+
+
+# ---------------------------------------------------------------------------
+# _calculate_distance_km (Haversine helper)
+# ---------------------------------------------------------------------------
+
+class TestCalculateDistanceKm:
+    def test_same_point_is_zero(self, namer):
+        assert namer._calculate_distance_km((41.88, -87.63), (41.88, -87.63)) == 0.0
+
+    def test_known_distance(self, namer):
+        # Chicago to Evanston is roughly 18-20 km
+        dist = namer._calculate_distance_km((41.8781, -87.6298), (42.0451, -87.6877))
+        assert 15 < dist < 25
+
+    def test_short_distance(self, namer):
+        # Two points ~100m apart
+        dist = namer._calculate_distance_km((41.88, -87.63), (41.8809, -87.63))
+        assert 0.05 < dist < 0.2
+
+    def test_symmetry(self, namer):
+        a, b = (41.88, -87.63), (42.0, -87.7)
+        assert abs(namer._calculate_distance_km(a, b) - namer._calculate_distance_km(b, a)) < 0.001
+
+
+# ---------------------------------------------------------------------------
+# _detect_route_type
+# ---------------------------------------------------------------------------
+
+class TestDetectRouteType:
+    def test_short_route_is_point_to_point(self, namer):
+        coords = [(0, 0), (1, 0), (2, 0)]
+        assert namer._detect_route_type(coords) == 'point-to-point'
+
+    def test_straight_line_is_point_to_point(self, namer):
+        # Start and end are far apart
+        coords = [(41.88 + i * 0.01, -87.63) for i in range(20)]
+        assert namer._detect_route_type(coords) == 'point-to-point'
+
+    def test_loop_route_detected(self, namer):
+        # Create a square loop: start and end at same point
+        import math
+        n = 40
+        coords = []
+        for i in range(n):
+            angle = 2 * math.pi * i / n
+            lat = 41.88 + 0.01 * math.cos(angle)
+            lon = -87.63 + 0.01 * math.sin(angle)
+            coords.append((lat, lon))
+        # Close the loop
+        coords.append(coords[0])
+        assert namer._detect_route_type(coords) == 'loop'
+
+    def test_out_and_back_detected(self, namer):
+        # Go north then retrace south back to start
+        outbound = [(41.88 + i * 0.002, -87.63) for i in range(20)]
+        inbound = list(reversed(outbound))
+        coords = outbound + inbound
+        result = namer._detect_route_type(coords)
+        assert result == 'out-and-back'
+
+    def test_near_loop_with_threshold(self, namer):
+        # Start and end within 0.5km
+        coords = [(41.88 + i * 0.001, -87.63 + (i % 5) * 0.001) for i in range(20)]
+        # Force start near end
+        coords[-1] = (coords[0][0] + 0.001, coords[0][1] + 0.001)
+        result = namer._detect_route_type(coords, loop_threshold_km=0.5)
+        assert result in ('loop', 'out-and-back')
+
+
+# ---------------------------------------------------------------------------
+# _format_loop_name
+# ---------------------------------------------------------------------------
+
+class TestFormatLoopName:
+    def test_single_street_loop(self, namer):
+        streets = [_seg('Lakefront Trail', 100)]
+        assert namer._format_loop_name(streets) == 'Loop via Lakefront Trail'
+
+    def test_two_street_loop(self, namer):
+        streets = [_seg('Main St', 60), _seg('Oak Ave', 40)]
+        result = namer._format_loop_name(streets)
+        assert result == 'Loop via Main St + Oak Ave'
+
+    def test_three_street_loop_picks_top_two(self, namer):
+        streets = [
+            _seg('A St', 20),
+            _seg('B Blvd', 50),
+            _seg('C Rd', 30),
+        ]
+        result = namer._format_loop_name(streets)
+        # Main is B Blvd (50%), secondary is C Rd (30%)
+        assert result == 'Loop via B Blvd + C Rd'
+
+
+# ---------------------------------------------------------------------------
+# _format_out_and_back_name
+# ---------------------------------------------------------------------------
+
+class TestFormatOutAndBackName:
+    def test_single_street(self, namer):
+        streets = [_seg('Trail Rd', 100)]
+        assert namer._format_out_and_back_name(streets) == 'Via Trail Rd and back'
+
+    def test_two_streets(self, namer):
+        streets = [_seg('Main St', 70), _seg('End Ln', 30)]
+        result = namer._format_out_and_back_name(streets)
+        assert result == 'Main St to End Ln and back'
+
+    def test_turnaround_same_as_main(self, namer):
+        # Last street is the main street — should pick a different turnaround
+        streets = [_seg('Short Ln', 30), _seg('Main St', 70)]
+        result = namer._format_out_and_back_name(streets)
+        assert 'Main St' in result
+        assert 'Short Ln' in result
+        assert 'and back' in result
+
+
+# ---------------------------------------------------------------------------
+# _format_point_to_point_name
+# ---------------------------------------------------------------------------
+
+class TestFormatPointToPointName:
+    def test_three_unique_streets(self, namer):
+        streets = [_seg('Start St', 20), _seg('Main Blvd', 60), _seg('End Ave', 20)]
+        result = namer._format_point_to_point_name(streets, streets)
+        assert result == 'Start St → Main Blvd → End Ave'
+
+    def test_main_equals_start_deduplicated(self, namer):
+        streets = [_seg('Same St', 50), _seg('Same St', 30), _seg('End Ave', 20)]
+        # After dedup unique_streets would be [Same St, End Ave]
+        unique = [_seg('Same St', 50), _seg('End Ave', 20)]
+        result = namer._format_point_to_point_name(unique, streets)
+        assert result == 'Same St → End Ave'
+
+    def test_main_equals_end_deduplicated(self, namer):
+        streets = [_seg('Start St', 20), _seg('End Ave', 60), _seg('End Ave', 20)]
+        unique = [_seg('Start St', 20), _seg('End Ave', 60)]
+        result = namer._format_point_to_point_name(unique, streets)
+        # With 2 unique streets and dominant main (60% > 60% threshold)
+        assert 'End Ave' in result
+        assert 'Start St' in result
+
+    def test_single_unique_street(self, namer):
+        streets = [_seg('Only St', 100)]
+        result = namer._format_point_to_point_name(streets, streets)
+        assert result == 'Via Only St'
+
+    def test_two_streets_dominant(self, namer):
+        streets = [_seg('Main Rd', 70), _seg('Short Ln', 30)]
+        result = namer._format_point_to_point_name(streets, streets)
+        assert 'Main Rd' in result
+        assert 'Short Ln' in result
+        assert 'via' in result.lower()
+
+    def test_two_streets_equal(self, namer):
+        streets = [_seg('First Ave', 50), _seg('Second St', 50)]
+        result = namer._format_point_to_point_name(streets, streets)
+        assert '→' in result
+
+
+# ---------------------------------------------------------------------------
+# _generate_descriptive_name with route_type
+# ---------------------------------------------------------------------------
+
+class TestGenerateDescriptiveNameWithRouteType:
+    """Test that _generate_descriptive_name respects route_type."""
+
+    def test_loop_route_uses_loop_format(self, namer):
+        segments = [
+            _seg('Oak Ave', 40, 'start'),
+            _seg('Elm St', 30, 'middle'),
+            _seg('Oak Ave', 30, 'end'),
+        ]
+        result = namer._generate_descriptive_name(
+            {'segments': segments, 'route_type': 'loop'},
+            'route_1', 'home_to_work'
+        )
+        assert 'Loop via' in result
+
+    def test_out_and_back_route_uses_back_format(self, namer):
+        segments = [
+            _seg('Main St', 60, 'start'),
+            _seg('End Rd', 40, 'end'),
+        ]
+        result = namer._generate_descriptive_name(
+            {'segments': segments, 'route_type': 'out-and-back'},
+            'route_1', 'home_to_work'
+        )
+        assert 'and back' in result
+
+    def test_point_to_point_default(self, namer):
+        segments = [
+            _seg('Start St', 20, 'start'),
+            _seg('Main Blvd', 60, 'middle'),
+            _seg('End Ave', 20, 'end'),
+        ]
+        result = namer._generate_descriptive_name(
+            {'segments': segments, 'route_type': 'point-to-point'},
+            'route_1', 'home_to_work'
+        )
+        assert '→' in result
+        assert 'Start St' in result
+        assert 'End Ave' in result
+
+    def test_missing_route_type_defaults_to_point_to_point(self, namer):
+        segments = [
+            _seg('Start St', 20, 'start'),
+            _seg('Main Blvd', 60, 'middle'),
+            _seg('End Ave', 20, 'end'),
+        ]
+        result = namer._generate_descriptive_name(
+            {'segments': segments},  # no route_type key
+            'route_1', 'home_to_work'
+        )
+        assert '→' in result
