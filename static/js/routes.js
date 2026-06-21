@@ -849,47 +849,64 @@
         announce(`Showing ${routes.length} routes`);
     }
 
-    async function loadRoutes() {
+    function showSkeletonLoaders() {
         const container = byId('routes-container');
-        if (container) {
-            container.innerHTML = `
-                <div class="text-center py-5">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading routes...</span>
+        if (!container) return;
+        container.innerHTML = `
+            <div class="row g-3">
+                ${Array.from({length: 4}, () => `
+                <div class="col-12">
+                    <div class="skeleton-route-card" aria-busy="true" aria-label="Loading route">
+                        <div class="skeleton skeleton-route-card-rank"></div>
+                        <div class="skeleton skeleton-route-card-name"></div>
+                        <div class="skeleton-route-card-metrics">
+                            <div class="skeleton skeleton-route-card-metric"></div>
+                            <div class="skeleton skeleton-route-card-metric"></div>
+                            <div class="skeleton skeleton-route-card-metric"></div>
+                        </div>
                     </div>
-                    <p class="mt-3 text-muted">Loading routes...</p>
+                </div>`).join('')}
+            </div>
+        `;
+    }
+
+    function showErrorState(message) {
+        const container = byId('routes-container');
+        if (!container) return;
+        const safeMessage = document.createElement('span');
+        safeMessage.textContent = message || 'Failed to load routes. Please try again.';
+        container.innerHTML = `
+            <div class="alert alert-warning" role="alert">
+                <div class="d-flex align-items-center mb-2">
+                    <i class="bi bi-exclamation-triangle fs-4 me-2"></i>
+                    <strong>Unable to Load Routes</strong>
                 </div>
-            `;
-        }
+                <p class="mb-2" id="routes-error-message"></p>
+                <button class="btn btn-primary btn-sm" id="routes-retry-btn">
+                    <i class="bi bi-arrow-clockwise"></i> Retry
+                </button>
+            </div>
+        `;
+        byId('routes-error-message').appendChild(safeMessage);
+        byId('routes-retry-btn').addEventListener('click', loadRoutes);
+    }
+
+    async function loadRoutes() {
+        showSkeletonLoaders();
 
         try {
             const response = await window.apiClient.getRoutes();
             state.routes = Array.isArray(response.routes) ? response.routes : [];
             state.filteredRoutes = applyClientFilters(state.routes, getFilters());
-            state.lastUpdated = response.timestamp; // Store timestamp for display
+            state.lastUpdated = response.timestamp;
             renderRoutes(state.filteredRoutes);
-            
-            // Display timestamp if available
+
             if (response.timestamp) {
                 displayRoutesTimestamp(response.timestamp);
             }
         } catch (error) {
             console.error('Failed to load routes:', error);
-            if (container) {
-                const errorMessage = error.message || 'Failed to load routes. Please try again.';
-                container.innerHTML = `
-                    <div class="alert alert-warning" role="alert">
-                        <div class="d-flex align-items-center mb-2">
-                            <i class="bi bi-exclamation-triangle fs-4 me-2"></i>
-                            <strong>Unable to Load Routes</strong>
-                        </div>
-                        <p class="mb-2">${errorMessage}</p>
-                        <button class="btn btn-primary btn-sm" onclick="window.location.reload()">
-                            <i class="bi bi-arrow-clockwise"></i> Retry
-                        </button>
-                    </div>
-                `;
-            }
+            showErrorState(error.message);
             renderSummary(0);
             announce('Failed to load routes');
         }
@@ -1001,6 +1018,70 @@
         }
     }
 
+    async function loadSavedPlans() {
+        const section = byId('saved-plans-section');
+        const list = byId('saved-plans-list');
+        if (!section || !list) return;
+
+        try {
+            const response = await window.apiClient.getPlans();
+            const plans = Array.isArray(response.plans) ? response.plans : [];
+            if (!plans.length) {
+                section.style.display = 'none';
+                return;
+            }
+
+            section.style.display = '';
+            list.innerHTML = plans.map(plan => {
+                const date = plan.created_at
+                    ? new Date(plan.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                    : '';
+                const dist = plan.distance ? window.formatDistance(plan.distance) : '';
+                return `<div class="d-flex align-items-center justify-content-between py-1 border-bottom" data-plan-id="${plan.id}">
+                    <div class="d-flex align-items-center gap-2 flex-grow-1 overflow-hidden">
+                        <a href="/route-detail.html?id=${encodeURIComponent(plan.route_id)}${plan.route_type ? '&type=' + encodeURIComponent(plan.route_type) : ''}"
+                           class="text-decoration-none text-truncate fw-medium">${plan.route_name || plan.route_id}</a>
+                        ${dist ? `<span class="text-muted small">${dist}</span>` : ''}
+                        ${plan.note ? `<span class="text-muted small fst-italic text-truncate">${plan.note}</span>` : ''}
+                    </div>
+                    <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                        <span class="text-muted small">${date}</span>
+                        <button class="btn btn-sm btn-outline-danger py-0 px-1 delete-plan-btn" data-plan-id="${plan.id}" title="Remove plan">
+                            <i class="bi bi-x"></i>
+                        </button>
+                    </div>
+                </div>`;
+            }).join('');
+
+            list.querySelectorAll('.delete-plan-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    const planId = btn.dataset.planId;
+                    btn.disabled = true;
+                    try {
+                        await window.apiClient.deletePlan(planId);
+                        loadSavedPlans();
+                    } catch (err) {
+                        btn.disabled = false;
+                    }
+                });
+            });
+
+            const toggleBtn = byId('toggle-plans-btn');
+            const body = byId('saved-plans-body');
+            if (toggleBtn && body) {
+                toggleBtn.onclick = () => {
+                    const collapsed = body.style.display === 'none';
+                    body.style.display = collapsed ? '' : 'none';
+                    toggleBtn.innerHTML = collapsed ? '<i class="bi bi-chevron-up"></i>' : '<i class="bi bi-chevron-down"></i>';
+                    toggleBtn.setAttribute('aria-expanded', collapsed);
+                };
+            }
+        } catch (err) {
+            console.error('Failed to load saved plans:', err);
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
         // Only initialize if we're on the routes page (has routes-container)
         const routesContainer = byId('routes-container');
@@ -1009,6 +1090,7 @@
             initializeMap();
             bindEvents();
             loadRoutes();
+            loadSavedPlans();
         } else {
             console.log('ℹ Not on routes page, skipping routes.js initialization');
         }

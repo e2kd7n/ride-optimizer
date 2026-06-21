@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-06-18 03:14:30 UTC / 2026-06-17 22:14:30 CDT
+**Last Updated:** 2026-06-21
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -8,13 +8,13 @@ This file reflects the current state of GitHub issues organized by release miles
 
 ## 📍 Release Context
 
-- **Current Release:** v0.14.0 (deployed)
-- **Next Release:** v0.14.0 (in development)
-- **Future Releases:** v0.15.0
+- **Current Release:** v0.14.0 (deployed — includes #264 UX audit, #326 TrainerRoad UI, #107 interactive route map)
+- **Next Release:** v0.15.0 (in development)
+- **Future Releases:** v0.16.0
 
 ---
 
-## 🎯 v0.14.0 (Next Release - IN DEVELOPMENT)
+## 🎯 v0.15.0 (Next Release - IN DEVELOPMENT)
 
 **Priority within this release determines work order. Complete P0/P1 issues before moving to future releases.**
 
@@ -25,23 +25,23 @@ This file reflects the current state of GitHub issues organized by release miles
 **No P1 issues** ✅
 
 ### 🟡 P2 - MEDIUM
-- #309 - SQLAlchemy models and scheduler never wired to production (relates to #131)
-- #308 - Dead blueprint cluster: app/routes/ never registered in production
+- #330 - Complete ntfy.sh push notification integration
+- #322 - Unify route comparison pipelines between commute and long ride analyzers
+- #307 - perf: reduce startup cost and per-request overhead on Pi
 - #272 - Add Hourly Weather Forecast
-- #264 - Dashboard and Route Library UX Review
 - #209 - Implement graceful degradation for unavailable services
 - #207 - Implement dependency injection pattern for better testability
-- #183 - Code Quality: Add debug logging for exception handlers
-- #182 - Code Quality: Replace 4 bare except statements with specific exceptions
+- #194 - Long Rides: Add accessibility features (WCAG 2.1 AA)
+- #180 - Add planner-specific API client methods
 - #136 - Implement settings and preferences page for home/work locations, units, time windows, and planner defaults
 - #108 - Integrate forecast generator into main.py workflow
-- #105 - Add monthly ride statistics breakdown
+- #106 - Add average speed and elevation gain metrics
 - #94 - Implement Accessibility Improvements
 
 ### 🟢 P3 - LOW
+- #321 - feat: Garmin Connect integration — graceful FTUE for connecting and harvesting
 - #200 - Route naming improvements (Start → Main → End format)
 - #199 - Design: Test on real iOS/Android devices
-- #196 - Design: Ensure touch targets ≥44x44px with 8px spacing
 - #195 - Design: Verify mobile-first responsive design (320px viewport)
 - #177 - UI/UX: Add clickable 'Uses' column with modal
 - #170 - Design: Test keyboard navigation and screen reader support
@@ -63,25 +63,14 @@ This file reflects the current state of GitHub issues organized by release miles
 
 ---
 
-## 📅 v0.15.0 (Future Release)
-
-### 🔴 P1 - HIGH
-- #260 - Implement guided FTUE for Strava API key setup with in-app configuration
-- #254 - Implement Animated GIF Tutorials for Key Features
-- #172 - Add Marshmallow validation schemas for planner endpoints
+## 📅 v0.16.0 (Future Release)
 
 ### 🟡 P2 - MEDIUM
-- #322 - Unify route comparison pipelines between commute and long ride analyzers
-- #307 - perf: reduce startup cost and per-request overhead on Pi
-- #194 - Long Rides: Add accessibility features (WCAG 2.1 AA)
-- #193 - Long Rides: Implement skeleton loaders and error states
-- #180 - Add planner-specific API client methods
-- #141 - Add repeat-a-past-ride flow and saved plan support
-- #107 - Add interactive map showing all long ride routes
-- #106 - Add average speed and elevation gain metrics
-
-### 🟢 P3 - LOW
-- #321 - feat: Garmin Connect integration — graceful FTUE for connecting and harvesting
+- #298 - chore: bump GitHub Actions to Node.js 24 (actions v5)
+- #275 - Major refactor: Centralize configuration and extract monolithic services
+- #284 - Long Rides: build new v0.15.0 implementation plan
+- #282 - 🚴 Epic: Long Rides feature re-planning and implementation
+- #261 - Senior Engineer Code Review Request
 
 ---
 
@@ -96,10 +85,9 @@ These issues need to be assigned to a release milestone and prioritized.
 ## 📝 Workspace TODOs & Tasks
 Code comments and inline tasks found in the workspace that may need attention.
 
-Found **2** code comments requiring attention:
+Found **1** code comment requiring attention:
 
 - `app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
-- `static/js/dashboard.js` - 7:// NOTE: Initialization is handled by inline script in index.html
 
 ## 📖 Priority System (Release-Aware)
 

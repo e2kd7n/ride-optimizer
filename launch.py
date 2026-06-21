@@ -1130,6 +1130,72 @@ def get_route_detail(route_id):
         }), 500
 
 
+# ── Saved Plans ────────────────────────────────────────────────
+
+@app.route('/api/plans', methods=['GET'])
+@limiter.limit("30 per minute")
+def get_plans():
+    """List all saved plans."""
+    plans = storage.read('saved_plans.json', default=[])
+    return jsonify({'status': 'success', 'plans': plans})
+
+
+@app.route('/api/plans', methods=['POST'])
+@limiter.limit("10 per minute")
+def save_plan():
+    """Save a ride plan from an existing route."""
+    data = request.get_json(silent=True) or {}
+    route_id = data.get('route_id')
+    route_name = data.get('route_name', '')
+    route_type = data.get('route_type', '')
+    note = data.get('note', '')
+    distance = data.get('distance', 0)
+    duration = data.get('duration', 0)
+    elevation = data.get('elevation', 0)
+
+    if not route_id:
+        return jsonify({'status': 'error', 'message': 'route_id is required'}), 400
+
+    if len(str(note)) > 500:
+        return jsonify({'status': 'error', 'message': 'Note must be 500 characters or less'}), 400
+
+    plans = storage.read('saved_plans.json', default=[])
+
+    plan = {
+        'id': secrets.token_hex(8),
+        'route_id': str(route_id),
+        'route_name': str(route_name)[:200],
+        'route_type': str(route_type)[:50],
+        'note': str(note)[:500],
+        'distance': distance,
+        'duration': duration,
+        'elevation': elevation,
+        'created_at': datetime.now().isoformat(),
+    }
+    plans.insert(0, plan)
+    storage.write('saved_plans.json', plans)
+
+    return jsonify({'status': 'success', 'plan': plan}), 201
+
+
+@app.route('/api/plans/<plan_id>', methods=['DELETE'])
+@limiter.limit("10 per minute")
+def delete_plan(plan_id):
+    """Delete a saved plan."""
+    if not plan_id or not plan_id.replace('-', '').replace('_', '').isalnum():
+        return jsonify({'status': 'error', 'message': 'Invalid plan ID'}), 400
+
+    plans = storage.read('saved_plans.json', default=[])
+    original_len = len(plans)
+    plans = [p for p in plans if p.get('id') != plan_id]
+
+    if len(plans) == original_len:
+        return jsonify({'status': 'error', 'message': 'Plan not found'}), 404
+
+    storage.write('saved_plans.json', plans)
+    return jsonify({'status': 'success'})
+
+
 @app.route('/api/status')
 @limiter.exempt
 def get_status():
