@@ -21,34 +21,40 @@ from pathlib import Path
 import json
 
 from app.services.trainerroad_service import TrainerRoadService
-from src.config import Config
+from src.config_manager import ConfigManager
 
 
 @pytest.fixture
 def mock_config():
     """Create a mock configuration."""
-    config = Mock(spec=Config)
+    config = Mock(spec=ConfigManager)
     config.get = Mock(side_effect=lambda key, default=None: {
         'trainerroad.sync_interval_hours': 6
     }.get(key, default))
     return config
 
 
+@pytest.fixture(autouse=True)
+def _patch_config_manager(mock_config):
+    """Patch ConfigManager.get_instance globally for all tests."""
+    with patch('app.services.trainerroad_service.ConfigManager.get_instance', return_value=mock_config):
+        yield
+
+
 @pytest.fixture
 def trainerroad_service(mock_config, tmp_path):
     """Create a TrainerRoadService instance with mocked dependencies."""
     with patch('app.services.trainerroad_service.Path') as mock_path:
-        # Mock paths to use tmp_path
         mock_path.return_value = tmp_path / 'config'
-        
+
         with patch.object(TrainerRoadService, '_get_cipher') as mock_cipher, \
              patch.object(TrainerRoadService, '_load_feed_url', return_value=None):
-            
+
             mock_cipher.return_value = Mock()
-            service = TrainerRoadService(mock_config)
+            service = TrainerRoadService()
             service.credentials_path = tmp_path / 'credentials.json'
             service.key_file = tmp_path / 'key'
-            
+
             return service
 
 
@@ -99,7 +105,7 @@ class TestTrainerRoadServiceInit:
         with patch.object(TrainerRoadService, '_get_cipher') as mock_cipher, \
              patch.object(TrainerRoadService, '_load_feed_url', return_value=None):
             
-            service = TrainerRoadService(mock_config)
+            service = TrainerRoadService()
             
             assert service.config == mock_config
             assert service.sync_interval_hours == 6
@@ -111,7 +117,7 @@ class TestTrainerRoadServiceInit:
         with patch.object(TrainerRoadService, '_get_cipher'), \
              patch.object(TrainerRoadService, '_load_feed_url', return_value='https://example.com/feed.ics') as mock_load:
             
-            service = TrainerRoadService(mock_config)
+            service = TrainerRoadService()
             
             assert service.feed_url == 'https://example.com/feed.ics'
             mock_load.assert_called_once()
@@ -126,7 +132,7 @@ class TestEncryptionSetup:
              patch('app.services.trainerroad_service.Fernet') as mock_fernet, \
              patch.object(TrainerRoadService, '_load_feed_url', return_value=None):
             
-            service = TrainerRoadService(mock_config)
+            service = TrainerRoadService()
             
             mock_fernet.assert_called_with(b'test_key_base64')
     
@@ -139,7 +145,7 @@ class TestEncryptionSetup:
              patch('app.services.trainerroad_service.Fernet') as mock_fernet, \
              patch.object(TrainerRoadService, '_load_feed_url', return_value=None):
             
-            service = TrainerRoadService(mock_config)
+            service = TrainerRoadService()
             service.key_file = key_file
             
             # Manually call _get_cipher to test the logic
@@ -155,7 +161,7 @@ class TestEncryptionSetup:
             
             mock_fernet.generate_key.return_value = b'new_generated_key'
             
-            service = TrainerRoadService(mock_config)
+            service = TrainerRoadService()
             service.key_file = tmp_path / 'new_key'
             
             cipher = service._get_cipher()

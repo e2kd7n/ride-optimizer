@@ -24,10 +24,11 @@ Licensed under the MIT License - see LICENSE file for details.
 """
 
 import logging
-import json
+import os
 from pathlib import Path
 from typing import Any, Optional, Dict
 import yaml
+from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
@@ -85,21 +86,34 @@ class ConfigManager:
     
     def _load_config(self) -> None:
         """
-        Load configuration from YAML file.
-        
+        Load configuration from YAML file and substitute environment variables.
+
         Raises:
             FileNotFoundError: If config file does not exist
             yaml.YAMLError: If config file has invalid YAML syntax
         """
+        load_dotenv()
+
         if not self.config_file.exists():
             raise FileNotFoundError(f"Configuration file not found: {self.config_file}")
-        
+
         try:
             with open(self.config_file, 'r') as f:
                 self._config = yaml.safe_load(f) or {}
+            self._config = self._replace_env_vars(self._config)
             logger.info(f"Configuration loaded from {self.config_file}")
         except yaml.YAMLError as e:
             raise yaml.YAMLError(f"Invalid YAML in {self.config_file}: {e}")
+
+    def _replace_env_vars(self, config: Any) -> Any:
+        """Replace ${VAR_NAME} placeholders with environment variable values."""
+        if isinstance(config, dict):
+            return {k: self._replace_env_vars(v) for k, v in config.items()}
+        elif isinstance(config, list):
+            return [self._replace_env_vars(item) for item in config]
+        elif isinstance(config, str) and config.startswith('${') and config.endswith('}'):
+            return os.getenv(config[2:-1])
+        return config
     
     def get(self, key: str, default: Any = None) -> Any:
         """
@@ -163,6 +177,14 @@ class ConfigManager:
         current[keys[-1]] = value
         logger.debug(f"Configuration set: {key} = {value}")
     
+    def __getitem__(self, key: str) -> Any:
+        """Allow dictionary-style access to top-level configuration keys."""
+        return self._config[key]
+
+    def __contains__(self, key: str) -> bool:
+        """Check if a top-level key exists in configuration."""
+        return key in self._config
+
     def get_section(self, section: str) -> Dict[str, Any]:
         """
         Get an entire configuration section as a dictionary.
