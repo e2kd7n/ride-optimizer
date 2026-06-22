@@ -71,8 +71,14 @@ function isWorkoutDataStale() {
 }
 
 /**
+ * Workout options cache — fetched from /api/workout-options
+ */
+let _workoutOptions = null;
+
+/**
  * Load workout strip between weather banner and hero card.
- * Only renders when TrainerRoad is configured and a workout exists today.
+ * When a workout is scheduled, fetches unified options and renders
+ * an option selector (commute, dedicated ride, indoor).
  */
 async function loadWorkoutStrip() {
     const container = document.getElementById('workout-strip');
@@ -84,31 +90,24 @@ async function loadWorkoutStrip() {
     }
 
     try {
-        const w = _todayWorkout;
+        const resp = await fetch('/api/workout-options');
+        const data = await resp.json();
+
+        if (data.status !== 'success') {
+            renderBasicWorkoutStrip(container);
+            return;
+        }
+
+        _workoutOptions = data;
         const esc = window.escapeHtml;
+        const w = data.workout;
         const typeBadgeClass = WORKOUT_TYPE_BADGES[w.type] || 'bg-secondary';
-
-        const fitScore = w.fit_score || 0;
-        const fitClass = w.indoor_fallback ? 'fit-poor'
-                       : fitScore >= 0.7 ? 'fit-good'
-                       : fitScore >= 0.4 ? 'fit-moderate'
-                       : 'fit-poor';
-        const fitLabel = w.indoor_fallback ? 'Indoor'
-                       : fitScore >= 0.7 ? 'Good fit'
-                       : fitScore >= 0.4 ? 'Moderate fit'
-                       : fitScore > 0 ? 'Poor fit' : '';
-        const fitIcon = w.indoor_fallback ? 'bi-house-door'
-                      : fitScore >= 0.7 ? 'bi-check-circle'
-                      : fitScore >= 0.4 ? 'bi-dash-circle'
-                      : 'bi-x-circle';
-
-        const noteText = w.notes && w.notes.length > 0 ? esc(w.notes[0]) : '';
         const stale = isWorkoutDataStale();
         const staleBadge = stale
             ? '<span class="badge bg-warning text-dark ms-2"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Stale</span>'
             : '';
 
-        container.innerHTML = `
+        let html = `
             <div class="workout-strip">
                 <i class="bi bi-lightning-charge workout-strip-icon" aria-hidden="true"></i>
                 <div>
@@ -119,14 +118,105 @@ async function loadWorkoutStrip() {
                         ${w.tss ? `<span><i class="bi bi-speedometer2" aria-hidden="true"></i> TSS ${w.tss}</span>` : ''}
                     </div>
                 </div>
-                ${noteText ? `<div class="workout-strip-note">${noteText}</div>` : ''}
-                ${fitLabel ? `<span class="workout-fit-badge ${fitClass}"><i class="bi ${fitIcon}" aria-hidden="true"></i> ${fitLabel}</span>` : ''}
             </div>`;
+
+        if (!data.weather_suitable) {
+            html += `
+                <div class="alert alert-warning py-2 px-3 mt-2 mb-0 d-flex align-items-start gap-2 small" role="alert">
+                    <i class="bi bi-house-door mt-1 flex-shrink-0" aria-hidden="true"></i>
+                    <div>
+                        <strong>Indoor trainer recommended.</strong>
+                        ${data.indoor_reason ? esc(data.indoor_reason) + '.' : ''}
+                    </div>
+                </div>`;
+        } else {
+            html += renderWorkoutOptionCards(data.options, esc);
+        }
+
+        container.innerHTML = html;
         container.style.display = '';
+
+        container.querySelectorAll('.workout-option-card').forEach(card => {
+            card.addEventListener('click', () => {
+                container.querySelectorAll('.workout-option-card').forEach(c => c.classList.remove('active'));
+                card.classList.add('active');
+            });
+        });
     } catch (error) {
-        console.warn('Workout strip unavailable:', error);
-        container.style.display = 'none';
+        console.warn('Workout options unavailable:', error);
+        renderBasicWorkoutStrip(container);
     }
+}
+
+function renderBasicWorkoutStrip(container) {
+    if (!_todayWorkout) { container.style.display = 'none'; return; }
+    const esc = window.escapeHtml;
+    const w = _todayWorkout;
+    const typeBadgeClass = WORKOUT_TYPE_BADGES[w.type] || 'bg-secondary';
+    container.innerHTML = `
+        <div class="workout-strip">
+            <i class="bi bi-lightning-charge workout-strip-icon" aria-hidden="true"></i>
+            <div>
+                <div class="workout-strip-name">${esc(w.name)}</div>
+                <div class="workout-strip-meta">
+                    <span class="badge ${typeBadgeClass}">${esc(w.type || 'Workout')}</span>
+                    ${w.duration_minutes ? `<span><i class="bi bi-clock" aria-hidden="true"></i> ${w.duration_minutes} min</span>` : ''}
+                    ${w.tss ? `<span><i class="bi bi-speedometer2" aria-hidden="true"></i> TSS ${w.tss}</span>` : ''}
+                </div>
+            </div>
+        </div>`;
+    container.style.display = '';
+}
+
+function renderWorkoutOptionCards(options, esc) {
+    const cards = [];
+
+    if (options.commute) {
+        const c = options.commute;
+        const scorePct = Math.round((c.fit_score || 0) * 100);
+        const scoreClass = scorePct >= 70 ? 'bg-success' : scorePct >= 40 ? 'bg-warning text-dark' : 'bg-secondary';
+        cards.push(`
+            <div class="workout-option-card active" data-option="commute" role="button" tabindex="0">
+                <div class="workout-option-label"><i class="bi bi-signpost-2"></i> Commute${c.is_extended ? '+Workout' : ''}</div>
+                <div class="fw-semibold small">${esc((c.route && c.route.name) || 'Commute route')}</div>
+                <div class="d-flex gap-2 small text-muted">
+                    ${c.duration_minutes ? `<span>${c.duration_minutes} min</span>` : ''}
+                    ${c.route && c.route.distance ? `<span>${c.route.distance.toFixed(1)} mi</span>` : ''}
+                </div>
+                <span class="badge ${scoreClass} mt-1">${scorePct > 0 ? scorePct + ' fit' : 'Commute fit'}</span>
+            </div>`);
+    }
+
+    if (options.workout_ride) {
+        const wr = options.workout_ride;
+        const scorePct = Math.round((wr.fit_score || 0) * 100);
+        const scoreClass = scorePct >= 70 ? 'bg-success' : scorePct >= 40 ? 'bg-warning text-dark' : 'bg-secondary';
+        cards.push(`
+            <div class="workout-option-card" data-option="workout_ride" role="button" tabindex="0">
+                <div class="workout-option-label"><i class="bi bi-bicycle"></i> Dedicated Ride</div>
+                <div class="fw-semibold small">${esc((wr.route && wr.route.name) || 'Best match')}</div>
+                <div class="d-flex gap-2 small text-muted">
+                    ${wr.duration_minutes ? `<span>${wr.duration_minutes} min</span>` : ''}
+                    ${wr.route && wr.route.distance ? `<span>${wr.route.distance.toFixed(1)} mi</span>` : ''}
+                </div>
+                <span class="badge ${scoreClass} mt-1">${scorePct > 0 ? scorePct + ' match' : 'Best match'}</span>
+            </div>`);
+    }
+
+    if (options.indoor) {
+        cards.push(`
+            <div class="workout-option-card" data-option="indoor" role="button" tabindex="0">
+                <div class="workout-option-label"><i class="bi bi-house-door"></i> Indoor</div>
+                <div class="fw-semibold small">Trainer</div>
+                <div class="d-flex gap-2 small text-muted">
+                    ${options.indoor.duration_minutes ? `<span>${options.indoor.duration_minutes} min</span>` : ''}
+                </div>
+                <span class="badge bg-secondary mt-1">Full control</span>
+            </div>`);
+    }
+
+    if (cards.length === 0) return '';
+    return `<div class="workout-options-row mt-2">${cards.join('')}</div>`;
 }
 
 /**

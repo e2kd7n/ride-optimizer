@@ -20,6 +20,10 @@ from scipy.spatial.distance import directed_hausdorff
 
 from .data_fetcher import Activity
 from .route_namer import RouteNamer
+from .route_comparison import (
+    coords_to_km, extent_point, passes_prefilter,
+    combined_distance_km, LONG_RIDE_THRESHOLDS,
+)
 from .weather_fetcher import WeatherFetcher
 from .units import UnitConverter
 
@@ -184,22 +188,11 @@ class LongRideAnalyzer:
     
     @staticmethod
     def _coords_to_km(coords: np.ndarray) -> np.ndarray:
-        """Convert (lat, lon) degree array to km-scaled coordinates using mean latitude."""
-        if len(coords) == 0:
-            return coords
-        mean_lat = float(np.mean(coords[:, 0]))
-        lat_km = 111.32
-        lon_km = 111.32 * math.cos(math.radians(mean_lat))
-        result = coords.copy().astype(float)
-        result[:, 0] *= lat_km
-        result[:, 1] *= lon_km
-        return result
+        return coords_to_km(coords)
 
     @staticmethod
     def _extent_point(coords_km: np.ndarray) -> np.ndarray:
-        """Return the point on the route that is farthest from the start (km coordinates)."""
-        dists = np.linalg.norm(coords_km - coords_km[0], axis=1)
-        return coords_km[int(np.argmax(dists))]
+        return extent_point(coords_km)
 
     def consolidate_similar_named_groups(self, name_groups: Dict[str, List[Activity]],
                                         similarity_threshold: float = 2.0,

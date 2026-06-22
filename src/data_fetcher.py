@@ -118,6 +118,50 @@ class Activity:
             kudos_count=_opt_int(getattr(activity, 'kudos_count', None)) or 0,
         )
     
+    @classmethod
+    def from_garmin_activity(cls, ga: Dict[str, Any]):
+        """Create Activity from a garth activity dict."""
+        start_lat = ga.get('startLatitude')
+        start_lon = ga.get('startLongitude')
+        end_lat = ga.get('endLatitude')
+        end_lon = ga.get('endLongitude')
+
+        sport_map = {
+            'cycling': 'Ride',
+            'road_biking': 'Ride',
+            'gravel_cycling': 'GravelRide',
+            'mountain_biking': 'Ride',
+            'virtual_ride': 'VirtualRide',
+            'indoor_cycling': 'VirtualRide',
+            'running': 'Run',
+            'trail_running': 'Run',
+            'walking': 'Walk',
+            'hiking': 'Hike',
+        }
+        raw_type = (ga.get('activityType', {}).get('typeKey', '') or '').lower()
+        sport_type = sport_map.get(raw_type, 'Ride')
+
+        return cls(
+            id=ga.get('activityId', 0),
+            name=ga.get('activityName', 'Garmin Activity'),
+            type=sport_type,
+            sport_type=sport_type,
+            start_date=ga.get('startTimeLocal'),
+            distance=ga.get('distance', 0.0),
+            moving_time=int(ga.get('movingDuration') or ga.get('duration') or 0),
+            elapsed_time=int(ga.get('duration', 0)),
+            total_elevation_gain=ga.get('elevationGain', 0.0),
+            start_latlng=(start_lat, start_lon) if start_lat and start_lon else None,
+            end_latlng=(end_lat, end_lon) if end_lat and end_lon else None,
+            polyline=None,
+            average_speed=ga.get('averageSpeed', 0.0),
+            max_speed=ga.get('maxSpeed', 0.0),
+            average_heartrate=ga.get('averageHR'),
+            max_heartrate=ga.get('maxHR'),
+            average_watts=ga.get('avgPower'),
+            kilojoules=None,
+        )
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
         return asdict(self)

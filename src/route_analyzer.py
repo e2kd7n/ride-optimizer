@@ -27,6 +27,11 @@ from tqdm import tqdm
 from .data_fetcher import Activity
 from .location_finder import Location
 from .route_namer import RouteNamer
+from .route_comparison import (
+    coords_to_km, extent_point, passes_prefilter,
+    similarity_score as shared_similarity_score,
+    COMMUTE_THRESHOLDS,
+)
 
 logger = logging.getLogger(__name__)
 

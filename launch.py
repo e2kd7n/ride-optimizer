@@ -956,6 +956,115 @@ def get_commute():
         }), 500
 
 
+@app.route('/api/workout-options')
+@limiter.limit("30 per minute")
+def get_workout_options():
+    """
+    Unified workout options for today's dashboard.
+
+    Returns workout info, weather suitability, and up to three options
+    (commute, dedicated workout ride, indoor) so the frontend renders
+    a single decision panel.
+    """
+    initialize_services()
+
+    from datetime import date as _date
+
+    has_tr = (_trainerroad_service
+              and _trainerroad_service.get_feed_url() is not None)
+    if not has_tr:
+        return jsonify({'status': 'no_workout'})
+
+    try:
+        constraints = _trainerroad_service.get_workout_constraints(_date.today())
+        if not constraints or not constraints.get('has_workout'):
+            return jsonify({'status': 'no_workout'})
+
+        # Weather indoor decision
+        if _commute_service:
+            _commute_service._apply_weather_indoor_decision(constraints)
+
+        weather_suitable = not constraints.get('indoor_fallback', False)
+        indoor_reason = constraints.get('indoor_reason')
+
+        workout_info = {
+            'name': constraints.get('workout_name', 'Workout'),
+            'type': constraints.get('workout_type', ''),
+            'duration_minutes': constraints.get('min_duration_minutes'),
+            'tss': constraints.get('tss'),
+        }
+
+        options = {}
+
+        # Commute option
+        if _commute_service:
+            try:
+                commute_rec = _commute_service.get_workout_aware_commute()
+                if commute_rec.get('status') == 'success':
+                    route = commute_rec.get('route', {})
+                    wf = commute_rec.get('workout_fit', {})
+                    options['commute'] = {
+                        'route': {
+                            'id': route.get('id'),
+                            'name': route.get('name', 'Commute'),
+                            'distance': route.get('distance'),
+                            'elevation': route.get('elevation'),
+                        },
+                        'fit_score': wf.get('fit_score', 0) if wf else 0,
+                        'is_extended': commute_rec.get('is_workout_extended', False),
+                        'duration_minutes': round(route.get('duration', 0)) if route.get('duration') else None,
+                    }
+            except Exception as e:
+                logger.warning(f"Workout-options: commute unavailable: {e}")
+
+        # Dedicated workout ride option (only when weather is suitable)
+        if weather_suitable and _planner_service and _planner_service._long_rides:
+            try:
+                home_loc = None
+                if _commute_service and _commute_service._recommender:
+                    hl = _commute_service._recommender.home_location
+                    home_loc = (hl.lat, hl.lon)
+                rides = _planner_service.get_workout_rides(
+                    workout_type=constraints.get('workout_type', ''),
+                    target_duration_min=constraints.get('min_duration_minutes'),
+                    location=home_loc,
+                    limit=3,
+                )
+                if rides:
+                    best = rides[0]
+                    options['workout_ride'] = {
+                        'route': {
+                            'name': best['name'],
+                            'distance': best['distance_miles'],
+                            'elevation': best['elevation_ft'],
+                        },
+                        'fit_score': best['score'],
+                        'duration_minutes': best['duration_minutes'],
+                        'alternatives': rides[1:],
+                    }
+            except Exception as e:
+                logger.warning(f"Workout-options: workout ride unavailable: {e}")
+
+        # Indoor option (always available)
+        options['indoor'] = {
+            'duration_minutes': constraints.get('min_duration_minutes'),
+            'notes': 'Full workout as prescribed',
+        }
+
+        return jsonify({
+            'status': 'success',
+            'workout': workout_info,
+            'weather_suitable': weather_suitable,
+            'indoor_reason': indoor_reason,
+            'options': options,
+            'timestamp': datetime.now().isoformat(),
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting workout options: {e}", exc_info=True)
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
 @app.route('/api/commute/map')
 def get_commute_map():
     """
@@ -1802,6 +1911,95 @@ def intervals_connect():
     except OSError as exc:
         logger.error("intervals.icu: failed to write .env: %s", exc)
         return jsonify({'success': False, 'error': 'Could not save credentials'}), 500
+
+
+# ── Garmin Connect Integration ────────────────────────────────────
+
+_garmin_service = None
+
+
+def _get_garmin_service():
+    global _garmin_service
+    if _garmin_service is None:
+        from app.services.garmin_service import GarminService
+        _garmin_service = GarminService()
+    return _garmin_service
+
+
+@app.route('/api/garmin/status')
+@limiter.limit("30 per minute")
+def garmin_status():
+    """Return Garmin Connect connection status."""
+    svc = _get_garmin_service()
+    return jsonify(svc.get_status())
+
+
+@app.route('/api/garmin/connect', methods=['POST'])
+@csrf.exempt
+@limiter.limit("5 per minute")
+def garmin_connect():
+    """Authenticate with Garmin Connect via email + password."""
+    data = request.get_json(silent=True) or {}
+    email = str(data.get('email', '')).strip()
+    password = str(data.get('password', '')).strip()
+
+    if not email or not password:
+        return jsonify({'success': False, 'error': 'Email and password are required'}), 400
+
+    svc = _get_garmin_service()
+    result = svc.connect(email, password)
+    if result['success']:
+        return jsonify(result)
+    return jsonify(result), 400
+
+
+@app.route('/api/garmin/disconnect', methods=['POST'])
+@csrf.exempt
+@limiter.limit("5 per minute")
+def garmin_disconnect():
+    """Remove Garmin Connect credentials."""
+    svc = _get_garmin_service()
+    svc.disconnect()
+    return jsonify({'success': True})
+
+
+@app.route('/api/garmin/sync', methods=['POST'])
+@csrf.exempt
+@limiter.limit("3 per minute")
+def garmin_sync():
+    """Fetch activities from Garmin Connect and merge into local cache."""
+    initialize_services()
+
+    svc = _get_garmin_service()
+    if not svc.is_connected():
+        return jsonify({'success': False, 'error': 'Garmin not connected'}), 400
+
+    data = request.get_json(silent=True) or {}
+    days = min(int(data.get('days', 90)), 365)
+
+    try:
+        activities = svc.fetch_activities(days=days)
+        if _analysis_service and _analysis_service.data_fetcher:
+            existing = _analysis_service.data_fetcher.load_cached_activities() or []
+            existing_ids = {a.id for a in existing}
+            new_acts = [a for a in activities if a.id not in existing_ids]
+            if new_acts:
+                merged = existing + new_acts
+                _analysis_service.data_fetcher.cache_activities(merged)
+            return jsonify({
+                'success': True,
+                'fetched': len(activities),
+                'new': len(new_acts),
+                'total': len(existing) + len(new_acts),
+            })
+        return jsonify({
+            'success': True,
+            'fetched': len(activities),
+            'new': len(activities),
+        })
+    except Exception as e:
+        logger.error(f"Garmin sync failed: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 # ── TrainerRoad Integration ───────────────────────────────────────

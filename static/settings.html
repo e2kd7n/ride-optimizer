@@ -328,6 +328,57 @@
 
                             <hr class="my-3">
 
+                            <!-- Garmin Connect -->
+                            <h3 class="h6 fw-bold mb-2"><i class="bi bi-smartwatch me-1" aria-hidden="true"></i>Garmin Connect</h3>
+                            <div class="mb-3 d-flex align-items-center gap-3 flex-wrap">
+                                <div id="garmin-connection-status">
+                                    <span class="text-muted small"><i class="bi bi-hourglass-split"></i> Checking Garmin…</span>
+                                </div>
+                            </div>
+
+                            <p class="small text-muted mb-3">
+                                Import cycling activities from Garmin Connect as a secondary data source alongside Strava.
+                            </p>
+
+                            <div id="garmin-connect-form">
+                                <div class="row g-3">
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-bold" for="garmin-email">Email</label>
+                                        <input type="email" class="form-control" id="garmin-email" placeholder="you@example.com"
+                                               autocomplete="email" spellcheck="false">
+                                    </div>
+                                    <div class="col-md-5">
+                                        <label class="form-label fw-bold" for="garmin-password">Password</label>
+                                        <input type="password" class="form-control" id="garmin-password" placeholder="Garmin password"
+                                               autocomplete="new-password">
+                                    </div>
+                                    <div class="col-md-3 d-flex align-items-end">
+                                        <button type="button" class="btn btn-primary w-100" id="garmin-connect-btn">
+                                            <i class="bi bi-link-45deg" aria-hidden="true"></i> Connect
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="garmin-connect-feedback" class="mt-2" style="display:none"></div>
+                            </div>
+
+                            <div id="garmin-connected-state" style="display:none">
+                                <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                                    <span class="badge bg-success"><i class="bi bi-check-circle"></i> Connected</span>
+                                    <span class="text-muted small" id="garmin-display-name"></span>
+                                </div>
+                                <div class="d-flex gap-2 flex-wrap">
+                                    <button type="button" class="btn btn-sm btn-outline-primary" id="garmin-sync-btn">
+                                        <i class="bi bi-arrow-repeat" aria-hidden="true"></i> Sync Activities
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" id="garmin-disconnect-btn">
+                                        <i class="bi bi-x-lg" aria-hidden="true"></i> Disconnect
+                                    </button>
+                                </div>
+                                <div id="garmin-sync-feedback" class="mt-2" style="display:none"></div>
+                            </div>
+
+                            <hr class="my-3">
+
                             <!-- TrainerRoad -->
                             <div class="d-flex align-items-start gap-2"
                                  style="cursor:pointer"
@@ -551,6 +602,7 @@
             // Load cache info and wire analysis button
             loadStravaStatus();
             loadIcuStatus();
+            loadGarminStatus();
             loadTrainerRoadStatus();
             loadCacheInfo();
             setupFetchModeControls();
@@ -1003,6 +1055,112 @@
                 } finally {
                     btn.disabled = false;
                     btn.innerHTML = '<i class="bi bi-link-45deg"></i> Connect';
+                }
+            });
+        }
+
+        // ── Garmin Connect ──────────────────────────────────────
+
+        async function loadGarminStatus() {
+            const statusEl = document.getElementById('garmin-connection-status');
+            const connectForm = document.getElementById('garmin-connect-form');
+            const connectedState = document.getElementById('garmin-connected-state');
+            try {
+                const s = await window.apiClient.fetch('/garmin/status');
+                if (s.connected) {
+                    statusEl.innerHTML = '<span class="badge bg-success"><i class="bi bi-check-circle"></i> Garmin connected</span>';
+                    const nameEl = document.getElementById('garmin-display-name');
+                    if (nameEl && s.display_name) nameEl.textContent = s.display_name;
+                    connectForm.style.display = 'none';
+                    connectedState.style.display = '';
+                } else {
+                    statusEl.innerHTML = '<span class="badge bg-secondary"><i class="bi bi-x-circle"></i> Not connected</span>';
+                    connectForm.style.display = '';
+                    connectedState.style.display = 'none';
+                }
+            } catch (e) {
+                statusEl.innerHTML = '<span class="text-muted small">Not configured</span>';
+            }
+
+            document.getElementById('garmin-connect-btn').addEventListener('click', async () => {
+                const btn = document.getElementById('garmin-connect-btn');
+                const feedback = document.getElementById('garmin-connect-feedback');
+                const email = document.getElementById('garmin-email').value.trim();
+                const password = document.getElementById('garmin-password').value;
+
+                if (!email || !password) {
+                    feedback.style.display = '';
+                    feedback.innerHTML = '<span class="text-danger small"><i class="bi bi-exclamation-triangle"></i> Email and password are required.</span>';
+                    return;
+                }
+
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Connecting…';
+                feedback.style.display = 'none';
+
+                try {
+                    const res = await window.apiClient.fetch('/garmin/connect', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email, password })
+                    });
+                    if (res.success) {
+                        feedback.style.display = '';
+                        feedback.innerHTML = `<span class="text-success small"><i class="bi bi-check-circle"></i> Connected as <strong>${window.escapeHtml(res.display_name || email)}</strong>.</span>`;
+                        document.getElementById('garmin-password').value = '';
+                        await loadGarminStatus();
+                        if (typeof showToast === 'function') showToast('Garmin Connect connected!', 'success');
+                    } else {
+                        feedback.style.display = '';
+                        feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(res.error || 'Connection failed')}</span>`;
+                    }
+                } catch (e) {
+                    feedback.style.display = '';
+                    feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(e.message || 'Connection failed')}</span>`;
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-link-45deg"></i> Connect';
+                }
+            });
+
+            document.getElementById('garmin-sync-btn').addEventListener('click', async () => {
+                const btn = document.getElementById('garmin-sync-btn');
+                const feedback = document.getElementById('garmin-sync-feedback');
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Syncing…';
+                feedback.style.display = 'none';
+
+                try {
+                    const res = await window.apiClient.fetch('/garmin/sync', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ days: 90 })
+                    });
+                    if (res.success) {
+                        feedback.style.display = '';
+                        feedback.innerHTML = `<span class="text-success small"><i class="bi bi-check-circle"></i> Synced ${res.fetched} activities (${res.new} new)</span>`;
+                        if (typeof showToast === 'function') showToast(`Garmin sync complete: ${res.new} new activities`, 'success');
+                    } else {
+                        feedback.style.display = '';
+                        feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(res.error || 'Sync failed')}</span>`;
+                    }
+                } catch (e) {
+                    feedback.style.display = '';
+                    feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(e.message || 'Sync failed')}</span>`;
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Sync Activities';
+                }
+            });
+
+            document.getElementById('garmin-disconnect-btn').addEventListener('click', async () => {
+                if (!confirm('Disconnect Garmin? This will remove your saved credentials.')) return;
+                try {
+                    await window.apiClient.fetch('/garmin/disconnect', { method: 'POST' });
+                    if (typeof showToast === 'function') showToast('Garmin disconnected', 'info');
+                    await loadGarminStatus();
+                } catch (e) {
+                    if (typeof showToast === 'function') showToast('Failed to disconnect', 'error');
                 }
             });
         }
