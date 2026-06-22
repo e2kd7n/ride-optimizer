@@ -115,7 +115,66 @@ class PlannerService:
         logger.info(f"Initializing planner with {len(long_rides)} long rides")
         self._long_rides = long_rides
     
-    def get_recommendations(self, 
+    def get_workout_rides(self,
+                          workout_type: str,
+                          target_duration_min: Optional[int] = None,
+                          location: Optional[Tuple[float, float]] = None,
+                          limit: int = 3) -> List[Dict[str, Any]]:
+        """
+        Find rides from the library that match a workout's constraints.
+
+        Args:
+            workout_type: e.g. 'Endurance', 'Threshold', 'VO2Max'
+            target_duration_min: Target workout duration in minutes
+            location: (lat, lon) to prefer rides near home
+            limit: Max rides to return
+
+        Returns:
+            List of ride dicts scored against the workout, best first.
+        """
+        if not self._long_rides:
+            return []
+
+        scored = []
+        for ride in self._long_rides:
+            ride_duration_min = ride.duration_hours * 60
+            duration_score = 1.0
+            if target_duration_min:
+                diff = abs(ride_duration_min - target_duration_min)
+                tolerance = 15
+                if diff <= tolerance:
+                    duration_score = 1.0 - (diff / tolerance) * 0.3
+                else:
+                    duration_score = max(0.0, 0.7 - (diff - tolerance) / 60)
+
+            variety_score = 1.0 / (ride.uses + 1)
+
+            location_score = 1.0
+            if location:
+                try:
+                    from geopy.distance import geodesic
+                    dist = geodesic(location, ride.start_location).miles
+                    location_score = max(0.0, 1.0 - dist / 10.0)
+                except Exception:
+                    pass
+
+            score = duration_score * 0.5 + variety_score * 0.3 + location_score * 0.2
+
+            scored.append({
+                'ride_id': ride.activity_id,
+                'name': ride.name,
+                'distance_miles': ride.distance_km / 1.60934,
+                'duration_minutes': round(ride_duration_min),
+                'elevation_ft': round(ride.elevation_gain * 3.28084),
+                'score': round(score, 2),
+                'is_loop': ride.is_loop,
+                'start_location': list(ride.start_location),
+            })
+
+        scored.sort(key=lambda r: r['score'], reverse=True)
+        return scored[:limit]
+
+    def get_recommendations(self,
                           forecast_days: int = 7,
                           min_distance: float = 30.0,
                           max_distance: float = 100.0,
