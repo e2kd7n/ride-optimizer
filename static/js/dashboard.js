@@ -90,8 +90,7 @@ async function loadWorkoutStrip() {
     }
 
     try {
-        const resp = await fetch('/api/workout-options');
-        const data = await resp.json();
+        const data = await window.apiClient.fetch('/workout-options');
 
         if (data.status !== 'success') {
             renderBasicWorkoutStrip(container);
@@ -766,8 +765,7 @@ async function loadRecommendation() {
     const container = document.getElementById('commute-recommendation');
 
     try {
-        const response = await fetch('/api/commute');
-        const data = await response.json();
+        const data = await window.apiClient.fetch('/commute');
 
         if (data.status !== 'success' || (!data.to_work && !data.to_home)) {
             container.innerHTML = window.renderEmptyState('No commute recommendations yet.', 'Run analysis to generate route recommendations.', 'bi-signpost-2');
@@ -917,8 +915,7 @@ async function loadRouteStatus() {
     if (!container) return;
 
     try {
-        const response = await fetch('/api/routes/status');
-        const data = await response.json();
+        const data = await window.apiClient.fetch('/routes/status');
 
         if (data.status !== 'success' || !data.routes || data.routes.length === 0) {
             container.innerHTML = window.renderEmptyState('No route data.', 'Sync Strava to see route conditions.', 'bi-map');
@@ -1028,8 +1025,7 @@ async function loadCommuteWindows() {
     if (!container) return;
 
     try {
-        const response = await fetch('/api/weather/commute-windows');
-        const data = await response.json();
+        const data = await window.apiClient.fetch('/weather/commute-windows');
 
         if (data.status !== 'success') {
             container.innerHTML = window.renderEmptyState('Forecast unavailable.', '', 'bi-cloud-slash');
