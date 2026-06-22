@@ -53,6 +53,8 @@ async function loadStats() {
         renderRecords(statsData.records);
         renderTypeBreakdown(statsData.by_type);
         renderMonthlyChart(statsData.by_month);
+        renderDistributionChart(statsData.speed_distribution, 'speed-chart', 'speed-chart-label', 'mph');
+        renderDistributionChart(statsData.elevation_distribution, 'elevation-chart', 'elevation-chart-label', 'ft');
     } catch (e) {
         showToast(`Failed to load stats: ${e.message}`, 'error');
     } finally {
@@ -138,6 +140,22 @@ function renderMonthlyChart(byMonth) {
     const first = byMonth[0].month;
     const last = byMonth[byMonth.length - 1].month;
     labelEl.textContent = first === last ? first : `${first} – ${last}`;
+}
+
+function renderDistributionChart(data, chartId, labelId, unit) {
+    const el = document.getElementById(chartId);
+    const labelEl = document.getElementById(labelId);
+    if (!data || !data.length) { el.innerHTML = '<div class="text-muted small">No data</div>'; return; }
+
+    const maxCount = Math.max(...data.map(b => b.count), 1);
+    el.innerHTML = data.map(b => {
+        const h = Math.max(Math.round((b.count / maxCount) * 100), 2);
+        return `<div class="bar" style="height:${h}%;" title="${b.label} ${unit}: ${b.count} rides" aria-label="${b.label} ${unit}"></div>`;
+    }).join('');
+
+    const first = data[0].label;
+    const last = data[data.length - 1].label;
+    labelEl.textContent = `${first} – ${last} ${unit}`;
 }
 
 // -----------------------------------------------------------------------

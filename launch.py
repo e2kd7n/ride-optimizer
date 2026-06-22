@@ -1913,6 +1913,161 @@ def intervals_connect():
         return jsonify({'success': False, 'error': 'Could not save credentials'}), 500
 
 
+# ── Planner / Long Rides ──────────────────────────────────────────
+
+@app.route('/api/planner/recommendations')
+@limiter.limit("10 per minute")
+def planner_recommendations():
+    """Weather-optimized long ride recommendations for upcoming days."""
+    initialize_services()
+
+    err = _require_service(_planner_service, 'Planner')
+    if err:
+        return err
+
+    forecast_days = request.args.get('forecast_days', 7, type=int)
+    min_distance = request.args.get('min_distance', 30.0, type=float)
+    max_distance = request.args.get('max_distance', 100.0, type=float)
+
+    result = _planner_service.get_recommendations(
+        forecast_days=forecast_days,
+        min_distance=min_distance,
+        max_distance=max_distance,
+    )
+    return jsonify(result)
+
+
+@app.route('/api/planner/rides/nearby')
+@limiter.limit("20 per minute")
+def planner_rides_nearby():
+    """Find rides near a given lat/lon."""
+    initialize_services()
+
+    err = _require_service(_planner_service, 'Planner')
+    if err:
+        return err
+
+    lat = request.args.get('lat', type=float)
+    lon = request.args.get('lon', type=float)
+    if lat is None or lon is None:
+        return jsonify({'status': 'error', 'message': 'lat and lon are required'}), 400
+
+    radius = request.args.get('radius_miles', 10.0, type=float)
+    limit = request.args.get('limit', 10, type=int)
+
+    result = _planner_service.get_rides_near_location(lat, lon, radius, limit)
+    return jsonify(result)
+
+
+@app.route('/api/planner/rides/<int:ride_id>')
+@limiter.limit("30 per minute")
+def planner_ride_detail(ride_id):
+    """Get details for a specific long ride."""
+    initialize_services()
+
+    err = _require_service(_planner_service, 'Planner')
+    if err:
+        return err
+
+    result = _planner_service.get_ride_details(ride_id)
+    if result.get('status') == 'error':
+        return jsonify(result), 404
+    return jsonify(result)
+
+
+@app.route('/api/planner/analyze', methods=['POST'])
+@limiter.limit("10 per minute")
+def planner_analyze_ride():
+    """Analyze a planned long ride for difficulty and weather suitability."""
+    initialize_services()
+
+    err = _require_service(_planner_service, 'Planner')
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    distance = data.get('distance')
+    duration = data.get('duration')
+    if distance is None or duration is None:
+        return jsonify({'status': 'error', 'message': 'distance and duration are required'}), 400
+
+    date_str = data.get('date')
+    ride_date = None
+    if date_str:
+        try:
+            from datetime import date as _date
+            ride_date = _date.fromisoformat(date_str)
+        except ValueError:
+            return jsonify({'status': 'error', 'message': 'date must be YYYY-MM-DD'}), 400
+
+    result = _planner_service.analyze_long_ride(distance, duration, ride_date)
+    status_code = result.pop('status', 200) if isinstance(result.get('status'), int) else 200
+    if status_code >= 400:
+        return jsonify(result), status_code
+    return jsonify(result)
+
+
+# ── Exploration / Coverage ────────────────────────────────────────
+
+_exploration_service = None
+
+
+def _get_exploration_service():
+    global _exploration_service
+    if _exploration_service is None:
+        from app.services.exploration_service import ExplorationService
+        _exploration_service = ExplorationService(Config())
+    return _exploration_service
+
+
+@app.route('/api/exploration/tiles')
+@limiter.limit("10 per minute")
+def exploration_tiles():
+    """Tile coverage within a bounding box, or all tiles if no bounds given."""
+    svc = _get_exploration_service()
+
+    south = request.args.get('south', type=float)
+    west = request.args.get('west', type=float)
+    north = request.args.get('north', type=float)
+    east = request.args.get('east', type=float)
+
+    if all(v is not None for v in (south, west, north, east)):
+        result = svc.get_tile_coverage((south, west, north, east))
+    else:
+        result = svc.get_tile_coverage_all()
+
+    status_code = 200 if result.get('status') == 'success' else 500
+    return jsonify(result), status_code
+
+
+@app.route('/api/exploration/roads')
+@limiter.limit("5 per minute")
+def exploration_roads():
+    """Road coverage within a bounding box (requires osmnx)."""
+    svc = _get_exploration_service()
+
+    south = request.args.get('south', type=float)
+    west = request.args.get('west', type=float)
+    north = request.args.get('north', type=float)
+    east = request.args.get('east', type=float)
+
+    if any(v is None for v in (south, west, north, east)):
+        return jsonify({'status': 'error', 'message': 'south, west, north, east are required'}), 400
+
+    result = svc.get_road_coverage((south, west, north, east))
+    status_code = 200 if result.get('status') == 'success' else 500
+    return jsonify(result), status_code
+
+
+@app.route('/api/exploration/invalidate', methods=['POST'])
+@limiter.limit("5 per minute")
+def exploration_invalidate():
+    """Clear coverage caches (call after fetching new activities)."""
+    svc = _get_exploration_service()
+    svc.invalidate_caches()
+    return jsonify({'status': 'success', 'message': 'Coverage caches invalidated'})
+
+
 # ── Garmin Connect Integration ────────────────────────────────────
 
 _garmin_service = None
@@ -2445,6 +2600,42 @@ def _filter_activities_by_period(activities, period):
     return result
 
 
+def _compute_speed_distribution(activities):
+    """Histogram of average speeds (mph) in 2 mph bins."""
+    speeds = [round(_ms_to_mph(a.average_speed), 1)
+              for a in activities if a.average_speed and a.average_speed > 0]
+    if not speeds:
+        return []
+    bin_width = 2
+    min_bin = int(min(speeds) // bin_width) * bin_width
+    max_bin = int(max(speeds) // bin_width) * bin_width + bin_width
+    bins = list(range(min_bin, max_bin + bin_width, bin_width))
+    counts = [0] * (len(bins) - 1)
+    for s in speeds:
+        idx = min(int((s - min_bin) // bin_width), len(counts) - 1)
+        counts[idx] += 1
+    return [{'label': f'{bins[i]}-{bins[i+1]}', 'min': bins[i], 'max': bins[i+1], 'count': counts[i]}
+            for i in range(len(counts))]
+
+
+def _compute_elevation_distribution(activities):
+    """Histogram of elevation gain per ride (ft) in 250 ft bins."""
+    elevations = [round(_meters_to_feet(a.total_elevation_gain))
+                  for a in activities if a.total_elevation_gain and a.total_elevation_gain > 0]
+    if not elevations:
+        return []
+    bin_width = 250
+    min_bin = int(min(elevations) // bin_width) * bin_width
+    max_bin = int(max(elevations) // bin_width) * bin_width + bin_width
+    bins = list(range(min_bin, max_bin + bin_width, bin_width))
+    counts = [0] * (len(bins) - 1)
+    for e in elevations:
+        idx = min(int((e - min_bin) // bin_width), len(counts) - 1)
+        counts[idx] += 1
+    return [{'label': f'{bins[i]}-{bins[i+1]}', 'min': bins[i], 'max': bins[i+1], 'count': counts[i]}
+            for i in range(len(counts))]
+
+
 def _compute_summary(activities):
     """Compute aggregate summary stats for a list of activities."""
     if not activities:
@@ -2581,6 +2772,8 @@ def get_stats():
             'by_type': by_type,
             'by_week': by_week,
             'by_month': by_month,
+            'speed_distribution': _compute_speed_distribution(activities),
+            'elevation_distribution': _compute_elevation_distribution(activities),
         },
         'timestamp': datetime.now().isoformat(),
     })
