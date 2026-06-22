@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.config import Config
+from src.config_manager import ConfigManager
 from src.json_storage import JSONStorage
 from src.ntfy_notifier import NtfyNotifier
 
@@ -45,7 +45,7 @@ def main():
     
     # Initialize notifier
     try:
-        config = Config()
+        config = ConfigManager.get_instance()
         notifier = NtfyNotifier(config.get('notifications.ntfy'))
     except Exception as e:
         logger.warning(f"Failed to initialize notifier: {e}")

@@ -18,7 +18,7 @@ import folium
 from src.next_commute_recommender import NextCommuteRecommender, CommuteRecommendation
 from src.route_analyzer import RouteGroup
 from src.location_finder import Location
-from src.config import Config
+from src.config_manager import ConfigManager
 from src.visualizer import RouteVisualizer
 from app.services.trainerroad_service import TrainerRoadService
 from app.services.weather_service import WeatherService
@@ -39,22 +39,21 @@ class CommuteService:
     - Departure time optimization
     """
     
-    def __init__(self, config: Config, weather_service: Optional['WeatherService'] = None,
+    def __init__(self, weather_service: Optional['WeatherService'] = None,
                  trainerroad_service: Optional['TrainerRoadService'] = None,
                  settings_service: Optional['SettingsService'] = None):
         """
         Initialize commute service.
 
         Args:
-            config: Configuration object
             weather_service: Optional pre-built WeatherService instance for dependency injection
             trainerroad_service: Optional pre-built TrainerRoadService instance for dependency injection
             settings_service: Optional pre-built SettingsService instance for dependency injection
         """
-        self.config = config
+        self.config = ConfigManager.get_instance()
         self._recommender: Optional[NextCommuteRecommender] = None
-        self.trainerroad_service = trainerroad_service or TrainerRoadService(config)
-        self.weather_service = weather_service or WeatherService(config)
+        self.trainerroad_service = trainerroad_service or TrainerRoadService()
+        self.weather_service = weather_service or WeatherService()
         self.settings_service = settings_service or SettingsService()
     
     def initialize(self, route_groups: List[RouteGroup],

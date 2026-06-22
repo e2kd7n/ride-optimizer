@@ -20,18 +20,26 @@ from src.data_fetcher import Activity
 from src.route_analyzer import RouteGroup, Route
 from src.long_ride_analyzer import LongRide
 from src.location_finder import Location
-from src.config import Config
+from src.config_manager import ConfigManager
 
 
 @pytest.fixture
 def mock_config():
     """Create a mock configuration."""
-    config = Mock(spec=Config)
+    config = Mock(spec=ConfigManager)
     config.get = Mock(side_effect=lambda key, default=None: {
         'analysis.staleness_hours': 24,
         'cache.directory': 'cache/'
     }.get(key, default))
     return config
+
+
+@pytest.fixture(autouse=True)
+def _patch_config_manager(mock_config):
+    """Patch ConfigManager.get_instance globally for all tests."""
+    with patch('app.services.analysis_service.ConfigManager.get_instance', return_value=mock_config), \
+         patch('app.services.weather_service.ConfigManager.get_instance', return_value=mock_config):
+        yield
 
 
 @pytest.fixture
@@ -82,16 +90,13 @@ def mock_location():
 
 
 @pytest.fixture
-def analysis_service(mock_config):
+def analysis_service():
     """Create an AnalysisService instance."""
-    # Mock get_authenticated_client to avoid loading real credentials
     with patch('src.auth_secure.get_authenticated_client') as mock_auth:
         mock_client = Mock()
         mock_auth.return_value = mock_client
-        service = AnalysisService(mock_config)
-        # Prevent tests from writing Mock objects to the real data directory
+        service = AnalysisService()
         service.storage.write = Mock(return_value=True)
-        # Skip loading real cache during tests
         service._cache_loaded = True
         return service
 
@@ -105,7 +110,7 @@ class TestAnalysisServiceInitialization:
         with patch('src.auth_secure.get_authenticated_client') as mock_auth:
             mock_client = Mock()
             mock_auth.return_value = mock_client
-            service = AnalysisService(mock_config)
+            service = AnalysisService()
             
             assert service.config == mock_config
             assert service.data_fetcher is not None
@@ -669,7 +674,7 @@ class TestCacheRoundTrip:
         storage = JSONStorage(str(tmp_path / 'data'))
 
         # --- Save ---
-        svc = AnalysisService(mock_config)
+        svc = AnalysisService()
         svc.storage = storage
         svc._cache_loaded = True
         svc._route_groups = [group]
@@ -681,7 +686,7 @@ class TestCacheRoundTrip:
         svc._save_to_cache()
 
         # --- Load in fresh service ---
-        svc2 = AnalysisService(mock_config)
+        svc2 = AnalysisService()
         svc2.storage = storage
         svc2._load_from_cache()
 
@@ -727,7 +732,7 @@ class TestCacheLoadEdgeCases:
 
     def test_load_cache_failure_sets_loaded_flag(self, mock_config):
         """Failed cache load still marks as loaded to avoid retry loops."""
-        service = AnalysisService(mock_config)
+        service = AnalysisService()
         service._cache_loaded = False
         service.storage = Mock()
         service.storage.read = Mock(side_effect=Exception("disk error"))
@@ -748,7 +753,7 @@ class TestCacheLoadEdgeCases:
         storage.write('analysis_status.json', {})
         storage.write('long_rides.json', {})
 
-        service = AnalysisService(mock_config)
+        service = AnalysisService()
         service.storage = storage
         service._load_from_cache()
 
@@ -768,7 +773,7 @@ class TestCacheLoadEdgeCases:
         storage.write('analysis_status.json', {})
         storage.write('route_groups.json', {})
 
-        service = AnalysisService(mock_config)
+        service = AnalysisService()
         service.storage = storage
         service._load_from_cache()
 

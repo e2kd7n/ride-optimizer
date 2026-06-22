@@ -20,7 +20,7 @@ from icalendar import Calendar, Event
 from urllib.parse import urlparse
 from cryptography.fernet import Fernet
 
-from src.config import Config
+from src.config_manager import ConfigManager
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +40,8 @@ class TrainerRoadService:
     - Secure encrypted storage of ICS feed URL
     """
 
-    def __init__(self, config: Config):
-        self.config = config
+    def __init__(self):
+        self.config = ConfigManager.get_instance()
         self.credentials_path = Path('config/trainerroad_credentials.json')
         self.key_file = Path('config/.trainerroad_encryption_key')
         self.last_sync = None

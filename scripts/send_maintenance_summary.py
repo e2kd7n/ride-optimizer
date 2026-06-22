@@ -6,7 +6,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.config import Config
+from src.config_manager import ConfigManager
 from src.ntfy_notifier import NtfyNotifier
 
 
@@ -18,7 +18,7 @@ def main():
     }
 
     try:
-        config = Config()
+        config = ConfigManager.get_instance()
         notifier = NtfyNotifier(config.get('notifications.ntfy'))
     except Exception as e:
         print(f"Failed to initialize notifier: {e}")

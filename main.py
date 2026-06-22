@@ -56,7 +56,7 @@ if platform.system() == 'Darwin':  # macOS
 
 from tqdm import tqdm
 
-from src.config import load_config
+from src.config_manager import load_config
 # Use secure authentication module with enhanced security features
 from src.auth_secure import SecureStravaAuthenticator, get_authenticated_client, validate_strava_credentials
 from src.data_fetcher import StravaDataFetcher

@@ -219,15 +219,18 @@ if __name__ == '__main__':
 
 import pytest
 from unittest.mock import Mock
+from unittest.mock import patch
 from app.services.planner_service import PlannerService
-from src.config import Config
+from src.config_manager import ConfigManager
 
 
 @pytest.fixture
 def planner_service():
-    config = Mock(spec=Config)
+    config = Mock(spec=ConfigManager)
     config.get = Mock(return_value=None)
-    return PlannerService(config)
+    with patch('app.services.planner_service.ConfigManager.get_instance', return_value=config), \
+         patch('app.services.planner_service.WeatherService'):
+        return PlannerService()
 
 
 def test_planner_error_handling_negative_distance(planner_service):

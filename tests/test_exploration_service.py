@@ -17,7 +17,8 @@ def mock_config():
 
 @pytest.fixture
 def service(mock_config):
-    return ExplorationService(mock_config)
+    with patch('app.services.exploration_service.ConfigManager.get_instance', return_value=mock_config):
+        return ExplorationService()
 
 
 class TestExplorationService:

@@ -8,7 +8,7 @@ the existing service patterns (constructor + initialize).
 import logging
 from typing import Any, Dict, Optional, Tuple
 
-from src.config import Config
+from src.config_manager import ConfigManager
 from src.coverage_tracker import CoverageTracker
 
 logger = logging.getLogger(__name__)
@@ -16,9 +16,9 @@ logger = logging.getLogger(__name__)
 
 class ExplorationService:
 
-    def __init__(self, config: Config):
-        self.config = config
-        self._tracker = CoverageTracker(config)
+    def __init__(self):
+        self.config = ConfigManager.get_instance()
+        self._tracker = CoverageTracker(self.config)
 
     def initialize(self):
         pass

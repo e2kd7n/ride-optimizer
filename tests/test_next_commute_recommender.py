@@ -20,13 +20,13 @@ import numpy as np
 
 from src.next_commute_recommender import NextCommuteRecommender, CommuteRecommendation
 from src.route_analyzer import RouteGroup, Route, RouteMetrics
-from src.config import Config
+from src.config_manager import ConfigManager
 
 
 @pytest.fixture
 def mock_config():
     """Create a mock configuration."""
-    config = Mock(spec=Config)
+    config = Mock(spec=ConfigManager)
     config.get = Mock(side_effect=lambda key, default=None: {
         'units.system': 'metric',
         'optimization.weights.time': 0.35,

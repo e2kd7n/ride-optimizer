@@ -17,13 +17,13 @@ from app.services.commute_service import CommuteService
 from src.next_commute_recommender import CommuteRecommendation
 from src.route_analyzer import RouteGroup, Route
 from src.location_finder import Location
-from src.config import Config
+from src.config_manager import ConfigManager
 
 
 @pytest.fixture
 def mock_config():
     """Create a mock configuration."""
-    config = Mock(spec=Config)
+    config = Mock(spec=ConfigManager)
     config.get = Mock(side_effect=lambda key, default=None: {
         'commute.morning_window_start': '07:00',
         'commute.morning_window_end': '09:00',
@@ -74,19 +74,20 @@ def mock_location():
 @pytest.fixture
 def commute_service(mock_config):
     """Create a CommuteService instance."""
-    return CommuteService(mock_config)
+    with patch('app.services.commute_service.ConfigManager.get_instance', return_value=mock_config), \
+         patch('app.services.weather_service.ConfigManager.get_instance', return_value=mock_config), \
+         patch('app.services.trainerroad_service.ConfigManager.get_instance', return_value=mock_config):
+        return CommuteService()
 
 
 @pytest.mark.unit
 class TestCommuteServiceInitialization:
     """Test CommuteService initialization."""
     
-    def test_init(self, mock_config):
+    def test_init(self, mock_config, commute_service):
         """Test service initialization."""
-        service = CommuteService(mock_config)
-        
-        assert service.config == mock_config
-        assert service._recommender is None
+        assert commute_service.config == mock_config
+        assert commute_service._recommender is None
     
     @patch('app.services.commute_service.NextCommuteRecommender')
     def test_initialize_with_route_data(self, mock_recommender_class, 

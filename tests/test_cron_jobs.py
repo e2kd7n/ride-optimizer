@@ -47,7 +47,7 @@ class TestDailyAnalysisJob:
     
     @patch('cron.daily_analysis.AnalysisService')
     @patch('cron.daily_analysis.JSONStorage')
-    @patch('cron.daily_analysis.Config')
+    @patch('cron.daily_analysis.ConfigManager.get_instance')
     def test_daily_analysis_success(self, mock_config, mock_storage_class, mock_service_class):
         """Test daily analysis job runs successfully."""
         # Setup mocks
@@ -75,7 +75,7 @@ class TestDailyAnalysisJob:
     
     @patch('cron.daily_analysis.AnalysisService')
     @patch('cron.daily_analysis.JSONStorage')
-    @patch('cron.daily_analysis.Config')
+    @patch('cron.daily_analysis.ConfigManager.get_instance')
     def test_daily_analysis_failure(self, mock_config, mock_storage_class, mock_service_class):
         """Test daily analysis job handles failures."""
         # Setup mocks
@@ -101,7 +101,7 @@ class TestWeatherRefreshJob:
     
     @patch('cron.weather_refresh.WeatherService')
     @patch('cron.weather_refresh.JSONStorage')
-    @patch('cron.weather_refresh.Config')
+    @patch('cron.weather_refresh.ConfigManager.get_instance')
     def test_weather_refresh_success(self, mock_config, mock_storage_class, mock_service_class):
         """Test weather refresh job runs successfully."""
         # Setup mocks
@@ -134,7 +134,7 @@ class TestWeatherRefreshJob:
         mock_service.get_current_weather.assert_called_once()
         mock_storage.write.assert_called()
     
-    @patch('cron.weather_refresh.Config')
+    @patch('cron.weather_refresh.ConfigManager.get_instance')
     def test_weather_refresh_no_location(self, mock_config):
         """Test weather refresh skips when no location configured."""
         mock_config_inst = Mock()
@@ -257,7 +257,7 @@ class TestCronJobHistory:
     
     @patch('cron.daily_analysis.JSONStorage')
     @patch('cron.daily_analysis.AnalysisService')
-    @patch('cron.daily_analysis.Config')
+    @patch('cron.daily_analysis.ConfigManager.get_instance')
     def test_job_history_recorded(self, mock_config, mock_service_class, mock_storage_class):
         """Test job execution is recorded in history."""
         # Setup mock storage

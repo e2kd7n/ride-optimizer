@@ -19,13 +19,13 @@ from datetime import datetime, timedelta
 import json
 
 from app.services.weather_service import WeatherService
-from src.config import Config
+from src.config_manager import ConfigManager
 
 
 @pytest.fixture
 def mock_config():
     """Create a mock configuration."""
-    config = Mock(spec=Config)
+    config = Mock(spec=ConfigManager)
     config.get = Mock(side_effect=lambda key, default=None: {
         'weather.api_key': 'test_api_key',
         'weather.cache_ttl': 7200  # 2 hours
@@ -36,10 +36,11 @@ def mock_config():
 @pytest.fixture
 def weather_service(mock_config):
     """Create a WeatherService instance with mocked dependencies."""
-    with patch('app.services.weather_service.WeatherFetcher'), \
+    with patch('app.services.weather_service.ConfigManager.get_instance', return_value=mock_config), \
+         patch('app.services.weather_service.WeatherFetcher'), \
          patch('app.services.weather_service.WindImpactCalculator'), \
          patch('app.services.weather_service.JSONStorage'):
-        service = WeatherService(mock_config)
+        service = WeatherService()
         return service
 
 
@@ -83,12 +84,13 @@ class TestWeatherServiceInit:
     
     def test_init_creates_dependencies(self, mock_config):
         """Test that initialization creates all required dependencies."""
-        with patch('app.services.weather_service.WeatherFetcher') as mock_fetcher, \
+        with patch('app.services.weather_service.ConfigManager.get_instance', return_value=mock_config), \
+             patch('app.services.weather_service.WeatherFetcher') as mock_fetcher, \
              patch('app.services.weather_service.WindImpactCalculator') as mock_wind, \
              patch('app.services.weather_service.JSONStorage') as mock_storage:
-            
-            service = WeatherService(mock_config)
-            
+
+            service = WeatherService()
+
             assert service.config == mock_config
             mock_fetcher.assert_called_once()
             mock_wind.assert_called_once()

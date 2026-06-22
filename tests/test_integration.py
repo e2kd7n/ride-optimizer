@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime, timezone
 
-from src.config import Config
+from src.config_manager import ConfigManager
 from src.data_fetcher import Activity, StravaDataFetcher
 from src.location_finder import LocationFinder
 from src.route_analyzer import RouteAnalyzer
@@ -29,6 +29,7 @@ class TestEndToEndWorkflow:
     @pytest.fixture
     def mock_config(self, temp_dir):
         """Create mock configuration for testing."""
+        safe_dir = str(temp_dir).replace('\\', '/')
         config_content = f"""
 strava:
   client_id: "test_client"
@@ -49,12 +50,12 @@ analysis:
   n_workers: 1
 
 cache:
-  directory: "{temp_dir}/cache"
+  directory: "{safe_dir}/cache"
   enabled: true
   max_age_days: 7
 
 output:
-  directory: "{temp_dir}/output"
+  directory: "{safe_dir}/output"
   generate_pdf: false
 
 units:
@@ -62,7 +63,8 @@ units:
 """
         config_file = Path(temp_dir) / "test_config.yaml"
         config_file.write_text(config_content)
-        return Config(str(config_file))
+        ConfigManager.reset_instance()
+        return ConfigManager(str(config_file))
     
     @pytest.fixture
     def sample_activities(self):
@@ -343,8 +345,9 @@ strava:
 """
         config_file = tmp_path / "config.yaml"
         config_file.write_text(config_content)
-        config = Config(str(config_file))
-        
+        ConfigManager.reset_instance()
+        config = ConfigManager(str(config_file))
+
         location_finder = LocationFinder([], config)
         
         # Should handle empty list gracefully
@@ -361,8 +364,9 @@ cache:
 """
         config_file = tmp_path / "config.yaml"
         config_file.write_text(config_content)
-        config = Config(str(config_file))
-        
+        ConfigManager.reset_instance()
+        config = ConfigManager(str(config_file))
+
         fetcher = StravaDataFetcher(mock_client, config, use_test_cache=True)
         
         # Invalid polyline should raise an exception
@@ -377,9 +381,10 @@ class TestLongRidesWorkflow:
     @pytest.fixture
     def mock_config(self, tmp_path):
         """Create mock configuration."""
+        safe_dir = str(tmp_path).replace('\\', '/')
         config_content = f"""
 cache:
-  directory: "{tmp_path}/cache"
+  directory: "{safe_dir}/cache"
   enabled: true
 analysis:
   min_long_ride_distance: 50.0
@@ -387,7 +392,8 @@ analysis:
 """
         config_file = tmp_path / "config.yaml"
         config_file.write_text(config_content)
-        return Config(str(config_file))
+        ConfigManager.reset_instance()
+        return ConfigManager(str(config_file))
     
     @pytest.fixture
     def sample_long_rides(self):
@@ -528,9 +534,10 @@ class TestNextCommuteWorkflow:
     @pytest.fixture
     def mock_config(self, tmp_path):
         """Create mock configuration."""
+        safe_dir = str(tmp_path).replace('\\', '/')
         config_content = f"""
 cache:
-  directory: "{tmp_path}/cache"
+  directory: "{safe_dir}/cache"
 locations:
   home:
     lat: 41.8781
@@ -541,7 +548,8 @@ locations:
 """
         config_file = tmp_path / "config.yaml"
         config_file.write_text(config_content)
-        return Config(str(config_file))
+        ConfigManager.reset_instance()
+        return ConfigManager(str(config_file))
     
     @pytest.fixture
     def sample_route_groups(self):

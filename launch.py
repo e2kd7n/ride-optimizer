@@ -25,7 +25,7 @@ import secrets
 import os
 from typing import List, Dict, Any
 
-from src.config import Config
+from src.config_manager import ConfigManager
 from src.json_storage import JSONStorage
 from src.location_finder import Location
 from app.services.analysis_service import AnalysisService
@@ -134,7 +134,7 @@ def get_csrf_token():
     return jsonify({'csrf_token': generate_csrf()})
 
 # Initialize configuration and storage
-config = Config()
+config = ConfigManager.get_instance()
 storage = JSONStorage()
 
 # Initialize services (lazy initialization on first request)
@@ -151,7 +151,7 @@ _analysis_stop_requested = False
 _fetch_job = {'status': 'idle', 'fetched': 0, 'label': '', 'started_at': None}
 
 
-def get_locations_from_config(config: Config) -> tuple[Location, Location]:
+def get_locations_from_config(config: ConfigManager) -> tuple[Location, Location]:
     """
     Extract home and work locations from config.
     
@@ -213,38 +213,37 @@ def initialize_services():
 
     # Shared dependencies first
     try:
-        _weather_service = WeatherService(config)
+        _weather_service = WeatherService()
     except Exception as e:
         logger.error(f"WeatherService failed to initialize: {e}", exc_info=True)
         _weather_service = None
 
     try:
-        _trainerroad_service = TrainerRoadService(config)
+        _trainerroad_service = TrainerRoadService()
     except Exception as e:
         logger.error(f"TrainerRoadService failed to initialize: {e}", exc_info=True)
         _trainerroad_service = None
 
     try:
-        _route_library_service = RouteLibraryService(config)
+        _route_library_service = RouteLibraryService()
     except Exception as e:
         logger.error(f"RouteLibraryService failed to initialize: {e}", exc_info=True)
         _route_library_service = None
 
-    # Dependent services receive shared instances
     try:
-        _analysis_service = AnalysisService(config, weather_service=_weather_service)
+        _analysis_service = AnalysisService(weather_service=_weather_service)
     except Exception as e:
         logger.error(f"AnalysisService failed to initialize: {e}", exc_info=True)
         _analysis_service = None
 
     try:
-        _commute_service = CommuteService(config, weather_service=_weather_service, trainerroad_service=_trainerroad_service, settings_service=_settings_service)
+        _commute_service = CommuteService(weather_service=_weather_service, trainerroad_service=_trainerroad_service, settings_service=_settings_service)
     except Exception as e:
         logger.error(f"CommuteService failed to initialize: {e}", exc_info=True)
         _commute_service = None
 
     try:
-        _planner_service = PlannerService(config, weather_service=_weather_service)
+        _planner_service = PlannerService(weather_service=_weather_service)
     except Exception as e:
         logger.error(f"PlannerService failed to initialize: {e}", exc_info=True)
         _planner_service = None
@@ -2016,7 +2015,7 @@ def _get_exploration_service():
     global _exploration_service
     if _exploration_service is None:
         from app.services.exploration_service import ExplorationService
-        _exploration_service = ExplorationService(Config())
+        _exploration_service = ExplorationService()
     return _exploration_service
 
 

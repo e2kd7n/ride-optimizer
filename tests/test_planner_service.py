@@ -15,7 +15,7 @@ from datetime import datetime, date, timedelta
 
 from app.services.planner_service import PlannerService
 from src.long_ride_analyzer import LongRide
-from src.config import Config
+from src.config_manager import ConfigManager
 from app import create_app
 
 
@@ -30,7 +30,7 @@ def app():
 @pytest.fixture
 def mock_config():
     """Create a mock Config object."""
-    config = Mock(spec=Config)
+    config = Mock(spec=ConfigManager)
     config.get = Mock(side_effect=lambda key, default=None: {
         'cache_dir': '/tmp/test_cache',
         'data_dir': '/tmp/test_data'
@@ -85,7 +85,8 @@ def mock_short_ride():
 @pytest.fixture
 def planner_service(mock_config):
     """Create a PlannerService instance with mocked weather service."""
-    with patch('app.services.planner_service.WeatherService') as mock_weather_class:
+    with patch('app.services.planner_service.ConfigManager.get_instance', return_value=mock_config), \
+         patch('app.services.planner_service.WeatherService') as mock_weather_class:
         # Create a mock weather service instance
         mock_weather_instance = Mock()
         
@@ -106,7 +107,7 @@ def planner_service(mock_config):
         # Make the WeatherService class return our configured instance
         mock_weather_class.return_value = mock_weather_instance
         
-        service = PlannerService(mock_config)
+        service = PlannerService()
         return service
 
 
@@ -119,11 +120,12 @@ def initialized_service(planner_service, mock_long_ride, mock_short_ride):
 
 class TestPlannerServiceInitialization:
     """Test service initialization."""
-    
+
     def test_init_creates_service(self, mock_config):
         """Test that service can be created."""
-        with patch('app.services.planner_service.WeatherService'):
-            service = PlannerService(mock_config)
+        with patch('app.services.planner_service.ConfigManager.get_instance', return_value=mock_config), \
+             patch('app.services.planner_service.WeatherService'):
+            service = PlannerService()
             assert service is not None
             assert service.config == mock_config
             assert service._long_rides is None
