@@ -1,6 +1,6 @@
 # GitHub Issue Labels Cache
 
-**Last Updated:** 2026-06-17  
+**Last Updated:** 2026-06-22  
 **Update Frequency:** Weekly maintenance
 
 ## Priority Labels
@@ -43,11 +43,14 @@
 - `gestures` - Gesture support
 - `routes` - Route-related features
 - `notifications` - Notifications and toasts
+- `toast` - Toast notifications
+- `undo` - Undo functionality
 
 ## Component Labels
 - `component` - Reusable component
 - `layout` - Layout and viewport optimization
 - `loading` - Loading states
+- `viewport-optimization` - Viewport optimization
 
 ## Quality Labels
 - `WCAG` - WCAG compliance
