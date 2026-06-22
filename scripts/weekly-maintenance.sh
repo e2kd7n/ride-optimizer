@@ -251,3 +251,11 @@ if [ "${WAIT_FOR_COMPLETION:-false}" = "true" ] && [ -n "${ISSUE_PID:-}" ]; then
     log "✓ Issue management complete"
 fi
 
+# 10. Send maintenance summary notification
+log_section "Sending Maintenance Summary"
+SECURITY_VULNS=$(grep -c "security" "$MAINTENANCE_LOG" 2>/dev/null || echo 0)
+ISSUES_CLOSED=$(gh issue list --state closed --search "closed:>=$(date -u -d '7 days ago' +%Y-%m-%d 2>/dev/null || date -u -v-7d +%Y-%m-%d 2>/dev/null || echo '2000-01-01')" --json number --jq 'length' 2>/dev/null || echo 0)
+CACHE_SIZE=$(du -sm "$PROJECT_ROOT/cache" 2>/dev/null | cut -f1 || echo 0)
+
+python3 "$PROJECT_ROOT/scripts/send_maintenance_summary.py" "$SECURITY_VULNS" "$ISSUES_CLOSED" "$CACHE_SIZE" 2>>"$MAINTENANCE_LOG" || log "⚠️  Failed to send maintenance summary"
+
