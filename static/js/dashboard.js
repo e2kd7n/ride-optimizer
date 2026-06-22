@@ -215,6 +215,49 @@ function renderWorkoutFitCompact(rec) {
 }
 
 /**
+ * Render the "Workout ride" option card when PlannerService found
+ * non-commute routes matching today's workout (#339).
+ */
+function renderWorkoutRideOption(workoutRide) {
+    if (!workoutRide || !workoutRide.rides || workoutRide.rides.length === 0) return '';
+
+    const esc = window.escapeHtml;
+    const wName = esc(workoutRide.workout_name || 'Workout');
+    const wType = esc(workoutRide.workout_type || '');
+    const typeBadgeClass = WORKOUT_TYPE_BADGES[workoutRide.workout_type] || 'bg-secondary';
+
+    const rideCards = workoutRide.rides.map(ride => {
+        const scorePct = Math.round(ride.score * 100);
+        const scoreClass = scorePct >= 70 ? 'bg-success'
+                         : scorePct >= 50 ? 'bg-warning text-dark'
+                         : 'bg-danger';
+        return `
+            <div class="d-flex align-items-center justify-content-between py-1">
+                <div>
+                    <span class="small fw-semibold">${esc(ride.name)}</span>
+                    <div class="d-flex gap-2 small text-muted">
+                        <span><i class="bi bi-clock" aria-hidden="true"></i> ${ride.duration_minutes} min</span>
+                        <span><i class="bi bi-signpost" aria-hidden="true"></i> ${ride.distance_miles.toFixed(1)} mi</span>
+                        <span><i class="bi bi-graph-up" aria-hidden="true"></i> ${ride.elevation_ft} ft</span>
+                    </div>
+                </div>
+                <span class="badge ${scoreClass}">${scorePct}</span>
+            </div>`;
+    }).join('');
+
+    return `
+        <div class="mt-3">
+            <div class="small text-muted fw-semibold mb-1">
+                <i class="bi bi-bicycle me-1" aria-hidden="true"></i>Workout rides for ${wName}
+                <span class="badge ${typeBadgeClass} ms-1">${wType}</span>
+            </div>
+            <div class="secondary-commute-card border rounded p-2">
+                ${rideCards}
+            </div>
+        </div>`;
+}
+
+/**
  * Load and display system status
  */
 async function loadSystemStatus() {
@@ -671,6 +714,10 @@ async function loadRecommendation() {
                     <i class="bi bi-arrow-return-right me-1"></i>${secondaryLabel}
                 </div>`;
             html += renderHeroCard(secondary, false);
+        }
+
+        if (data.workout_ride) {
+            html += renderWorkoutRideOption(data.workout_ride);
         }
 
         container.innerHTML = html;

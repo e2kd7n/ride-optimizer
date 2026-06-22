@@ -270,6 +270,12 @@ def initialize_services():
                 )
                 logger.info("CommuteService initialized successfully")
 
+                if _planner_service:
+                    long_rides = _analysis_service.get_long_rides()
+                    if long_rides:
+                        _planner_service.initialize(long_rides)
+                        logger.info(f"PlannerService initialized with {len(long_rides)} long rides")
+
             except ValueError as e:
                 logger.warning(f"Invalid route data or config, commute service will not be available: {e}")
             except Exception as e:
@@ -907,10 +913,37 @@ def get_commute():
                 _commute_service.get_next_commute(direction='to_home')
             )
 
+        workout_ride = None
+        if use_workout and _planner_service and _planner_service._long_rides:
+            from datetime import date as _date
+            constraints = _trainerroad_service.get_workout_constraints(_date.today())
+            if constraints:
+                _commute_service._apply_weather_indoor_decision(constraints)
+                if not constraints.get('indoor_fallback'):
+                    home_loc = None
+                    try:
+                        home_loc = (_commute_service._recommender.home_location.lat,
+                                    _commute_service._recommender.home_location.lon)
+                    except Exception:
+                        pass
+                    rides = _planner_service.get_workout_rides(
+                        workout_type=constraints.get('workout_type', ''),
+                        target_duration_min=constraints.get('min_duration_minutes'),
+                        location=home_loc,
+                        limit=3,
+                    )
+                    if rides:
+                        workout_ride = {
+                            'workout_name': constraints.get('workout_name'),
+                            'workout_type': constraints.get('workout_type'),
+                            'rides': rides,
+                        }
+
         return jsonify({
             'status': 'success',
             'to_work': to_work,
             'to_home': to_home,
+            'workout_ride': workout_ride,
             'timestamp': datetime.now().isoformat()
         })
 
