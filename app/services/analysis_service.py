@@ -14,8 +14,6 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 
-import folium
-
 from src.data_fetcher import StravaDataFetcher, Activity
 from src.route_analyzer import RouteAnalyzer, RouteGroup
 from src.long_ride_analyzer import LongRideAnalyzer, LongRide
@@ -636,10 +634,11 @@ class AnalysisService:
     def generate_dashboard_overview_map(self) -> Optional[str]:
         """
         Generate overview map for dashboard showing activity heatmap and top routes.
-        
+
         Returns:
             HTML string of the map, or None if data not available
         """
+        import folium  # noqa: F811 — lazy import to avoid startup cost on Pi
         # Load cached data if not already loaded
         self._load_from_cache()
         
@@ -818,6 +817,7 @@ class AnalysisService:
     
     def _add_dashboard_weather_overlay(self, visualizer) -> None:
         """Add toggleable current weather plus short-range forecast markers to the dashboard map."""
+        import folium
         if not self._home_location or not self._work_location:
             return
         

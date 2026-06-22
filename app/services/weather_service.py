@@ -162,23 +162,23 @@ class WeatherService:
             
             if not weather_data:
                 logger.warning(f"API returned no data for ({lat}, {lon}), trying degraded fallback")
-                return self._get_degraded_weather(lat, lon, location_name)
-            
+                return self._get_degraded_weather(lat, lon, location_name, cache=cache)
+
             # Enrich with comfort metrics
             weather_data = self._enrich_weather_data(weather_data)
-            
+
             # Store in JSON cache
             cache['locations'][cache_key] = {
                 'weather_data': weather_data,
                 'timestamp': datetime.now().isoformat(),
                 'location_name': location_name or f"Location ({lat:.2f}, {lon:.2f})"
             }
-            
+
             self.storage.write('weather_cache.json', cache)
             logger.info(f"Stored fresh weather snapshot for {location_name or 'location'}")
-            
+
             return weather_data
-                
+
         except Exception as e:
             logger.error(f"Error getting current weather: {e}", exc_info=True)
             return self._get_degraded_weather(lat, lon, location_name)
@@ -295,21 +295,24 @@ class WeatherService:
     def _get_degraded_weather(self,
                              lat: float,
                              lon: float,
-                             location_name: Optional[str] = None) -> Dict[str, Any]:
+                             location_name: Optional[str] = None,
+                             cache: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Get stale weather data as fallback (up to 24 hours old).
-        
+
         Args:
             lat: Latitude
             lon: Longitude
             location_name: Optional location name
-            
+            cache: Pre-loaded cache dict to avoid re-reading from disk
+
         Returns:
             Dictionary with stale weather data or empty dict if none available
         """
         try:
             cache_key = self._get_cache_key(lat, lon)
-            cache = self.storage.read('weather_cache.json', default={'locations': {}})
+            if cache is None:
+                cache = self.storage.read('weather_cache.json', default={'locations': {}})
             
             if cache_key in cache['locations']:
                 cached = cache['locations'][cache_key]
