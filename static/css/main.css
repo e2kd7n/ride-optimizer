@@ -1959,6 +1959,46 @@ h5.card-title {
     color: #a71d2a;
 }
 
+/* Workout option cards (#341) */
+.workout-options-row {
+    display: flex;
+    gap: var(--space-2);
+}
+
+.workout-option-card {
+    flex: 1;
+    padding: var(--space-2);
+    border: 2px solid var(--color-border);
+    border-radius: 8px;
+    background: white;
+    cursor: pointer;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.workout-option-card:hover {
+    border-color: var(--color-primary);
+}
+
+.workout-option-card.active {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 1px var(--color-primary);
+}
+
+.workout-option-label {
+    font-size: var(--font-size-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-muted);
+    font-weight: 600;
+    margin-bottom: var(--space-1);
+}
+
+@media (max-width: 575.98px) {
+    .workout-options-row {
+        flex-direction: column;
+    }
+}
+
 .alert-workout-fit {
     border-radius: 8px;
     font-size: var(--font-size-sm);
