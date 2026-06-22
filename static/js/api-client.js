@@ -299,6 +299,62 @@ class APIClient {
         return this.fetch('/trainerroad/today');
     }
 
+    // ── Exploration / Coverage ───────────────────────────────
+
+    async getTileCoverage(bounds = null) {
+        if (bounds) {
+            const params = new URLSearchParams({
+                south: bounds.south, west: bounds.west,
+                north: bounds.north, east: bounds.east,
+            });
+            return this.fetch(`/exploration/tiles?${params}`);
+        }
+        return this.fetch('/exploration/tiles');
+    }
+
+    async getRoadCoverage(bounds) {
+        const params = new URLSearchParams({
+            south: bounds.south, west: bounds.west,
+            north: bounds.north, east: bounds.east,
+        });
+        return this.fetch(`/exploration/roads?${params}`);
+    }
+
+    async invalidateCoverageCache() {
+        return this.fetch('/exploration/invalidate', { method: 'POST' });
+    }
+
+    // ── Planner / Long Rides ─────────────────────────────────
+
+    async getLongRideRecommendations(options = {}) {
+        const params = new URLSearchParams();
+        if (options.forecastDays) params.append('forecast_days', options.forecastDays);
+        if (options.minDistance) params.append('min_distance', options.minDistance);
+        if (options.maxDistance) params.append('max_distance', options.maxDistance);
+        const qs = params.toString();
+        return this.fetch(`/planner/recommendations${qs ? '?' + qs : ''}`);
+    }
+
+    async getRidesNearLocation(lat, lon, options = {}) {
+        const params = new URLSearchParams({ lat, lon });
+        if (options.radiusMiles) params.append('radius_miles', options.radiusMiles);
+        if (options.limit) params.append('limit', options.limit);
+        return this.fetch(`/planner/rides/nearby?${params}`);
+    }
+
+    async getLongRideDetails(rideId) {
+        return this.fetch(`/planner/rides/${encodeURIComponent(rideId)}`);
+    }
+
+    async analyzeLongRide(distance, duration, date = null) {
+        const body = { distance, duration };
+        if (date) body.date = date;
+        return this.fetch('/planner/analyze', {
+            method: 'POST',
+            body: JSON.stringify(body),
+        });
+    }
+
     // ── Saved Plans ────────────────────────────────────────
 
     async getPlans() {

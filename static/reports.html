@@ -177,6 +177,7 @@
                     <li class="nav-item"><a class="nav-link" href="/"><i class="bi bi-house-door" aria-hidden="true"></i> Home</a></li>
                     <li class="nav-item"><a class="nav-link" href="/routes.html"><i class="bi bi-map" aria-hidden="true"></i> Routes</a></li>
                     <li class="nav-item"><a class="nav-link active" href="/reports.html" aria-current="page"><i class="bi bi-bar-chart-line" aria-hidden="true"></i> Reports</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/explore.html"><i class="bi bi-compass" aria-hidden="true"></i> Explore</a></li>
                     <li class="nav-item"><a class="nav-link" href="/weather.html"><i class="bi bi-cloud-sun" aria-hidden="true"></i> Weather</a></li>
                     <li class="nav-item"><a class="nav-link" href="/settings.html"><i class="bi bi-gear" aria-hidden="true"></i> Settings</a></li>
                 </ul>
@@ -323,6 +324,32 @@
                             <div class="text-muted small">Loading…</div>
                         </div>
                         <div id="monthly-chart-label" class="text-muted" style="font-size:10px; margin-top:var(--space-1); text-align:center;"></div>
+                    </div>
+                </div>
+
+                <!-- Speed distribution -->
+                <div class="card mb-2">
+                    <div class="card-body py-2 px-3">
+                        <div class="section-header">
+                            <h6><i class="bi bi-speedometer2" aria-hidden="true"></i> Speed Distribution</h6>
+                        </div>
+                        <div class="bar-chart" id="speed-chart" role="img" aria-label="Speed distribution histogram">
+                            <div class="text-muted small">Loading…</div>
+                        </div>
+                        <div id="speed-chart-label" class="text-muted" style="font-size:10px; margin-top:var(--space-1); text-align:center;"></div>
+                    </div>
+                </div>
+
+                <!-- Elevation distribution -->
+                <div class="card mb-2">
+                    <div class="card-body py-2 px-3">
+                        <div class="section-header">
+                            <h6><i class="bi bi-arrow-up-right" aria-hidden="true"></i> Elevation per Ride</h6>
+                        </div>
+                        <div class="bar-chart" id="elevation-chart" role="img" aria-label="Elevation gain distribution histogram">
+                            <div class="text-muted small">Loading…</div>
+                        </div>
+                        <div id="elevation-chart-label" class="text-muted" style="font-size:10px; margin-top:var(--space-1); text-align:center;"></div>
                     </div>
                 </div>
 
