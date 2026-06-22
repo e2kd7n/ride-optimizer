@@ -259,6 +259,13 @@
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
             border: 1px solid rgba(0,0,0,0.07);
         }
+
+        .weather-hourly-strip {
+            background: rgba(74, 95, 213, 0.08);
+            border-radius: 0 0 8px 8px;
+            padding: var(--space-2) var(--space-3);
+            margin-top: -8px;
+        }
     </style>
 </head>
 <body>
@@ -354,7 +361,7 @@
                 </button>
             </div>
 
-            <!-- Weather Banner (full-width) -->
+            <!-- Weather Banner (full-width): current conditions + hourly strip -->
             <div class="mb-2">
                 <div id="weather-banner" class="weather-banner">
                     <!-- Skeleton loader -->
@@ -367,32 +374,21 @@
                         </div>
                     </div>
                 </div>
+                <div id="hourly-forecast" class="weather-hourly-strip">
+                    <div class="d-flex gap-2 overflow-hidden">
+                        <div class="skeleton" style="width:56px;height:80px;border-radius:6px"></div>
+                        <div class="skeleton" style="width:56px;height:80px;border-radius:6px"></div>
+                        <div class="skeleton" style="width:56px;height:80px;border-radius:6px"></div>
+                        <div class="skeleton" style="width:56px;height:80px;border-radius:6px"></div>
+                        <div class="skeleton" style="width:56px;height:80px;border-radius:6px"></div>
+                        <div class="skeleton" style="width:56px;height:80px;border-radius:6px"></div>
+                    </div>
+                </div>
             </div>
 
             <!-- Workout Strip (only when TrainerRoad configured + workout today) -->
             <div id="workout-strip" class="mb-2" style="display:none"
                  role="complementary" aria-label="Today's workout"></div>
-
-            <!-- Hourly Forecast Strip -->
-            <div class="mb-2">
-                <div class="card">
-                    <div class="card-body p-2">
-                        <h6 class="card-title mb-2">
-                            <i class="bi bi-clock-history" aria-hidden="true"></i> Hourly Forecast
-                        </h6>
-                        <div id="hourly-forecast">
-                            <div class="d-flex gap-2 overflow-hidden">
-                                <div class="skeleton" style="width:56px;height:80px;border-radius:6px"></div>
-                                <div class="skeleton" style="width:56px;height:80px;border-radius:6px"></div>
-                                <div class="skeleton" style="width:56px;height:80px;border-radius:6px"></div>
-                                <div class="skeleton" style="width:56px;height:80px;border-radius:6px"></div>
-                                <div class="skeleton" style="width:56px;height:80px;border-radius:6px"></div>
-                                <div class="skeleton" style="width:56px;height:80px;border-radius:6px"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
 
             <!-- Decision Row: Hero Card (col-lg-5) + Map + Panels (col-lg-7) -->
             <div class="row mb-2">
@@ -427,32 +423,16 @@
 
                 <!-- Right: Forecast + Route Status panels above map -->
                 <div class="col-lg-7 mb-3">
-                    <div class="row g-2 mb-2">
-                        <div class="col-6">
-                            <div class="card">
-                                <div class="card-body p-2">
-                                    <h6 class="card-title mb-2">
-                                        <i class="bi bi-clock" aria-hidden="true"></i> Commute Forecast
-                                    </h6>
-                                    <div id="commute-windows">
-                                        <div class="skeleton skeleton-card-line" style="height:var(--space-2);margin-bottom:var(--space-2)"></div>
-                                        <div class="skeleton skeleton-card-line" style="height:var(--space-2);margin-bottom:var(--space-2)"></div>
-                                        <div class="skeleton skeleton-card-line" style="height:var(--space-2)"></div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-6 route-status-col">
-                            <div class="card">
-                                <div class="card-body p-2">
-                                    <h6 class="card-title mb-2">
-                                        <i class="bi bi-map" aria-hidden="true"></i> Route Status
-                                    </h6>
-                                    <div id="route-status-panel">
-                                        <div class="skeleton skeleton-card-line" style="height:var(--space-2);margin-bottom:var(--space-2)"></div>
-                                        <div class="skeleton skeleton-card-line" style="height:var(--space-2);margin-bottom:var(--space-2)"></div>
-                                        <div class="skeleton skeleton-card-line" style="height:var(--space-2)"></div>
-                                    </div>
+                    <div class="mb-2">
+                        <div class="card">
+                            <div class="card-body p-2">
+                                <h6 class="card-title mb-2">
+                                    <i class="bi bi-map" aria-hidden="true"></i> Route Status
+                                </h6>
+                                <div id="route-status-panel">
+                                    <div class="skeleton skeleton-card-line" style="height:var(--space-2);margin-bottom:var(--space-2)"></div>
+                                    <div class="skeleton skeleton-card-line" style="height:var(--space-2);margin-bottom:var(--space-2)"></div>
+                                    <div class="skeleton skeleton-card-line" style="height:var(--space-2)"></div>
                                 </div>
                             </div>
                         </div>
