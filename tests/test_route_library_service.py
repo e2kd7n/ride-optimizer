@@ -16,13 +16,13 @@ from datetime import datetime
 from app.services.route_library_service import RouteLibraryService
 from src.route_analyzer import RouteGroup, Route
 from src.long_ride_analyzer import LongRide
-from src.config import Config
+from src.config_manager import ConfigManager
 
 
 @pytest.fixture
 def mock_config():
     """Create a mock Config object."""
-    config = Mock(spec=Config)
+    config = Mock(spec=ConfigManager)
     config.get = Mock(side_effect=lambda key, default=None: {
         'cache_dir': '/tmp/test_cache',
         'data_dir': '/tmp/test_data'
@@ -86,7 +86,8 @@ def mock_long_ride():
 @pytest.fixture
 def route_library_service(mock_config):
     """Create a RouteLibraryService instance."""
-    service = RouteLibraryService(mock_config)
+    with patch('app.services.route_library_service.ConfigManager.get_instance', return_value=mock_config):
+        service = RouteLibraryService()
     service._cache_loaded = True
     return service
 
@@ -103,7 +104,8 @@ class TestRouteLibraryServiceInitialization:
     
     def test_init_creates_service(self, mock_config):
         """Test that service can be created."""
-        service = RouteLibraryService(mock_config)
+        with patch('app.services.route_library_service.ConfigManager.get_instance', return_value=mock_config):
+            service = RouteLibraryService()
         assert service is not None
         assert service.config == mock_config
         assert service._route_groups is None

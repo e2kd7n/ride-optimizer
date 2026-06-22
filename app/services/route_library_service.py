@@ -14,7 +14,7 @@ from datetime import datetime
 
 from src.route_analyzer import RouteGroup, Route
 from src.long_ride_analyzer import LongRide
-from src.config import Config
+from src.config_manager import ConfigManager
 from src.json_storage import JSONStorage
 
 logger = logging.getLogger(__name__)
@@ -31,14 +31,9 @@ class RouteLibraryService:
     - Favorite management (JSON-based storage)
     """
 
-    def __init__(self, config: Config):
-        """
-        Initialize route library service.
-
-        Args:
-            config: Configuration object
-        """
-        self.config = config
+    def __init__(self):
+        """Initialize route library service."""
+        self.config = ConfigManager.get_instance()
         self.storage = JSONStorage()
         self._route_groups: Optional[List[RouteGroup]] = None
         self._long_rides: Optional[List[LongRide]] = None

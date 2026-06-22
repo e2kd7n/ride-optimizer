@@ -13,7 +13,7 @@ from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime, timedelta
 
 from src.weather_fetcher import WeatherFetcher, WindImpactCalculator
-from src.config import Config
+from src.config_manager import ConfigManager
 from src.json_storage import JSONStorage
 
 logger = logging.getLogger(__name__)
@@ -30,14 +30,9 @@ class WeatherService:
     - Wind impact analysis for routes
     """
     
-    def __init__(self, config: Config):
-        """
-        Initialize weather service.
-        
-        Args:
-            config: Configuration object
-        """
-        self.config = config
+    def __init__(self):
+        """Initialize weather service."""
+        self.config = ConfigManager.get_instance()
         self.fetcher = WeatherFetcher()
         self.wind_calculator = WindImpactCalculator()
         self.storage = JSONStorage()
