@@ -24,7 +24,6 @@ async function loadDashboard() {
         loadWorkoutStrip(),
         loadRecommendation(),
         loadRouteStatus(),
-        loadCommuteWindows(),
         loadHourlyForecast()
     ]);
 }
@@ -247,7 +246,6 @@ function renderWorkoutFitRow(rec) {
                       : 'bg-danger-subtle text-danger';
     const typeIcon = WORKOUT_TYPE_ICONS[workoutFit.workout_type] || 'bi-activity';
 
-    const wName = esc(workoutFit.workout_name || 'Workout');
     const wType = esc(workoutFit.workout_type || '');
     const reasons = (workoutFit.fit_reasons || []).map(r => esc(r)).join(' · ');
 
@@ -256,7 +254,6 @@ function renderWorkoutFitRow(rec) {
             <div class="workout-fit-row-header">
                 <i class="bi ${typeIcon}" aria-hidden="true"></i>
                 <span class="fw-semibold">Workout fit:</span>
-                <span>${wName} (${wType})</span>
                 <span class="badge ${ratingClass} ms-auto">${rating}</span>
             </div>
             ${reasons ? `<div class="workout-fit-row-reasons">${reasons}</div>` : ''}`;
@@ -581,46 +578,10 @@ async function loadWeather() {
         `;
         
         container.innerHTML = html;
-
-        renderWeatherWorkoutPill(container);
     } catch (error) {
         console.error('Failed to load weather:', error);
         container.innerHTML = '<span class="text-white small"><i class="bi bi-cloud-slash me-1"></i>Weather unavailable <button class="btn btn-sm btn-outline-light ms-2 py-0 px-1" onclick="loadWeather()">Retry</button></span>';
     }
-}
-
-/**
- * Render workout pill inside the weather banner (Design B §2A).
- * Shows today's workout name, type, and duration at a glance.
- * Links to settings.html#trainerroad-section.
- */
-function renderWeatherWorkoutPill(bannerEl) {
-    if (!_todayWorkout) return;
-
-    const esc = window.escapeHtml;
-    const w = _todayWorkout;
-    const typeBadgeClass = WORKOUT_TYPE_BADGES[w.type] || 'bg-secondary';
-    const staleClass = isWorkoutDataStale() ? ' workout-pill-stale' : '';
-    const staleTitle = isWorkoutDataStale()
-        ? ' — workout data may be outdated'
-        : '';
-
-    const pill = document.createElement('a');
-    pill.href = 'settings.html#trainerroad-section';
-    pill.className = `workout-pill${staleClass}`;
-    pill.setAttribute('aria-label',
-        `Today's workout: ${w.name}, ${w.type || 'Workout'}, ${w.duration_minutes || '?'} minutes${staleTitle}`);
-    pill.title = `Today's workout${staleTitle}`;
-    pill.innerHTML = `
-        <i class="bi bi-calendar-week" aria-hidden="true"></i>
-        <span class="fw-semibold">${esc(w.name)}</span>
-        <span>&middot;</span>
-        <span class="badge ${typeBadgeClass}">${esc(w.type || 'Workout')}</span>
-        <span>&middot;</span>
-        <span>${w.duration_minutes || '?'} min</span>
-        ${isWorkoutDataStale() ? '<i class="bi bi-exclamation-circle ms-1" aria-hidden="true" title="Workout data stale"></i>' : ''}`;
-
-    bannerEl.appendChild(pill);
 }
 
 /**
@@ -919,12 +880,7 @@ async function loadRouteStatus() {
 
         if (data.status !== 'success' || !data.routes || data.routes.length === 0) {
             container.innerHTML = window.renderEmptyState('No route data.', 'Sync Strava to see route conditions.', 'bi-map');
-            container.closest('.route-status-col').classList.add('d-none', 'd-md-block');
             return;
-        }
-
-        if (data.routes.length < 2) {
-            container.closest('.route-status-col').classList.add('d-none', 'd-md-block');
         }
 
         const esc = window.escapeHtml;
@@ -1017,86 +973,6 @@ async function loadRouteStats() {
     }
 }
 
-/**
- * Load morning/evening commute window forecast cards (#110, #111, #115).
- */
-async function loadCommuteWindows() {
-    const container = document.getElementById('commute-windows');
-    if (!container) return;
-
-    try {
-        const data = await window.apiClient.fetch('/weather/commute-windows');
-
-        if (data.status !== 'success') {
-            container.innerHTML = window.renderEmptyState('Forecast unavailable.', '', 'bi-cloud-slash');
-            return;
-        }
-
-        const esc = window.escapeHtml;
-
-        function windowCard(label, icon, window) {
-            if (!window || !window.avg_temp_f) return '';
-            const precip = window.max_precip_prob || 0;
-            const wind = window.avg_wind_mph || 0;
-            const precipColor = precip >= 60 ? 'text-danger' : precip >= 30 ? 'text-warning' : 'text-success';
-            const windColor = wind >= 15 ? 'text-danger' : wind >= 8 ? 'text-warning' : 'text-success';
-            const opt = window.optimal_departure;
-            const optText = opt
-                ? `<span class="badge bg-primary ms-1" title="Best departure: lowest wind + precip">${esc(opt)}</span>`
-                : '';
-
-            // Hourly progression rows (#115 — weather progression)
-            const hours = Array.isArray(window.hours) ? window.hours : [];
-            const progressionRows = hours.map(h => {
-                const isOpt = opt && h.hour === opt;
-                const hWind = h.wind_mph || 0;
-                const hWindClass = hWind >= 15 ? 'text-danger' : hWind >= 8 ? 'text-warning' : 'text-muted';
-                const hPrecip = h.precip_prob || 0;
-                const hPrecipPart = hPrecip > 0
-                    ? `<span class="${hPrecip >= 60 ? 'text-danger' : hPrecip >= 30 ? 'text-warning' : 'text-muted'}"> · ${hPrecip}%</span>`
-                    : '';
-                return `<div class="d-flex align-items-center gap-1 ${isOpt ? 'fw-semibold' : ''}" style="font-size:0.7rem;line-height:1.6">
-                    <span class="text-muted" style="min-width:36px">${esc(h.hour)}</span>
-                    <span>${h.temp_f}°</span>
-                    <span class="${hWindClass}">${hWind}mph</span>
-                    ${hPrecipPart}
-                    ${isOpt ? '<i class="bi bi-arrow-left text-primary" title="Best departure"></i>' : ''}
-                </div>`;
-            }).join('');
-
-            return `
-                <div class="commute-window-card d-flex align-items-start gap-2 py-2">
-                    <i class="bi ${icon} text-muted" style="font-size:1.1rem;margin-top:2px;flex-shrink:0"></i>
-                    <div class="flex-grow-1">
-                        <div class="d-flex align-items-center gap-1 mb-1">
-                            <span class="small fw-semibold">${label}</span>
-                            ${optText}
-                        </div>
-                        <div class="d-flex flex-wrap gap-2 small text-muted mb-1">
-                            <span><i class="bi bi-thermometer-half"></i> ${window.avg_temp_f}°F avg</span>
-                            <span class="${windColor}"><i class="bi bi-wind"></i> ${wind} mph ${esc(window.dominant_wind_direction || '')}</span>
-                            ${precip > 0 ? `<span class="${precipColor}"><i class="bi bi-cloud-rain"></i> ${precip}%</span>` : ''}
-                        </div>
-                        ${progressionRows ? `<div class="commute-window-progression">${progressionRows}</div>` : ''}
-                    </div>
-                </div>`;
-        }
-
-        const html = `
-            ${windowCard('Morning (7–9 AM)', 'bi-sunrise', data.morning)}
-            ${data.morning && data.evening ? '<hr class="my-1">' : ''}
-            ${windowCard('Evening (3–6 PM)', 'bi-sunset', data.evening)}
-            <div class="mt-1">
-                <a href="/weather.html" class="small text-muted">Full forecast →</a>
-            </div>`;
-
-        container.innerHTML = html;
-    } catch (error) {
-        console.error('Failed to load commute windows:', error);
-        container.innerHTML = window.renderErrorState('Forecast unavailable.', { small: true, retry: 'loadCommuteWindows()' });
-    }
-}
-
 async function loadHourlyForecast() {
     const container = document.getElementById('hourly-forecast');
     if (!container) return;
@@ -1110,17 +986,20 @@ async function loadHourlyForecast() {
         }
 
         const esc = window.escapeHtml;
+        const HIGHLIGHT_HOURS = new Set([6,7,8, 15,16,17, 18,19,20]);
 
-        const hourCells = data.hours.map(h => {
+        const hourCells = data.hours
+            .filter(h => h.hour >= 6)
+            .map(h => {
             const tempClass = getTempColorClass(h.temp_f);
             const windInfo = getWindInfo(h.wind_speed_mph);
             const precipColor = h.precipitation_prob >= 60 ? 'text-danger'
                               : h.precipitation_prob >= 30 ? 'text-warning'
                               : 'text-muted';
-            const commuteClass = h.is_commute_hour ? 'hourly-commute' : '';
+            const highlightClass = HIGHLIGHT_HOURS.has(h.hour) ? 'hourly-commute' : '';
 
             return `
-                <div class="hourly-cell ${commuteClass}">
+                <div class="hourly-cell ${highlightClass}">
                     <div class="hourly-time">${esc(h.time)}</div>
                     <div class="hourly-temp ${tempClass}">${h.temp_f}°</div>
                     <div class="hourly-wind ${windInfo.color}">
