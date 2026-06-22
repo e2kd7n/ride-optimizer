@@ -6,7 +6,6 @@ Verifies that routes never display as "Unnamed Activity" and have meaningful fal
 
 import pytest
 from datetime import datetime
-from unittest.mock import Mock
 from app.services.route_library_service import RouteLibraryService
 
 
@@ -15,9 +14,8 @@ class TestRouteNamingFix:
     
     @pytest.fixture
     def service(self):
-        """Create a RouteLibraryService instance with mock config."""
-        mock_config = Mock()
-        return RouteLibraryService(mock_config)
+        """Create a RouteLibraryService instance."""
+        return RouteLibraryService()
     
     def test_meaningful_route_name_with_valid_name(self, service):
         """Test that valid names are preserved."""
