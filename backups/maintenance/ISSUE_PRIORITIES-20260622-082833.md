@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-06-22 13:29:52 UTC / 2026-06-22 13:29:52 GMT
+**Last Updated:** 2026-06-22 04:30:00 UTC / 2026-06-21 23:30:00 CDT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -10,7 +10,7 @@ This file reflects the current state of GitHub issues organized by release miles
 
 - **Current Release:** v0.14.0 (deployed)
 - **Next Release:** v0.15.0 (in development)
-- **Future Releases:** 
+- **Future Releases:** v0.16.0
 
 ---
 
@@ -25,13 +25,24 @@ This file reflects the current state of GitHub issues organized by release miles
 **No P1 issues** ✅
 
 ### 🟡 P2 - MEDIUM
-**No P2 issues** ✅
+- ~~#307~~ - perf: reduce startup/request overhead on Pi ✅ **CLOSED** (lazy folium import, bare fetch→apiClient, degraded weather cache passthrough)
+- ~~#180~~ - Add planner-specific API client methods ✅ **CLOSED** (already implemented)
+- #341 - Dashboard shows commute, workout ride, and indoor options when workout is scheduled (in progress elsewhere)
+- #194 - Long Rides: Add accessibility features (WCAG 2.1 AA)
+- #106 - Add average speed and elevation gain metrics
 
 ### 🟢 P3 - LOW
 **No P3 issues** ✅
 
 ### 📋 P4 - FUTURE
 **No P4 issues** ✅
+
+---
+
+## 📅 v0.16.0 (Future Release)
+
+### 🔴 P1 - HIGH
+- #331 - Epic: Exploration Route Generator
 
 ---
 
