@@ -294,6 +294,7 @@ class CommuteService:
         """
         route_group = rec.route_group
         
+        rep = route_group.representative_route
         result = {
             'status': 'success',
             'direction': rec.direction,
@@ -301,12 +302,12 @@ class CommuteService:
             'route': {
                 'id': route_group.id,
                 'name': route_group.name or f"Route {route_group.id}",
-                'distance': route_group.representative_route.distance,
-                'duration': route_group.representative_route.duration,
-                'elevation': route_group.representative_route.elevation_gain,
+                'distance': rep.distance / 1000,
+                'duration': rep.duration / 60,
+                'elevation': rep.elevation_gain,
                 'frequency': route_group.frequency,
                 'is_plus_route': route_group.is_plus_route,
-                'coordinates': route_group.representative_route.coordinates
+                'coordinates': rep.coordinates
             },
             'score': rec.score,
             'breakdown': rec.breakdown,
@@ -539,8 +540,8 @@ class CommuteService:
         route = route_option.get('route', {})
         weather = route_option.get('weather') or {}
         route_name = escape(route.get('name', 'Unknown Route'))
-        distance_km = route.get('distance', 0) / 1000
-        duration_min = route.get('duration', 0) / 60
+        distance_km = route.get('distance', 0)
+        duration_min = route.get('duration', 0)
         elevation_m = route.get('elevation', 0)
         score_pct = route_option.get('score', 0) * 100
         
@@ -745,7 +746,8 @@ class CommuteService:
                 workout_constraints
             )
             if extended_rec:
-                extended_rec['workout_fit'] = workout_fit
+                extended_fit = self._analyze_workout_fit(extended_rec, workout_constraints)
+                extended_rec['workout_fit'] = extended_fit
                 extended_rec['is_workout_extended'] = True
                 return extended_rec
         
@@ -817,8 +819,8 @@ class CommuteService:
             Dictionary with fit analysis
         """
         route = recommendation.get('route', {})
-        duration_min = route.get('duration', 0)
-        
+        duration_min = route.get('duration', 0) / 60  # duration stored in seconds
+
         workout_name = constraints.get('workout_name', 'Unknown Workout')
         workout_type = constraints.get('workout_type', 'Unknown')
         min_duration = constraints.get('min_duration_minutes')
@@ -878,17 +880,18 @@ class CommuteService:
         Returns:
             True if route should be extended
         """
-        # Only extend for endurance workouts
-        if constraints.get('workout_type') != 'Endurance':
+        # Don't extend for high-intensity workouts best done indoors
+        indoor_types = {'VO2Max', 'Sprint', 'Anaerobic'}
+        if constraints.get('workout_type') in indoor_types:
             return False
-        
+
         # Don't extend if indoor fallback is preferred
         if constraints.get('indoor_fallback', False):
             return False
         
         # Check if current route is too short
         route = recommendation.get('route', {})
-        duration_min = route.get('duration', 0)
+        duration_min = route.get('duration', 0) / 60  # duration stored in seconds
         min_duration = constraints.get('min_duration_minutes')
         
         if min_duration and duration_min < min_duration:
