@@ -81,8 +81,8 @@ class TestLaunchAPIEndpoints:
             'route': {
                 'id': 'route-1',
                 'name': 'Main Route',
-                'distance': 5200,
-                'duration': 1500,
+                'distance': 5.2,
+                'duration': 25,
                 'elevation': 45,
                 'coordinates': [(40.7128, -74.0060), (40.7589, -73.9851)]
             },

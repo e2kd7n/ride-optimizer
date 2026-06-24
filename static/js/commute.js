@@ -159,17 +159,10 @@
         const scorePercent = typeof score === 'number' ? (score <= 1 ? score * 100 : score) : 0;
         const scoreClass = scorePercent >= 70 ? '' : scorePercent >= 50 ? 'medium' : 'low';
         
-        // Format metrics
-        const distanceKm = (route.distance / 1000).toFixed(1);
-        const distanceMi = (distanceKm * 0.621371).toFixed(1);
-        const durationMin = Math.round(route.duration / 60);
-        const elevationM = Math.round(route.elevation);
-        const elevationFt = Math.round(elevationM * 3.28084);
-        
-        // Get unit system preference
-        const unitSystem = window.getUnitSystem ? window.getUnitSystem() : 'imperial';
-        const distance = unitSystem === 'metric' ? `${distanceKm} km` : `${distanceMi} mi`;
-        const elevation = unitSystem === 'metric' ? `${elevationM} m` : `${elevationFt} ft`;
+        // Format metrics — API returns distance in km, duration in minutes, elevation in meters
+        const durationMin = Math.round(route.duration);
+        const distance = window.formatDistance ? window.formatDistance(route.distance) : `${route.distance.toFixed(1)} km`;
+        const elevation = window.formatElevation ? window.formatElevation(route.elevation) : `${Math.round(route.elevation)} m`;
         
         // Weather data
         const weather = recommendation.weather || {};
