@@ -248,7 +248,8 @@ class TrainerRoadService:
             ('Sprint', ['sprint', 'neuromuscular']),
             ('Threshold', ['threshold', 'sweet spot', 'ftp test']),
             ('Tempo', ['tempo']),
-            ('Endurance', ['endurance', 'easy', 'recovery', 'base'])
+            ('Endurance', ['endurance', 'easy', 'recovery', 'base']),
+            ('Group Ride', ['group ride', 'group'])
         ]
 
         for workout_type, keywords in type_keywords:
@@ -458,6 +459,13 @@ class TrainerRoadService:
             constraints['indoor_preferred'] = True
             constraints['preferred_intensity'] = 'high'
             constraints['notes'].append('High-intensity workout - consider indoor trainer')
+
+        elif wtype == 'Group Ride':
+            constraints['min_duration_minutes'] = duration or 60
+            constraints['max_duration_minutes'] = (duration or 60) + 60
+            constraints['preferred_intensity'] = 'moderate'
+            constraints['indoor_preferred'] = False
+            constraints['notes'].append('Group ride — match to historical day-of-week pattern')
 
         elif wtype == 'Recovery':
             constraints['max_duration_minutes'] = 45

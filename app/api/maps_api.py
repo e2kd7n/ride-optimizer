@@ -136,8 +136,8 @@ def get_dashboard_map_data() -> Dict:
                 'opacity': 0.7,
                 'popup_html': f"""
                     <strong>{group.get('name', 'Route')}</strong><br>
-                    Distance: {rep_route.get('distance', 0):.1f} mi<br>
-                    Elevation: {rep_route.get('elevation_gain', 0):.0f} ft<br>
+                    Distance: {rep_route.get('distance', 0) / 1000:.1f} km<br>
+                    Elevation: {rep_route.get('elevation_gain', 0):.0f} m<br>
                     Uses: {group.get('count', 0)}
                 """,
                 'tooltip': group.get('name', 'Route')
@@ -145,7 +145,7 @@ def get_dashboard_map_data() -> Dict:
             'markers': []
         }
         layers.append(layer)
-    
+
     return {
         'status': 'success',
         'center': center,
@@ -226,8 +226,8 @@ def get_commute_map_data() -> Dict:
                 'popup_html': f"""
                     <strong>{group.get('name', 'Route')}</strong><br>
                     {'<span class="badge bg-success">Recommended</span><br>' if is_recommended else ''}
-                    Distance: {rep_route.get('distance', 0):.1f} mi<br>
-                    Elevation: {rep_route.get('elevation_gain', 0):.0f} ft<br>
+                    Distance: {rep_route.get('distance', 0) / 1000:.1f} km<br>
+                    Elevation: {rep_route.get('elevation_gain', 0):.0f} m<br>
                     Uses: {group.get('count', 0)}
                 """,
                 'tooltip': group.get('name', 'Route')
@@ -299,8 +299,8 @@ def get_route_detail_map_data(route_id: str) -> Dict:
         'opacity': 0.8,
         'popup_html': f"""
             <strong>{route_group.get('name', 'Route')}</strong><br>
-            Distance: {rep_route.get('distance', 0):.1f} mi<br>
-            Elevation: {rep_route.get('elevation_gain', 0):.0f} ft<br>
+            Distance: {rep_route.get('distance', 0) / 1000:.1f} km<br>
+            Elevation: {rep_route.get('elevation_gain', 0):.0f} m<br>
             Uses: {route_group.get('count', 0)}
         """,
         'tooltip': route_group.get('name', 'Route')

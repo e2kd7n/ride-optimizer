@@ -616,7 +616,94 @@ class AnalysisService:
         """
         self._load_from_cache()
         return self._activities if self._activities else []
-    
+
+    def find_group_rides_for_day(self, target_weekday: int,
+                                 min_duration_minutes: int = 0,
+                                 limit: int = 5) -> List[Dict[str, Any]]:
+        """
+        Find recurring non-commute rides for a specific day of week.
+
+        Looks at historical activities, groups by name similarity on the
+        target weekday, and returns the most frequent patterns.
+
+        Args:
+            target_weekday: 0=Monday .. 6=Sunday
+            min_duration_minutes: Minimum ride duration to consider
+            limit: Max results to return
+
+        Returns:
+            List of dicts with ride pattern info, sorted by frequency
+        """
+        from collections import Counter
+        import re
+
+        self._load_from_cache()
+        activities = self._activities or []
+
+        commute_directions = set()
+        if self._route_groups:
+            for rg in self._route_groups:
+                commute_directions.add(rg.direction)
+
+        min_duration_s = min_duration_minutes * 60
+
+        day_rides = []
+        for a in activities:
+            if not a.start_date or a.type not in ('Ride', 'GravelRide', 'EBikeRide'):
+                continue
+            try:
+                dt = datetime.fromisoformat(a.start_date.replace('Z', '+00:00'))
+            except (ValueError, AttributeError):
+                continue
+            if dt.weekday() != target_weekday:
+                continue
+            if a.moving_time < min_duration_s:
+                continue
+            day_rides.append(a)
+
+        if not day_rides:
+            return []
+
+        # Normalize ride names for grouping
+        def normalize(name: str) -> str:
+            name = name.lower().strip()
+            name = re.sub(r'[#\d/\-]+', '', name)
+            name = re.sub(r'\s+', ' ', name).strip()
+            return name
+
+        # Group by normalized name
+        name_groups: Dict[str, List] = {}
+        for a in day_rides:
+            key = normalize(a.name)
+            if not key or key in ('morning ride', 'afternoon ride', 'evening ride',
+                                   'lunch ride', 'ride'):
+                continue
+            name_groups.setdefault(key, []).append(a)
+
+        if not name_groups:
+            return []
+
+        results = []
+        for norm_name, rides in sorted(name_groups.items(),
+                                        key=lambda x: len(x[1]), reverse=True):
+            rides.sort(key=lambda a: a.start_date or '', reverse=True)
+            latest = rides[0]
+            avg_duration = sum(a.moving_time for a in rides) / len(rides)
+            avg_distance = sum(a.distance for a in rides) / len(rides)
+
+            results.append({
+                'name': latest.name,
+                'normalized_name': norm_name,
+                'frequency': len(rides),
+                'avg_duration_minutes': round(avg_duration / 60),
+                'avg_distance_miles': round(avg_distance / 1609.34, 1),
+                'latest_date': latest.start_date,
+                'latest_activity_id': latest.id,
+                'activity_ids': [a.id for a in rides[:10]],
+            })
+
+        return results[:limit]
+
     def get_locations(self) -> Tuple[Optional[Location], Optional[Location]]:
         """
         Get home and work locations.
