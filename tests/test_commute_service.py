@@ -38,8 +38,8 @@ def mock_route():
     """Create a mock route."""
     route = Mock(spec=Route)
     route.activity_id = "12345"
-    route.distance = 10.5
-    route.duration = 1800  # 30 minutes
+    route.distance = 10500  # 10.5 km in meters
+    route.duration = 1800  # 30 min in seconds
     route.elevation_gain = 150.0
     route.coordinates = [
         (40.7128, -74.0060),
@@ -360,8 +360,8 @@ class TestFormatRecommendation:
         assert result['time_window'] == 'morning'
         assert result['route']['id'] == 'route_123'
         assert result['route']['name'] == 'Main Commute Route'
-        assert result['route']['distance'] == 10.5
-        assert result['route']['duration'] == 1800
+        assert result['route']['distance'] == 10.5  # 10500m → 10.5 km
+        assert result['route']['duration'] == 30  # 1800s → 30 min
         assert result['route']['elevation'] == 150.0
         assert result['route']['frequency'] == 25
         assert result['route']['is_plus_route'] is False
@@ -848,7 +848,7 @@ class TestAnalyzeWorkoutFit:
     """Test _analyze_workout_fit."""
 
     def test_duration_matches(self, commute_service):
-        recommendation = {'route': {'duration': 45}}  # 45 "minutes" (code reads raw value)
+        recommendation = {'route': {'duration': 2700}}  # 45 min (seconds)
         constraints = {
             'workout_name': 'Endurance',
             'workout_type': 'Endurance',
@@ -863,7 +863,7 @@ class TestAnalyzeWorkoutFit:
         assert result['indoor_fallback'] is False
 
     def test_duration_too_short(self, commute_service):
-        recommendation = {'route': {'duration': 10}}
+        recommendation = {'route': {'duration': 600}}  # 10 min (seconds)
         constraints = {
             'workout_name': 'Long Ride',
             'workout_type': 'Endurance',
@@ -876,7 +876,7 @@ class TestAnalyzeWorkoutFit:
         assert result['fit_score'] < 0.5
 
     def test_duration_too_long(self, commute_service):
-        recommendation = {'route': {'duration': 7200}}  # 120 min
+        recommendation = {'route': {'duration': 7200}}  # 120 min (seconds)
         constraints = {
             'workout_name': 'Recovery',
             'workout_type': 'Recovery',
@@ -889,7 +889,7 @@ class TestAnalyzeWorkoutFit:
         assert 'longer than recommended' in result['fit_reasons'][0]
 
     def test_indoor_fallback_penalty(self, commute_service):
-        recommendation = {'route': {'duration': 2400}}
+        recommendation = {'route': {'duration': 2400}}  # 40 min (seconds)
         constraints = {
             'workout_name': 'Sprint Intervals',
             'workout_type': 'VO2Max',
@@ -913,17 +913,35 @@ class TestShouldExtendForWorkout:
             'indoor_fallback': False,
             'min_duration_minutes': 60
         }
-        recommendation = {'route': {'duration': 30}}  # 30 < 60
+        recommendation = {'route': {'duration': 1800}}  # 30 min in seconds < 60 min target
         assert commute_service._should_extend_for_workout(constraints, recommendation) is True
 
-    def test_no_extend_for_non_endurance(self, commute_service):
+    def test_no_extend_for_indoor_intensity(self, commute_service):
         constraints = {
             'workout_type': 'VO2Max',
             'indoor_fallback': False,
             'min_duration_minutes': 60
         }
-        recommendation = {'route': {'duration': 1800}}
+        recommendation = {'route': {'duration': 1800}}  # 30 min in seconds
         assert commute_service._should_extend_for_workout(constraints, recommendation) is False
+
+    def test_extends_for_untyped_workout(self, commute_service):
+        constraints = {
+            'workout_type': None,
+            'indoor_fallback': False,
+            'min_duration_minutes': 90
+        }
+        recommendation = {'route': {'duration': 2220}}  # 37 min in seconds
+        assert commute_service._should_extend_for_workout(constraints, recommendation) is True
+
+    def test_extends_for_tempo_workout(self, commute_service):
+        constraints = {
+            'workout_type': 'Tempo',
+            'indoor_fallback': False,
+            'min_duration_minutes': 75
+        }
+        recommendation = {'route': {'duration': 2220}}  # 37 min in seconds
+        assert commute_service._should_extend_for_workout(constraints, recommendation) is True
 
     def test_no_extend_for_indoor_fallback(self, commute_service):
         constraints = {
@@ -931,7 +949,7 @@ class TestShouldExtendForWorkout:
             'indoor_fallback': True,
             'min_duration_minutes': 60
         }
-        recommendation = {'route': {'duration': 1800}}
+        recommendation = {'route': {'duration': 1800}}  # 30 min in seconds
         assert commute_service._should_extend_for_workout(constraints, recommendation) is False
 
     def test_no_extend_when_duration_sufficient(self, commute_service):
@@ -940,7 +958,7 @@ class TestShouldExtendForWorkout:
             'indoor_fallback': False,
             'min_duration_minutes': 30
         }
-        recommendation = {'route': {'duration': 2400}}  # 40 min > 30 min
+        recommendation = {'route': {'duration': 2400}}  # 40 min in seconds > 30 min target
         assert commute_service._should_extend_for_workout(constraints, recommendation) is False
 
 
@@ -961,7 +979,7 @@ class TestExtendRouteForWorkout:
         commute_service._recommender.get_all_recommendations.return_value = []
 
         result = commute_service._extend_route_for_workout(
-            {'direction': 'to_work', 'route': {'duration': 1800}},
+            {'direction': 'to_work', 'route': {'duration': 30}},
             {'min_duration_minutes': 120, 'workout_name': 'Long Endurance'}
         )
         assert result is None
@@ -983,7 +1001,7 @@ class TestExtendRouteForWorkout:
         commute_service._recommender.get_all_recommendations.return_value = [extended_rec]
 
         result = commute_service._extend_route_for_workout(
-            {'direction': 'to_work', 'route': {'duration': 1800}},
+            {'direction': 'to_work', 'route': {'duration': 30}},
             {'min_duration_minutes': 60, 'workout_name': 'Endurance Ride'}
         )
         assert result is not None
@@ -994,7 +1012,7 @@ class TestExtendRouteForWorkout:
         commute_service._recommender.get_all_recommendations.side_effect = Exception("Boom")
 
         result = commute_service._extend_route_for_workout(
-            {'direction': 'to_work', 'route': {'duration': 1800}},
+            {'direction': 'to_work', 'route': {'duration': 30}},
             {'min_duration_minutes': 60, 'workout_name': 'Test'}
         )
         assert result is None

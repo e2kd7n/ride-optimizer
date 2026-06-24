@@ -39,6 +39,7 @@ const WORKOUT_TYPE_BADGES = {
     'Sprint':     'bg-danger',
     'Anaerobic':  'bg-danger',
     'Recovery':   'bg-success',
+    'Group Ride': 'bg-info text-dark',
 };
 
 /**
@@ -179,7 +180,7 @@ function renderWorkoutOptionCards(options, esc) {
                 <div class="fw-semibold small">${esc((c.route && c.route.name) || 'Commute route')}</div>
                 <div class="d-flex gap-2 small text-muted">
                     ${c.duration_minutes ? `<span>${c.duration_minutes} min</span>` : ''}
-                    ${c.route && c.route.distance ? `<span>${c.route.distance.toFixed(1)} mi</span>` : ''}
+                    ${c.route && c.route.distance ? `<span>${window.formatDistance(c.route.distance)}</span>` : ''}
                 </div>
                 <span class="badge ${scoreClass} mt-1">${scorePct > 0 ? scorePct + ' fit' : 'Commute fit'}</span>
             </div>`);
@@ -195,9 +196,23 @@ function renderWorkoutOptionCards(options, esc) {
                 <div class="fw-semibold small">${esc((wr.route && wr.route.name) || 'Best match')}</div>
                 <div class="d-flex gap-2 small text-muted">
                     ${wr.duration_minutes ? `<span>${wr.duration_minutes} min</span>` : ''}
-                    ${wr.route && wr.route.distance ? `<span>${wr.route.distance.toFixed(1)} mi</span>` : ''}
+                    ${wr.route && wr.route.distance ? `<span>${window.formatDistance(wr.route.distance)}</span>` : ''}
                 </div>
                 <span class="badge ${scoreClass} mt-1">${scorePct > 0 ? scorePct + ' match' : 'Best match'}</span>
+            </div>`);
+    }
+
+    if (options.group_ride) {
+        const gr = options.group_ride;
+        cards.push(`
+            <div class="workout-option-card${!options.commute ? ' active' : ''}" data-option="group_ride" role="button" tabindex="0">
+                <div class="workout-option-label"><i class="bi bi-people"></i> Group Ride</div>
+                <div class="fw-semibold small">${esc(gr.name)}</div>
+                <div class="d-flex gap-2 small text-muted">
+                    ${gr.avg_duration_minutes ? `<span>~${gr.avg_duration_minutes} min</span>` : ''}
+                    ${gr.avg_distance_miles ? `<span>~${gr.avg_distance_miles} mi</span>` : ''}
+                </div>
+                <span class="badge bg-info text-dark mt-1">${gr.frequency}x ridden</span>
             </div>`);
     }
 
@@ -681,8 +696,8 @@ function renderHeroCard(rec, isHero) {
                 ` : ''}
                 ${renderWorkoutFitRow(rec)}
                 <div class="hero-meta small text-muted mt-2">
-                    <span><i class="bi bi-signpost"></i> ${route.distance ? route.distance.toFixed(1) : '—'} mi</span>
-                    <span class="ms-3"><i class="bi bi-graph-up"></i> ${route.elevation || '—'} ft</span>
+                    <span><i class="bi bi-signpost"></i> ${route.distance ? window.formatDistance(route.distance) : '—'}</span>
+                    <span class="ms-3"><i class="bi bi-graph-up"></i> ${route.elevation != null ? window.formatElevation(route.elevation) : '—'}</span>
                     ${departureTime ? `<span class="ms-3"><i class="bi bi-alarm"></i> ${departureTime}</span>` : ''}
                 </div>
                 ${transitBanner}
@@ -713,7 +728,7 @@ function renderHeroCard(rec, isHero) {
             ${weatherSummary ? `<div class="small text-muted mt-1">${weatherSummary}</div>` : ''}
             <div class="d-flex gap-3 mt-1 small text-muted">
                 ${estMins ? `<span><i class="bi bi-clock"></i> ${estMins} min</span>` : ''}
-                <span><i class="bi bi-signpost"></i> ${route.distance ? route.distance.toFixed(1) : '—'} mi</span>
+                <span><i class="bi bi-signpost"></i> ${route.distance ? window.formatDistance(route.distance) : '—'}</span>
             </div>
             ${renderWorkoutFitCompact(rec)}
         </div>`;
@@ -929,8 +944,8 @@ async function loadRouteStats() {
         // Calculate statistics
         const totalRoutes = routes.length;
         const favoriteRoutes = routes.filter(r => r.is_favorite).length;
-        const totalDistance = routes.reduce((sum, r) => sum + (r.distance || 0), 0);
-        const avgDistance = totalRoutes > 0 ? (totalDistance / totalRoutes).toFixed(1) : 0;
+        const totalDistanceKm = routes.reduce((sum, r) => sum + (r.distance || 0), 0);
+        const avgDistanceKm = totalRoutes > 0 ? totalDistanceKm / totalRoutes : 0;
         
         // Stats HTML
         const statsHtml = `
@@ -952,14 +967,14 @@ async function loadRouteStats() {
                 <div class="col-md-3">
                     <div class="stat-card">
                         <i class="bi bi-speedometer2 fs-2 text-success"></i>
-                        <h3 class="mt-2">${totalDistance.toFixed(0)}</h3>
-                        <small class="text-muted">Total Miles</small>
+                        <h3 class="mt-2">${window.formatDistance(totalDistanceKm, 0)}</h3>
+                        <small class="text-muted">Total Distance</small>
                     </div>
                 </div>
                 <div class="col-md-3">
                     <div class="stat-card">
                         <i class="bi bi-graph-up fs-2 text-info"></i>
-                        <h3 class="mt-2">${avgDistance}</h3>
+                        <h3 class="mt-2">${window.formatDistance(avgDistanceKm)}</h3>
                         <small class="text-muted">Avg Distance</small>
                     </div>
                 </div>
