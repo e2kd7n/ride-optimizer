@@ -659,7 +659,7 @@ def get_recommendation():
                 'recommended_route': {
                     'id': route.get('id'),
                     'name': route.get('name', 'Unknown Route'),
-                    'distance': route.get('distance', 0) / 1000,
+                    'distance': route.get('distance', 0),
                     'duration': route.get('duration', 0),
                     'elevation_gain': route.get('elevation', 0),
                     'coordinates': route.get('coordinates', [])
@@ -1006,8 +1006,8 @@ def get_workout_options():
                         'route': {
                             'id': route.get('id'),
                             'name': route.get('name', 'Commute'),
-                            'distance': route.get('distance'),
-                            'elevation': route.get('elevation'),
+                            'distance': route.get('distance', 0),
+                            'elevation': route.get('elevation', 0),
                         },
                         'fit_score': wf.get('fit_score', 0) if wf else 0,
                         'is_extended': commute_rec.get('is_workout_extended', False),
@@ -1034,8 +1034,8 @@ def get_workout_options():
                     options['workout_ride'] = {
                         'route': {
                             'name': best['name'],
-                            'distance': best['distance_miles'],
-                            'elevation': best['elevation_ft'],
+                            'distance': best['distance_miles'] * 1.60934,
+                            'elevation': best['elevation_ft'] / 3.28084,
                         },
                         'fit_score': best['score'],
                         'duration_minutes': best['duration_minutes'],
@@ -1043,6 +1043,28 @@ def get_workout_options():
                     }
             except Exception as e:
                 logger.warning(f"Workout-options: workout ride unavailable: {e}")
+
+        # Group ride option — match historical rides for this day of week
+        if constraints.get('workout_type') == 'Group Ride' and _analysis_service:
+            try:
+                target_weekday = _date.today().weekday()
+                group_rides = _analysis_service.find_group_rides_for_day(
+                    target_weekday=target_weekday,
+                    min_duration_minutes=constraints.get('min_duration_minutes') or 30,
+                    limit=3,
+                )
+                if group_rides:
+                    best = group_rides[0]
+                    options['group_ride'] = {
+                        'name': best['name'],
+                        'frequency': best['frequency'],
+                        'avg_duration_minutes': best['avg_duration_minutes'],
+                        'avg_distance_miles': best['avg_distance_miles'],
+                        'latest_date': best['latest_date'],
+                        'alternatives': group_rides[1:],
+                    }
+            except Exception as e:
+                logger.warning(f"Workout-options: group ride lookup failed: {e}")
 
         # Indoor option (always available)
         options['indoor'] = {
