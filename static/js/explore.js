@@ -210,7 +210,9 @@ async function generateRoute() {
 
     const btn = document.getElementById('generate-route-btn');
     const statusEl = document.getElementById('worker-status');
+    const spinnerEl = document.getElementById('worker-spinner');
     btn.disabled = true;
+    spinnerEl.classList.remove('d-none');
     statusEl.textContent = 'Computing exploration routes…';
 
     waypointMarkers.clearLayers();
@@ -223,18 +225,34 @@ async function generateRoute() {
 
     let routeCount = 0;
 
+    const slowHintTimer = setTimeout(() => {
+        statusEl.textContent += ' — still working, larger search areas can take longer…';
+    }, 8000);
+
+    const stopWorking = () => {
+        btn.disabled = false;
+        spinnerEl.classList.add('d-none');
+        clearTimeout(slowHintTimer);
+    };
+
     explorationWorker.onmessage = (e) => {
         const msg = e.data;
+
+        if (msg.type === 'progress') {
+            statusEl.textContent = msg.message;
+            return;
+        }
 
         if (msg.type === 'route') {
             renderRoute(msg.route, routeCount);
             addRouteListItem(msg.route, routeCount);
             routeCount++;
+            statusEl.textContent = `Found ${routeCount} route${routeCount > 1 ? 's' : ''} so far…`;
             return;
         }
 
         if (msg.type === 'done') {
-            btn.disabled = false;
+            stopWorking();
             statusEl.textContent = routeCount > 0
                 ? `${routeCount} route${routeCount > 1 ? 's' : ''} generated`
                 : 'No reachable unvisited tiles found — try increasing distance or moving the start point';
@@ -242,13 +260,13 @@ async function generateRoute() {
         }
 
         if (msg.type === 'error') {
-            btn.disabled = false;
+            stopWorking();
             statusEl.textContent = msg.message || 'Route generation failed';
         }
     };
 
     explorationWorker.onerror = (err) => {
-        btn.disabled = false;
+        stopWorking();
         statusEl.textContent = 'Worker error: ' + err.message;
     };
 
