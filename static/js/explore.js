@@ -76,6 +76,9 @@ function initWorker() {
 async function loadCoverage() {
     const statusEl = document.getElementById('coverage-status');
     statusEl.textContent = 'Loading coverage…';
+    const slowHintTimer = setTimeout(() => {
+        statusEl.textContent = 'Still loading — first coverage load over your full ride history can take up to a minute…';
+    }, 5000);
 
     const bounds = map.getBounds();
     const zoom = map.getZoom();
@@ -105,6 +108,8 @@ async function loadCoverage() {
         statusEl.textContent = `Updated ${new Date(data.computed_at).toLocaleTimeString()}`;
     } catch (e) {
         statusEl.textContent = `Error: ${e.message}`;
+    } finally {
+        clearTimeout(slowHintTimer);
     }
 }
 
