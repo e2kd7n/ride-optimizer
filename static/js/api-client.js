@@ -62,8 +62,9 @@ class APIClient {
      * Generic fetch wrapper with error handling and retry logic
      */
     async fetch(endpoint, options = {}) {
+        const { timeoutMs, ...fetchOptions } = options;
         const url = `${this.baseURL}${endpoint}`;
-        const method = (options.method || 'GET').toUpperCase();
+        const method = (fetchOptions.method || 'GET').toUpperCase();
         const isMutation = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method);
 
         // Ensure CSRF token is ready before any state-changing request
@@ -76,15 +77,15 @@ class APIClient {
 
         for (let attempt = 0; attempt < this.retryAttempts; attempt++) {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+            const timeoutId = setTimeout(() => controller.abort(), timeoutMs || this.timeout);
 
             try {
                 const response = await fetch(url, {
-                    ...options,
+                    ...fetchOptions,
                     headers: {
                         'Content-Type': 'application/json',
                         ...(isMutation && this._csrfToken ? { 'X-CSRFToken': this._csrfToken } : {}),
-                        ...options.headers
+                        ...fetchOptions.headers
                     },
                     signal: controller.signal
                 });
@@ -302,14 +303,17 @@ class APIClient {
     // ── Exploration / Coverage ───────────────────────────────
 
     async getTileCoverage(bounds = null) {
+        // Coverage is computed from scratch (no cache) on the first request
+        // after each activity sync and can take 30s+ over a large ride history.
+        const timeoutMs = 45000;
         if (bounds) {
             const params = new URLSearchParams({
                 south: bounds.south, west: bounds.west,
                 north: bounds.north, east: bounds.east,
             });
-            return this.fetch(`/exploration/tiles?${params}`);
+            return this.fetch(`/exploration/tiles?${params}`, { timeoutMs });
         }
-        return this.fetch('/exploration/tiles');
+        return this.fetch('/exploration/tiles', { timeoutMs });
     }
 
     async getRoadCoverage(bounds) {
