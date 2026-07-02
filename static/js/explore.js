@@ -17,8 +17,22 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('load-coverage-btn').addEventListener('click', loadCoverage);
     document.getElementById('clear-cache-btn').addEventListener('click', clearCache);
     document.getElementById('generate-route-btn').addEventListener('click', generateRoute);
+    initDistanceSlider();
     loadCoverage();
 });
+
+// ── Distance unit display ──────────────────────────────────────
+
+function initDistanceSlider() {
+    const unit = window.getDistanceUnit ? window.getDistanceUnit() : 'km';
+    document.getElementById('distance-unit-label').textContent = unit;
+    updateDistanceDisplay(document.getElementById('distance-slider').value);
+}
+
+window.updateDistanceDisplay = function(kmValue) {
+    document.getElementById('distance-value').textContent =
+        window.formatDistance ? window.formatDistance(parseFloat(kmValue), 1) : `${kmValue} km`;
+};
 
 // ── Map setup ───────────────────────────────────────────────────
 

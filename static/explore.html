@@ -111,11 +111,11 @@
                 </h6>
                 <div class="d-flex flex-wrap gap-3 align-items-center mb-2">
                     <div>
-                        <label class="form-label small mb-0" for="distance-slider">Distance (km)</label>
+                        <label class="form-label small mb-0" for="distance-slider">Distance (<span id="distance-unit-label">km</span>)</label>
                         <div class="d-flex align-items-center gap-2">
                             <input type="range" class="form-range" id="distance-slider" min="10" max="150" value="40" step="5"
-                                   aria-label="Target route distance in kilometers"
-                                   oninput="document.getElementById('distance-value').textContent = this.value + ' km'">
+                                   aria-label="Target route distance"
+                                   oninput="window.updateDistanceDisplay(this.value)">
                             <span class="small fw-bold" id="distance-value">40 km</span>
                         </div>
                     </div>
