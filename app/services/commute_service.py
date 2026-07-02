@@ -318,9 +318,18 @@ class CommuteService:
             'confidence': self._get_confidence_label(rec.score)
         }
         
-        # Add weather if available
+        # Add weather if available — convert to the same imperial schema
+        # /api/weather uses (temperature/wind_speed/precipitation_probability),
+        # since forecast_weather comes from next_commute_recommender in metric units
         if rec.forecast_weather:
-            result['weather'] = rec.forecast_weather
+            fw = rec.forecast_weather
+            result['weather'] = {
+                'temperature': round(fw['temp_c'] * 9 / 5 + 32),
+                'wind_speed': round(fw['wind_speed_kph'] * 0.621371),
+                'wind_gust': round(fw['wind_gust_kph'] * 0.621371),
+                'wind_direction_deg': fw['wind_direction_deg'],
+                'precipitation_probability': round(fw['precipitation_prob']),
+            }
         
         return result
     
