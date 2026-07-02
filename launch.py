@@ -2089,6 +2089,33 @@ def exploration_invalidate():
     return jsonify({'status': 'success', 'message': 'Coverage caches invalidated'})
 
 
+_geocoding_service = None
+
+
+def _get_geocoding_service():
+    global _geocoding_service
+    if _geocoding_service is None:
+        from app.services.geocoding_service import GeocodingService
+        _geocoding_service = GeocodingService()
+    return _geocoding_service
+
+
+@app.route('/api/geocode')
+@limiter.limit("10 per minute")
+def geocode_location():
+    """Forward-geocode a city/state or postal code to coordinates (for setting an explore start point)."""
+    query = (request.args.get('query') or '').strip()
+    if not query:
+        return jsonify({'status': 'error', 'message': 'query is required'}), 400
+    if len(query) > 200:
+        return jsonify({'status': 'error', 'message': 'query is too long'}), 400
+
+    svc = _get_geocoding_service()
+    result = svc.geocode(query)
+    status_code = 200 if result.get('status') == 'success' else 404
+    return jsonify(result), status_code
+
+
 # ── Garmin Connect Integration ────────────────────────────────────
 
 _garmin_service = None

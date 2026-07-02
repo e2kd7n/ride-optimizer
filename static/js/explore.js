@@ -17,6 +17,13 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('load-coverage-btn').addEventListener('click', loadCoverage);
     document.getElementById('clear-cache-btn').addEventListener('click', clearCache);
     document.getElementById('generate-route-btn').addEventListener('click', generateRoute);
+    document.getElementById('location-search-btn').addEventListener('click', searchLocation);
+    document.getElementById('location-search-input').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            searchLocation();
+        }
+    });
     initDistanceSlider();
     loadCoverage();
 });
@@ -51,13 +58,44 @@ function initMap() {
     });
 }
 
-function setStart(lat, lon) {
+function setStart(lat, lon, label = null) {
     if (startMarker) map.removeLayer(startMarker);
     startMarker = L.marker([lat, lon], {
         title: 'Start',
         alt: 'Route start point',
     }).addTo(map).bindPopup('Start').openPopup();
-    document.getElementById('start-display').textContent = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+    document.getElementById('start-display').textContent = label || `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+}
+
+// ── Location search (geocoding) ──────────────────────────────────
+
+async function searchLocation() {
+    const input = document.getElementById('location-search-input');
+    const btn = document.getElementById('location-search-btn');
+    const query = input.value.trim();
+    if (!query) return;
+
+    btn.disabled = true;
+    const statusEl = document.getElementById('start-display');
+    const previousText = statusEl.textContent;
+    statusEl.textContent = 'Searching…';
+
+    try {
+        const result = await api.geocodeLocation(query);
+        if (result.status !== 'success') {
+            statusEl.textContent = previousText;
+            if (typeof showToast === 'function') showToast(result.message || 'Location not found', 'warning');
+            return;
+        }
+
+        setStart(result.lat, result.lon, result.display_name);
+        map.setView([result.lat, result.lon], 12);
+    } catch (e) {
+        statusEl.textContent = previousText;
+        if (typeof showToast === 'function') showToast(e.message || 'Location search failed', 'error');
+    } finally {
+        btn.disabled = false;
+    }
 }
 
 // ── Web Worker ──────────────────────────────────────────────────
@@ -153,6 +191,9 @@ function renderTiles(visited) {
 
 // ── Route generation ────────────────────────────────────────────
 
+const ROUTE_COLORS = ['#0d6efd', '#fd7e14', '#6f42c1', '#20c997'];
+const DIRECTION_LABELS = { NE: 'Northeast', SE: 'Southeast', SW: 'Southwest', NW: 'Northwest' };
+
 async function generateRoute() {
     if (!explorationWorker) {
         if (typeof showToast === 'function') showToast('Web Workers not supported', 'error');
@@ -170,22 +211,40 @@ async function generateRoute() {
     const btn = document.getElementById('generate-route-btn');
     const statusEl = document.getElementById('worker-status');
     btn.disabled = true;
-    statusEl.textContent = 'Computing exploration route…';
+    statusEl.textContent = 'Computing exploration routes…';
+
+    waypointMarkers.clearLayers();
+    routeLayer.clearLayers();
+    document.getElementById('route-list').innerHTML = '';
 
     const startPos = startMarker.getLatLng();
     const distanceKm = parseFloat(document.getElementById('distance-slider').value);
+    const optimizeFor = document.getElementById('optimize-for-select').value;
+
+    let routeCount = 0;
 
     explorationWorker.onmessage = (e) => {
-        btn.disabled = false;
-        const result = e.data;
+        const msg = e.data;
 
-        if (result.status !== 'success') {
-            statusEl.textContent = result.message || 'Route generation failed';
+        if (msg.type === 'route') {
+            renderRoute(msg.route, routeCount);
+            addRouteListItem(msg.route, routeCount);
+            routeCount++;
             return;
         }
 
-        renderWaypoints(result.waypoints);
-        statusEl.textContent = `${result.stats.waypoints || 0} waypoints from ${result.stats.zones} zones (${result.stats.unvisited} unvisited tiles)`;
+        if (msg.type === 'done') {
+            btn.disabled = false;
+            statusEl.textContent = routeCount > 0
+                ? `${routeCount} route${routeCount > 1 ? 's' : ''} generated`
+                : 'No reachable unvisited tiles found — try increasing distance or moving the start point';
+            return;
+        }
+
+        if (msg.type === 'error') {
+            btn.disabled = false;
+            statusEl.textContent = msg.message || 'Route generation failed';
+        }
     };
 
     explorationWorker.onerror = (err) => {
@@ -200,38 +259,49 @@ async function generateRoute() {
         mode: 'tiles',
         routeType: 'round_trip',
         coverageData,
+        optimizeFor,
     });
 }
 
-function renderWaypoints(waypoints) {
-    waypointMarkers.clearLayers();
-    routeLayer.clearLayers();
-
-    if (!waypoints || waypoints.length === 0) return;
-
+function renderRoute(route, index) {
+    const color = ROUTE_COLORS[index % ROUTE_COLORS.length];
     const startPos = startMarker.getLatLng();
     const coords = [[startPos.lat, startPos.lng]];
 
-    waypoints.forEach((wp, i) => {
+    route.waypoints.forEach((wp, i) => {
         coords.push([wp.lat, wp.lon]);
         const marker = L.circleMarker([wp.lat, wp.lon], {
             radius: 6,
-            color: '#fd7e14',
-            fillColor: '#fd7e14',
+            color,
+            fillColor: color,
             fillOpacity: 0.8,
-        }).bindPopup(`Waypoint ${i + 1}`);
+        }).bindPopup(`${DIRECTION_LABELS[route.direction]} · Waypoint ${i + 1}`);
         waypointMarkers.addLayer(marker);
     });
 
     coords.push([startPos.lat, startPos.lng]);
 
+    const distanceLabel = window.formatDistance ? window.formatDistance(route.stats.distanceKm, 1) : `${route.stats.distanceKm.toFixed(1)} km`;
     const line = L.polyline(coords, {
-        color: '#0d6efd',
+        color,
         weight: 3,
         dashArray: '8, 8',
-        opacity: 0.7,
-    });
+        opacity: 0.8,
+    }).bindPopup(`${DIRECTION_LABELS[route.direction]} — ${distanceLabel}, ${route.stats.unvisited} new tiles`);
     routeLayer.addLayer(line);
+}
+
+function addRouteListItem(route, index) {
+    const color = ROUTE_COLORS[index % ROUTE_COLORS.length];
+    const distanceLabel = window.formatDistance ? window.formatDistance(route.stats.distanceKm, 1) : `${route.stats.distanceKm.toFixed(1)} km`;
+
+    const badge = document.createElement('span');
+    badge.className = 'route-badge';
+    badge.innerHTML = `
+        <span class="swatch" style="background:${color}"></span>
+        <span>${DIRECTION_LABELS[route.direction]} · ${distanceLabel} · ${route.stats.unvisited} new tiles</span>
+    `;
+    document.getElementById('route-list').appendChild(badge);
 }
 
 // ── Cache management ────────────────────────────────────────────
