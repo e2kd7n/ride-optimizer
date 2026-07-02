@@ -2,28 +2,36 @@
  * exploration-worker.js — Browser-side route optimization Web Worker
  *
  * Runs clustering + TSP off the main thread so the UI stays responsive.
+ * Generates one route per compass quadrant (NE/SE/SW/NW) that has reachable
+ * unvisited tiles, streaming each as it finishes rather than waiting for all.
  *
- * Input message: {start, end?, distanceKm, mode, routeType, coverageData}
+ * Input message: {start, end?, distanceKm, mode, routeType, coverageData, optimizeFor}
  *   - start: {lat, lon}
  *   - end: {lat, lon} | null (null = round-trip back to start)
  *   - distanceKm: target route distance
  *   - mode: 'tiles' | 'roads'
  *   - routeType: 'round_trip' | 'point_to_point'
  *   - coverageData: {visited: {"x,y": {...}}, total_in_bounds, bounds}
+ *   - optimizeFor: 'tiles' | 'distance' | 'efficiency'
  *
- * Output message: {waypoints, zones, stats}
+ * Output messages (streamed):
+ *   {type: 'route', route: {direction, waypoints, stats}}  — one per generated route
+ *   {type: 'done', totalRoutes, stats}                     — sent once, after all routes
+ *   {type: 'error', message}                                — fatal error
  */
 
 self.onmessage = function (e) {
     try {
-        const result = optimize(e.data);
-        self.postMessage({ status: 'success', ...result });
+        const summary = optimize(e.data);
+        self.postMessage({ type: 'done', ...summary });
     } catch (err) {
-        self.postMessage({ status: 'error', message: err.message });
+        self.postMessage({ type: 'error', message: err.message });
     }
 };
 
-function optimize({ start, end, distanceKm, mode, routeType, coverageData }) {
+const QUADRANTS = ['NE', 'SE', 'SW', 'NW'];
+
+function optimize({ start, end, distanceKm, mode, routeType, coverageData, optimizeFor }) {
     const bounds = coverageData.bounds;
     if (!bounds) throw new Error('Coverage data has no bounds');
 
@@ -35,38 +43,94 @@ function optimize({ start, end, distanceKm, mode, routeType, coverageData }) {
     const unvisited = allTiles.filter(t => !visitedSet.has(t.key));
 
     if (unvisited.length === 0) {
-        return { waypoints: [], zones: [], stats: { unvisited: 0, zones: 0 } };
+        return { totalRoutes: 0, stats: { unvisited: 0, zones: 0 } };
     }
 
     const zones = floodFillZones(unvisited);
-    zones.sort((a, b) => b.tiles.length - a.tiles.length);
 
-    const reachable = zones.filter(z => {
-        const d = haversineKm(start.lat, start.lon, z.centroid.lat, z.centroid.lon);
-        return d <= reachRadius;
-    });
+    const reachable = zones
+        .map(z => ({ ...z, distanceFromStart: haversineKm(start.lat, start.lon, z.centroid.lat, z.centroid.lon) }))
+        .filter(z => z.distanceFromStart <= reachRadius);
 
-    const candidates = reachable.slice(0, 8);
-    if (candidates.length === 0) {
-        return { waypoints: [], zones, stats: { unvisited: unvisited.length, zones: zones.length, reachable: 0 } };
+    if (reachable.length === 0) {
+        return {
+            totalRoutes: 0,
+            stats: { unvisited: unvisited.length, zones: zones.length, reachable: 0 },
+        };
     }
 
-    const points = candidates.map(z => z.centroid);
-    const ordered = solveTSP(start, points, end);
+    // Bucket reachable zones by compass quadrant from the start point so each
+    // generated route explores a distinct direction instead of one big loop.
+    const buckets = { NE: [], SE: [], SW: [], NW: [] };
+    for (const z of reachable) {
+        buckets[quadrantFor(bearingDeg(start.lat, start.lon, z.centroid.lat, z.centroid.lon))].push(z);
+    }
+
+    let totalRoutes = 0;
+    for (const dir of QUADRANTS) {
+        const candidates = scoreZones(buckets[dir], optimizeFor).slice(0, 6);
+        if (candidates.length === 0) continue;
+
+        const points = candidates.map(z => z.centroid);
+        const ordered = solveTSP(start, points, end);
+
+        totalRoutes++;
+        self.postMessage({
+            type: 'route',
+            route: {
+                direction: dir,
+                waypoints: ordered,
+                stats: {
+                    waypoints: ordered.length,
+                    zones: candidates.length,
+                    unvisited: candidates.reduce((sum, z) => sum + z.tiles.length, 0),
+                    distanceKm: routeDistance(start, ordered, end),
+                },
+            },
+        });
+    }
 
     return {
-        waypoints: ordered,
-        zones: candidates.map(z => ({
-            centroid: z.centroid,
-            tileCount: z.tiles.length,
-        })),
-        stats: {
-            unvisited: unvisited.length,
-            zones: zones.length,
-            reachable: reachable.length,
-            waypoints: ordered.length,
-        },
+        totalRoutes,
+        stats: { unvisited: unvisited.length, zones: zones.length, reachable: reachable.length },
     };
+}
+
+/**
+ * Order zones by the user's chosen priority before capping to the top few
+ * per direction:
+ *   - 'tiles': biggest contiguous unexplored areas first (default)
+ *   - 'distance': closest to the start point first (shortest route)
+ *   - 'efficiency': most new tiles per km of travel to reach them
+ */
+function scoreZones(zones, optimizeFor) {
+    const scored = [...zones];
+    if (optimizeFor === 'distance') {
+        scored.sort((a, b) => a.distanceFromStart - b.distanceFromStart);
+    } else if (optimizeFor === 'efficiency') {
+        scored.sort((a, b) =>
+            (b.tiles.length / Math.max(b.distanceFromStart, 0.1)) -
+            (a.tiles.length / Math.max(a.distanceFromStart, 0.1))
+        );
+    } else {
+        scored.sort((a, b) => b.tiles.length - a.tiles.length);
+    }
+    return scored;
+}
+
+function bearingDeg(lat1, lon1, lat2, lon2) {
+    const phi1 = lat1 * Math.PI / 180, phi2 = lat2 * Math.PI / 180;
+    const dLambda = (lon2 - lon1) * Math.PI / 180;
+    const y = Math.sin(dLambda) * Math.cos(phi2);
+    const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLambda);
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+function quadrantFor(bearing) {
+    if (bearing < 90) return 'NE';
+    if (bearing < 180) return 'SE';
+    if (bearing < 270) return 'SW';
+    return 'NW';
 }
 
 // ── Tile utilities ──────────────────────────────────────────────

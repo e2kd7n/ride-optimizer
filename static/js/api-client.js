@@ -328,6 +328,14 @@ class APIClient {
         return this.fetch('/exploration/invalidate', { method: 'POST' });
     }
 
+    /**
+     * Forward-geocode a city/state or postal code to coordinates.
+     */
+    async geocodeLocation(query) {
+        const params = new URLSearchParams({ query });
+        return this.fetch(`/geocode?${params}`);
+    }
+
     // ── Planner / Long Rides ─────────────────────────────────
 
     async getLongRideRecommendations(options = {}) {
