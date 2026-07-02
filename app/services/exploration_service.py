@@ -26,17 +26,18 @@ class ExplorationService:
     def get_tile_coverage(
         self,
         bounds: Tuple[float, float, float, float],
+        zoom: Optional[int] = None,
     ) -> Dict[str, Any]:
         try:
-            result = self._tracker.get_tile_coverage(bounds)
+            result = self._tracker.get_tile_coverage(bounds, zoom=zoom)
             return {"status": "success", **result.to_dict()}
         except Exception as exc:
             logger.error("Tile coverage failed: %s", exc, exc_info=True)
             return {"status": "error", "message": str(exc)}
 
-    def get_tile_coverage_all(self) -> Dict[str, Any]:
+    def get_tile_coverage_all(self, zoom: Optional[int] = None) -> Dict[str, Any]:
         try:
-            result = self._tracker.get_tile_coverage_all()
+            result = self._tracker.get_tile_coverage_all(zoom=zoom)
             return {"status": "success", **result.to_dict()}
         except Exception as exc:
             logger.error("Full tile coverage failed: %s", exc, exc_info=True)

@@ -302,18 +302,20 @@ class APIClient {
 
     // ── Exploration / Coverage ───────────────────────────────
 
-    async getTileCoverage(bounds = null) {
+    async getTileCoverage(bounds = null, zoom = null) {
         // Coverage is computed from scratch (no cache) on the first request
         // after each activity sync and can take 30s+ over a large ride history.
         const timeoutMs = 45000;
+        const params = new URLSearchParams();
         if (bounds) {
-            const params = new URLSearchParams({
-                south: bounds.south, west: bounds.west,
-                north: bounds.north, east: bounds.east,
-            });
-            return this.fetch(`/exploration/tiles?${params}`, { timeoutMs });
+            params.set('south', bounds.south);
+            params.set('west', bounds.west);
+            params.set('north', bounds.north);
+            params.set('east', bounds.east);
         }
-        return this.fetch('/exploration/tiles', { timeoutMs });
+        if (zoom) params.set('zoom', zoom);
+        const qs = params.toString();
+        return this.fetch(`/exploration/tiles${qs ? '?' + qs : ''}`, { timeoutMs });
     }
 
     async getRoadCoverage(bounds) {

@@ -189,6 +189,41 @@ class TestLaunchAPIEndpoints:
 
 
 @pytest.mark.unit
+class TestExplorationTilesAPI:
+    """Tests for /api/exploration/tiles — squadrat/squadratinho coverage retrieval."""
+
+    def test_default_zoom_is_squadrat(self, client):
+        response = client.get('/api/exploration/tiles')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['status'] == 'success'
+        assert data['zoom'] == 14
+
+    def test_explicit_squadratinho_zoom(self, client):
+        response = client.get('/api/exploration/tiles?zoom=17')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['status'] == 'success'
+        assert data['zoom'] == 17
+
+    def test_invalid_zoom_rejected(self, client):
+        response = client.get('/api/exploration/tiles?zoom=20')
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data['status'] == 'error'
+
+    def test_bounded_request_with_zoom(self, client):
+        response = client.get(
+            '/api/exploration/tiles?south=41.0&west=-88.0&north=42.0&east=-87.0&zoom=17'
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['status'] == 'success'
+        assert data['zoom'] == 17
+        assert data['bounds'] == [41.0, -88.0, 42.0, -87.0]
+
+
+@pytest.mark.unit
 class TestSavedPlansAPI:
     """Tests for saved plans CRUD endpoints."""
 
