@@ -14,7 +14,10 @@ from src.coverage_tracker import (
     tile_to_bounds,
     _haversine_m,
     _interpolate_points,
+    _segment_tiles,
+    _activity_tiles,
     TILE_ZOOM,
+    SQUADRATINHO_ZOOM,
 )
 
 
@@ -110,6 +113,53 @@ class TestHaversine:
     def test_known_distance(self):
         dist = _haversine_m(40.7128, -74.0060, 40.7580, -73.9855)
         assert 4800 < dist < 5500
+
+
+# ── _segment_tiles / _activity_tiles (grid traversal) ────────────
+
+class TestSegmentTiles:
+    def test_same_tile_returns_single_tile(self):
+        tiles = _segment_tiles(40.0, -74.0, 40.0001, -74.0001, TILE_ZOOM)
+        assert tiles == [lat_lon_to_tile(40.0, -74.0, TILE_ZOOM)]
+
+    def test_endpoints_match_lat_lon_to_tile(self):
+        tiles = _segment_tiles(40.7, -74.05, 40.7, -73.95, SQUADRATINHO_ZOOM)
+        assert tiles[0] == lat_lon_to_tile(40.7, -74.05, SQUADRATINHO_ZOOM)
+        assert tiles[-1] == lat_lon_to_tile(40.7, -73.95, SQUADRATINHO_ZOOM)
+
+    def test_path_is_four_connected(self):
+        """No diagonal jumps — every step must share an edge with the last
+        (otherwise a tile the line actually crosses would be skipped)."""
+        tiles = _segment_tiles(40.5, -74.1, 40.9, -73.7, SQUADRATINHO_ZOOM)
+        assert len(tiles) > 1
+        for prev, curr in zip(tiles, tiles[1:]):
+            dx = abs(curr[0] - prev[0])
+            dy = abs(curr[1] - prev[1])
+            assert dx + dy == 1
+
+    def test_vertical_segment_stays_in_one_column(self):
+        tiles = _segment_tiles(40.5, -74.0, 40.9, -74.0, SQUADRATINHO_ZOOM)
+        assert all(t[0] == tiles[0][0] for t in tiles)
+
+    def test_zoom_affects_tile_count(self):
+        coarse = _segment_tiles(40.5, -74.1, 40.9, -73.7, TILE_ZOOM)
+        fine = _segment_tiles(40.5, -74.1, 40.9, -73.7, SQUADRATINHO_ZOOM)
+        assert len(fine) > len(coarse)
+
+
+class TestActivityTiles:
+    def test_empty_coords(self):
+        assert _activity_tiles([], TILE_ZOOM) == set()
+
+    def test_single_point(self):
+        tiles = _activity_tiles([(40.0, -74.0)], TILE_ZOOM)
+        assert tiles == {lat_lon_to_tile(40.0, -74.0, TILE_ZOOM)}
+
+    def test_multi_point_covers_all_segments(self):
+        coords = [(40.0, -74.0), (40.01, -74.0), (40.01, -73.99)]
+        tiles = _activity_tiles(coords, TILE_ZOOM)
+        for lat, lon in coords:
+            assert lat_lon_to_tile(lat, lon, TILE_ZOOM) in tiles
 
 
 # ── TileCoverage dataclass ───────────────────────────────────────
@@ -223,6 +273,32 @@ class TestCoverageTracker:
         r1 = tracker.get_tile_coverage(bounds)
         r2 = tracker.get_tile_coverage(bounds)
         assert r1.visited_count == r2.visited_count
+
+    def test_squadratinho_zoom_produces_finer_grid(self, tracker):
+        import polyline as codec
+        coords = [(40.7128, -74.0060), (40.72, -74.0), (40.73, -73.99)]
+        encoded = codec.encode(coords)
+        tracker._activities_cache = [{
+            "id": 1, "polyline": encoded, "start_date": "2026-01-01", "type": "Ride",
+        }]
+        squadrat = tracker.get_tile_coverage_all(zoom=TILE_ZOOM)
+        squadratinho = tracker.get_tile_coverage_all(zoom=SQUADRATINHO_ZOOM)
+        assert squadratinho.zoom == SQUADRATINHO_ZOOM
+        assert squadrat.zoom == TILE_ZOOM
+        assert squadratinho.visited_count > squadrat.visited_count
+
+    def test_zoom_uses_separate_cache_entries(self, tracker):
+        import polyline as codec
+        coords = [(40.7128, -74.0060), (40.7130, -74.0058)]
+        encoded = codec.encode(coords)
+        tracker._activities_cache = [{
+            "id": 1, "polyline": encoded, "start_date": "2026-01-01", "type": "Ride",
+        }]
+        bounds = (40.0, -75.0, 41.0, -73.0)
+        tracker.get_tile_coverage(bounds, zoom=TILE_ZOOM)
+        tracker.get_tile_coverage(bounds, zoom=SQUADRATINHO_ZOOM)
+        cache_files = list(tracker.cache_dir.glob("coverage_tiles_*.json"))
+        assert len(cache_files) == 2
 
     def test_invalidate_caches(self, tracker):
         cache_file = tracker.cache_dir / "coverage_tiles_test.json"

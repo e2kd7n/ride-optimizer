@@ -11,7 +11,7 @@
  *   - distanceKm: target route distance
  *   - mode: 'tiles' | 'roads'
  *   - routeType: 'round_trip' | 'point_to_point'
- *   - coverageData: {visited: {"x,y": {...}}, total_in_bounds, bounds}
+ *   - coverageData: {visited: {"x,y": {...}}, total_in_bounds, bounds, zoom}
  *   - optimizeFor: 'tiles' | 'distance' | 'efficiency'
  *
  * Output messages (streamed):
@@ -38,12 +38,13 @@ const QUADRANTS = ['NE', 'SE', 'SW', 'NW'];
 function optimize({ start, end, distanceKm, mode, routeType, coverageData, optimizeFor }) {
     const bounds = coverageData.bounds;
     if (!bounds) throw new Error('Coverage data has no bounds');
+    const zoom = coverageData.zoom || 14;
 
     const isRoundTrip = routeType === 'round_trip' || !end;
     const reachRadius = distanceKm / (isRoundTrip ? 4 : 3);
 
     reportProgress('Scanning tile grid…');
-    const allTiles = buildTileSet(bounds);
+    const allTiles = buildTileSet(bounds, zoom);
     const visitedSet = new Set(Object.keys(coverageData.visited || {}));
     const unvisited = allTiles.filter(t => !visitedSet.has(t.key));
 
@@ -148,9 +149,8 @@ function quadrantFor(bearing) {
 
 // ── Tile utilities ──────────────────────────────────────────────
 
-function buildTileSet(bounds) {
+function buildTileSet(bounds, zoom = 14) {
     const [south, west, north, east] = bounds;
-    const zoom = 14;
     const n = Math.pow(2, zoom);
     const minX = Math.floor((west + 180) / 360 * n);
     const maxX = Math.floor((east + 180) / 360 * n);
