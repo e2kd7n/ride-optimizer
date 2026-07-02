@@ -87,10 +87,17 @@ async function loadCoverage() {
         coverageData = data;
         renderStats(data);
         renderTiles(data.visited);
+        fitToCoverage(data);
         statusEl.textContent = `Updated ${new Date(data.computed_at).toLocaleTimeString()}`;
     } catch (e) {
         statusEl.textContent = `Error: ${e.message}`;
     }
+}
+
+function fitToCoverage(data) {
+    if (!data.bounds || map.getZoom() >= 10) return;
+    const [south, west, north, east] = data.bounds;
+    map.fitBounds([[south, west], [north, east]], { padding: [20, 20], maxZoom: 13 });
 }
 
 function renderStats(data) {
