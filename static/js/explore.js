@@ -119,19 +119,20 @@ async function loadCoverage() {
     }, 5000);
 
     const bounds = map.getBounds();
-    const zoom = map.getZoom();
+    const mapZoom = map.getZoom();
+    const tileZoom = parseInt(document.getElementById('coverage-type-select').value, 10);
 
     try {
         let data;
-        if (zoom >= 10) {
+        if (mapZoom >= 10) {
             data = await api.getTileCoverage({
                 south: bounds.getSouth(),
                 west: bounds.getWest(),
                 north: bounds.getNorth(),
                 east: bounds.getEast(),
-            });
+            }, tileZoom);
         } else {
-            data = await api.getTileCoverage();
+            data = await api.getTileCoverage(null, tileZoom);
         }
 
         if (data.status !== 'success') {
@@ -141,7 +142,7 @@ async function loadCoverage() {
 
         coverageData = data;
         renderStats(data);
-        renderTiles(data.visited);
+        renderTiles(data.visited, data.zoom);
         fitToCoverage(data);
         statusEl.textContent = `Updated ${new Date(data.computed_at).toLocaleTimeString()}`;
     } catch (e) {
@@ -163,11 +164,10 @@ function renderStats(data) {
     document.getElementById('stat-total-tiles').textContent = data.total_in_bounds.toLocaleString();
 }
 
-function renderTiles(visited) {
+function renderTiles(visited, zoom = 14) {
     tileLayer.clearLayers();
     if (!visited || typeof visited !== 'object') return;
 
-    const zoom = 14;
     const n = Math.pow(2, zoom);
 
     for (const key of Object.keys(visited)) {

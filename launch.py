@@ -2045,6 +2045,8 @@ def _get_exploration_service():
 @limiter.limit("10 per minute")
 def exploration_tiles():
     """Tile coverage within a bounding box, or all tiles if no bounds given."""
+    from src.coverage_tracker import TILE_ZOOM, SQUADRATINHO_ZOOM
+
     svc = _get_exploration_service()
 
     south = request.args.get('south', type=float)
@@ -2052,10 +2054,17 @@ def exploration_tiles():
     north = request.args.get('north', type=float)
     east = request.args.get('east', type=float)
 
+    zoom = request.args.get('zoom', type=int)
+    if zoom is not None and zoom not in (TILE_ZOOM, SQUADRATINHO_ZOOM):
+        return jsonify({
+            'status': 'error',
+            'message': f'zoom must be {TILE_ZOOM} (squadrat) or {SQUADRATINHO_ZOOM} (squadratinho)',
+        }), 400
+
     if all(v is not None for v in (south, west, north, east)):
-        result = svc.get_tile_coverage((south, west, north, east))
+        result = svc.get_tile_coverage((south, west, north, east), zoom=zoom)
     else:
-        result = svc.get_tile_coverage_all()
+        result = svc.get_tile_coverage_all(zoom=zoom)
 
     status_code = 200 if result.get('status') == 'success' else 500
     return jsonify(result), status_code

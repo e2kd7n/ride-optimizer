@@ -19,7 +19,8 @@ import polyline as polyline_codec
 
 logger = logging.getLogger(__name__)
 
-TILE_ZOOM = 14
+TILE_ZOOM = 14              # "squadrat" granularity (squadrat.at / squadrat.com default)
+SQUADRATINHO_ZOOM = 17      # "squadratinho" granularity — each squadrat = 8x8 squadratinhos
 INTERPOLATION_INTERVAL_M = 80
 EARTH_RADIUS_M = 6_371_000
 
@@ -31,6 +32,7 @@ class TileCoverage:
     total_in_bounds: int = 0
     bounds: Optional[Tuple[float, float, float, float]] = None
     computed_at: str = ""
+    zoom: int = TILE_ZOOM
 
     @property
     def visited_count(self) -> int:
@@ -50,6 +52,7 @@ class TileCoverage:
             "coverage_pct": self.coverage_pct,
             "bounds": self.bounds,
             "computed_at": self.computed_at,
+            "zoom": self.zoom,
         }
 
 
@@ -83,6 +86,15 @@ def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return 2 * EARTH_RADIUS_M * math.asin(math.sqrt(a))
 
 
+def _haversine_m_np(lat1: np.ndarray, lon1: np.ndarray, lat2: np.ndarray, lon2: np.ndarray) -> np.ndarray:
+    """Vectorized great-circle distance in metres between two point arrays."""
+    rlat1, rlon1, rlat2, rlon2 = np.radians(lat1), np.radians(lon1), np.radians(lat2), np.radians(lon2)
+    dlat = rlat2 - rlat1
+    dlon = rlon2 - rlon1
+    a = np.sin(dlat / 2) ** 2 + np.cos(rlat1) * np.cos(rlat2) * np.sin(dlon / 2) ** 2
+    return 2 * EARTH_RADIUS_M * np.arcsin(np.sqrt(a))
+
+
 def _interpolate_points(
     coords: List[Tuple[float, float]], interval_m: float = INTERPOLATION_INTERVAL_M
 ) -> List[Tuple[float, float]]:
@@ -90,22 +102,125 @@ def _interpolate_points(
     Fill in points along a polyline so no gap exceeds *interval_m* metres.
 
     Prevents tile-skipping when summary polylines have sparse GPS points.
+    Interior interpolated points are computed for all segments at once with
+    numpy; only the (cheap) interleaving with the original endpoints stays
+    in Python, since it does no math — just list assembly.
     """
     if len(coords) < 2:
         return list(coords)
 
+    n_segs = len(coords) - 1
+    arr = np.asarray(coords, dtype=np.float64)
+    lat1, lon1 = arr[:-1, 0], arr[:-1, 1]
+    lat2, lon2 = arr[1:, 0], arr[1:, 1]
+
+    seg_dist = _haversine_m_np(lat1, lon1, lat2, lon2)
+    steps = np.maximum(np.ceil(seg_dist / interval_m).astype(np.int64), 1)
+    interior_counts = steps - 1
+
     result: List[Tuple[float, float]] = [coords[0]]
+    total_interior = int(interior_counts.sum())
+
+    if total_interior == 0:
+        result.extend(coords[1:])
+        return result
+
+    seg_idx = np.repeat(np.arange(n_segs), interior_counts)
+    seg_starts = np.repeat(np.cumsum(interior_counts) - interior_counts, interior_counts)
+    local_pos = (np.arange(total_interior) - seg_starts) + 1  # 1-indexed within segment
+    fracs = local_pos / steps[seg_idx]
+
+    interp_lat = (lat1[seg_idx] + fracs * (lat2[seg_idx] - lat1[seg_idx])).tolist()
+    interp_lon = (lon1[seg_idx] + fracs * (lon2[seg_idx] - lon1[seg_idx])).tolist()
+    interior_counts_list = interior_counts.tolist()
+
+    pos = 0
+    for i in range(n_segs):
+        c = interior_counts_list[i]
+        if c:
+            result.extend(zip(interp_lat[pos:pos + c], interp_lon[pos:pos + c]))
+            pos += c
+        result.append(coords[i + 1])
+
+    return result
+
+
+def _segment_tiles(lat1: float, lon1: float, lat2: float, lon2: float, zoom: int) -> List[Tuple[int, int]]:
+    """
+    Exact set of tiles a GPS segment passes through, via grid traversal
+    (2D DDA / "supercover line", per Amanatides & Woo) in continuous
+    tile-space rather than sampling points at a fixed interval.
+
+    This replaces distance-based interpolation for tile coverage: instead
+    of guessing how finely to resample a segment so no tile gets skipped
+    (and re-tuning that guess per zoom level), it walks the exact set of
+    grid cells the line crosses — O(tiles crossed) instead of O(samples),
+    and correct at any zoom without a tunable interval. This is what makes
+    squadratinho (zoom 17) coverage tractable: a sparse, simplified summary
+    polyline with long segments no longer needs thousands of interpolated
+    samples per segment, just the handful of tiles it actually crosses.
+    """
+    n = 2 ** zoom
+    fx1 = (lon1 + 180.0) / 360.0 * n
+    fx2 = (lon2 + 180.0) / 360.0 * n
+    fy1 = (1.0 - math.asinh(math.tan(math.radians(lat1))) / math.pi) / 2.0 * n
+    fy2 = (1.0 - math.asinh(math.tan(math.radians(lat2))) / math.pi) / 2.0 * n
+
+    x0, y0 = int(fx1), int(fy1)
+    x1, y1 = int(fx2), int(fy2)
+
+    if x0 == x1 and y0 == y1:
+        return [(x0, y0)]
+
+    dx, dy = fx2 - fx1, fy2 - fy1
+    step_x = 1 if dx > 0 else -1
+    step_y = 1 if dy > 0 else -1
+
+    if dx != 0:
+        t_delta_x = abs(1.0 / dx)
+        t_max_x = ((x0 + (1 if step_x > 0 else 0)) - fx1) / dx
+    else:
+        t_delta_x = t_max_x = float("inf")
+
+    if dy != 0:
+        t_delta_y = abs(1.0 / dy)
+        t_max_y = ((y0 + (1 if step_y > 0 else 0)) - fy1) / dy
+    else:
+        t_delta_y = t_max_y = float("inf")
+
+    x, y = x0, y0
+    tiles = [(x, y)]
+    # Safety cap: a single segment shouldn't legitimately cross more tiles
+    # than this even at squadratinho zoom; guards against pathological
+    # data (e.g. a corrupted point pair spanning half the globe).
+    for _ in range(20_000):
+        if (x, y) == (x1, y1):
+            break
+        if t_max_x < t_max_y:
+            x += step_x
+            t_max_x += t_delta_x
+        else:
+            y += step_y
+            t_max_y += t_delta_y
+        tiles.append((x, y))
+
+    return tiles
+
+
+def _activity_tiles(coords: List[Tuple[float, float]], zoom: int) -> Set[Tuple[int, int]]:
+    """All tiles an activity's decoded GPS track passes through, exactly."""
+    if not coords:
+        return set()
+    if len(coords) == 1:
+        lat, lon = coords[0]
+        return {lat_lon_to_tile(lat, lon, zoom)}
+
+    tiles: Set[Tuple[int, int]] = set()
     for i in range(1, len(coords)):
         lat1, lon1 = coords[i - 1]
         lat2, lon2 = coords[i]
-        seg_dist = _haversine_m(lat1, lon1, lat2, lon2)
-        if seg_dist > interval_m:
-            steps = int(math.ceil(seg_dist / interval_m))
-            for s in range(1, steps):
-                frac = s / steps
-                result.append((lat1 + frac * (lat2 - lat1), lon1 + frac * (lon2 - lon1)))
-        result.append((lat2, lon2))
-    return result
+        tiles.update(_segment_tiles(lat1, lon1, lat2, lon2, zoom))
+    return tiles
 
 
 def _bounds_key(bounds: Tuple[float, float, float, float]) -> str:
@@ -174,23 +289,30 @@ class CoverageTracker:
     def get_tile_coverage(
         self,
         bounds: Tuple[float, float, float, float],
+        zoom: Optional[int] = None,
     ) -> TileCoverage:
         """
         Compute tile coverage within a bounding box.
 
         Args:
             bounds: (south, west, north, east) in degrees
+            zoom: tile zoom level — TILE_ZOOM (squadrat) or SQUADRATINHO_ZOOM
+                (squadratinho). Defaults to the configured zoom.
 
         Returns:
             TileCoverage with visited tile data and stats
         """
-        cache_path = self.cache_dir / f"coverage_tiles_{_bounds_key(bounds)}.json"
+        zoom = zoom or self.zoom
+        cache_path = self.cache_dir / f"coverage_tiles_{zoom}_{_bounds_key(bounds)}.json"
         cached = self._load_tile_cache(cache_path)
         if cached is not None:
             return cached
 
         south, west, north, east = bounds
         activities = self._load_activities()
+
+        min_tx, min_ty = lat_lon_to_tile(north, west, zoom)
+        max_tx, max_ty = lat_lon_to_tile(south, east, zoom)
 
         visited: Dict[str, dict] = {}
 
@@ -209,14 +331,12 @@ class CoverageTracker:
                         if elat < south - 0.1 or elat > north + 0.1 or elon < west - 0.1 or elon > east + 0.1:
                             continue
 
-            interpolated = _interpolate_points(coords)
             act_id = act.get("id")
             act_date = act.get("start_date", "")
 
-            for lat, lon in interpolated:
-                if lat < south or lat > north or lon < west or lon > east:
+            for tx, ty in _activity_tiles(coords, zoom):
+                if not (min_tx <= tx <= max_tx and min_ty <= ty <= max_ty):
                     continue
-                tx, ty = lat_lon_to_tile(lat, lon, self.zoom)
                 key = f"{tx},{ty}"
                 if key not in visited:
                     visited[key] = {
@@ -226,8 +346,6 @@ class CoverageTracker:
                 elif act_id not in visited[key]["activity_ids"]:
                     visited[key]["activity_ids"].append(act_id)
 
-        min_tx, min_ty = lat_lon_to_tile(north, west, self.zoom)
-        max_tx, max_ty = lat_lon_to_tile(south, east, self.zoom)
         total_tiles = (max_tx - min_tx + 1) * (max_ty - min_ty + 1)
 
         result = TileCoverage(
@@ -235,18 +353,20 @@ class CoverageTracker:
             total_in_bounds=max(total_tiles, 1),
             bounds=bounds,
             computed_at=datetime.utcnow().isoformat(),
+            zoom=zoom,
         )
 
         self._save_tile_cache(cache_path, result)
         return result
 
-    def get_tile_coverage_all(self) -> TileCoverage:
+    def get_tile_coverage_all(self, zoom: Optional[int] = None) -> TileCoverage:
         """
         Compute tile coverage across ALL activities (no bounds filter).
 
         Useful for getting overall stats and the full visited tile set.
         """
-        cache_path = self.cache_dir / "coverage_tiles_all.json"
+        zoom = zoom or self.zoom
+        cache_path = self.cache_dir / f"coverage_tiles_{zoom}_all.json"
         cached = self._load_tile_cache(cache_path)
         if cached is not None:
             return cached
@@ -259,12 +379,10 @@ class CoverageTracker:
             if not coords:
                 continue
 
-            interpolated = _interpolate_points(coords)
             act_id = act.get("id")
             act_date = act.get("start_date", "")
 
-            for lat, lon in interpolated:
-                tx, ty = lat_lon_to_tile(lat, lon, self.zoom)
+            for tx, ty in _activity_tiles(coords, zoom):
                 key = f"{tx},{ty}"
                 if key not in visited:
                     visited[key] = {
@@ -281,8 +399,8 @@ class CoverageTracker:
             ys = [int(k.split(",")[1]) for k in visited]
             min_tx, max_tx = min(xs), max(xs)
             min_ty, max_ty = min(ys), max(ys)
-            south, west, _, _ = tile_to_bounds(min_tx, max_ty, self.zoom)
-            _, _, north, east = tile_to_bounds(max_tx, min_ty, self.zoom)
+            south, west, _, _ = tile_to_bounds(min_tx, max_ty, zoom)
+            _, _, north, east = tile_to_bounds(max_tx, min_ty, zoom)
             bounds = (south, west, north, east)
             total_in_bounds = max((max_tx - min_tx + 1) * (max_ty - min_ty + 1), 1)
 
@@ -291,6 +409,7 @@ class CoverageTracker:
             total_in_bounds=total_in_bounds,
             bounds=bounds,
             computed_at=datetime.utcnow().isoformat(),
+            zoom=zoom,
         )
 
         self._save_tile_cache(cache_path, result)
@@ -416,6 +535,7 @@ class CoverageTracker:
                 total_in_bounds=data["total_in_bounds"],
                 bounds=tuple(data["bounds"]) if data.get("bounds") else None,
                 computed_at=data.get("computed_at", ""),
+                zoom=data.get("zoom", TILE_ZOOM),
             )
         except (json.JSONDecodeError, KeyError, OSError):
             return None
