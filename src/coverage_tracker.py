@@ -200,11 +200,11 @@ class CoverageTracker:
                 continue
 
             start = act.get("start_latlng")
-            if start:
+            if start and len(start) == 2:
                 slat, slon = start
                 if slat < south - 0.1 or slat > north + 0.1 or slon < west - 0.1 or slon > east + 0.1:
                     end = act.get("end_latlng")
-                    if end:
+                    if end and len(end) == 2:
                         elat, elon = end
                         if elat < south - 0.1 or elat > north + 0.1 or elon < west - 0.1 or elon > east + 0.1:
                             continue
@@ -246,6 +246,11 @@ class CoverageTracker:
 
         Useful for getting overall stats and the full visited tile set.
         """
+        cache_path = self.cache_dir / "coverage_tiles_all.json"
+        cached = self._load_tile_cache(cache_path)
+        if cached is not None:
+            return cached
+
         activities = self._load_activities()
         visited: Dict[str, dict] = {}
 
@@ -281,12 +286,15 @@ class CoverageTracker:
             bounds = (south, west, north, east)
             total_in_bounds = max((max_tx - min_tx + 1) * (max_ty - min_ty + 1), 1)
 
-        return TileCoverage(
+        result = TileCoverage(
             visited=visited,
             total_in_bounds=total_in_bounds,
             bounds=bounds,
             computed_at=datetime.utcnow().isoformat(),
         )
+
+        self._save_tile_cache(cache_path, result)
+        return result
 
     # ------------------------------------------------------------------
     # Road coverage (Phase 1B — osmnx-based map matching)
