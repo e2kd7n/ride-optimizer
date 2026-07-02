@@ -269,10 +269,22 @@ class CoverageTracker:
                 elif act_id not in visited[key]["activity_ids"]:
                     visited[key]["activity_ids"].append(act_id)
 
+        bounds = None
+        total_in_bounds = len(visited)
+        if visited:
+            xs = [int(k.split(",")[0]) for k in visited]
+            ys = [int(k.split(",")[1]) for k in visited]
+            min_tx, max_tx = min(xs), max(xs)
+            min_ty, max_ty = min(ys), max(ys)
+            south, west, _, _ = tile_to_bounds(min_tx, max_ty, self.zoom)
+            _, _, north, east = tile_to_bounds(max_tx, min_ty, self.zoom)
+            bounds = (south, west, north, east)
+            total_in_bounds = max((max_tx - min_tx + 1) * (max_ty - min_ty + 1), 1)
+
         return TileCoverage(
             visited=visited,
-            total_in_bounds=len(visited),
-            bounds=None,
+            total_in_bounds=total_in_bounds,
+            bounds=bounds,
             computed_at=datetime.utcnow().isoformat(),
         )
 
