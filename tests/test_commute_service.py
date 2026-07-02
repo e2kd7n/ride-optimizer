@@ -166,11 +166,13 @@ class TestGetNextCommute:
         mock_rec.window_start = time(7, 0)
         mock_rec.window_end = time(9, 0)
         mock_rec.forecast_weather = {
-            'temperature': 72.0,
-            'conditions': 'Clear',
-            'wind_speed': 5.0
+            'temp_c': 22.2,
+            'wind_speed_kph': 8.0,
+            'wind_gust_kph': 12.0,
+            'wind_direction_deg': 180,
+            'precipitation_prob': 5.0
         }
-        
+
         commute_service._recommender = Mock()
         commute_service._recommender.get_next_commute_recommendations.return_value = {'to_work': mock_rec}
 
@@ -385,18 +387,17 @@ class TestFormatRecommendation:
         rec.window_start = time(16, 0)
         rec.window_end = time(17, 30)
         rec.forecast_weather = {
-            'temperature': 68.0,
-            'conditions': 'Partly Cloudy',
-            'wind_speed': 8.0,
-            'wind_direction': 'NW',
-            'precipitation': 0.0
+            'temp_c': 20.0,
+            'wind_speed_kph': 12.9,
+            'wind_gust_kph': 19.3,
+            'wind_direction_deg': 315,
+            'precipitation_prob': 0.0
         }
-        
+
         result = commute_service._format_recommendation(rec)
-        
+
         assert 'weather' in result
         assert result['weather']['temperature'] == 68.0
-        assert result['weather']['conditions'] == 'Partly Cloudy'
         assert result['weather']['wind_speed'] == 8.0
         assert result['is_today'] is False
     
