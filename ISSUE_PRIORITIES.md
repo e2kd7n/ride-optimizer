@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-06-22 13:29:52 UTC / 2026-06-22 13:29:52 GMT
+**Last Updated:** 2026-07-02 18:52:06 UTC / 2026-07-02 13:52:06 CDT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -11,27 +11,6 @@ This file reflects the current state of GitHub issues organized by release miles
 - **Current Release:** v0.14.0 (deployed)
 - **Next Release:** v0.15.0 (in development)
 - **Future Releases:** 
-
----
-
-## 🎯 v0.15.0 (Next Release - IN DEVELOPMENT)
-
-**Priority within this release determines work order. Complete P0/P1 issues before moving to future releases.**
-
-### 🔴 P0 - CRITICAL
-**No P0 issues** ✅
-
-### 🔴 P1 - HIGH
-**No P1 issues** ✅
-
-### 🟡 P2 - MEDIUM
-**No P2 issues** ✅
-
-### 🟢 P3 - LOW
-**No P3 issues** ✅
-
-### 📋 P4 - FUTURE
-**No P4 issues** ✅
 
 ---
 
@@ -46,30 +25,8 @@ These issues need to be assigned to a release milestone and prioritized.
 ## 📝 Workspace TODOs & Tasks
 Code comments and inline tasks found in the workspace that may need attention.
 
-Found **24** code comments requiring attention:
+Found **2** code comments requiring attention:
 
-- `.claude/worktrees/agent-a039b0bc70465bc21/app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
-- `.claude/worktrees/agent-a039b0bc70465bc21/static/js/dashboard.js` - 7:// NOTE: Initialization is handled by inline script in index.html
-- `.claude/worktrees/agent-a1cf7832d2e55e023/app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
-- `.claude/worktrees/agent-a1cf7832d2e55e023/static/js/dashboard.js` - 7:// NOTE: Initialization is handled by inline script in index.html
-- `.claude/worktrees/agent-a260dcd623739a407/app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
-- `.claude/worktrees/agent-a260dcd623739a407/static/js/dashboard.js` - 7:// NOTE: Initialization is handled by inline script in index.html
-- `.claude/worktrees/agent-a32b4f7cc79e6fdad/app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
-- `.claude/worktrees/agent-a32b4f7cc79e6fdad/static/js/dashboard.js` - 7:// NOTE: Initialization is handled by inline script in index.html
-- `.claude/worktrees/agent-a580b433240d8d227/app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
-- `.claude/worktrees/agent-a580b433240d8d227/static/js/dashboard.js` - 7:// NOTE: Initialization is handled by inline script in index.html
-- `.claude/worktrees/agent-a62dd708f4abfbafa/app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
-- `.claude/worktrees/agent-a62dd708f4abfbafa/static/js/dashboard.js` - 7:// NOTE: Initialization is handled by inline script in index.html
-- `.claude/worktrees/agent-a7905a0b3216bd919/app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
-- `.claude/worktrees/agent-a7905a0b3216bd919/static/js/dashboard.js` - 7:// NOTE: Initialization is handled by inline script in index.html
-- `.claude/worktrees/agent-a8407d4f64334e0cf/app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
-- `.claude/worktrees/agent-a8407d4f64334e0cf/static/js/dashboard.js` - 7:// NOTE: Initialization is handled by inline script in index.html
-- `.claude/worktrees/agent-aca1efd51cd5ad499/app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
-- `.claude/worktrees/agent-aca1efd51cd5ad499/static/js/dashboard.js` - 7:// NOTE: Initialization is handled by inline script in index.html
-- `.claude/worktrees/agent-ae19632342a95b7ee/app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
-- `.claude/worktrees/agent-ae19632342a95b7ee/static/js/dashboard.js` - 7:// NOTE: Initialization is handled by inline script in index.html
-- `.claude/worktrees/agent-ae27c24a569424fd2/app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
-- `.claude/worktrees/agent-ae27c24a569424fd2/static/js/dashboard.js` - 7:// NOTE: Initialization is handled by inline script in index.html
 - `app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
 - `static/js/dashboard.js` - 7:// NOTE: Initialization is handled by inline script in index.html
 
