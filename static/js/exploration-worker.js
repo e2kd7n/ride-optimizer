@@ -29,6 +29,10 @@ self.onmessage = function (e) {
     }
 };
 
+function reportProgress(message) {
+    self.postMessage({ type: 'progress', message });
+}
+
 const QUADRANTS = ['NE', 'SE', 'SW', 'NW'];
 
 function optimize({ start, end, distanceKm, mode, routeType, coverageData, optimizeFor }) {
@@ -38,6 +42,7 @@ function optimize({ start, end, distanceKm, mode, routeType, coverageData, optim
     const isRoundTrip = routeType === 'round_trip' || !end;
     const reachRadius = distanceKm / (isRoundTrip ? 4 : 3);
 
+    reportProgress('Scanning tile grid…');
     const allTiles = buildTileSet(bounds);
     const visitedSet = new Set(Object.keys(coverageData.visited || {}));
     const unvisited = allTiles.filter(t => !visitedSet.has(t.key));
@@ -46,30 +51,37 @@ function optimize({ start, end, distanceKm, mode, routeType, coverageData, optim
         return { totalRoutes: 0, stats: { unvisited: 0, zones: 0 } };
     }
 
-    const zones = floodFillZones(unvisited);
+    reportProgress(`Finding tiles within reach…`);
+    const reachableTiles = unvisited.filter(
+        t => haversineKm(start.lat, start.lon, t.lat, t.lon) <= reachRadius
+    );
 
-    const reachable = zones
-        .map(z => ({ ...z, distanceFromStart: haversineKm(start.lat, start.lon, z.centroid.lat, z.centroid.lon) }))
-        .filter(z => z.distanceFromStart <= reachRadius);
-
-    if (reachable.length === 0) {
+    if (reachableTiles.length === 0) {
+        const zones = floodFillZones(unvisited);
         return {
             totalRoutes: 0,
             stats: { unvisited: unvisited.length, zones: zones.length, reachable: 0 },
         };
     }
 
-    // Bucket reachable zones by compass quadrant from the start point so each
-    // generated route explores a distinct direction instead of one big loop.
+    // Bucket individual tiles (not zones) by compass quadrant from the start
+    // point *before* flood-filling, so one large contiguous unexplored area
+    // still splits into a distinct route per direction rather than collapsing
+    // into a single zone/route.
     const buckets = { NE: [], SE: [], SW: [], NW: [] };
-    for (const z of reachable) {
-        buckets[quadrantFor(bearingDeg(start.lat, start.lon, z.centroid.lat, z.centroid.lon))].push(z);
+    for (const t of reachableTiles) {
+        buckets[quadrantFor(bearingDeg(start.lat, start.lon, t.lat, t.lon))].push(t);
     }
 
     let totalRoutes = 0;
-    for (const dir of QUADRANTS) {
-        const candidates = scoreZones(buckets[dir], optimizeFor).slice(0, 6);
-        if (candidates.length === 0) continue;
+    QUADRANTS.forEach((dir, i) => {
+        reportProgress(`Optimizing ${dir} route (${i + 1}/${QUADRANTS.length})…`);
+        const dirZones = floodFillZones(buckets[dir]).map(z => ({
+            ...z,
+            distanceFromStart: haversineKm(start.lat, start.lon, z.centroid.lat, z.centroid.lon),
+        }));
+        const candidates = scoreZones(dirZones, optimizeFor).slice(0, 6);
+        if (candidates.length === 0) return;
 
         const points = candidates.map(z => z.centroid);
         const ordered = solveTSP(start, points, end);
@@ -88,11 +100,12 @@ function optimize({ start, end, distanceKm, mode, routeType, coverageData, optim
                 },
             },
         });
-    }
+    });
 
+    const allReachableZones = floodFillZones(reachableTiles);
     return {
         totalRoutes,
-        stats: { unvisited: unvisited.length, zones: zones.length, reachable: reachable.length },
+        stats: { unvisited: unvisited.length, zones: allReachableZones.length, reachable: allReachableZones.length },
     };
 }
 
