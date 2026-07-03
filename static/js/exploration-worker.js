@@ -5,13 +5,18 @@
  * Generates one route per compass quadrant (NE/SE/SW/NW) that has reachable
  * unvisited tiles, streaming each as it finishes rather than waiting for all.
  *
- * Input message: {start, end?, distanceKm, mode, routeType, coverageData, optimizeFor}
+ * Input message: {start, end?, distanceKm, mode, routeType, coverageData, coverageDataSecondary?, optimizeFor}
  *   - start: {lat, lon}
  *   - end: {lat, lon} | null (null = round-trip back to start)
  *   - distanceKm: target route distance
  *   - mode: 'tiles' | 'roads'
  *   - routeType: 'round_trip' | 'point_to_point'
  *   - coverageData: {visited: {"x,y": {...}}, total_in_bounds, bounds, zoom}
+ *   - coverageDataSecondary: same shape as coverageData, at a different zoom | null
+ *       When present ("Both" grid mode), routes are optimized against both
+ *       grids at once — each grid's zones are found independently (tile
+ *       adjacency only makes sense within a single zoom's coordinate space),
+ *       then the best zones from each are merged into one route per quadrant.
  *   - optimizeFor: 'tiles' | 'distance' | 'efficiency'
  *
  * Output messages (streamed):
@@ -34,58 +39,91 @@ function reportProgress(message) {
 }
 
 const QUADRANTS = ['NE', 'SE', 'SW', 'NW'];
+const GRID_LABELS = { 14: 'squadrats', 17: 'squadratinhos' };
 
-function optimize({ start, end, distanceKm, mode, routeType, coverageData, optimizeFor }) {
+/**
+ * Scan one coverage grid and bucket its reachable unvisited tiles by
+ * compass quadrant from the start point. Bucketing individual tiles (not
+ * zones) before flood-filling means one large contiguous unexplored area
+ * still splits into a distinct route per direction rather than collapsing
+ * into a single zone/route.
+ */
+function scanGrid(coverageData, start, reachRadius) {
     const bounds = coverageData.bounds;
     if (!bounds) throw new Error('Coverage data has no bounds');
     const zoom = coverageData.zoom || 14;
 
-    const isRoundTrip = routeType === 'round_trip' || !end;
-    const reachRadius = distanceKm / (isRoundTrip ? 4 : 3);
-
-    reportProgress('Scanning tile grid…');
     const allTiles = buildTileSet(bounds, zoom);
     const visitedSet = new Set(Object.keys(coverageData.visited || {}));
     const unvisited = allTiles.filter(t => !visitedSet.has(t.key));
-
-    if (unvisited.length === 0) {
-        return { totalRoutes: 0, stats: { unvisited: 0, zones: 0 } };
-    }
-
-    reportProgress(`Finding tiles within reach…`);
     const reachableTiles = unvisited.filter(
         t => haversineKm(start.lat, start.lon, t.lat, t.lon) <= reachRadius
     );
 
-    if (reachableTiles.length === 0) {
-        const zones = floodFillZones(unvisited);
-        return {
-            totalRoutes: 0,
-            stats: { unvisited: unvisited.length, zones: zones.length, reachable: 0 },
-        };
-    }
-
-    // Bucket individual tiles (not zones) by compass quadrant from the start
-    // point *before* flood-filling, so one large contiguous unexplored area
-    // still splits into a distinct route per direction rather than collapsing
-    // into a single zone/route.
     const buckets = { NE: [], SE: [], SW: [], NW: [] };
     for (const t of reachableTiles) {
         buckets[quadrantFor(bearingDeg(start.lat, start.lon, t.lat, t.lon))].push(t);
     }
 
+    return { zoom, unvisited, reachableTiles, buckets };
+}
+
+function optimize({ start, end, distanceKm, mode, routeType, coverageData, coverageDataSecondary, optimizeFor }) {
+    const isRoundTrip = routeType === 'round_trip' || !end;
+    const reachRadius = distanceKm / (isRoundTrip ? 4 : 3);
+
+    reportProgress('Scanning tile grid…');
+    const primary = scanGrid(coverageData, start, reachRadius);
+    const secondary = coverageDataSecondary ? scanGrid(coverageDataSecondary, start, reachRadius) : null;
+    const grids = secondary ? [primary, secondary] : [primary];
+
+    const totalUnvisited = grids.reduce((sum, g) => sum + g.unvisited.length, 0);
+    if (totalUnvisited === 0) {
+        return { totalRoutes: 0, stats: { unvisited: 0, zones: 0 } };
+    }
+
+    const totalReachable = grids.reduce((sum, g) => sum + g.reachableTiles.length, 0);
+    if (totalReachable === 0) {
+        const zoneCount = grids.reduce((sum, g) => sum + floodFillZones(g.unvisited).length, 0);
+        return {
+            totalRoutes: 0,
+            stats: { unvisited: totalUnvisited, zones: zoneCount, reachable: 0 },
+        };
+    }
+
+    // Per grid, top candidate zones per quadrant. When merging two grids,
+    // cap each grid's contribution so the combined waypoint count per route
+    // stays reasonable (TSP brute-force applies up to 8 points).
+    const perGridCap = secondary ? 4 : 6;
+
     let totalRoutes = 0;
     QUADRANTS.forEach((dir, i) => {
         reportProgress(`Optimizing ${dir} route (${i + 1}/${QUADRANTS.length})…`);
-        const dirZones = floodFillZones(buckets[dir]).map(z => ({
-            ...z,
-            distanceFromStart: haversineKm(start.lat, start.lon, z.centroid.lat, z.centroid.lon),
-        }));
-        const candidates = scoreZones(dirZones, optimizeFor).slice(0, 6);
-        if (candidates.length === 0) return;
 
-        const points = candidates.map(z => z.centroid);
+        const gridCandidates = grids.map(g => {
+            const dirZones = floodFillZones(g.buckets[dir]).map(z => ({
+                ...z,
+                distanceFromStart: haversineKm(start.lat, start.lon, z.centroid.lat, z.centroid.lon),
+            }));
+            return {
+                zoom: g.zoom,
+                candidates: scoreZones(dirZones, optimizeFor).slice(0, perGridCap),
+            };
+        });
+
+        const allCandidates = gridCandidates.flatMap(gc => gc.candidates);
+        if (allCandidates.length === 0) return;
+
+        const points = allCandidates.map(z => z.centroid);
         const ordered = solveTSP(start, points, end);
+
+        const breakdown = gridCandidates
+            .filter(gc => gc.candidates.length > 0)
+            .map(gc => ({
+                zoom: gc.zoom,
+                label: GRID_LABELS[gc.zoom] || `zoom ${gc.zoom}`,
+                count: gc.candidates.reduce((sum, z) => sum + z.tiles.length, 0),
+            }));
 
         totalRoutes++;
         self.postMessage({
@@ -95,18 +133,19 @@ function optimize({ start, end, distanceKm, mode, routeType, coverageData, optim
                 waypoints: ordered,
                 stats: {
                     waypoints: ordered.length,
-                    zones: candidates.length,
-                    unvisited: candidates.reduce((sum, z) => sum + z.tiles.length, 0),
+                    zones: allCandidates.length,
+                    unvisited: breakdown.reduce((sum, b) => sum + b.count, 0),
+                    breakdown: secondary ? breakdown : null,
                     distanceKm: routeDistance(start, ordered, end),
                 },
             },
         });
     });
 
-    const allReachableZones = floodFillZones(reachableTiles);
+    const totalReachableZones = grids.reduce((sum, g) => sum + floodFillZones(g.reachableTiles).length, 0);
     return {
         totalRoutes,
-        stats: { unvisited: unvisited.length, zones: allReachableZones.length, reachable: allReachableZones.length },
+        stats: { unvisited: totalUnvisited, zones: totalReachableZones, reachable: totalReachableZones },
     };
 }
 

@@ -5,16 +5,21 @@
 const api = new APIClient('/api');
 let map = null;
 let tileLayer = null;
+let tileLayerSecondary = null;
 let routeLayer = null;
 let waypointMarkers = null;
 let startMarker = null;
 let coverageData = null;
+let coverageDataSecondary = null;
 let explorationWorker = null;
+
+const ZOOM_LABELS = { 14: 'Squadrats', 17: 'Squadratinhos' };
 
 document.addEventListener('DOMContentLoaded', () => {
     initMap();
     initWorker();
     document.getElementById('load-coverage-btn').addEventListener('click', loadCoverage);
+    document.getElementById('coverage-type-select').addEventListener('change', loadCoverage);
     document.getElementById('clear-cache-btn').addEventListener('click', clearCache);
     document.getElementById('generate-route-btn').addEventListener('click', generateRoute);
     document.getElementById('location-search-btn').addEventListener('click', searchLocation);
@@ -50,6 +55,7 @@ function initMap() {
         maxZoom: 18,
     }).addTo(map);
     tileLayer = L.layerGroup().addTo(map);
+    tileLayerSecondary = L.layerGroup().addTo(map);
     routeLayer = L.layerGroup().addTo(map);
     waypointMarkers = L.layerGroup().addTo(map);
 
@@ -111,6 +117,10 @@ function initWorker() {
 
 // ── Coverage loading ────────────────────────────────────────────
 
+function getCoverageMode() {
+    return document.getElementById('coverage-type-select').value; // '14' | '17' | 'both'
+}
+
 async function loadCoverage() {
     const statusEl = document.getElementById('coverage-status');
     statusEl.textContent = 'Loading coverage…';
@@ -120,31 +130,33 @@ async function loadCoverage() {
 
     const bounds = map.getBounds();
     const mapZoom = map.getZoom();
-    const tileZoom = parseInt(document.getElementById('coverage-type-select').value, 10);
+    const mode = getCoverageMode();
+    const zooms = mode === 'both' ? [14, 17] : [parseInt(mode, 10)];
+
+    const fetchOne = (tileZoom) => mapZoom >= 10
+        ? api.getTileCoverage({
+            south: bounds.getSouth(),
+            west: bounds.getWest(),
+            north: bounds.getNorth(),
+            east: bounds.getEast(),
+        }, tileZoom)
+        : api.getTileCoverage(null, tileZoom);
 
     try {
-        let data;
-        if (mapZoom >= 10) {
-            data = await api.getTileCoverage({
-                south: bounds.getSouth(),
-                west: bounds.getWest(),
-                north: bounds.getNorth(),
-                east: bounds.getEast(),
-            }, tileZoom);
-        } else {
-            data = await api.getTileCoverage(null, tileZoom);
-        }
-
-        if (data.status !== 'success') {
-            statusEl.textContent = data.message || 'Failed to load coverage';
+        const results = await Promise.all(zooms.map(fetchOne));
+        const failed = results.find(d => d.status !== 'success');
+        if (failed) {
+            statusEl.textContent = failed.message || 'Failed to load coverage';
             return;
         }
 
-        coverageData = data;
-        renderStats(data);
-        renderTiles(data.visited, data.zoom);
-        fitToCoverage(data);
-        statusEl.textContent = `Updated ${new Date(data.computed_at).toLocaleTimeString()}`;
+        coverageData = results[0];
+        coverageDataSecondary = results[1] || null;
+
+        renderStats(coverageData, coverageDataSecondary);
+        renderTiles(coverageData, coverageDataSecondary);
+        fitToCoverage(coverageData);
+        statusEl.textContent = `Updated ${new Date(coverageData.computed_at).toLocaleTimeString()}`;
     } catch (e) {
         statusEl.textContent = `Error: ${e.message}`;
     } finally {
@@ -158,17 +170,50 @@ function fitToCoverage(data) {
     map.fitBounds([[south, west], [north, east]], { padding: [20, 20], maxZoom: 13 });
 }
 
-function renderStats(data) {
-    document.getElementById('stat-tiles-visited').textContent = data.visited_count.toLocaleString();
-    document.getElementById('stat-coverage-pct').textContent = data.coverage_pct + '%';
-    document.getElementById('stat-total-tiles').textContent = data.total_in_bounds.toLocaleString();
+function renderStats(primary, secondary) {
+    const labelEls = document.querySelectorAll('#coverage-stats .stat-label');
+    if (secondary) {
+        document.getElementById('stat-tiles-visited').textContent =
+            `${primary.visited_count.toLocaleString()} / ${secondary.visited_count.toLocaleString()}`;
+        document.getElementById('stat-coverage-pct').textContent =
+            `${primary.coverage_pct}% / ${secondary.coverage_pct}%`;
+        document.getElementById('stat-total-tiles').textContent =
+            `${primary.total_in_bounds.toLocaleString()} / ${secondary.total_in_bounds.toLocaleString()}`;
+        labelEls.forEach(el => {
+            if (!el.dataset.baseLabel) el.dataset.baseLabel = el.textContent;
+            el.textContent = `${el.dataset.baseLabel} (Sq / Sqi)`;
+        });
+    } else {
+        document.getElementById('stat-tiles-visited').textContent = primary.visited_count.toLocaleString();
+        document.getElementById('stat-coverage-pct').textContent = primary.coverage_pct + '%';
+        document.getElementById('stat-total-tiles').textContent = primary.total_in_bounds.toLocaleString();
+        labelEls.forEach(el => {
+            if (el.dataset.baseLabel) el.textContent = el.dataset.baseLabel;
+        });
+    }
 }
 
-function renderTiles(visited, zoom = 14) {
+function renderTiles(primary, secondary) {
     tileLayer.clearLayers();
-    if (!visited || typeof visited !== 'object') return;
+    tileLayerSecondary.clearLayers();
 
-    const n = Math.pow(2, zoom);
+    // In single-grid mode, keep the original green-fill styling. In "both"
+    // mode, distinguish the coarser squadrat grid (blue outline) from the
+    // finer squadratinho grid (green fill) drawn on top of it.
+    const primaryStyle = secondary
+        ? { color: '#0d6efd', weight: 1, fillOpacity: 0.08 }
+        : { color: '#28a745', weight: 0.5, fillOpacity: 0.35 };
+    const secondaryStyle = { color: '#28a745', weight: 0.5, fillOpacity: 0.35 };
+
+    drawTileGrid(tileLayer, primary.visited, primary.zoom, primaryStyle);
+    if (secondary) {
+        drawTileGrid(tileLayerSecondary, secondary.visited, secondary.zoom, secondaryStyle);
+    }
+}
+
+function drawTileGrid(layerGroup, visited, zoom, style) {
+    if (!visited || typeof visited !== 'object') return;
+    const n = Math.pow(2, zoom || 14);
 
     for (const key of Object.keys(visited)) {
         const [x, y] = key.split(',').map(Number);
@@ -180,12 +225,10 @@ function renderTiles(visited, zoom = 14) {
         const south = southRad * 180 / Math.PI;
 
         const rect = L.rectangle([[south, west], [north, east]], {
-            color: '#28a745',
-            weight: 0.5,
-            fillOpacity: 0.35,
+            ...style,
             interactive: false,
         });
-        tileLayer.addLayer(rect);
+        layerGroup.addLayer(rect);
     }
 }
 
@@ -203,7 +246,8 @@ async function generateRoute() {
         if (typeof showToast === 'function') showToast('Click the map to set a start point', 'warning');
         return;
     }
-    if (!coverageData) {
+    const mode = getCoverageMode();
+    if (!coverageData || (mode === 'both' && !coverageDataSecondary)) {
         if (typeof showToast === 'function') showToast('Load coverage data first', 'warning');
         return;
     }
@@ -277,6 +321,7 @@ async function generateRoute() {
         mode: 'tiles',
         routeType: 'round_trip',
         coverageData,
+        coverageDataSecondary: mode === 'both' ? coverageDataSecondary : null,
         optimizeFor,
     });
 }
@@ -305,8 +350,15 @@ function renderRoute(route, index) {
         weight: 3,
         dashArray: '8, 8',
         opacity: 0.8,
-    }).bindPopup(`${DIRECTION_LABELS[route.direction]} — ${distanceLabel}, ${route.stats.unvisited} new tiles`);
+    }).bindPopup(`${DIRECTION_LABELS[route.direction]} — ${distanceLabel}, ${newTilesLabel(route.stats)}`);
     routeLayer.addLayer(line);
+}
+
+function newTilesLabel(stats) {
+    if (stats.breakdown && stats.breakdown.length > 0) {
+        return stats.breakdown.map(b => `${b.count} new ${b.label}`).join(' + ');
+    }
+    return `${stats.unvisited} new tiles`;
 }
 
 function addRouteListItem(route, index) {
@@ -317,7 +369,7 @@ function addRouteListItem(route, index) {
     badge.className = 'route-badge';
     badge.innerHTML = `
         <span class="swatch" style="background:${color}"></span>
-        <span>${DIRECTION_LABELS[route.direction]} · ${distanceLabel} · ${route.stats.unvisited} new tiles</span>
+        <span>${DIRECTION_LABELS[route.direction]} · ${distanceLabel} · ${newTilesLabel(route.stats)}</span>
     `;
     document.getElementById('route-list').appendChild(badge);
 }
