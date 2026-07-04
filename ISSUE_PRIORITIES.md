@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-07-04 21:50:14 UTC / 2026-07-04 16:50:15 CDT
+**Last Updated:** 2026-07-04 22:52:03 UTC / 2026-07-04 17:52:03 CDT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -9,12 +9,12 @@ This file reflects the current state of GitHub issues organized by release miles
 ## 📍 Release Context
 
 - **Current Release:** v0.14.0 (deployed)
-- **Next Release:** v0.16.0 (in development)
+- **Next Release:** v0.17.0 (in development)
 - **Future Releases:** 
 
 ---
 
-## 🎯 v0.16.0 (Next Release - IN DEVELOPMENT)
+## 🎯 v0.17.0 (Next Release - IN DEVELOPMENT)
 
 **Priority within this release determines work order. Complete P0/P1 issues before moving to future releases.**
 
@@ -22,15 +22,12 @@ This file reflects the current state of GitHub issues organized by release miles
 **No P0 issues** ✅
 
 ### 🔴 P1 - HIGH
-- #351 - Tests + cleanup for exploration route generator
-- #350 - GPX export (frontend)
-- #349 - Staged two-phase compute + iterative refinement (frontend)
-- #348 - Surface preference (backend + frontend)
-- #347 - ORS routing proxy (backend)
-- #346 - Epic: Finish Exploration Route Generator - real road routing, surface preference, staged compute, GPX export
+- #352 - Epic: Design Review — Information Density, Discoverability & Card Placement
 
 ### 🟡 P2 - MEDIUM
-**No P2 issues** ✅
+- #355 - Design Review: Evaluate card and object placement for workflow optimization
+- #354 - Design Review: Evaluate discoverability and ease of use across all pages
+- #353 - Design Review: Evaluate information density across all pages
 
 ### 🟢 P3 - LOW
 **No P3 issues** ✅
