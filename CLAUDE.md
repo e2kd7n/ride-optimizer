@@ -36,6 +36,14 @@ STRAVA_CLIENT_ID=your_client_id
 STRAVA_CLIENT_SECRET=your_client_secret
 ```
 
+Optionally add an OpenRouteService API key to enable real road-following routes on the Explore page.
+The app starts and degrades gracefully without it — the `/api/exploration/route` endpoint returns a
+clear "not configured" error instead of crashing:
+```
+ORS_API_KEY=your_ors_api_key
+```
+Get a free key at https://openrouteservice.org/dev/#/signup (free tier: 2000 req/day, 40 req/min).
+
 Flask dev config lives in `.flaskenv`. Encrypted OAuth tokens are auto-generated to `config/credentials.json`.
 
 ## Architecture

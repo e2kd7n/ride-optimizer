@@ -1,5 +1,11 @@
 /**
  * explore.js — Tile coverage map and exploration route generation
+ *
+ * Two-phase compute:
+ *   Phase 1  Worker runs flood-fill + TSP client-side.  Each result is a
+ *            dashed "straight-line preview" badge with a "Plot road route" button.
+ *   Phase 2  User clicks the button → POST /api/exploration/route → iterative
+ *            distance refinement → solid polyline + surface breakdown badge.
  */
 
 const api = new APIClient('/api');
@@ -12,6 +18,10 @@ let startMarker = null;
 let coverageData = null;
 let coverageDataSecondary = null;
 let explorationWorker = null;
+
+// Phase-1 candidate lists per direction, for iterative refinement.
+// { NE: [zoneList, ...], SE: [...], ... }
+let _phase1Candidates = {};
 
 const ZOOM_LABELS = { 14: 'Squadrats', 17: 'Squadratinhos' };
 
@@ -237,6 +247,11 @@ function drawTileGrid(layerGroup, visited, zoom, style) {
 const ROUTE_COLORS = ['#0d6efd', '#fd7e14', '#6f42c1', '#20c997'];
 const DIRECTION_LABELS = { NE: 'Northeast', SE: 'Southeast', SW: 'Southwest', NW: 'Northwest' };
 
+// Per-direction Phase-1 polyline references, keyed by direction ('NE', etc.)
+const _phase1Polylines = {};
+// Per-direction Phase-2 polyline references
+const _phase2Polylines = {};
+
 async function generateRoute() {
     if (!explorationWorker) {
         if (typeof showToast === 'function') showToast('Web Workers not supported', 'error');
@@ -262,6 +277,9 @@ async function generateRoute() {
     waypointMarkers.clearLayers();
     routeLayer.clearLayers();
     document.getElementById('route-list').innerHTML = '';
+    _phase1Candidates = {};
+    Object.keys(_phase1Polylines).forEach(k => delete _phase1Polylines[k]);
+    Object.keys(_phase2Polylines).forEach(k => delete _phase2Polylines[k]);
 
     const startPos = startMarker.getLatLng();
     const distanceKm = parseFloat(document.getElementById('distance-slider').value);
@@ -288,8 +306,13 @@ async function generateRoute() {
         }
 
         if (msg.type === 'route') {
+            // Phase 1 result: render dashed preview and add badge with "Plot road route" button.
             renderRoute(msg.route, routeCount);
-            addRouteListItem(msg.route, routeCount);
+            addRouteListItem(msg.route, routeCount, distanceKm);
+            // Store Phase-1 candidate data for iterative refinement.
+            if (msg.candidates) {
+                _phase1Candidates[msg.route.direction] = msg.candidates;
+            }
             routeCount++;
             statusEl.textContent = `Found ${routeCount} route${routeCount > 1 ? 's' : ''} so far…`;
             return;
@@ -298,7 +321,7 @@ async function generateRoute() {
         if (msg.type === 'done') {
             stopWorking();
             statusEl.textContent = routeCount > 0
-                ? `${routeCount} route${routeCount > 1 ? 's' : ''} generated`
+                ? `${routeCount} route${routeCount > 1 ? 's' : ''} generated — click "Plot road route" to get real road directions`
                 : 'No reachable unvisited tiles found — try increasing distance or moving the start point';
             return;
         }
@@ -352,6 +375,7 @@ function renderRoute(route, index) {
         opacity: 0.8,
     }).bindPopup(`${DIRECTION_LABELS[route.direction]} — ${distanceLabel}, ${newTilesLabel(route.stats)}`);
     routeLayer.addLayer(line);
+    _phase1Polylines[route.direction] = line;
 }
 
 function newTilesLabel(stats) {
@@ -361,17 +385,177 @@ function newTilesLabel(stats) {
     return `${stats.unvisited} new tiles`;
 }
 
-function addRouteListItem(route, index) {
+function addRouteListItem(route, index, targetDistanceKm) {
     const color = ROUTE_COLORS[index % ROUTE_COLORS.length];
     const distanceLabel = window.formatDistance ? window.formatDistance(route.stats.distanceKm, 1) : `${route.stats.distanceKm.toFixed(1)} km`;
+    const dir = route.direction;
 
-    const badge = document.createElement('span');
-    badge.className = 'route-badge';
+    const badge = document.createElement('div');
+    badge.className = 'route-badge flex-column align-items-start';
+    badge.dataset.direction = dir;
+    badge.style.gap = '4px';
     badge.innerHTML = `
-        <span class="swatch" style="background:${color}"></span>
-        <span>${DIRECTION_LABELS[route.direction]} · ${distanceLabel} · ${newTilesLabel(route.stats)}</span>
+        <div class="d-flex align-items-center gap-2 w-100">
+            <span class="swatch" style="background:${color}"></span>
+            <span class="route-label">${DIRECTION_LABELS[dir]} · ${distanceLabel} · ${newTilesLabel(route.stats)}</span>
+            <button class="btn btn-xs btn-outline-primary ms-auto plot-road-btn" data-direction="${dir}"
+                    aria-label="Plot road route for ${DIRECTION_LABELS[dir]}">
+                <i class="bi bi-map" aria-hidden="true"></i> Plot road route
+            </button>
+        </div>
+        <div class="route-phase2-info text-muted small d-none" data-direction="${dir}"></div>
     `;
     document.getElementById('route-list').appendChild(badge);
+
+    badge.querySelector('.plot-road-btn').addEventListener('click', () => {
+        plotRoadRoute(dir, route, targetDistanceKm, color, badge);
+    });
+}
+
+// ── Phase 2: Road routing ────────────────────────────────────────
+
+async function plotRoadRoute(direction, route, targetDistanceKm, color, badgeEl) {
+    const plotBtn = badgeEl.querySelector('.plot-road-btn');
+    const infoEl = badgeEl.querySelector('.route-phase2-info');
+
+    plotBtn.disabled = true;
+    plotBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Routing…';
+    infoEl.textContent = 'Calling road routing service…';
+    infoEl.classList.remove('d-none');
+
+    const startPos = startMarker.getLatLng();
+    const surfacePref = document.getElementById('surface-preference-select').value;
+
+    // Build waypoints list: start → route waypoints → start (round trip).
+    const baseWaypoints = [
+        [startPos.lat, startPos.lng],
+        ...route.waypoints.map(wp => [wp.lat, wp.lon]),
+        [startPos.lat, startPos.lng],
+    ];
+
+    // Iterative refinement: adjust waypoints up to 3 iterations to get within 10% of target.
+    const TOLERANCE = 0.10;
+    const MAX_ITERATIONS = 3;
+    let waypoints = baseWaypoints;
+    let result = null;
+    let candidateList = (_phase1Candidates[direction] || []).slice(); // remaining candidates
+
+    for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
+        try {
+            result = await api.getExplorationRoute({ waypoints, surfacePreference: surfacePref });
+        } catch (err) {
+            // Network/API error — fall back gracefully.
+            result = null;
+            break;
+        }
+
+        if (!result || result.status !== 'success') break;
+
+        const ratio = result.distance_km / targetDistanceKm;
+        if (Math.abs(ratio - 1) <= TOLERANCE) break; // within 10% — done
+
+        if (ratio > 1 + TOLERANCE && waypoints.length > 3) {
+            // Too long: drop the last non-start/end waypoint (lowest-priority).
+            waypoints = [waypoints[0], ...waypoints.slice(1, -2), waypoints[waypoints.length - 1]];
+        } else if (ratio < 1 - TOLERANCE && candidateList.length > 0) {
+            // Too short: pull in the next candidate zone.
+            const next = candidateList.shift();
+            waypoints = [
+                waypoints[0],
+                ...waypoints.slice(1, -1),
+                [next.centroid.lat, next.centroid.lon],
+                waypoints[waypoints.length - 1],
+            ];
+        } else {
+            break; // Nothing more to adjust.
+        }
+    }
+
+    if (!result || result.status !== 'success') {
+        const errMsg = (result && result.message) || 'Road routing unavailable';
+        if (typeof showToast === 'function') showToast(errMsg, 'warning');
+        infoEl.textContent = errMsg;
+        plotBtn.disabled = false;
+        plotBtn.innerHTML = '<i class="bi bi-map" aria-hidden="true"></i> Plot road route';
+        return;
+    }
+
+    // Replace dashed preview with solid road-following polyline.
+    if (_phase1Polylines[direction]) {
+        routeLayer.removeLayer(_phase1Polylines[direction]);
+        delete _phase1Polylines[direction];
+    }
+    if (_phase2Polylines[direction]) {
+        routeLayer.removeLayer(_phase2Polylines[direction]);
+    }
+
+    const latlngs = result.coordinates.map(([lat, lon]) => [lat, lon]);
+    const solidLine = L.polyline(latlngs, { color, weight: 4, opacity: 0.9 });
+    const distLabel = window.formatDistance ? window.formatDistance(result.distance_km, 1) : `${result.distance_km} km`;
+    solidLine.bindPopup(`${DIRECTION_LABELS[direction]} (road) — ${distLabel}, ${result.duration_min} min`);
+    routeLayer.addLayer(solidLine);
+    _phase2Polylines[direction] = solidLine;
+
+    // Update badge: replace straight-line stats with real stats + surface + GPX button.
+    const sb = result.surface_breakdown || {};
+    const surfaceText = (sb.paved_pct != null)
+        ? `${sb.paved_pct}% paved · ${sb.unpaved_pct}% unpaved · ${sb.unknown_pct}% unknown`
+        : '';
+
+    const labelEl = badgeEl.querySelector('.route-label');
+    if (labelEl) {
+        labelEl.textContent = `${DIRECTION_LABELS[direction]} · ${distLabel} · ${result.duration_min} min`;
+    }
+
+    infoEl.innerHTML = `
+        ${surfaceText ? `<span>${surfaceText}</span> · ` : ''}
+        <button class="btn btn-xs btn-outline-secondary export-gpx-btn"
+                aria-label="Export GPX for ${DIRECTION_LABELS[direction]}">
+            <i class="bi bi-download" aria-hidden="true"></i> Export GPX
+        </button>
+    `;
+
+    infoEl.querySelector('.export-gpx-btn').addEventListener('click', () => {
+        downloadGpx(result.coordinates, direction);
+    });
+
+    plotBtn.innerHTML = '<i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Re-plot';
+    plotBtn.disabled = false;
+}
+
+// ── GPX export ───────────────────────────────────────────────────
+
+function buildGpx(coordinates) {
+    const trkpts = coordinates.map(([lat, lon]) =>
+        `    <trkpt lat="${lat}" lon="${lon}"/>`
+    ).join('\n');
+
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Ride Optimizer"
+     xmlns="http://www.topografix.com/GPX/1/1"
+     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">
+  <metadata><time>${new Date().toISOString()}</time></metadata>
+  <trk>
+    <name>Exploration Route</name>
+    <trkseg>
+${trkpts}
+    </trkseg>
+  </trk>
+</gpx>`;
+}
+
+function downloadGpx(coordinates, direction) {
+    const gpx = buildGpx(coordinates);
+    const blob = new Blob([gpx], { type: 'application/gpx+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `exploration-${direction.toLowerCase()}-${Date.now()}.gpx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 }
 
 // ── Cache management ────────────────────────────────────────────

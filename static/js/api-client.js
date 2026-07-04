@@ -330,6 +330,18 @@ class APIClient {
         return this.fetch('/exploration/invalidate', { method: 'POST' });
     }
 
+    async getExplorationRoute({ waypoints, surfacePreference = 'any' } = {}) {
+        // Route computation involves a live ORS call; allow generous timeout.
+        return this.fetch('/exploration/route', {
+            method: 'POST',
+            timeoutMs: 60000,
+            body: JSON.stringify({
+                waypoints,
+                surface_preference: surfacePreference,
+            }),
+        });
+    }
+
     /**
      * Forward-geocode a city/state or postal code to coordinates.
      */

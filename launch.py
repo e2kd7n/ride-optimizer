@@ -2098,6 +2098,23 @@ def exploration_invalidate():
     return jsonify({'status': 'success', 'message': 'Coverage caches invalidated'})
 
 
+@app.route('/api/exploration/route', methods=['POST'])
+@limiter.limit("10 per minute")
+def exploration_route():
+    """Compute a road-following route via ORS for a given waypoint list."""
+    svc = _get_exploration_service()
+    data = request.get_json(silent=True) or {}
+    waypoints = data.get('waypoints')
+    if not waypoints or not isinstance(waypoints, list) or len(waypoints) < 2:
+        return jsonify({'status': 'error', 'message': 'waypoints must be a list of at least 2 [lat, lon] pairs'}), 400
+    surface_preference = data.get('surface_preference', 'any')
+    if surface_preference not in ('any', 'paved', 'unpaved'):
+        return jsonify({'status': 'error', 'message': 'surface_preference must be any, paved, or unpaved'}), 400
+    result = svc.compute_route(waypoints, surface_preference=surface_preference)
+    status_code = 200 if result.get('status') == 'success' else 500
+    return jsonify(result), status_code
+
+
 _geocoding_service = None
 
 
