@@ -1,6 +1,14 @@
 strava:
   client_id: ${STRAVA_CLIENT_ID}
   client_secret: ${STRAVA_CLIENT_SECRET}
+
+ors:
+  api_key: ${ORS_API_KEY}
+
+exploration:
+  ors_timeout_seconds: 15
+  route_cache_ttl_seconds: 600
+
   oauth_callback_host: "localhost"  # Host for OAuth callback server
   oauth_callback_port: 8000  # Port for OAuth callback server
 
