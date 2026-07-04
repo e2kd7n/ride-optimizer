@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-07-02 18:52:06 UTC / 2026-07-02 13:52:06 CDT
+**Last Updated:** 2026-07-04 21:46:34 UTC / 2026-07-04 16:46:34 CDT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -9,8 +9,34 @@ This file reflects the current state of GitHub issues organized by release miles
 ## 📍 Release Context
 
 - **Current Release:** v0.14.0 (deployed)
-- **Next Release:** v0.15.0 (in development)
+- **Next Release:** v0.16.0 (in development)
 - **Future Releases:** 
+
+---
+
+## 🎯 v0.16.0 (Next Release - IN DEVELOPMENT)
+
+**Priority within this release determines work order. Complete P0/P1 issues before moving to future releases.**
+
+### 🔴 P0 - CRITICAL
+**No P0 issues** ✅
+
+### 🔴 P1 - HIGH
+- #351 - Tests + cleanup for exploration route generator
+- #350 - GPX export (frontend)
+- #349 - Staged two-phase compute + iterative refinement (frontend)
+- #348 - Surface preference (backend + frontend)
+- #347 - ORS routing proxy (backend)
+- #346 - Epic: Finish Exploration Route Generator - real road routing, surface preference, staged compute, GPX export
+
+### 🟡 P2 - MEDIUM
+**No P2 issues** ✅
+
+### 🟢 P3 - LOW
+**No P3 issues** ✅
+
+### 📋 P4 - FUTURE
+**No P4 issues** ✅
 
 ---
 
@@ -18,7 +44,23 @@ This file reflects the current state of GitHub issues organized by release miles
 
 These issues need to be assigned to a release milestone and prioritized.
 
-**All issues are assigned to releases** ✅
+### 🔴 P0 - CRITICAL
+None
+
+### 🔴 P1 - HIGH
+None
+
+### 🟡 P2 - MEDIUM
+None
+
+### 🟢 P3 - LOW
+None
+
+### 📋 P4 - FUTURE
+None
+
+### ⚠️ Unprioritized (No P-label)
+- #345 - [FEATURE] Manage and monitor python launch.py dev server processes (no PID tracking, kill_existing_server is a no-op on Windows)
 
 ---
 
