@@ -28,16 +28,24 @@ function initializeBottomNav() {
     // Handle nav item clicks and keyboard navigation
     const navItems = bottomNav.querySelectorAll('.bottom-nav-item');
     navItems.forEach((item, index) => {
+        // The "More" drawer toggle (Issue #362) is handled entirely by
+        // Bootstrap collapse via data-bs-toggle; don't steal its active
+        // state or aria-current — it highlights only when a drawer page
+        // (Explore/Settings) is the current page.
+        const isDrawerToggle = item.hasAttribute('data-bs-toggle');
+
         // Click handler
         item.addEventListener('click', function(e) {
+            if (isDrawerToggle) return;
             e.preventDefault();
             handleNavItemActivation(this, navItems);
         });
-        
+
         // Keyboard navigation handler
         item.addEventListener('keydown', function(e) {
             // Enter or Space to activate
             if (e.key === 'Enter' || e.key === ' ') {
+                if (isDrawerToggle) return; // native button click triggers Bootstrap collapse
                 e.preventDefault();
                 handleNavItemActivation(this, navItems);
             }
@@ -108,6 +116,8 @@ const PAGE_ROUTES = {
     home:     '/',
     routes:   '/routes.html',
     weather:  '/weather.html',
+    reports:  '/reports.html',
+    explore:  '/explore.html',
     settings: '/settings.html'
 };
 
@@ -234,7 +244,7 @@ function showSwipeFeedback(direction) {
         ${direction === 'left' ? 'right: 20px' : 'left: 20px'};
         transform: translateY(-50%);
         font-size: 48px;
-        color: var(--epic-primary, #667eea);
+        color: var(--accent, #0B6FA6);
         opacity: 0;
         animation: swipeFeedbackAnim 0.3s ease-out;
         pointer-events: none;

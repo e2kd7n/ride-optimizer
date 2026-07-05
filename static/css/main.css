@@ -4,16 +4,40 @@
  */
 
 /* ===== Global Styles ===== */
+/* Fair Weather brand tokens — see docs/designs/FAIR_WEATHER_BRAND_BOOK.md */
 :root {
-    --primary-color: #667eea;
-    --primary-dark: #764ba2;
-    --primary-gradient: linear-gradient(135deg, #4a5fd5 0%, #764ba2 100%);
-    --success-color: #28a745;
-    --danger-color: #dc3545;
-    --warning-color: #ffc107;
-    --info-color: #17a2b8;
-    --light-gray: #f8f9fa;
-    --dark-gray: #343a40;
+    /* Day ground (default) */
+    --bg: #F3F6F7;
+    --surface: #FFFFFF;
+    --surface-2: #EDF2F4;
+    --ink: #0F2233;
+    --ink-soft: #5B7686;
+    --line: #DCE3E6;
+    --accent: #0B6FA6;
+    --accent-warm: #F2662D;
+    --success: #3E8E63;
+    --warning: #C98A1D;
+    --danger: #C4483A;
+    /* RGB triplet for alpha tints of the accent (kept in sync with --accent) */
+    --accent-rgb: 11, 111, 166;
+
+    /* Display face (headlines, decision copy, CTA labels) */
+    --font-display: "Century Gothic", "Avenir Next", "Futura", -apple-system, sans-serif;
+
+    /* Legacy aliases — pre-rebrand names kept so untouched code still works.
+       Gradients are retired: flat cobalt everywhere. */
+    --primary-color: var(--accent);
+    --primary-dark: var(--accent);
+    --primary-gradient: var(--accent);
+    --success-color: var(--success);
+    --danger-color: var(--danger);
+    --warning-color: var(--warning);
+    --info-color: var(--accent);
+    --light-gray: var(--bg);
+    --dark-gray: var(--ink);
+
+    /* Bootstrap utility hooks (drives .bg-primary tints, focus rings, etc.) */
+    --bs-primary-rgb: 11, 111, 166;
 
     /* Spacing scale (#280) */
     --space-1: 4px;
@@ -45,14 +69,14 @@
     /* Chart height token */
     --chart-height: 256px;
 
-    /* Semantic color tokens */
-    --color-primary: #667eea;
-    --color-accent: #764ba2;
-    --color-text: #343a40;
-    --color-text-muted: #6c757d;
-    --color-border: #dee2e6;
-    --color-bg-hover: rgba(102, 126, 234, 0.06);
-    --color-bg-selected: rgba(102, 126, 234, 0.1);
+    /* Semantic color tokens (legacy aliases) */
+    --color-primary: var(--accent);
+    --color-accent: var(--accent);
+    --color-text: var(--ink);
+    --color-text-muted: var(--ink-soft);
+    --color-border: var(--line);
+    --color-bg-hover: rgba(var(--accent-rgb), 0.06);
+    --color-bg-selected: rgba(var(--accent-rgb), 0.1);
 
     /* Workout color tokens (#340) */
     --workout-color: #e85d04;
@@ -60,9 +84,28 @@
     --workout-border: rgba(232, 93, 4, 0.3);
 }
 
+/* Fair Weather Night ground — token set only; no toggle UI ships yet.
+   Day is the default; setting data-theme="night" on <html> flips the system. */
+html[data-theme="night"] {
+    --bg: #0B1620;
+    --surface: #122232;
+    --surface-2: #16283A;
+    --ink: #EAF0F3;
+    --ink-soft: #8FA6B4;
+    --line: #223243;
+    --accent: #4FB3E8;
+    --accent-warm: #FF8A57;
+    --success: #57B384;
+    --warning: #E0A63E;
+    --danger: #E2695C;
+    --accent-rgb: 79, 179, 232;
+    --bs-primary-rgb: 79, 179, 232;
+}
+
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    background-color: var(--light-gray);
+    background: var(--bg);
+    color: var(--ink);
     min-height: 100vh;
     display: flex;
     flex-direction: column;
@@ -70,11 +113,32 @@ body {
     line-height: 1.45;
 }
 
+/* ===== Fair Weather typography ===== */
+/* Display face on headlines, brand, decision copy, and button labels */
+h1, h2, h3,
+.navbar-brand,
+.btn,
+.temperature-display,
+.stat-value-hero,
+.hero-route-name {
+    font-family: var(--font-display);
+}
+
+/* Tabular numerals wherever digits line up in a column */
+.tabular-nums {
+    font-variant-numeric: tabular-nums;
+}
+
+/* Links carry cobalt */
+a {
+    color: var(--accent);
+}
+
 /* ===== Timestamp Display Styles (Issue #274) ===== */
 .timestamp-display {
     display: inline-block;
     font-size: var(--font-size-sm);
-    color: #6c757d;
+    color: var(--ink-soft);
     margin-top: var(--space-1);
 }
 
@@ -98,17 +162,47 @@ body {
 }
 
 /* ===== Navigation ===== */
+/* Fair Weather Day ground: light surface-2 bar, ink text, cobalt accents.
+   .navbar-gradient kept as a legacy alias for any untouched markup. */
+.navbar-fairweather,
 .navbar-gradient {
-    background: linear-gradient(135deg, #4a5fd5 0%, #764ba2 100%);
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--line);
 }
 
 .navbar-brand {
-    font-weight: 600;
+    font-weight: 700;
     font-size: var(--font-size-lg);
+    color: var(--accent);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.navbar-brand:hover,
+.navbar-brand:focus {
+    color: var(--accent);
 }
 
 .navbar-brand i {
     margin-right: var(--space-2);
+}
+
+/* Brand mark (circle + eight ticks) sized for the navbar lockup */
+.navbar-brand .brand-mark {
+    width: 27px;
+    height: 27px;
+    flex-shrink: 0;
+    color: var(--accent);
+}
+
+/* Wordmark: "Ride" in ink, "Optimizer" in cobalt */
+.navbar-brand .brand-ride {
+    color: var(--ink);
+}
+
+.navbar-brand .brand-optimizer {
+    color: var(--accent);
 }
 
 /* Desktop navigation tabs - keep left-aligned (Issue #258) */
@@ -120,7 +214,7 @@ body {
 .navbar .navbar-nav .nav-link {
     border: none;
     background: transparent;
-    color: rgba(255, 255, 255, 0.85);
+    color: var(--ink);
     padding: var(--space-2) var(--space-3);
     margin: 0 var(--space-1);
     border-radius: 4px;
@@ -128,32 +222,46 @@ body {
 }
 
 .navbar .navbar-nav .nav-link:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
+    background: var(--line);
+    color: var(--accent);
 }
 
 .navbar .navbar-nav .nav-link.active {
-    background: rgba(255, 255, 255, 0.2);
-    color: white;
+    background: transparent;
+    color: var(--accent);
     font-weight: 600;
-    border-bottom: var(--space-1) solid white;
+    border-bottom: 3px solid var(--accent);
 }
 
 .navbar .navbar-nav .nav-link i {
     margin-right: var(--space-2);
 }
 
+/* Toggler on the light bar (pages no longer use navbar-dark) */
+.navbar-fairweather .navbar-toggler,
+.navbar-gradient .navbar-toggler {
+    color: var(--ink);
+    border-color: var(--line);
+}
+
 /* ===== Cards ===== */
+/* Fair Weather shape: 16px radius, hairline border, quiet shadow;
+   visible lift is reserved for hover. */
 .card {
-    border: none;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    /* Keep Bootstrap's inner elements (card-header/footer/img) in sync
+       with the 16px outer radius so their corners don't poke out. */
+    --bs-card-border-radius: 16px;
+    --bs-card-inner-border-radius: 15px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
     margin-bottom: var(--space-2);
     transition: box-shadow 0.3s ease;
 }
 
 .card:hover {
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .card-body {
@@ -186,6 +294,7 @@ body {
     font-weight: 700;
     margin: var(--space-2) 0;
     color: var(--dark-gray);
+    font-variant-numeric: tabular-nums;
 }
 
 .stat-card i {
@@ -193,14 +302,17 @@ body {
 }
 
 /* ===== Badges ===== */
+/* Fully rounded, matching the mark's circular geometry */
 .badge {
     font-weight: 500;
     padding: var(--space-1) var(--space-2);
+    border-radius: 999px;
 }
 
 /* ===== Buttons ===== */
+/* Fully rounded, matching the mark's circular geometry */
 .btn {
-    border-radius: 4px;
+    border-radius: 999px;
     font-weight: 500;
     transition: all 0.2s ease;
 }
@@ -210,6 +322,85 @@ body {
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
+/* Bootstrap primary overrides — flat cobalt, no gradients */
+.btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 700;
+}
+
+.btn-primary:hover,
+.btn-primary:focus,
+.btn-primary:active,
+.btn-primary:disabled {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+.btn-primary:hover {
+    filter: brightness(0.92);
+    box-shadow: 0 4px 8px rgba(var(--accent-rgb), 0.3);
+}
+
+.btn-outline-primary {
+    color: var(--accent);
+    border-color: var(--accent);
+}
+
+.btn-outline-primary:hover,
+.btn-outline-primary:focus,
+.btn-outline-primary:active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+.btn-link {
+    color: var(--accent);
+}
+
+.bg-primary {
+    background-color: var(--accent) !important;
+}
+
+.text-primary {
+    color: var(--accent) !important;
+}
+
+.border-primary {
+    border-color: var(--accent) !important;
+}
+
+.form-check-input:checked {
+    background-color: var(--accent);
+    border-color: var(--accent);
+}
+
+.progress-bar {
+    background-color: var(--accent);
+}
+
+/* Coral CTA — reserve for exactly ONE primary CTA/badge per screen
+   (see DESIGN_PRINCIPLES §Brand Identity; defined here, applied in later phases) */
+.btn-cta {
+    background: var(--accent-warm);
+    border-color: var(--accent-warm);
+    color: #fff;
+    border-radius: 999px;
+    font-weight: 700;
+}
+
+.btn-cta:hover,
+.btn-cta:focus,
+.btn-cta:active {
+    background: var(--accent-warm);
+    border-color: var(--accent-warm);
+    color: #fff;
+    filter: brightness(0.94);
+}
+
 .btn-sm {
     padding: var(--space-1) var(--space-2);
     font-size: var(--font-size-sm);
@@ -217,17 +408,17 @@ body {
 
 /* ===== Tables ===== */
 .table {
-    background-color: white;
+    background-color: var(--surface);
 }
 
 .table thead th {
-    border-bottom: 2px solid #dee2e6;
+    border-bottom: 2px solid var(--line);
     font-weight: 600;
     color: var(--dark-gray);
 }
 
 .table-hover tbody tr:hover {
-    background-color: rgba(0, 123, 255, 0.05);
+    background-color: rgba(var(--accent-rgb), 0.05);
 }
 
 /* ===== Alerts ===== */
@@ -251,18 +442,19 @@ body {
 /* ===== Footer ===== */
 footer {
     margin-top: auto;
-    background-color: white;
-    border-top: 1px solid #dee2e6;
+    background-color: var(--surface-2);
+    border-top: 1px solid var(--line);
     padding-top: var(--space-2) !important;
     padding-bottom: var(--space-2) !important;
 }
 
 /* ===== Filters Section ===== */
 .filters-section {
-    background-color: white;
+    background-color: var(--surface);
     padding: var(--space-3);
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
     margin-bottom: var(--space-3);
 }
 
@@ -313,11 +505,11 @@ footer {
 /* ===== Route Cards ===== */
 .route-card,
 .route-library-card {
-    border: 1px solid #dee2e6;
-    border-radius: 8px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
     padding: var(--space-2) var(--space-3);
     margin-bottom: var(--space-2);
-    background-color: white;
+    background-color: var(--surface);
     transition: all 0.2s ease;
     cursor: pointer;
 }
@@ -325,13 +517,13 @@ footer {
 .route-card:hover,
 .route-library-card:hover {
     border-color: var(--primary-color);
-    box-shadow: 0 4px 8px rgba(0, 123, 255, 0.15);
+    box-shadow: 0 4px 8px rgba(var(--accent-rgb), 0.15);
     transform: translateY(-4px);
 }
 
 .route-library-card:active {
     transform: translateY(calc(-1 * var(--space-1)));
-    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.2);
+    box-shadow: 0 2px 4px rgba(var(--accent-rgb), 0.2);
 }
 
 .route-card-header {
@@ -373,7 +565,7 @@ footer {
 
 .route-stat-label {
     font-size: var(--font-size-xs);
-    color: #6c757d;
+    color: var(--ink-soft);
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
@@ -382,6 +574,7 @@ footer {
     font-size: var(--font-size-base);
     font-weight: 600;
     color: var(--dark-gray);
+    font-variant-numeric: tabular-nums;
 }
 
 /* ===== Weather Display ===== */
@@ -394,6 +587,7 @@ footer {
     font-size: var(--font-size-hero);
     font-weight: 700;
     color: var(--dark-gray);
+    font-variant-numeric: tabular-nums;
 }
 
 /* ===== Responsive Design (Mobile First) ===== */
@@ -612,59 +806,59 @@ select:focus {
    Ported from deprecated CLI template
    ======================================== */
 
-/* ===== Epic #237 Color Palette ===== */
+/* ===== Epic #237 Color Palette (legacy aliases → Fair Weather accent) ===== */
 :root {
-    --epic-primary: #667eea;
-    --epic-secondary: #764ba2;
-    --epic-gradient: linear-gradient(135deg, #4a5fd5 0%, #764ba2 100%);
+    --epic-primary: var(--accent);
+    --epic-secondary: var(--accent);
+    --epic-gradient: var(--accent);
 }
 
 /* ===== Issue #242: Enhanced Focus Indicators (3px minimum, WCAG 2.4.7) ===== */
 *:focus-visible {
-    outline: 3px solid #667eea;
+    outline: 3px solid var(--accent);
     outline-offset: var(--space-1);
     border-radius: 4px;
 }
 
 button:focus-visible,
 .btn:focus-visible {
-    outline: 3px solid #667eea;
+    outline: 3px solid var(--accent);
     outline-offset: var(--space-1);
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3);
+    box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.3);
 }
 
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-    outline: 3px solid #667eea;
+    outline: 3px solid var(--accent);
     outline-offset: var(--space-1);
-    border-color: #667eea;
+    border-color: var(--accent);
 }
 
 a:focus-visible {
-    outline: 3px solid #667eea;
+    outline: 3px solid var(--accent);
     outline-offset: var(--space-1);
     text-decoration: underline;
     text-decoration-thickness: 2px;
 }
 
 .nav-link:focus-visible {
-    outline: 3px solid #667eea;
+    outline: 3px solid var(--accent);
     outline-offset: var(--space-1);
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3);
+    box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.3);
 }
 
 .route-row:focus-visible,
 tr:focus-visible {
-    outline: 3px solid #667eea;
+    outline: 3px solid var(--accent);
     outline-offset: calc(-1 * var(--space-1));
-    background-color: rgba(102, 126, 234, 0.1);
+    background-color: rgba(var(--accent-rgb), 0.1);
 }
 
 .card:focus-visible {
-    outline: 3px solid #667eea;
+    outline: 3px solid var(--accent);
     outline-offset: var(--space-1);
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3);
+    box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.3);
 }
 
 /* ===== Issue #243: Skip Navigation Links ===== */
@@ -672,7 +866,7 @@ tr:focus-visible {
     position: absolute;
     top: -40px;
     left: 0;
-    background: #667eea;
+    background: var(--accent);
     color: white;
     padding: var(--space-2);
     text-decoration: none;
@@ -693,8 +887,8 @@ tr:focus-visible {
     cursor: pointer;
     transition: all 0.2s ease;
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    background: white;
-    border: 1px solid #e0e0e0;
+    background: var(--surface);
+    border: 1px solid var(--line);
     margin-bottom: var(--space-2);
     position: relative;
 }
@@ -705,33 +899,33 @@ tr:focus-visible {
 }
 
 .route-card-compact:focus {
-    outline: 3px solid #667eea;
+    outline: 3px solid var(--accent);
     outline-offset: var(--space-1);
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+    box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.2);
 }
 
 .route-card-compact.selected {
-    background-color: #f0f7ff;
-    border-color: #667eea;
-    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+    background-color: rgba(var(--accent-rgb), 0.06);
+    border-color: var(--accent);
+    box-shadow: 0 2px 8px rgba(var(--accent-rgb), 0.2);
 }
 
 .route-card-compact.optimal {
-    background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
-    border-left: 4px solid #667eea;
+    background: rgba(var(--accent-rgb), 0.05);
+    border-left: 4px solid var(--accent);
 }
 
 .route-card-compact-rank {
     flex: 0 0 32px;
     font-weight: bold;
-    color: #667eea;
+    color: var(--accent);
     font-size: var(--font-size-base);
 }
 
 .route-card-compact-name {
     flex: 1;
     font-weight: 600;
-    color: #333;
+    color: var(--ink);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -743,7 +937,8 @@ tr:focus-visible {
     gap: var(--space-2);
     align-items: center;
     font-size: var(--font-size-sm);
-    color: #6c757d;
+    color: var(--ink-soft);
+    font-variant-numeric: tabular-nums;
 }
 
 .route-card-compact-metric {
@@ -759,7 +954,8 @@ tr:focus-visible {
 
 .route-card-compact-score {
     font-weight: 600;
-    color: #667eea;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
 }
 
 .route-card-compact-weather {
@@ -772,18 +968,18 @@ tr:focus-visible {
 }
 
 .route-card-compact-weather.favorable {
-    background-color: #d4edda;
-    color: #155724;
+    background-color: rgba(62, 142, 99, 0.13);
+    color: #1F5C3F;
 }
 
 .route-card-compact-weather.unfavorable {
-    background-color: #f8d7da;
-    color: #721c24;
+    background-color: rgba(196, 72, 58, 0.12);
+    color: #7A2A21;
 }
 
 .route-card-compact-weather.neutral {
-    background-color: #fff3cd;
-    color: #856404;
+    background-color: rgba(201, 138, 29, 0.15);
+    color: #6E4C0F;
 }
 
 /* ===== Issue #248: Skeleton Loading States ===== */
@@ -805,8 +1001,8 @@ tr:focus-visible {
     align-items: center;
     padding: var(--space-2) var(--space-3);
     border-radius: 4px;
-    background: white;
-    border: 1px solid #e0e0e0;
+    background: var(--surface);
+    border: 1px solid var(--line);
     margin-bottom: var(--space-2);
     gap: var(--space-2);
 }
@@ -851,7 +1047,7 @@ tr:focus-visible {
     width: 64px;
     height: 64px;
     border: 4px solid #e0e0e0;
-    border-top-color: #667eea;
+    border-top-color: var(--accent);
     border-radius: 50%;
     animation: skeleton-map-spin 1s linear infinite;
 }
@@ -863,8 +1059,8 @@ tr:focus-visible {
 .skeleton-weather {
     padding: var(--space-2);
     border-radius: 4px;
-    background: white;
-    border: 1px solid #e0e0e0;
+    background: var(--surface);
+    border: 1px solid var(--line);
 }
 
 .skeleton-weather-header {
@@ -886,9 +1082,9 @@ tr:focus-visible {
 /* Additional skeleton loaders for statistics and tables */
 .skeleton-stat-card {
     height: 120px;
-    border-radius: 8px;
-    background: white;
-    border: 1px solid #e0e0e0;
+    border-radius: 16px;
+    background: var(--surface);
+    border: 1px solid var(--line);
     padding: var(--space-3);
     margin-bottom: var(--space-3);
 }
@@ -913,8 +1109,8 @@ tr:focus-visible {
 }
 
 .skeleton-table {
-    background: white;
-    border-radius: 8px;
+    background: var(--surface);
+    border-radius: 16px;
     padding: var(--space-3);
 }
 
@@ -946,9 +1142,9 @@ tr:focus-visible {
 /* Skeleton for recommendation cards */
 .skeleton-recommendation-card {
     height: 200px;
-    border-radius: 8px;
-    background: white;
-    border: 1px solid #e0e0e0;
+    border-radius: 16px;
+    background: var(--surface);
+    border: 1px solid var(--line);
     padding: var(--space-4);
     margin-bottom: var(--space-3);
 }
@@ -983,10 +1179,10 @@ tr:focus-visible {
 
 /* Skeleton card components */
 .skeleton-card {
-    background: white;
-    border-radius: 8px;
+    background: var(--surface);
+    border-radius: 16px;
     padding: var(--space-4);
-    border: 1px solid #e0e0e0;
+    border: 1px solid var(--line);
 }
 
 .skeleton-card-header {
@@ -1049,28 +1245,28 @@ tr:focus-visible {
 }
 
 .toast-item.alert-success {
-    background-color: #d4edda;
-    border-color: #c3e6cb;
-    color: #155724;
+    background-color: #E4EFE9;
+    border-color: var(--success);
+    color: #1F5C3F;
 }
 
 .toast-item.alert-error,
 .toast-item.alert-danger {
-    background-color: #f8d7da;
-    border-color: #f5c6cb;
-    color: #721c24;
+    background-color: #F6E7E5;
+    border-color: var(--danger);
+    color: #7A2A21;
 }
 
 .toast-item.alert-warning {
-    background-color: #fff3cd;
-    border-color: #ffeaa7;
-    color: #856404;
+    background-color: #F7EFDD;
+    border-color: var(--warning);
+    color: #6E4C0F;
 }
 
 .toast-item.alert-info {
-    background-color: #d1ecf1;
-    border-color: #bee5eb;
-    color: #0c5460;
+    background-color: #E3EEF5;
+    border-color: var(--accent);
+    color: #084C73;
 }
 
 .toast-item .btn-close {
@@ -1214,8 +1410,8 @@ input[type="radio"] {
     left: 0;
     right: 0;
     height: 56px;
-    background: white;
-    border-top: 1px solid #dee2e6;
+    background: var(--surface);
+    border-top: 1px solid var(--line);
     box-shadow: 0 -2px 8px rgba(0,0,0,0.1);
     z-index: 1000;
     padding: 0;
@@ -1250,7 +1446,7 @@ input[type="radio"] {
     min-height: 56px;
     padding: var(--space-1) var(--space-2);
     text-decoration: none;
-    color: #6c757d;
+    color: var(--ink-soft);
     transition: all 0.2s ease;
     position: relative;
     cursor: pointer;
@@ -1258,13 +1454,13 @@ input[type="radio"] {
 
 .bottom-nav-item:hover,
 .mobile-bottom-nav-item:hover {
-    background-color: #f8f9fa;
-    color: #667eea;
+    background-color: var(--surface-2);
+    color: var(--accent);
 }
 
 .bottom-nav-item.active,
 .mobile-bottom-nav-item.active {
-    color: #667eea;
+    color: var(--accent);
     font-weight: 600;
 }
 
@@ -1276,7 +1472,7 @@ input[type="radio"] {
     left: 0;
     right: 0;
     height: 4px;
-    background: #667eea;
+    background: var(--accent);
 }
 
 .bottom-nav-item i,
@@ -1311,18 +1507,18 @@ input[type="radio"] {
     min-height: 56px;
     padding: var(--space-1) var(--space-2);
     text-decoration: none;
-    color: #6c757d;
+    color: var(--ink-soft);
     transition: all 0.2s ease;
     position: relative;
 }
 
 .mobile-bottom-nav-link:hover {
-    background-color: #f8f9fa;
-    color: #667eea;
+    background-color: var(--surface-2);
+    color: var(--accent);
 }
 
 .mobile-bottom-nav-link.active {
-    color: #667eea;
+    color: var(--accent);
     font-weight: 600;
 }
 
@@ -1333,7 +1529,64 @@ input[type="radio"] {
     left: 0;
     right: 0;
     height: 4px;
-    background: #667eea;
+    background: var(--accent);
+}
+
+/* ===== Issue #362: "More" drawer above the bottom nav ===== */
+/* Upward panel opened by the More button (Bootstrap collapse, no new deps).
+   Holds one-tap links to pages that don't fit the 5-item bar. */
+.bottom-nav-drawer {
+    position: fixed;
+    bottom: var(--bottom-nav-height);
+    left: 0;
+    right: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.12);
+    border-radius: 16px 16px 0 0;
+    z-index: 999;
+    padding: var(--space-2) var(--space-3);
+}
+
+.bottom-nav-drawer-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-height: 48px;
+    min-width: 44px;
+    padding: var(--space-2) var(--space-3);
+    color: var(--ink);
+    text-decoration: none;
+    border-radius: 12px;
+    font-size: var(--font-size-base);
+}
+
+/* 8px spacing between touch targets */
+.bottom-nav-drawer-item + .bottom-nav-drawer-item {
+    margin-top: var(--space-2);
+}
+
+.bottom-nav-drawer-item i {
+    font-size: 20px;
+    color: var(--ink-soft);
+}
+
+.bottom-nav-drawer-item:hover,
+.bottom-nav-drawer-item:focus {
+    background: var(--surface-2);
+    color: var(--accent);
+}
+
+.bottom-nav-drawer-item:hover i,
+.bottom-nav-drawer-item:focus i,
+.bottom-nav-drawer-item.active i {
+    color: var(--accent);
+}
+
+.bottom-nav-drawer-item.active {
+    color: var(--accent);
+    font-weight: 600;
+    background: rgba(var(--accent-rgb), 0.08);
 }
 
 /* ===== Issue #252: Swipe Gesture Visual Feedback ===== */
@@ -1343,7 +1596,7 @@ input[type="radio"] {
     transform: translateY(-50%);
     width: 64px;
     height: 64px;
-    background: rgba(102, 126, 234, 0.9);
+    background: rgba(var(--accent-rgb), 0.9);
     border-radius: 50%;
     display: none;
     align-items: center;
@@ -1352,7 +1605,7 @@ input[type="radio"] {
     color: white;
     z-index: 10001;
     pointer-events: none;
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 4px 12px rgba(var(--accent-rgb), 0.4);
     animation: swipeIndicatorPulse 0.3s ease-out;
 }
 
@@ -1387,7 +1640,7 @@ input[type="radio"] {
     top: 0;
     left: 0;
     height: 4px;
-    background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+    background: var(--accent);
     width: 0%;
     z-index: 10002;
     pointer-events: none;
@@ -1404,7 +1657,7 @@ input[type="radio"] {
     top: var(--space-3);
     left: 50%;
     transform: translateX(-50%);
-    background: rgba(102, 126, 234, 0.9);
+    background: rgba(var(--accent-rgb), 0.9);
     color: white;
     padding: var(--space-2) var(--space-3);
     border-radius: 24px;
@@ -1415,7 +1668,7 @@ input[type="radio"] {
     gap: var(--space-2);
     z-index: 10001;
     pointer-events: none;
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 4px 12px rgba(var(--accent-rgb), 0.4);
     animation: refreshIndicatorSlide 0.3s ease-out;
 }
 
@@ -1452,9 +1705,9 @@ input[type="radio"] {
     display: flex;
     gap: var(--space-3);
     padding: var(--space-2) var(--space-3);
-    background: linear-gradient(135deg, #4a5fd5 0%, #764ba2 100%);
+    background: var(--accent);
     color: white;
-    border-radius: 8px;
+    border-radius: 16px;
     margin-bottom: var(--space-2);
     height: 72px;
     align-items: center;
@@ -1671,7 +1924,7 @@ input[type="radio"] {
     
     .loading-spinner {
         animation: none;
-        border-top-color: #667eea;
+        border-top-color: var(--accent);
     }
     
     .card,
@@ -1738,30 +1991,25 @@ h5.card-title {
 
 /* --- Hero decision card: elevated shadow + branded border (#68) --- */
 .card.hero-card {
-    box-shadow: 0 4px 16px rgba(102, 126, 234, 0.15) !important;
-    border-color: rgba(102, 126, 234, 0.2) !important;
+    box-shadow: 0 4px 16px rgba(var(--accent-rgb), 0.15) !important;
+    border-color: rgba(var(--accent-rgb), 0.2) !important;
     transition: box-shadow 0.2s ease;
 }
 
 .card.hero-card:hover {
-    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.22) !important;
+    box-shadow: 0 8px 24px rgba(var(--accent-rgb), 0.22) !important;
 }
 
-/* --- Optimal route card: gradient border treatment (#68) --- */
+/* --- Optimal route card: flat cobalt border (gradients retired) (#68) --- */
 .route-card-compact.optimal {
-    border: 4px solid transparent;
-    background:
-        linear-gradient(white, white) padding-box,
-        linear-gradient(135deg, var(--primary-color), var(--primary-dark)) border-box;
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+    border: 2px solid var(--accent);
+    background: var(--surface);
+    box-shadow: 0 4px 12px rgba(var(--accent-rgb), 0.2);
 }
 
-/* Score badge: gradient text for visual pop */
+/* Score badge: flat cobalt (gradient text retired) */
 .route-card-compact-score {
-    background: var(--primary-gradient);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    color: var(--accent);
 }
 
 /* Route row hover: left accent bar + lift */
@@ -1900,11 +2148,11 @@ h5.card-title {
 }
 
 .workout-strip {
-    background: white;
-    border-radius: 8px;
+    background: var(--surface);
+    border-radius: 16px;
     padding: var(--space-2) var(--space-3);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.08);
-    border: 1px solid rgba(0,0,0,0.07);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+    border: 1px solid var(--line);
     display: flex;
     align-items: center;
     gap: var(--space-3);
@@ -1945,18 +2193,18 @@ h5.card-title {
 }
 
 .workout-fit-badge.fit-good {
-    background-color: rgba(40, 167, 69, 0.12);
-    color: #1a7431;
+    background-color: rgba(62, 142, 99, 0.13);
+    color: #1F5C3F;
 }
 
 .workout-fit-badge.fit-moderate {
-    background-color: rgba(255, 193, 7, 0.15);
-    color: #7a6000;
+    background-color: rgba(201, 138, 29, 0.15);
+    color: #6E4C0F;
 }
 
 .workout-fit-badge.fit-poor {
-    background-color: rgba(220, 53, 69, 0.12);
-    color: #a71d2a;
+    background-color: rgba(196, 72, 58, 0.12);
+    color: #7A2A21;
 }
 
 /* Workout option cards (#341) */
@@ -1969,8 +2217,8 @@ h5.card-title {
     flex: 1;
     padding: var(--space-2);
     border: 2px solid var(--color-border);
-    border-radius: 8px;
-    background: white;
+    border-radius: 16px;
+    background: var(--surface);
     cursor: pointer;
     transition: border-color 0.15s, box-shadow 0.15s;
 }
@@ -2047,19 +2295,20 @@ h5.card-title {
 }
 
 .hourly-cell.hourly-commute {
-    background: rgba(74, 95, 213, 0.1);
-    border: 1px solid rgba(74, 95, 213, 0.3);
+    background: rgba(var(--accent-rgb), 0.1);
+    border: 1px solid rgba(var(--accent-rgb), 0.3);
 }
 
 .hourly-time {
     font-weight: 600;
-    color: #333;
+    color: var(--ink);
     margin-bottom: 2px;
 }
 
 .hourly-temp {
     font-weight: 700;
     font-size: var(--font-size-sm);
+    font-variant-numeric: tabular-nums;
 }
 
 .hourly-wind,

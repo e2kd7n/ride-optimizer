@@ -52,12 +52,17 @@
     // Build modal HTML
     // ------------------------------------------------------------------
 
-    function buildModalHTML() {
+    /**
+     * Build the modal markup.
+     * @param {boolean} textOnly - when true (no tutorial assets exist at all),
+     *   render titles + text descriptions with no image containers at all.
+     */
+    function buildModalHTML(textOnly) {
         const cards = TUTORIALS.map((t) => `
             <div class="col-md-6">
                 <div class="card h-100 tutorial-card" data-tutorial-id="${t.id}">
-                    <div class="tutorial-img-wrapper position-relative overflow-hidden"
-                         style="height:176px; background:#f8f9fa;">
+                    ${textOnly ? '' : `<div class="tutorial-img-wrapper position-relative overflow-hidden"
+                         style="height:176px; background:var(--surface-2, #f8f9fa);">
                         <img
                             class="tutorial-img w-100 h-100"
                             style="object-fit:cover; cursor:pointer;"
@@ -76,7 +81,7 @@
                         </div>
                         <span class="tutorial-hover-badge position-absolute bottom-0 end-0 m-2 badge bg-secondary"
                               aria-hidden="true">Hover to play</span>
-                    </div>
+                    </div>`}
                     <div class="card-body pb-2">
                         <h6 class="card-title mb-1">${t.title}</h6>
                         <p class="card-text small text-muted mb-0">${t.description}</p>
@@ -84,6 +89,10 @@
                 </div>
             </div>
         `).join('');
+
+        const intro = textOnly
+            ? 'Quick guides to the main features.'
+            : 'Hover over a tutorial to see it in action.';
 
         return `
 <div class="modal fade" id="helpModal" tabindex="-1"
@@ -98,7 +107,7 @@
                         aria-label="Close help modal"></button>
             </div>
             <div class="modal-body">
-                <p class="text-muted mb-3">Hover over a tutorial to see it in action.</p>
+                <p class="text-muted mb-3">${intro}</p>
                 <div class="row g-3">
                     ${cards}
                 </div>
@@ -194,23 +203,67 @@
     }
 
     // ------------------------------------------------------------------
+    // Asset probing (Issue #374): the tutorial GIF/PNG assets may not be
+    // deployed. Probe the preview images up front; if ALL are missing,
+    // rebuild the modal in text-only mode (titles + descriptions, no image
+    // containers). If only some are missing, the per-image onerror fallback
+    // above handles each one individually.
+    // ------------------------------------------------------------------
+
+    function probeTutorialAssets() {
+        return Promise.all(
+            TUTORIALS.map(
+                (t) =>
+                    new Promise((resolve) => {
+                        const img = new Image();
+                        img.onload = () => resolve(true);
+                        img.onerror = () => resolve(false);
+                        img.src = t.preview;
+                    })
+            )
+        );
+    }
+
+    // ------------------------------------------------------------------
     // Inject modal + help button, wire up events
     // ------------------------------------------------------------------
 
-    function init() {
-        // Inject modal into body
+    function injectModal(textOnly) {
+        const existing = document.getElementById('helpModal');
+        if (existing) existing.remove();
         const wrapper = document.createElement('div');
-        wrapper.innerHTML = buildModalHTML();
+        wrapper.innerHTML = buildModalHTML(textOnly);
         document.body.appendChild(wrapper.firstElementChild);
 
-        // Start lazy loading once modal opens (saves bandwidth until user needs it)
         const modalEl = document.getElementById('helpModal');
-        if (modalEl) {
+        if (modalEl && !textOnly) {
+            // Start lazy loading once modal opens (saves bandwidth until user needs it)
             modalEl.addEventListener('shown.bs.modal', () => {
                 observeImages();
                 attachHoverPlay();
             }, { once: true });
         }
+        return modalEl;
+    }
+
+    function init() {
+        // Inject modal into body (image mode by default)
+        injectModal(false);
+
+        // Probe tutorial assets; if none exist, switch to text-only mode.
+        // Rebuilding is safe: Bootstrap binds the trigger button lazily via
+        // data-bs-target, so a replaced #helpModal keeps working. If the
+        // modal is open right now, leave it — the per-image onerror
+        // fallback is already showing text descriptions.
+        probeTutorialAssets().then((results) => {
+            const anyAvailable = results.some(Boolean);
+            if (!anyAvailable) {
+                const openModal = document.querySelector('#helpModal.show');
+                if (!openModal) {
+                    injectModal(true);
+                }
+            }
+        });
 
         // Inject Help button into navbar if present
         const navList = document.querySelector('.navbar-nav');
