@@ -13,6 +13,7 @@ import logging
 import requests
 import json
 import os
+import re
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta, date
@@ -209,16 +210,16 @@ class TrainerRoadService:
             if not summary or not dtstart:
                 return None
 
-            if hasattr(dtstart.dt, 'date'):
+            if isinstance(dtstart.dt, datetime):
                 workout_date = dtstart.dt.date()
             else:
                 workout_date = dtstart.dt
 
-            duration_minutes = None
-            if dtend:
-                if hasattr(dtstart.dt, 'date') and hasattr(dtend.dt, 'date'):
-                    duration = dtend.dt - dtstart.dt
-                    duration_minutes = int(duration.total_seconds() / 60)
+            duration_minutes = self._extract_duration_minutes(
+                summary,
+                dtstart.dt,
+                dtend.dt if dtend else None,
+            )
 
             workout_type = self._extract_workout_type(summary, description)
             tss, intensity_factor = self._extract_metrics(description)
@@ -258,9 +259,22 @@ class TrainerRoadService:
 
         return None
 
-    def _extract_metrics(self, description: str) -> tuple[Optional[float], Optional[float]]:
-        import re
+    def _extract_duration_minutes(self, summary: str, start_value: Any, end_value: Any = None) -> Optional[int]:
+        if isinstance(start_value, datetime) and isinstance(end_value, datetime):
+            duration = end_value - start_value
+            duration_minutes = int(duration.total_seconds() / 60)
+            if duration_minutes > 0:
+                return duration_minutes
 
+        summary_match = re.match(r'^(\d+):(\d{2})\s+-\s+', summary)
+        if summary_match:
+            hours = int(summary_match.group(1))
+            minutes = int(summary_match.group(2))
+            return (hours * 60) + minutes
+
+        return None
+
+    def _extract_metrics(self, description: str) -> tuple[Optional[float], Optional[float]]:
         tss = None
         intensity_factor = None
 
