@@ -116,7 +116,8 @@ def set_security_headers(response):
         "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
         "img-src 'self' data: https: blob:; "
         "font-src 'self' https://cdn.jsdelivr.net; "
-        "connect-src 'self'; "
+        "connect-src 'self' https://cdn.jsdelivr.net https://unpkg.com; "
+        "frame-src 'self' blob:; "
         "frame-ancestors 'none'"
     )
     
