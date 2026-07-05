@@ -282,6 +282,38 @@ This release was superseded by v0.12.0 which focuses on production readiness wit
 
 ---
 
+## Release v0.17.0 - Design Review: Information Density, Discoverability & Card Placement (IN PLANNING)
+
+**Target Date:** July 2026
+**Status:** 📝 IN PLANNING — staff engineering review complete, implementation not started
+
+### Planning Documents
+- **DESIGN_REVIEW_EPIC.md** - Epic plan with prioritized child issues, dependency graph, and PR/subagent execution plan
+- **DESIGN_REVIEW_FINDINGS.md** - Consolidated findings from three parallel design reviews
+- **findings-information-density.md**, **findings-discoverability.md**, **findings-card-placement.md** - Raw per-reviewer findings
+
+### GitHub Issues
+- [#352](https://github.com/e2kd7n/ride-optimizer/issues/352) - Epic: Design Review (P1-high)
+- [#357](https://github.com/e2kd7n/ride-optimizer/issues/357)–[#376](https://github.com/e2kd7n/ride-optimizer/issues/376) - 20 child implementation issues (all in v0.17.0 milestone)
+
+### Key Findings
+- Three parallel reviewers audited all 7 pages against a live instance (2,059 activities, 221 route groups) for information density, discoverability, and card/object placement
+- Systemic pattern: context cards placed above action/decision cards on Weather, Dashboard, Reports, and Explore
+- Two P1 blockers prevent first-time task completion: raw JSON dump in Route Detail, no concept explainer on Explore
+- Mobile bottom nav caps at 4 items across all pages, leaving Reports and Explore unreachable without the hamburger menu
+
+### Staff Engineering Review (2026-07-06)
+Verified the underlying findings directly against the running code — confirmed, not hallucinated.
+Re-scoped #362 (bottom nav) from "add 2 items to a 4-item bar" to a 6-item icon-only bar, since the
+original scoping would have shipped an unreadable nav on small phones. Resolved #374 (help modal
+tutorial assets) and the stale `v0.14.0` version strings directly rather than leaving them in the
+implementation queue — both were mechanical, zero-design-risk fixes. Replaced the prior sequential
+"sub-task" implementation plan with a page-scoped PR plan (7 PRs instead of 20 issues run one at a time),
+five of which have no file overlap and can be implemented by parallel subagents in isolated worktrees.
+See [`DESIGN_REVIEW_EPIC.md`](v0.17.0/DESIGN_REVIEW_EPIC.md) for the full execution plan.
+
+---
+
 ## Document Index by Type
 
 ### Architecture & Design

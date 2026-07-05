@@ -67,8 +67,14 @@
                             alt="${t.alt}"
                             loading="lazy"
                             decoding="async"
+                            onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'; var badge=this.parentElement.querySelector('.tutorial-hover-badge'); if (badge) badge.style.display='none';"
                         />
-                        <span class="position-absolute bottom-0 end-0 m-2 badge bg-secondary"
+                        <div class="tutorial-img-fallback position-absolute top-0 start-0 w-100 h-100 align-items-center justify-content-center flex-column text-muted"
+                             style="display:none;" aria-hidden="true">
+                            <i class="bi bi-image" style="font-size:2rem;"></i>
+                            <span class="small mt-1">Preview coming soon</span>
+                        </div>
+                        <span class="tutorial-hover-badge position-absolute bottom-0 end-0 m-2 badge bg-secondary"
                               aria-hidden="true">Hover to play</span>
                     </div>
                     <div class="card-body pb-2">

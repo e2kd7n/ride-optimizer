@@ -2,7 +2,7 @@
 
 **Version:** v0.17.0
 **Created:** 2026-07-04
-**Updated:** 2026-07-05 (staff engineering reprioritization + implementation plan)
+**Updated:** 2026-07-06 (final staff engineering review: re-scoped #362, resolved #374, shipped version-string fix, replaced implementation plan with PR/subagent execution plan)
 **Status:** Planned for implementation
 **Epic Issue:** [#352](https://github.com/e2kd7n/ride-optimizer/issues/352)
 **Consolidated Findings:** [DESIGN_REVIEW_FINDINGS.md](./DESIGN_REVIEW_FINDINGS.md)
@@ -65,7 +65,7 @@ sequencing concern: two primary sections remain effectively second-class on mobi
 
 | # | Issue | Page | Why first / why P1-for-sequencing | Unblocks |
 |---|-------|------|-----------------------------------|----------|
-| 1 | [#362](https://github.com/e2kd7n/ride-optimizer/issues/362) | All pages | Reports and Explore are unreachable from the primary mobile nav; execute first so mobile validation is possible across the full app | Mobile testing of every other fix |
+| 1 | [#362](https://github.com/e2kd7n/ride-optimizer/issues/362) | All pages | Reports and Explore are unreachable from the primary mobile nav; execute first so mobile validation is possible across the full app. **Re-scoped 2026-07-06: ship as a 6-item icon-only bar, not "add 2 items to the existing 4."** | Mobile testing of every other fix |
 | 2 | [#358](https://github.com/e2kd7n/ride-optimizer/issues/358) | Dashboard | Mobile stacking puts Route Status above the commute decision and inverts desktop emphasis on the highest-frequency page | #363, #370 |
 | 3 | [#357](https://github.com/e2kd7n/ride-optimizer/issues/357) | Weather | 7-day forecast above same-day commute windows inverts time urgency on a core commute workflow page | Recommended before #373 |
 | 4 | [#359](https://github.com/e2kd7n/ride-optimizer/issues/359) | Route Detail | Raw `JSON.stringify` rendered in the primary metrics card breaks comprehension of current weather context | #371 |
@@ -90,13 +90,13 @@ Ordered by **hard dependencies first, then page-criticality and breadth**.
 | 16 | [#371](https://github.com/e2kd7n/ride-optimizer/issues/371) | Route Detail | B | #359 (formatted weather context should replace the JSON dump first) |
 | 17 | [#373](https://github.com/e2kd7n/ride-optimizer/issues/373) | Weather | E | Recommended after #357 (visual order first), but can proceed independently if needed |
 | 18 | [#375](https://github.com/e2kd7n/ride-optimizer/issues/375) | Settings/Reports/Explore | E | Can run in parallel with #368; only coordinate on the Settings temperature control markup |
-| 19 | [#374](https://github.com/e2kd7n/ride-optimizer/issues/374) | All pages | C | Tutorial assets available, or graceful-degradation fallback defined |
+| 19 | [#374](https://github.com/e2kd7n/ride-optimizer/issues/374) | All pages | C | **Resolved 2026-07-06** — graceful-degradation `onerror` fallback shipped directly; no longer waiting on tutorial asset creation |
 
 ### 🟡 P3 — Can defer if needed (polish)
 
 | # | Issue | Page(s) | Theme | Notes |
 |---|-------|---------|-------|-------|
-| 20 | [#376](https://github.com/e2kd7n/ride-optimizer/issues/376) | All pages | E | Bundle: stale `v0.14.0` version strings, missing H1s, a11y minor, touch target tweaks |
+| 20 | [#376](https://github.com/e2kd7n/ride-optimizer/issues/376) | All pages | E | Bundle: missing H1s, a11y minor, touch target tweaks. Stale `v0.14.0` version strings **fixed directly 2026-07-06**, pulled out of this bundle. |
 
 ---
 
@@ -125,63 +125,89 @@ Help assets (#374) ──► either ship tutorial media or implement graceful de
 
 ---
 
-## Staff Engineering Implementation Plan
+## Staff Engineering Review — Final Call (2026-07-06)
 
-### Top-Level Overview
+The 2026-07-05 "Staff Engineering Implementation Plan" below this heading has been **superseded**. It
+restated the existing dependency graph as four sequential "sub-tasks" without changing any technical
+decision — for a single-developer app this adds process overhead (fake per-paragraph status checkboxes,
+a strict waterfall) without adding judgment. I re-verified the underlying findings directly against the
+live code (not just the reviewer docs) before making this call. They check out: the `JSON.stringify`
+dump, the stale `v0.14.0` strings in all 8 templates, the missing bottom-nav entries, and the missing
+`onerror` fallback on tutorial images are all real, not hallucinated. The raw findings docs
+(`findings-*.md`) remain the source of truth for *what's* wrong. This section replaces the *how and in
+what order* it gets fixed.
 
-This implementation plan keeps the design review recommendations intact while adjusting sequencing in a
-few places so execution is less likely to thrash layout work across pages. The plan preserves the
-review team's intent, treats their findings as the source of truth, and only changes priority or
-dependency handling where implementation order materially affects validation or creates unnecessary
-rework. The approach is to restore mobile reach first, then complete page-local fixes in dependency
-chains, while allowing independent consistency work to proceed in parallel.
+### Decisions made this pass
 
-### Sub-Task 1 — Re-baseline epic sequencing and issue metadata
-- **Intent** — Align the epic's execution order with the actual dependency graph so implementers do not start lower-value work before navigation and page-structure blockers are resolved.
-- **Expected Outcomes** — Epic documentation reflects the approved sequencing; any GitHub issue comments or labels needed for sequencing clarity are prepared; the team has one authoritative order of operations.
-- **Todo List**
-  1. Treat [#362](https://github.com/e2kd7n/ride-optimizer/issues/362) as the first implementation item for release sequencing, while preserving the original review severity in supporting docs.
-  2. Record that [#375](https://github.com/e2kd7n/ride-optimizer/issues/375) may proceed in parallel with [#368](https://github.com/e2kd7n/ride-optimizer/issues/368), with coordination limited to the Settings temperature control markup.
-  3. Record that [#373](https://github.com/e2kd7n/ride-optimizer/issues/373) is recommended after [#357](https://github.com/e2kd7n/ride-optimizer/issues/357) for cleaner review, but is not a hard blocker.
-  4. Record that [#374](https://github.com/e2kd7n/ride-optimizer/issues/374) should not start until tutorial asset availability is confirmed or the graceful-degradation fallback is defined.
-- **Relevant Context** — [`plans/v0.17.0/DESIGN_REVIEW_EPIC.md`](plans/v0.17.0/DESIGN_REVIEW_EPIC.md), [`plans/v0.17.0/DESIGN_REVIEW_FINDINGS.md`](plans/v0.17.0/DESIGN_REVIEW_FINDINGS.md)
-- **Status** — [ ] pending
+1. **#362 (mobile nav) is re-scoped.** "Add Reports and Explore to the existing 4-item bar" was never
+   going to work — that's 6 items in a bottom nav, which is unreadable with text labels below ~360px
+   viewports. Decision: **6 items, icon-only** (drop text labels, keep all six primary sections —
+   Home, Routes, Reports, Explore, Weather, Settings — reachable in one tap). The implementer should
+   verify legibility/tap-target size (≥44px) at a 360px viewport before calling this done; if it's
+   still too cramped, fall back to dropping Settings from the bar (it's already reachable from the top
+   navbar on every page) rather than shipping a nav that doesn't work on small phones.
+2. **Version string and "What's New" toast — fixed directly in this session**, not left for the
+   implementation phase. This was mechanical (global string replace across 8 templates) with one
+   content judgment call: the toast's bullet list was still advertising `v0.14.0`-era features
+   ("Hourly forecast", "Saved plans") under a bumped title, which would have made the mismatch worse,
+   not better. Replaced the bullets with features that actually shipped since then, per `git log`
+   (tile-coverage exploration, road-following routes with GPX export, location search, Garmin/
+   TrainerRoad integration). No epic tracking needed for this — it's done.
+3. **#374 (help modal tutorial assets) — resolved as "graceful degradation," fixed directly in this
+   session.** `static/img/tutorials/` doesn't exist at all, so every "Help" click was showing 4 broken
+   images with no fallback. Added an `onerror` handler that swaps to a "Preview coming soon" placeholder
+   and hides the now-meaningless "Hover to play" badge. This unblocks the epic without waiting on
+   someone to record four tutorial GIFs — if/when those assets show up, they'll just work; if they
+   never do, the modal still reads cleanly. No further tracking needed for this issue.
+4. **Real dependencies vs. review-order preferences.** The original dependency graph treated "should be
+   reviewed in this order for a cleaner diff" the same as "will break if done out of order." Only the
+   latter are real blockers: things that touch the *same file*. #368/#369/#366 (Settings + Reports admin
+   controls) and #360/#361/#367 (Explore) and #364/#365/#372 (Routes Library) share files and should
+   each land as **one PR per page**, not three sequenced issues per page. Cross-page items that touch
+   *every* template (nav, and now-resolved version/help-asset fixes) must land before or alongside
+   everything else, since every other change will otherwise conflict with them on the same lines.
+   Everything else — Dashboard vs. Weather vs. Route Detail vs. Routes Library vs. Explore — touches
+   disjoint files and has **no real ordering constraint**. Treating it as a waterfall (Sub-Task 2 → 3 → 4)
+   was leaving parallelism on the table for no benefit.
 
-### Sub-Task 2 — Ship the release-gating and P1 page blockers
-- **Intent** — Remove the issues that most directly block mobile validation and first-time task completion on core workflows.
-- **Expected Outcomes** — Mobile users can reach every primary section; dashboard and weather follow urgency order; Route Detail no longer shows raw JSON; Explore has enough context to complete the primary workflow.
-- **Todo List**
-  1. Implement [#362](https://github.com/e2kd7n/ride-optimizer/issues/362) first across shared navigation templates and page markup.
-  2. Implement [#358](https://github.com/e2kd7n/ride-optimizer/issues/358) and [#357](https://github.com/e2kd7n/ride-optimizer/issues/357) next, in parallel if resourcing allows.
-  3. Implement [#359](https://github.com/e2kd7n/ride-optimizer/issues/359) to restore a usable Route Detail summary card.
-  4. Implement [#360](https://github.com/e2kd7n/ride-optimizer/issues/360) before [#361](https://github.com/e2kd7n/ride-optimizer/issues/361) so the Explore workflow uses defined terms before adding sequencing guidance.
-  5. Re-run mobile checks on all affected pages after this phase to confirm the remaining P2 work is now testable.
-- **Relevant Context** — `static/index.html`, `static/weather.html`, `static/route-detail.html`, `static/explore.html`, shared navigation patterns in `static/`
-- **Status** — [ ] pending
+### Execution plan — by PR, not by issue
 
-### Sub-Task 3 — Resolve page-local P2 dependency chains
-- **Intent** — Complete the medium-priority findings in stable page-level bundles so each page is reviewed once after its structural changes settle.
-- **Expected Outcomes** — Reports, Routes Library, Explore, Dashboard, and Route Detail each end in a coherent layout without follow-on churn from dependent fixes landing later.
-- **Todo List**
-  1. Complete the Reports / Settings chain in order: [#368](https://github.com/e2kd7n/ride-optimizer/issues/368) → [#369](https://github.com/e2kd7n/ride-optimizer/issues/369) → [#366](https://github.com/e2kd7n/ride-optimizer/issues/366).
-  2. Complete the Dashboard follow-ons after [#358](https://github.com/e2kd7n/ride-optimizer/issues/358): [#363](https://github.com/e2kd7n/ride-optimizer/issues/363) and [#370](https://github.com/e2kd7n/ride-optimizer/issues/370).
-  3. Complete the Routes Library chain in order: [#364](https://github.com/e2kd7n/ride-optimizer/issues/364) → [#365](https://github.com/e2kd7n/ride-optimizer/issues/365) → [#372](https://github.com/e2kd7n/ride-optimizer/issues/372).
-  4. Complete the Explore follow-on [#367](https://github.com/e2kd7n/ride-optimizer/issues/367) after [#360](https://github.com/e2kd7n/ride-optimizer/issues/360) and [#361](https://github.com/e2kd7n/ride-optimizer/issues/361).
-  5. Complete [#371](https://github.com/e2kd7n/ride-optimizer/issues/371) after [#359](https://github.com/e2kd7n/ride-optimizer/issues/359).
-- **Relevant Context** — `static/settings.html`, `static/reports.html`, `static/routes.html`, `static/explore.html`, `static/index.html`, `static/route-detail.html`
-- **Status** — [ ] pending
+Twenty GitHub issues is the right granularity for *tracking findings*; it's the wrong granularity for
+*implementation* on a single small codebase, where issue-per-finding would mean 20 PRs almost all
+touching the same handful of files. Collapse to page-scoped PRs:
 
-### Sub-Task 4 — Apply cross-page consistency and asset handling fixes
-- **Intent** — Finish the epic with lower-risk consistency improvements and any asset-dependent onboarding work once page layouts are stable.
-- **Expected Outcomes** — Unit preferences are applied consistently, weather supporting labels match the rendered data, help experiences degrade safely when assets are absent, and the remaining polish items are isolated to the end of the release.
-- **Todo List**
-  1. Implement [#375](https://github.com/e2kd7n/ride-optimizer/issues/375) in parallel with late P2 work, coordinating with Settings changes only where needed.
-  2. Implement [#373](https://github.com/e2kd7n/ride-optimizer/issues/373) after the Weather page structure from [#357](https://github.com/e2kd7n/ride-optimizer/issues/357) is settled, unless staffing makes parallel work more efficient.
-  3. Confirm tutorial asset availability before starting [#374](https://github.com/e2kd7n/ride-optimizer/issues/374); if assets are not ready, implement graceful degradation rather than blocking the release.
-  4. Defer [#376](https://github.com/e2kd7n/ride-optimizer/issues/376) until functional and structural work is complete so polish does not mask regressions.
-  5. Close the epic only after child issues are resolved and the final comment summarizes any deliberate deferrals.
-- **Relevant Context** — `static/weather.html`, `static/settings.html`, `static/reports.html`, `static/explore.html`, remaining shared UI patterns across `static/`
-- **Status** — [ ] pending
+| PR | Issues | Files | Can start | Notes |
+|----|--------|-------|-----------|-------|
+| **A — Nav rework** | #362 | all 8 `static/*.html` (bottom nav block) | Now | Must merge before B–G branch, since it touches shared markup in every file. Do this first, alone. |
+| **B — Dashboard** | #358, #363, #370 | `static/index.html` | After A merges | Independent of C–G. |
+| **C — Weather** | #357, #373 | `static/weather.html` | After A merges | Independent of B, D–G. |
+| **D — Route Detail** | #359, #371 | `static/route-detail.html` | After A merges | Independent of B, C, E–G. |
+| **E — Explore** | #360, #361, #367 | `static/explore.html`, `static/js/explore.js` | After A merges | Real intra-PR order: #360 (explainer) → #361 (workflow steps) → #367 (merge controls), same file, same PR. |
+| **F — Routes Library** | #364, #365, #372 | `static/routes.html`, `static/js/routes.js` | After A merges | Real intra-PR order: #364 → #365 → #372, same file, same PR. |
+| **G — Settings + Reports admin** | #368, #369, #366 | `static/settings.html`, `static/reports.html` | After A merges | Real cross-file dependency: #368 (Settings restructure) before #369 (buttons move *into* Settings) before #366 (Reports reorder). One PR, sequenced commits. |
+| **H — Unit system pass** | #375 | `static/settings.html`, `static/reports.html`, `static/explore.html` | After G merges | Touches the same Settings/Reports markup G just changed — sequencing here is real, not preference. |
+| **I — P3 cleanup** | #376 (minus version strings, already fixed) | various | Anytime, low risk | Missing H1s, a11y, touch targets. |
+
+### Subagent assignment
+
+This shape — one cross-cutting PR followed by five to six page-disjoint PRs — is close to the ideal
+case for parallel subagents in isolated git worktrees:
+
+1. **PR A runs solo, first**, one agent, no parallelism (it's the one thing every other PR would conflict
+   with).
+2. **Once A merges, spawn agents B, C, D, E, F in parallel**, each in its own worktree, each scoped to
+   exactly the files/issues in its row above. Give each agent the relevant `findings-*.md` excerpts
+   (not the whole 350-line doc) plus the specific issue numbers — they don't need the other pages'
+   context.
+3. **G runs as its own agent**, sequentially internally (368→369→366) since it's a real dependency chain
+   within one PR.
+4. **H runs after G merges** (same agent or a fresh one — either is fine since G's outcome is now just
+   "current code," not context the agent needs to have generated itself).
+5. **I can run whenever**, lowest priority, single agent, no coordination needed.
+
+This turns a 20-issue waterfall into ~7 PRs, of which 5 run in true parallel — a meaningfully faster and
+less error-prone path than the previous sub-task sequencing, without touching any of the underlying
+design verdicts from the three reviewers.
 
 ## Output Artifacts
 
@@ -189,7 +215,9 @@ chains, while allowing independent consistency work to proceed in parallel.
 - [x] **Reviewer findings** → `plans/v0.17.0/findings-information-density.md`, `findings-discoverability.md`, `findings-card-placement.md`
 - [x] **Design guidelines updated** → [`plans/v0.6.0/DESIGN_PRINCIPLES.md`](../v0.6.0/DESIGN_PRINCIPLES.md) bumped to v2.1
 - [x] **20 implementation issues created** → #357–#376 (all in v0.17.0 milestone)
-- [ ] All child implementation issues resolved and closed
+- [x] **#374 resolved directly** (help modal now degrades gracefully via `onerror` fallback — no longer blocked on tutorial asset creation)
+- [x] **Stale `v0.14.0` version strings and "What's New" toast fixed directly** across all 8 templates (part of #376, pulled forward — see `static/index.html`, footers app-wide)
+- [ ] Remaining 18 child implementation issues resolved via PR plan (A–I) above and closed
 - [ ] Epic #352 closed with summary comment
 
 ---
