@@ -70,7 +70,7 @@ All v0.12.0 work is tracked via GitHub issues linked to the v0.12.0 milestone:
 
 ## Related Documentation
 
-- [RELEASE_ROADMAP.md](../../RELEASE_ROADMAP.md) - Overall product roadmap
+- [RELEASE_ROADMAP.md](../../docs/archive/RELEASE_ROADMAP.md) - Overall product roadmap *(archived)*
 - [ISSUE_PRIORITIES.md](../../ISSUE_PRIORITIES.md) - Current issue priorities
 - [plans/README.md](../README.md) - All version plans index
 

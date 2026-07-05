@@ -277,7 +277,7 @@ plans/
 
 **Rules:**
 - **NEVER** store plans in `docs/plans/` - this location is deprecated
-- **ALWAYS** determine the target version from RELEASE_ROADMAP.md before creating plans
+- **ALWAYS** determine the target version from GitHub milestones (`gh api repos/:owner/:repo/milestones`) before creating plans
 - **ALWAYS** place plans in the appropriate `/plans/vX.X.X/` subdirectory
 - **ALWAYS** update `/plans/README.md` when adding new plans
 - Version-agnostic or cross-version plans go in the version where work begins
