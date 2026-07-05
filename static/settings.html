@@ -805,10 +805,11 @@
 
             clearUnsavedChanges();
 
-            if (typeof showToast === 'function') {
-                showToast('Settings saved successfully!', 'success');
-            } else {
-                alert('Settings saved successfully!');
+            const saveBtn = document.getElementById('save-settings');
+            if (saveBtn) {
+                const original = saveBtn.innerHTML;
+                saveBtn.innerHTML = '<i class="bi bi-check-circle" aria-hidden="true"></i> Save Complete';
+                setTimeout(() => { saveBtn.innerHTML = original; }, 2000);
             }
         }
         
