@@ -56,12 +56,15 @@ route_analysis:
 
 route_naming:
   sampling_density: 10  # Number of points to sample along route for naming
+  commute_sampling_density: 20  # Higher density for commute routes (one-time geocoding cost)
   min_segment_length_pct: 10  # Minimum % to be considered significant segment
   show_full_path: true  # Show start → middle → end format
   max_segments_in_name: 3  # Maximum segments to include in name
   enable_segment_naming: true  # Feature flag to enable/disable segment-based naming
   geocoder_timeout: 10  # Timeout in seconds for geocoding requests
   geocoder_user_agent: "strava_commute_analyzer"  # User agent for geocoding service
+  terrain_rolling_threshold: 15  # m/km above which a route is tagged (rolling)
+  terrain_hilly_threshold: 30   # m/km above which a route is tagged (hilly)
   equivalent_streets:  # Parallel streets that should be treated as the same route
     "North Simonds Drive": "Lakefront Trail"
     "South Simonds Drive": "Lakefront Trail"

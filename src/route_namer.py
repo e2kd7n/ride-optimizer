@@ -36,6 +36,10 @@ class RouteNamer:
         self.enable_segment_naming = self.config.get('route_naming.enable_segment_naming', True) if config else True
         self.show_full_path = self.config.get('route_naming.show_full_path', True) if config else True
         self.max_segments_in_name = self.config.get('route_naming.max_segments_in_name', 3) if config else 3
+        # Terrain thresholds (m/km)
+        self.terrain_rolling_threshold = self.config.get('route_naming.terrain_rolling_threshold', 15) if config else 15
+        self.terrain_hilly_threshold = self.config.get('route_naming.terrain_hilly_threshold', 30) if config else 30
+        self.commute_sampling_density = self.config.get('route_naming.commute_sampling_density', 20) if config else 20
         
         # Load equivalent streets from config (parallel routes that should be treated as the same)
         default_equivalent_streets = {
@@ -150,7 +154,9 @@ class RouteNamer:
             logger.error(f"Failed to record rate limit: {e}")
     
     def name_route(self, coordinates: List[Tuple[float, float]],
-                   route_id: str, direction: str) -> str:
+                   route_id: str, direction: str,
+                   elevation_gain: Optional[float] = None,
+                   distance: Optional[float] = None) -> str:
         """
         Generate a descriptive name for a route using multi-strategy approach:
         1. Major streets (most significant roads along route)
@@ -162,6 +168,8 @@ class RouteNamer:
             coordinates: List of (lat, lon) tuples
             route_id: Original route ID
             direction: Route direction
+            elevation_gain: Optional elevation gain in metres (for terrain tag)
+            distance: Optional route distance in metres (for terrain tag)
             
         Returns:
             Human-readable route name that clearly indicates where route goes
@@ -179,9 +187,20 @@ class RouteNamer:
             route_type = self._detect_route_type(coordinates)
 
             # Multi-strategy naming approach
-            route_info = self._analyze_route_geography(coordinates)
+            route_info = self._analyze_route_geography(coordinates, direction=direction)
             route_info['route_type'] = route_type
             route_info['coordinates'] = coordinates
+
+            # Compute and stash elevation gain per km for terrain tag
+            if elevation_gain is not None and distance is not None and distance > 0:
+                route_info['elevation_gain_per_km'] = elevation_gain / (distance / 1000.0)
+            else:
+                route_info['elevation_gain_per_km'] = None
+
+            # Signal to _generate_descriptive_name that direction suffix should be added.
+            # This is threaded via route_info (not a positional param) so direct callers
+            # of _generate_descriptive_name in tests remain unaffected.
+            route_info['add_direction_suffix'] = direction in ('home_to_work', 'work_to_home')
 
             # Generate name based on available information
             name = self._generate_descriptive_name(route_info, route_id, direction)
@@ -197,7 +216,8 @@ class RouteNamer:
             direction_label = "to Work" if direction == "home_to_work" else "to Home"
             return f"Route {route_id.split('_')[-1]} {direction_label}"
     
-    def _analyze_route_geography(self, coordinates: List[Tuple[float, float]]) -> Dict:
+    def _analyze_route_geography(self, coordinates: List[Tuple[float, float]],
+                                  direction: Optional[str] = None) -> Dict:
         """
         Analyze route geography including segment identification.
         
@@ -207,23 +227,28 @@ class RouteNamer:
         - neighborhoods: List of neighborhoods/districts traversed
         - landmarks: List of notable landmarks
         - geographic_features: Parks, rivers, etc.
+        - total_sample_points: Count of sample points (for turnaround detection)
+        - park_names: List of park/leisure/natural names found along route
+        - start_suburb: Suburb at the start point (for ambiguity anchoring)
         """
         if not coordinates:
             return {}
         
         # Identify route segments (NEW)
-        segments = self._identify_route_segments(coordinates)
+        segments = self._identify_route_segments(coordinates, direction=direction)
         
         # Sample strategic points along route
-        sample_points = self._get_strategic_sample_points(coordinates)
+        sample_points = self._get_strategic_sample_points(coordinates, direction=direction)
         
         # Collect geographic information
         streets = []
         neighborhoods = set()
         landmarks = []
         features = []
+        park_names = []
+        start_suburb = None
         
-        for point in sample_points:
+        for i, point in enumerate(sample_points):
             location_info = self._get_location_details(point)
             
             if location_info:
@@ -242,22 +267,41 @@ class RouteNamer:
                 # Collect geographic features
                 if location_info.get('feature'):
                     features.append(location_info['feature'])
+
+                # Collect park/leisure/natural names for loop naming preference
+                park = location_info.get('park_name')
+                if park:
+                    park_names.append(park)
+
+                # Capture suburb at start point for ambiguity anchoring
+                if i == 0 and location_info.get('suburb'):
+                    start_suburb = location_info['suburb']
         
         return {
-            'segments': segments,  # NEW
+            'segments': segments,
             'major_streets': self._filter_significant_streets(streets),
             'neighborhoods': list(neighborhoods),
             'landmarks': landmarks[:2],  # Limit to 2 most prominent
-            'geographic_features': features[:1]  # Limit to 1 most prominent
+            'geographic_features': features[:1],  # Limit to 1 most prominent
+            'total_sample_points': len(sample_points),
+            'park_names': park_names,
+            'start_suburb': start_suburb,
         }
     
-    def _get_strategic_sample_points(self, coordinates: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
+    def _get_strategic_sample_points(self, coordinates: List[Tuple[float, float]],
+                                      direction: Optional[str] = None) -> List[Tuple[float, float]]:
         """
         Sample points to capture route structure, focusing on direction changes (turns).
         Returns points based on sampling_density config (default ~10 points).
+        Commute routes use a higher density and always include the geographic midpoint.
         """
         if len(coordinates) < 10:
             return coordinates
+        
+        # Use higher density for commute routes
+        target_points = (self.commute_sampling_density
+                         if direction in ('home_to_work', 'work_to_home')
+                         else self.sampling_density)
         
         # Calculate bearing changes to find turns
         turn_points = self._find_significant_turns(coordinates)
@@ -270,9 +314,14 @@ class RouteNamer:
         
         # Add end point
         points.append(coordinates[-1])
+
+        # Always include the geographic midpoint (by cumulative distance).
+        # For out-and-back this is the actual turnaround; for loops it is the far end.
+        midpoint = self._get_cumulative_midpoint(coordinates)
+        if midpoint not in points:
+            points.append(midpoint)
         
         # If we don't have enough points, add some evenly spaced ones
-        target_points = self.sampling_density
         if len(points) < target_points:
             # Fill in with evenly spaced points
             step = len(coordinates) // (target_points - len(points) + 1)
@@ -283,10 +332,34 @@ class RouteNamer:
                     break
         
         # Sort by original order in coordinates
-        points_with_idx = [(coordinates.index(p), p) for p in points if p in coordinates]
+        coord_set = set(coordinates)
+        points_with_idx = []
+        for p in points:
+            if p in coord_set:
+                try:
+                    points_with_idx.append((coordinates.index(p), p))
+                except ValueError:
+                    pass
         points_with_idx.sort(key=lambda x: x[0])
         
         return [p for _, p in points_with_idx[:target_points]]
+
+    def _get_cumulative_midpoint(self, coordinates: List[Tuple[float, float]]) -> Tuple[float, float]:
+        """Return the coordinate at the cumulative-distance midpoint of the route."""
+        if not coordinates:
+            return coordinates[0] if coordinates else (0.0, 0.0)
+        # Compute cumulative distances
+        cum = [0.0]
+        for i in range(1, len(coordinates)):
+            cum.append(cum[-1] + self._calculate_distance_km(coordinates[i - 1], coordinates[i]))
+        total = cum[-1]
+        if total == 0:
+            return coordinates[len(coordinates) // 2]
+        half = total / 2.0
+        for i, d in enumerate(cum):
+            if d >= half:
+                return coordinates[i]
+        return coordinates[-1]
     
     def _find_significant_turns(self, coordinates: List[Tuple[float, float]],
                                 min_angle: float = 30.0) -> List[Tuple[float, float]]:
@@ -449,7 +522,8 @@ class RouteNamer:
         # Check if this street has an equivalent
         return self.equivalent_streets.get(street, street)
     
-    def _identify_route_segments(self, coordinates: List[Tuple[float, float]]) -> List[Dict]:
+    def _identify_route_segments(self, coordinates: List[Tuple[float, float]],
+                                  direction: Optional[str] = None) -> List[Dict]:
         """
         Identify distinct route segments based on street changes.
         
@@ -458,8 +532,9 @@ class RouteNamer:
         - length_pct: Percentage of route on this street
         - position: 'start', 'middle', or 'end'
         - sample_points: Number of sample points on this street
+        - highway_type: Raw OSM highway type (may be None for old cache entries)
         """
-        sample_points = self._get_strategic_sample_points(coordinates)
+        sample_points = self._get_strategic_sample_points(coordinates, direction=direction)
         
         segments = []
         current_street = None
@@ -470,6 +545,7 @@ class RouteNamer:
             raw_street = location_info.get('street') if location_info else None
             # Normalize street name to handle equivalents (e.g., Simonds Drive → Lakefront Trail)
             street = self._normalize_street_name(raw_street)
+            highway_type = location_info.get('highway_type') if location_info else None
             
             if street != current_street:
                 # Street changed - start new segment
@@ -480,7 +556,8 @@ class RouteNamer:
                 current_segment = {
                     'street': street,
                     'start_idx': i,
-                    'sample_points': 1
+                    'sample_points': 1,
+                    'highway_type': highway_type,
                 }
             else:
                 # Same street - extend current segment
@@ -513,7 +590,8 @@ class RouteNamer:
             point: (lat, lon) tuple
             retry_count: Current retry attempt (for exponential backoff)
         
-        Returns dict with street, neighborhood, landmark, feature, and is_major flag.
+        Returns dict with street, neighborhood, landmark, feature, highway_type,
+        park_name, suburb, and is_major flag.
         """
         # Check cache first
         cache_key = f"details_{point[0]:.4f},{point[1]:.4f}"
@@ -541,6 +619,10 @@ class RouteNamer:
                      address.get('cycleway') or
                      address.get('path'))
             
+            # Persist the raw OSM highway type so road-type filters can use it.
+            # Old cache entries missing this key should default to None (don't filter).
+            highway_type = address.get('highway')
+
             # Determine if this is a major street
             is_major = self._is_major_street(address)
             
@@ -550,11 +632,19 @@ class RouteNamer:
                           address.get('quarter') or
                           address.get('district') or
                           address.get('city_district'))
+
+            # Prefer suburb over neighbourhood for consistent Nominatim coverage
+            suburb = address.get('suburb') or address.get('neighbourhood')
             
             # Extract landmarks
             landmark = (address.get('amenity') or
                        address.get('tourism') or
                        address.get('historic'))
+
+            # Park / leisure / natural name for loop naming preference
+            park_name = (address.get('leisure') or
+                        address.get('natural') or
+                        address.get('tourism'))
             
             # Extract geographic features
             feature = (address.get('natural') or
@@ -566,8 +656,11 @@ class RouteNamer:
                 'street': street,
                 'is_major': is_major,
                 'neighborhood': neighborhood,
+                'suburb': suburb,
                 'landmark': landmark,
-                'feature': feature
+                'feature': feature,
+                'highway_type': highway_type,
+                'park_name': park_name,
             }
             
             # Cache and save
@@ -641,6 +734,17 @@ class RouteNamer:
         top_streets = [street for street, count in street_counts.most_common(3)]
         
         return top_streets
+
+    # OSM highway types that add noise rather than orientation value
+    _NOISY_HIGHWAY_TYPES: frozenset = frozenset({'service', 'track', 'path', 'unclassified'})
+
+    def _is_noisy_segment(self, segment: Dict) -> bool:
+        """Return True if the segment's highway_type marks it as low-utility noise."""
+        ht = segment.get('highway_type')
+        # Old cache entries won't have the key — treat as "unknown, don't filter"
+        if ht is None:
+            return False
+        return ht in self._NOISY_HIGHWAY_TYPES
     
     def _is_access_path(self, street_name: str) -> bool:
         """
@@ -683,6 +787,24 @@ class RouteNamer:
         
         return False
     
+    def _terrain_tag(self, elevation_gain_per_km: Optional[float]) -> Optional[str]:
+        """Return 'rolling', 'hilly', or None based on elevation gain per km."""
+        if elevation_gain_per_km is None:
+            return None
+        if elevation_gain_per_km > self.terrain_hilly_threshold:
+            return 'hilly'
+        if elevation_gain_per_km > self.terrain_rolling_threshold:
+            return 'rolling'
+        return None
+
+    def _direction_suffix(self, direction: str) -> str:
+        """Return the direction arrow suffix for commute routes."""
+        if direction == 'home_to_work':
+            return ' → Work'
+        if direction == 'work_to_home':
+            return ' → Home'
+        return ''
+
     def _generate_descriptive_name(self, route_info: Dict, route_id: str, direction: str) -> str:
         """
         Generate descriptive name from route segments using Start -> Main -> End format.
@@ -695,12 +817,24 @@ class RouteNamer:
         - Single segment: "Via Main"
         - Fallback: legacy naming strategies
 
+        Appends terrain tag (rolling/hilly) and commute direction suffix when applicable.
         Edge cases:
         - If main street equals start or end, it is omitted to avoid repetition
-        - Short/unnamed/access-path segments are filtered out
+        - Short/unnamed/access-path/noisy highway-type segments are filtered out
         """
         segments = route_info.get('segments', [])
         route_type = route_info.get('route_type', 'point-to-point')
+        total_sample_points = route_info.get('total_sample_points', len(segments))
+        park_names = route_info.get('park_names', [])
+        start_suburb = route_info.get('start_suburb')
+        elevation_gain_per_km = route_info.get('elevation_gain_per_km')
+
+        terrain = self._terrain_tag(elevation_gain_per_km)
+        # Only append direction suffix when explicitly requested via route_info
+        # (set by name_route() for commute routes). Direct callers of this method
+        # in tests do not set this key, so they get the old behaviour unchanged.
+        add_dir = route_info.get('add_direction_suffix', False)
+        dir_suffix = self._direction_suffix(direction) if add_dir else ''
 
         # Try segment-based naming first (if enabled)
         if self.enable_segment_naming and segments:
@@ -708,10 +842,12 @@ class RouteNamer:
             # 1. Too short (< min_segment_length_pct)
             # 2. Have no street name
             # 3. Are access paths/ramps
+            # 4. Are low-utility OSM highway types (service, track, path, unclassified)
             significant_segments = [s for s in segments
                                    if s.get('street')
                                    and s.get('length_pct', 0) >= self.min_segment_length_pct
-                                   and not self._is_access_path(s.get('street', ''))]
+                                   and not self._is_access_path(s.get('street', ''))
+                                   and not self._is_noisy_segment(s)]
 
             # Get unique streets in order, preserving the path
             unique_streets = []
@@ -723,29 +859,53 @@ class RouteNamer:
                     seen.add(street)
 
             if unique_streets:
-                # Handle loop routes (start ~= end)
+                # Handle loop routes (start ~= end) — prefer park/landmark over street
                 if route_type == 'loop':
-                    return self._format_loop_name(unique_streets)
+                    base = self._format_loop_name(unique_streets, park_names=park_names,
+                                                   start_suburb=start_suburb)
+                    terrain_part = f' ({terrain})' if terrain else ''
+                    return f'{base}{dir_suffix}{terrain_part}'
 
                 # Handle out-and-back routes
                 if route_type == 'out-and-back':
-                    return self._format_out_and_back_name(unique_streets)
+                    base = self._format_out_and_back_name(
+                        unique_streets, total_sample_points=total_sample_points)
+                    terrain_part = f' ({terrain})' if terrain else ''
+                    return f'{base}{dir_suffix}{terrain_part}'
 
                 # Point-to-point naming
-                return self._format_point_to_point_name(unique_streets, significant_segments)
+                base = self._format_point_to_point_name(unique_streets, significant_segments,
+                                                         start_suburb=start_suburb)
+                terrain_part = f' ({terrain})' if terrain else ''
+                return f'{base}{dir_suffix}{terrain_part}'
 
         # Fallback to legacy naming strategies
-        return self._generate_descriptive_name_legacy(route_info, route_id, direction)
+        base = self._generate_descriptive_name_legacy(route_info, route_id, direction)
+        # Append direction suffix and terrain if the base doesn't already carry them
+        if dir_suffix and dir_suffix not in base:
+            terrain_part = f' ({terrain})' if terrain else ''
+            return f'{base}{dir_suffix}{terrain_part}'
+        return base
 
-    def _format_loop_name(self, unique_streets: List[Dict]) -> str:
+    def _format_loop_name(self, unique_streets: List[Dict],
+                           park_names: Optional[List[str]] = None,
+                           start_suburb: Optional[str] = None) -> str:
         """
         Format name for a loop route (start near end).
 
-        Returns "Loop via Main" or "Loop via Main + Secondary" when there are
-        multiple significant streets.
+        Prefers a park/landmark/natural name when one is present along the route.
+        Falls back to "Loop via Main" or "Loop via Main + Secondary".
         """
+        # Prefer park/landmark when available — more meaningful to cyclists than a street name
+        if park_names:
+            park = park_names[0]
+            return f"Loop through {park}"
+
         if len(unique_streets) == 1:
-            return f"Loop via {unique_streets[0]['street']}"
+            name = f"Loop via {unique_streets[0]['street']}"
+            if start_suburb:
+                name += f", {start_suburb}"
+            return name
 
         # Pick the longest street as the main feature
         main = max(unique_streets, key=lambda s: s['length_pct'])
@@ -758,38 +918,56 @@ class RouteNamer:
 
         return f"Loop via {main['street']}"
 
-    def _format_out_and_back_name(self, unique_streets: List[Dict]) -> str:
+    def _format_out_and_back_name(self, unique_streets: List[Dict],
+                                   total_sample_points: int = 0) -> str:
         """
         Format name for an out-and-back route.
 
         Returns "Main to Turnaround and back" using the dominant street and
-        the street at the turnaround point (last unique street encountered
-        before the route retraces).
+        the actual far-point street (last street seen in the *first half* of the
+        route, before the retracing leg begins).
         """
         if len(unique_streets) == 1:
             return f"Via {unique_streets[0]['street']} and back"
 
-        # The turnaround point is roughly the last unique street in the first half
-        # (since the second half retraces, its streets duplicate the first half)
         main = max(unique_streets, key=lambda s: s['length_pct'])
-        turnaround = unique_streets[-1]
+
+        # Use the first-half constraint to find the real turnaround street.
+        # Only streets whose start_idx falls in the first half of the sample
+        # points are candidates (the second half is the return leg).
+        if total_sample_points > 0:
+            half = total_sample_points / 2
+            first_half = [s for s in unique_streets if s.get('start_idx', 0) < half]
+        else:
+            # No denominator available — fall back to all streets
+            first_half = unique_streets
+
+        # The turnaround is the last street encountered in the first half
+        if first_half:
+            turnaround = first_half[-1]
+        else:
+            turnaround = unique_streets[-1]
 
         if turnaround['street'] == main['street']:
-            # Turnaround is on the main street itself
-            if len(unique_streets) >= 2:
-                turnaround = unique_streets[-2] if unique_streets[-2]['street'] != main['street'] else unique_streets[0]
+            # Turnaround is on the main street itself — pick the farthest other first-half street
+            candidates = [s for s in first_half if s['street'] != main['street']]
+            if candidates:
+                turnaround = candidates[-1]
+            elif len(unique_streets) >= 2:
+                turnaround = unique_streets[1]
             else:
                 return f"Via {main['street']} and back"
 
         return f"{main['street']} to {turnaround['street']} and back"
 
     def _format_point_to_point_name(self, unique_streets: List[Dict],
-                                     significant_segments: List[Dict]) -> str:
+                                     significant_segments: List[Dict],
+                                     start_suburb: Optional[str] = None) -> str:
         """
         Format name for a point-to-point route using Start -> Main -> End.
 
         Handles deduplication: if the main street is the same as start or end,
-        it falls back to "Start -> End".
+        it falls back to "Start -> End".  Appends suburb anchor when provided.
         """
         if len(unique_streets) >= 3:
             start = unique_streets[0]['street']
@@ -799,9 +977,12 @@ class RouteNamer:
 
             # Deduplicate: if main equals start or end, use simpler format
             if main == start or main == end:
-                return f"{start} → {end}"
-
-            return f"{start} → {main} → {end}"
+                base = f"{start} → {end}"
+            else:
+                base = f"{start} → {main} → {end}"
+            if start_suburb and start_suburb.lower() not in base.lower():
+                base += f", {start_suburb}"
+            return base
 
         elif len(unique_streets) == 2:
             # Check if they're the same street (shouldn't happen after dedup, but safety)
@@ -875,13 +1056,14 @@ class RouteNamer:
         route_num = route_id.split('_')[-1]
         return f"Route {route_num} {direction_label}"
     
-    def _get_street_name(self, point: Tuple[float, float]) -> Optional[str]:
+    def _get_street_name(self, point: Tuple[float, float], retry_count: int = 0) -> Optional[str]:
         """
         Get street name for a point using reverse geocoding.
         (Legacy method - kept for compatibility)
         
         Args:
             point: (lat, lon) tuple
+            retry_count: Current retry attempt (for exponential backoff)
             
         Returns:
             Street name or None
