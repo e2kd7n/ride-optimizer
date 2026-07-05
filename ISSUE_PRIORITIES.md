@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-07-05 00:42:31 UTC / 2026-07-04 19:42:31 CDT
+**Last Updated:** 2026-07-05 01:09:13 UTC / 2026-07-04 20:09:13 CDT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -22,10 +22,10 @@ This file reflects the current state of GitHub issues organized by release miles
 **No P0 issues** ✅
 
 ### 🔴 P1 - HIGH
-**No P1 issues** ✅
+- #356 - Improve route names: deduplicate, reduce noise, and add visual direction indicator for commute routes
 
 ### 🟡 P2 - MEDIUM
-- #356 - Improve route names: deduplicate, reduce noise, and add visual direction indicator for commute routes
+**No P2 issues** ✅
 
 ### 🟢 P3 - LOW
 **No P3 issues** ✅
