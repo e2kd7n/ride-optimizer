@@ -1,4 +1,9 @@
-# Release Roadmap
+> **⚠️ ARCHIVED** — This file was moved to `docs/archive/` on 2026-06-01 because it was out of date
+> (showed v0.13.0/v0.14.0; actual milestones are v0.16.0/v0.17.0).
+> Release state is now derived entirely from **GitHub milestones** by `./scripts/update-issue-priorities.sh`.
+> Do not update this file.
+
+# Release Roadmap (ARCHIVED)
 
 **Created:** 2026-05-06 16:23 CDT
 **Updated:** 2026-06-01 (Weekly Maintenance - Version Status Correction)
