@@ -4,7 +4,9 @@ config/.token_encryption_key
 config/.cache_encryption_key
 config/trainerroad_credentials.json
 config/.trainerroad_encryption_key
+config/trainerroad_encryption_key
 config/secret_key
+config/.garmin_tokens/
 /data/cache/
 /data/weather_cache.json
 /data/*.json
@@ -41,3 +43,10 @@ backups/maintenance/*.tar.gz
 
 # Backup files — pushed to private backup repo via scripts/backup-env.sh
 *.backup
+
+# Bob tmp workspace
+.bob/tmp/
+
+# Garmin tokens and untracked encryption keys
+config/.garmin_tokens/
+config/trainerroad_encryption_key
