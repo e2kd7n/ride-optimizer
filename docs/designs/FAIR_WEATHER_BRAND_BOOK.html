@@ -1,0 +1,632 @@
+<title>Fair Weather — Brand Book</title>
+<style>
+  :root {
+    --bg:#F3F6F7; --surface:#FFFFFF; --surface-2:#EDF2F4;
+    --ink:#0F2233; --ink-soft:#5B7686; --line:#DCE3E6;
+    --accent:#0B6FA6; --accent-warm:#F2662D;
+    --success:#3E8E63; --warning:#C98A1D; --danger:#C4483A;
+    --font-display: "Century Gothic","Avenir Next","Futura",-apple-system,sans-serif;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#0B1620; --surface:#122232; --surface-2:#16283A;
+      --ink:#EAF0F3; --ink-soft:#8FA6B4; --line:#223243;
+      --accent:#4FB3E8; --accent-warm:#FF8A57;
+      --success:#57B384; --warning:#E0A63E; --danger:#E2695C;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:#0B1620; --surface:#122232; --surface-2:#16283A;
+    --ink:#EAF0F3; --ink-soft:#8FA6B4; --line:#223243;
+    --accent:#4FB3E8; --accent-warm:#FF8A57;
+    --success:#57B384; --warning:#E0A63E; --danger:#E2695C;
+  }
+  :root[data-theme="light"] {
+    --bg:#F3F6F7; --surface:#FFFFFF; --surface-2:#EDF2F4;
+    --ink:#0F2233; --ink-soft:#5B7686; --line:#DCE3E6;
+    --accent:#0B6FA6; --accent-warm:#F2662D;
+    --success:#3E8E63; --warning:#C98A1D; --danger:#C4483A;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: var(--font-body); line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    transition: background .2s ease, color .2s ease;
+  }
+  .page { max-width: 1100px; margin: 0 auto; padding: 4.5rem 1.75rem 6rem; }
+  h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; }
+  .prose { max-width: 62ch; color: var(--ink-soft); font-size: 1.02rem; }
+  .eyebrow {
+    font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--accent); margin: 0 0 0.9rem;
+  }
+  section { margin-top: 5.5rem; }
+  section > h2.section-title {
+    font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 700; margin-bottom: 0.6rem;
+  }
+  section > p.section-note { margin: 0 0 2.5rem; }
+  hr.rule { border: none; border-top: 1px solid var(--line); margin: 5.5rem 0 0; }
+
+  /* ---- mark ---- */
+  .mark { display: inline-block; }
+  .mark svg { display: block; }
+
+  /* ---- masthead ---- */
+  .masthead { display: flex; flex-direction: column; align-items: flex-start; gap: 1.6rem; }
+  .masthead .mark { color: var(--accent-warm); }
+  .lockup-hero { display: flex; align-items: center; gap: 0.9rem; }
+  .lockup-hero .wordmark { font-family: var(--font-display); font-weight: 700; font-size: 2.1rem; letter-spacing: -0.01em; }
+  .lockup-hero .wordmark .op { color: var(--accent); font-weight: 500; }
+  .tagline { font-family: var(--font-display); font-size: 1.05rem; color: var(--ink-soft); font-style: italic; }
+  .toggle-note { font-family: var(--font-mono); font-size: 0.78rem; color: var(--ink-soft); background: var(--surface-2); border: 1px solid var(--line); padding: 0.5rem 0.8rem; border-radius: 8px; }
+
+  /* ---- generic card/chip ---- */
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; }
+  .swatch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 1rem; }
+  .swatch { border-radius: 12px; overflow: hidden; border: 1px solid var(--line); }
+  .swatch-fill { height: 64px; }
+  .swatch-meta { padding: 0.55rem 0.7rem; background: var(--surface); }
+  .swatch-role { font-family: var(--font-body); font-weight: 600; font-size: 0.82rem; }
+  .swatch-hex { font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-soft); }
+  .mode-label {
+    font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--ink-soft); margin: 0 0 0.9rem;
+  }
+
+  /* ================= LOGO SECTION ================= */
+  .logo-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem; }
+  @media (max-width: 760px) { .logo-grid { grid-template-columns: 1fr; } }
+  .logo-panel { padding: 2.2rem 1.8rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; text-align: center; min-height: 190px; }
+  .logo-panel .cap { font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-soft); }
+  .logo-panel.on-surface { background: var(--surface); }
+  .logo-panel.on-cobalt { background: #0B6FA6; }
+  .logo-panel.on-night { background: #0B1620; }
+  .logo-panel.on-ink { background: #0F2233; }
+  .lockup { display: flex; align-items: center; gap: 0.6rem; }
+  .lockup .wordmark { font-family: var(--font-display); font-weight: 700; font-size: 1.3rem; }
+  .lockup.reversed .wordmark, .lockup.reversed .wordmark .op { color: #FFFFFF; }
+  .lockup.reversed .mark { color: #FFFFFF; }
+  .lockup .wordmark .op { color: var(--accent); font-weight: 500; }
+  .stacked-lockup { display: flex; flex-direction: column; align-items: center; gap: 0.7rem; }
+  .stacked-lockup .tagline { font-size: 0.85rem; margin-top: -0.3rem; }
+
+  .icon-row { display: flex; align-items: flex-end; justify-content: center; gap: 2rem; flex-wrap: wrap; }
+  .app-icon { background: var(--accent-warm); border-radius: 22%; display: flex; align-items: center; justify-content: center; color: #fff; }
+  .icon-caption { font-family: var(--font-mono); font-size: 0.68rem; color: var(--ink-soft); margin-top: 0.5rem; text-align: center; }
+
+  .clearspace-box { display: flex; align-items: center; justify-content: center; padding: 1.6rem; border: 1px dashed var(--line); border-radius: 12px; }
+
+  /* ================= TYPE SECTION ================= */
+  .type-block + .type-block { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--line); }
+  .type-label { font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-soft); margin-bottom: 0.5rem; }
+  .scale-table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 0.85rem; }
+  .scale-table td { padding: 0.5rem 0.6rem; border-top: 1px solid var(--line); color: var(--ink-soft); }
+  .scale-table td:first-child { color: var(--ink); font-weight: 600; width: 9rem; }
+
+  /* ================= SCREENS ================= */
+  .screen-section-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.2rem; }
+  .screen-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 3.5rem; }
+  @media (max-width: 760px) { .screen-pair { grid-template-columns: 1fr; } }
+
+  .phone { border-radius: 22px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.08), 0 18px 40px -22px rgba(0,0,0,0.4); font-family: var(--font-body); }
+  .phone.day { --p-bg:#F3F6F7; --p-surface:#FFFFFF; --p-ink:#0F2233; --p-ink-soft:#5B7686; --p-line:#DCE3E6; --p-accent:#0B6FA6; --p-warm:#F2662D; --p-success:#3E8E63; --p-warning:#C98A1D; }
+  .phone.night { --p-bg:#0B1620; --p-surface:#122232; --p-ink:#EAF0F3; --p-ink-soft:#8FA6B4; --p-line:#223243; --p-accent:#4FB3E8; --p-warm:#FF8A57; --p-success:#57B384; --p-warning:#E0A63E; }
+  .phone-mode-tag { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-soft); margin-bottom: 0.6rem; }
+
+  .phone-body { background: var(--p-bg); color: var(--p-ink); min-height: 520px; }
+  .phone-nav { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.2rem; border-bottom: 1px solid var(--p-line); }
+  .phone-nav .lockup .wordmark { font-size: 0.95rem; }
+  .phone-nav .lockup.reversed .wordmark, .phone-nav .lockup .wordmark { color: var(--p-ink); }
+  .phone-nav .lockup .wordmark .op { color: var(--p-accent); }
+  .phone-nav .mark { color: var(--p-warm); }
+  .phone-clock { font-family: var(--font-body); font-size: 0.78rem; color: var(--p-ink-soft); font-variant-numeric: tabular-nums; }
+  .phone-content { padding: 1.3rem 1.2rem 1.6rem; }
+
+  .p-hero { background: var(--p-surface); border: 1px solid var(--p-line); border-radius: 16px; padding: 1.3rem 1.3rem 1.4rem; position: relative; overflow: hidden; }
+  .p-hero::before { content:""; position:absolute; top:-50px; right:-50px; width:160px; height:160px; border-radius:50%; background: radial-gradient(circle, color-mix(in srgb, var(--p-warm) 22%, transparent), transparent 70%); }
+  .p-badge { display:inline-flex; align-items:center; gap:0.3rem; background: var(--p-warm); color:#fff; font-family: var(--font-display); font-weight:700; font-size:0.78rem; padding:0.28rem 0.65rem; border-radius:999px; margin-bottom:0.8rem; }
+  .p-headline { font-family: var(--font-display); font-weight:700; font-size:1.35rem; letter-spacing:-0.01em; margin:0 0 0.7rem; max-width: 18ch; }
+  .p-stats { font-size:0.85rem; color: var(--p-ink-soft); font-variant-numeric: tabular-nums; }
+  .p-cta { display:inline-block; margin-top:1rem; background: var(--p-accent); color:#fff; font-family: var(--font-display); font-weight:700; font-size:0.8rem; padding:0.55rem 1.05rem; border-radius:999px; }
+
+  .p-section-label { font-family: var(--font-mono); font-size:0.68rem; letter-spacing:0.1em; text-transform:uppercase; color: var(--p-ink-soft); margin: 1.3rem 0 0.6rem; }
+  .p-route { background: var(--p-surface); border-radius:12px; padding:0.85rem 0.95rem; margin-bottom:0.6rem; box-shadow: 0 1px 0 var(--p-line); position:relative; }
+  .p-route .fold { position:absolute; top:0; right:0; width:0; height:0; border-style:solid; border-width:0 18px 18px 0; border-top-right-radius:12px; }
+  .p-route.good .fold { border-color: transparent var(--p-success) transparent transparent; }
+  .p-route.caution .fold { border-color: transparent var(--p-warning) transparent transparent; }
+  .p-route-name { font-weight:700; font-size:0.92rem; }
+  .p-route-stats { font-size:0.76rem; color: var(--p-ink-soft); margin-top:0.15rem; font-variant-numeric: tabular-nums; }
+  .p-tag { display:inline-block; font-size:0.68rem; font-weight:700; padding:0.15rem 0.5rem; border-radius:3px; margin-top:0.4rem; }
+  .p-tag.good { background: color-mix(in srgb, var(--p-success) 16%, transparent); color: var(--p-success); }
+  .p-tag.caution { background: color-mix(in srgb, var(--p-warning) 18%, transparent); color: var(--p-warning); }
+
+  .p-temp-row { display:flex; align-items:center; justify-content: space-between; }
+  .p-temp { font-family: var(--font-display); font-weight:700; font-size:3rem; line-height:1; }
+  .p-cond { font-size:0.85rem; color: var(--p-ink-soft); margin-top:0.3rem; }
+  .p-hourly { display:flex; gap:0.5rem; overflow-x:auto; padding: 1.2rem 0 0.3rem; -webkit-overflow-scrolling:touch; }
+  .p-hour { flex:0 0 auto; min-width:52px; text-align:center; padding:0.5rem 0.4rem; border-radius:10px; background: var(--p-surface); border:1px solid var(--p-line); font-size:0.72rem; }
+  .p-hour.active { background: color-mix(in srgb, var(--p-accent) 14%, var(--p-surface)); border-color: var(--p-accent); }
+  .p-hour-time { font-weight:600; margin-bottom:0.2rem; }
+  .p-hour-temp { font-weight:700; font-variant-numeric: tabular-nums; }
+  .p-caption { font-size:0.8rem; color: var(--p-ink-soft); margin-top:1rem; }
+  .p-current-stats { display:flex; align-items:center; gap:1rem; margin-top:0.8rem; font-size:0.82rem; color: var(--p-ink-soft); font-variant-numeric: tabular-nums; }
+  .p-current-stats .stat { display:flex; align-items:center; gap:0.35rem; }
+  .p-current-stats svg { flex-shrink:0; }
+  .p-hour-detail { display:flex; align-items:center; justify-content:center; gap:0.2rem; font-size:0.64rem; color: var(--p-ink-soft); margin-top:0.25rem; font-variant-numeric: tabular-nums; }
+  .p-hour-detail.precip { color: var(--p-accent); }
+  .p-hour-detail svg { flex-shrink:0; }
+
+  .p-route-title { font-family: var(--font-display); font-weight:700; font-size:1.4rem; margin-bottom:0.4rem; }
+  .p-route-meta { display:flex; gap:1.1rem; font-size:0.82rem; color: var(--p-ink-soft); font-variant-numeric: tabular-nums; margin-bottom:1.1rem; }
+  .p-route-meta b { color: var(--p-ink); }
+  .p-spark-wrap { background: var(--p-surface); border:1px solid var(--p-line); border-radius:12px; padding:0.9rem 0.9rem 0.6rem; }
+  .p-fit-box { display:flex; gap:0.7rem; align-items:flex-start; background: color-mix(in srgb, var(--p-success) 12%, var(--p-surface)); border:1px solid color-mix(in srgb, var(--p-success) 35%, var(--p-line)); border-radius:12px; padding:0.8rem 0.9rem; margin-top:1rem; }
+  .p-fit-box .dot { width:9px; height:9px; border-radius:50%; background: var(--p-success); margin-top:0.35rem; flex-shrink:0; }
+  .p-fit-title { font-weight:700; font-size:0.85rem; }
+  .p-fit-note { font-size:0.78rem; color: var(--p-ink-soft); }
+
+  footer.closing { margin-top: 5.5rem; padding-top: 2.5rem; border-top: 1px solid var(--line); }
+</style>
+
+<div class="page">
+
+  <header class="masthead">
+    <p class="eyebrow">Brand book — Fair Weather</p>
+    <div class="lockup-hero">
+      <span class="mark">
+        <svg width="44" height="44" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+          <circle cx="24" cy="24" r="12" stroke="currentColor" stroke-width="3"/>
+          <g stroke="currentColor" stroke-width="3" stroke-linecap="round">
+            <line x1="24" y1="2" x2="24" y2="8"/><line x1="24" y1="40" x2="24" y2="46"/>
+            <line x1="2" y1="24" x2="8" y2="24"/><line x1="40" y1="24" x2="46" y2="24"/>
+            <line x1="8.3" y1="8.3" x2="12.5" y2="12.5"/><line x1="35.5" y1="35.5" x2="39.7" y2="39.7"/>
+            <line x1="39.7" y1="8.3" x2="35.5" y2="12.5"/><line x1="12.5" y1="35.5" x2="8.3" y2="39.7"/>
+          </g>
+        </svg>
+      </span>
+      <h1 class="wordmark">Ride <span class="op">Optimizer</span></h1>
+    </div>
+    <p class="tagline">Know before you go.</p>
+    <p class="prose">Fair Weather is built for the one question this app actually answers: is today a good day to ride, and which route fits it best. The mark reads two ways at once — a wheel hub or a sun — because the product sits exactly at that intersection. Cobalt carries structure and trust; a single warm coral is spent only on the day's call to action.</p>
+    <p class="toggle-note">This page follows your system or in-app light/dark setting for its own chrome. The Screens section further down shows Day and Night side by side on purpose, so both can be judged at once.</p>
+  </header>
+
+  <!-- ============ LOGO ============ -->
+  <section>
+    <h2 class="section-title">Logo</h2>
+    <p class="section-note prose">One mark, three lockups. The mark alone carries the brand once it's recognized; the wordmark stays close by everywhere else.</p>
+
+    <div class="logo-grid">
+      <div class="logo-panel on-surface">
+        <span class="cap">Primary lockup — on white</span>
+        <div class="lockup">
+          <span class="mark" style="color:#F2662D;">
+            <svg width="30" height="30" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+              <circle cx="24" cy="24" r="12" stroke="currentColor" stroke-width="3.4"/>
+              <g stroke="currentColor" stroke-width="3.4" stroke-linecap="round">
+                <line x1="24" y1="2" x2="24" y2="8"/><line x1="24" y1="40" x2="24" y2="46"/>
+                <line x1="2" y1="24" x2="8" y2="24"/><line x1="40" y1="24" x2="46" y2="24"/>
+                <line x1="8.3" y1="8.3" x2="12.5" y2="12.5"/><line x1="35.5" y1="35.5" x2="39.7" y2="39.7"/>
+                <line x1="39.7" y1="8.3" x2="35.5" y2="12.5"/><line x1="12.5" y1="35.5" x2="8.3" y2="39.7"/>
+              </g>
+            </svg>
+          </span>
+          <span class="wordmark" style="color:#0F2233;">Ride <span class="op" style="color:#0B6FA6;">Optimizer</span></span>
+        </div>
+      </div>
+
+      <div class="logo-panel on-cobalt">
+        <span class="cap" style="color:rgba(255,255,255,0.75);">Reversed — on cobalt</span>
+        <div class="lockup reversed">
+          <span class="mark">
+            <svg width="30" height="30" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+              <circle cx="24" cy="24" r="12" stroke="currentColor" stroke-width="3.4"/>
+              <g stroke="currentColor" stroke-width="3.4" stroke-linecap="round">
+                <line x1="24" y1="2" x2="24" y2="8"/><line x1="24" y1="40" x2="24" y2="46"/>
+                <line x1="2" y1="24" x2="8" y2="24"/><line x1="40" y1="24" x2="46" y2="24"/>
+                <line x1="8.3" y1="8.3" x2="12.5" y2="12.5"/><line x1="35.5" y1="35.5" x2="39.7" y2="39.7"/>
+                <line x1="39.7" y1="8.3" x2="35.5" y2="12.5"/><line x1="12.5" y1="35.5" x2="8.3" y2="39.7"/>
+              </g>
+            </svg>
+          </span>
+          <span class="wordmark">Ride Optimizer</span>
+        </div>
+      </div>
+
+      <div class="logo-panel on-night">
+        <span class="cap" style="color:rgba(255,255,255,0.55);">On night surface</span>
+        <div class="lockup reversed">
+          <span class="mark" style="color:#FF8A57;">
+            <svg width="30" height="30" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+              <circle cx="24" cy="24" r="12" stroke="currentColor" stroke-width="3.4"/>
+              <g stroke="currentColor" stroke-width="3.4" stroke-linecap="round">
+                <line x1="24" y1="2" x2="24" y2="8"/><line x1="24" y1="40" x2="24" y2="46"/>
+                <line x1="2" y1="24" x2="8" y2="24"/><line x1="40" y1="24" x2="46" y2="24"/>
+                <line x1="8.3" y1="8.3" x2="12.5" y2="12.5"/><line x1="35.5" y1="35.5" x2="39.7" y2="39.7"/>
+                <line x1="39.7" y1="8.3" x2="35.5" y2="12.5"/><line x1="12.5" y1="35.5" x2="8.3" y2="39.7"/>
+              </g>
+            </svg>
+          </span>
+          <span class="wordmark" style="color:#EAF0F3;">Ride <span class="op" style="color:#4FB3E8;">Optimizer</span></span>
+        </div>
+      </div>
+
+      <div class="logo-panel on-surface">
+        <span class="cap">Stacked lockup — square contexts</span>
+        <div class="stacked-lockup">
+          <span class="mark" style="color:#0B6FA6;">
+            <svg width="34" height="34" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+              <circle cx="24" cy="24" r="12" stroke="currentColor" stroke-width="3.4"/>
+              <g stroke="currentColor" stroke-width="3.4" stroke-linecap="round">
+                <line x1="24" y1="2" x2="24" y2="8"/><line x1="24" y1="40" x2="24" y2="46"/>
+                <line x1="2" y1="24" x2="8" y2="24"/><line x1="40" y1="24" x2="46" y2="24"/>
+                <line x1="8.3" y1="8.3" x2="12.5" y2="12.5"/><line x1="35.5" y1="35.5" x2="39.7" y2="39.7"/>
+                <line x1="39.7" y1="8.3" x2="35.5" y2="12.5"/><line x1="12.5" y1="35.5" x2="8.3" y2="39.7"/>
+              </g>
+            </svg>
+          </span>
+          <span class="wordmark" style="color:#0F2233;">Ride <span class="op" style="color:#0B6FA6;">Optimizer</span></span>
+          <span class="tagline">Know before you go.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:1.5rem; padding: 2rem;">
+      <p class="cap" style="font-family:var(--font-mono);font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-soft);text-align:center;margin-bottom:1.4rem;">Mark only — app icon, holds up from 128px down to 16px</p>
+      <div class="icon-row">
+        <div>
+          <div class="app-icon" style="width:96px;height:96px;">
+            <svg width="52" height="52" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+              <circle cx="24" cy="24" r="12" stroke="currentColor" stroke-width="3.6"/>
+              <g stroke="currentColor" stroke-width="3.6" stroke-linecap="round">
+                <line x1="24" y1="2" x2="24" y2="8"/><line x1="24" y1="40" x2="24" y2="46"/>
+                <line x1="2" y1="24" x2="8" y2="24"/><line x1="40" y1="24" x2="46" y2="24"/>
+                <line x1="8.3" y1="8.3" x2="12.5" y2="12.5"/><line x1="35.5" y1="35.5" x2="39.7" y2="39.7"/>
+                <line x1="39.7" y1="8.3" x2="35.5" y2="12.5"/><line x1="12.5" y1="35.5" x2="8.3" y2="39.7"/>
+              </g>
+            </svg>
+          </div>
+          <div class="icon-caption">128px</div>
+        </div>
+        <div>
+          <div class="app-icon" style="width:56px;height:56px;">
+            <svg width="30" height="30" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+              <circle cx="24" cy="24" r="12" stroke="currentColor" stroke-width="4"/>
+              <g stroke="currentColor" stroke-width="4" stroke-linecap="round">
+                <line x1="24" y1="2" x2="24" y2="8"/><line x1="24" y1="40" x2="24" y2="46"/>
+                <line x1="2" y1="24" x2="8" y2="24"/><line x1="40" y1="24" x2="46" y2="24"/>
+                <line x1="8.3" y1="8.3" x2="12.5" y2="12.5"/><line x1="35.5" y1="35.5" x2="39.7" y2="39.7"/>
+                <line x1="39.7" y1="8.3" x2="35.5" y2="12.5"/><line x1="12.5" y1="35.5" x2="8.3" y2="39.7"/>
+              </g>
+            </svg>
+          </div>
+          <div class="icon-caption">32px</div>
+        </div>
+        <div>
+          <div class="app-icon" style="width:32px;height:32px;">
+            <svg width="18" height="18" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+              <circle cx="24" cy="24" r="13" stroke="currentColor" stroke-width="5"/>
+              <g stroke="currentColor" stroke-width="5" stroke-linecap="round">
+                <line x1="24" y1="1" x2="24" y2="7"/><line x1="24" y1="41" x2="24" y2="47"/>
+                <line x1="1" y1="24" x2="7" y2="24"/><line x1="41" y1="24" x2="47" y2="24"/>
+              </g>
+            </svg>
+          </div>
+          <div class="icon-caption">16px</div>
+        </div>
+      </div>
+      <p class="prose" style="margin: 1.4rem auto 0; text-align:center; font-size:0.85rem;">Below 24px, drop the diagonal rays and keep only the circle and the four cardinal ticks — it still reads as the mark without turning into noise.</p>
+    </div>
+  </section>
+
+  <hr class="rule">
+
+  <!-- ============ COLOR ============ -->
+  <section>
+    <h2 class="section-title">Color</h2>
+    <p class="section-note prose">Two grounds, not one inverted into the other — Day is an overcast-bright sky, Night is a clear one. The accents shift in brightness to stay correct on each, not just on hue.</p>
+
+    <p class="mode-label">Day</p>
+    <div class="swatch-grid">
+      <div class="swatch"><div class="swatch-fill" style="background:#F3F6F7"></div><div class="swatch-meta"><div class="swatch-role">Ground</div><div class="swatch-hex">#F3F6F7</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background:#FFFFFF;border-bottom:1px solid #eee;"></div><div class="swatch-meta"><div class="swatch-role">Surface</div><div class="swatch-hex">#FFFFFF</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background:#0F2233"></div><div class="swatch-meta"><div class="swatch-role">Ink</div><div class="swatch-hex">#0F2233</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background:#0B6FA6"></div><div class="swatch-meta"><div class="swatch-role">Accent — cobalt</div><div class="swatch-hex">#0B6FA6</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background:#F2662D"></div><div class="swatch-meta"><div class="swatch-role">Accent — coral</div><div class="swatch-hex">#F2662D</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background:#3E8E63"></div><div class="swatch-meta"><div class="swatch-role">Good fit</div><div class="swatch-hex">#3E8E63</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background:#C98A1D"></div><div class="swatch-meta"><div class="swatch-role">Caution</div><div class="swatch-hex">#C98A1D</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background:#C4483A"></div><div class="swatch-meta"><div class="swatch-role">Poor fit</div><div class="swatch-hex">#C4483A</div></div></div>
+    </div>
+
+    <p class="mode-label" style="margin-top:2rem;">Night</p>
+    <div class="swatch-grid">
+      <div class="swatch"><div class="swatch-fill" style="background:#0B1620"></div><div class="swatch-meta"><div class="swatch-role">Ground</div><div class="swatch-hex">#0B1620</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background:#122232"></div><div class="swatch-meta"><div class="swatch-role">Surface</div><div class="swatch-hex">#122232</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background:#EAF0F3"></div><div class="swatch-meta"><div class="swatch-role">Ink</div><div class="swatch-hex">#EAF0F3</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background:#4FB3E8"></div><div class="swatch-meta"><div class="swatch-role">Accent — cobalt</div><div class="swatch-hex">#4FB3E8</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background:#FF8A57"></div><div class="swatch-meta"><div class="swatch-role">Accent — coral</div><div class="swatch-hex">#FF8A57</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background:#57B384"></div><div class="swatch-meta"><div class="swatch-role">Good fit</div><div class="swatch-hex">#57B384</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background:#E0A63E"></div><div class="swatch-meta"><div class="swatch-role">Caution</div><div class="swatch-hex">#E0A63E</div></div></div>
+      <div class="swatch"><div class="swatch-fill" style="background:#E2695C"></div><div class="swatch-meta"><div class="swatch-role">Poor fit</div><div class="swatch-hex">#E2695C</div></div></div>
+    </div>
+  </section>
+
+  <hr class="rule">
+
+  <!-- ============ TYPE ============ -->
+  <section>
+    <h2 class="section-title">Type</h2>
+    <p class="section-note prose">A geometric display face carries decisions and headlines; the system body face handles everything read at length. Numerals stay tabular wherever they line up in a column — no separate mono face in-product.</p>
+
+    <div class="card" style="padding: 2rem;">
+      <div class="type-block">
+        <div class="type-label">Display — Century Gothic / Avenir Next / Futura</div>
+        <div style="font-family:var(--font-display);font-weight:700;font-size:2.1rem;">Ride today. Clear until 2pm.</div>
+      </div>
+      <div class="type-block">
+        <div class="type-label">Body — system UI face</div>
+        <div style="font-size:1.05rem;color:var(--ink);">34.2 mi, 1,120 ft of gain, and a tailwind home. This is the best window before the afternoon front moves in.</div>
+      </div>
+      <div class="type-block">
+        <div class="type-label">Tabular numerals in context</div>
+        <div style="font-variant-numeric:tabular-nums;font-size:1.15rem;">61°F &nbsp;·&nbsp; 6 mph NW &nbsp;·&nbsp; 94 match</div>
+      </div>
+      <div class="type-block">
+        <table class="scale-table">
+          <tr><td>Display / hero</td><td>2.5rem, 700</td></tr>
+          <tr><td>Section heading</td><td>1.5–2rem, 700</td></tr>
+          <tr><td>Card title</td><td>1.1–1.35rem, 700</td></tr>
+          <tr><td>Body</td><td>1rem, 400</td></tr>
+          <tr><td>Caption / eyebrow</td><td>0.72–0.78rem, 600, tracked</td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <hr class="rule">
+
+  <!-- ============ SCREENS ============ -->
+  <section>
+    <h2 class="section-title">Screens</h2>
+    <p class="section-note prose">Three surfaces, each shown Day and Night. Same data, same hierarchy — only the sky changes.</p>
+
+    <!-- Today -->
+    <div class="screen-section-head"><h3 style="font-size:1.1rem;">Today</h3></div>
+    <div class="screen-pair">
+      <div>
+        <p class="phone-mode-tag">Day</p>
+        <div class="phone day">
+          <div class="phone-body">
+            <div class="phone-nav">
+              <div class="lockup">
+                <span class="mark"><svg width="18" height="18" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="13" stroke="currentColor" stroke-width="5"/><g stroke="currentColor" stroke-width="5" stroke-linecap="round"><line x1="24" y1="1" x2="24" y2="7"/><line x1="24" y1="41" x2="24" y2="47"/><line x1="1" y1="24" x2="7" y2="24"/><line x1="41" y1="24" x2="47" y2="24"/></g></svg></span>
+                <span class="wordmark">Ride <span class="op">Optimizer</span></span>
+              </div>
+              <span class="phone-clock">6:42 AM</span>
+            </div>
+            <div class="phone-content">
+              <div class="p-hero">
+                <span class="p-badge">94 Match</span>
+                <div class="p-headline">Ride today. Clear until 2pm.</div>
+                <div class="p-stats">34.2 mi · 1,120 ft · 61°F · 6 mph NW · 0% precip</div>
+                <span class="p-cta">Start Reservoir Loop</span>
+              </div>
+              <p class="p-section-label">More routes today</p>
+              <div class="p-route good">
+                <div class="fold"></div>
+                <div class="p-route-name">North Fork Out-and-Back</div>
+                <div class="p-route-stats">28.6 mi · 860 ft</div>
+                <span class="p-tag good">Z2 Endurance · Good fit</span>
+              </div>
+              <div class="p-route caution">
+                <div class="fold"></div>
+                <div class="p-route-name">Cemetery Ridge Loop</div>
+                <div class="p-route-stats">41.0 mi · 2,050 ft</div>
+                <span class="p-tag caution">Exposed climb · check wind</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <p class="phone-mode-tag">Night</p>
+        <div class="phone night">
+          <div class="phone-body">
+            <div class="phone-nav">
+              <div class="lockup">
+                <span class="mark"><svg width="18" height="18" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="13" stroke="currentColor" stroke-width="5"/><g stroke="currentColor" stroke-width="5" stroke-linecap="round"><line x1="24" y1="1" x2="24" y2="7"/><line x1="24" y1="41" x2="24" y2="47"/><line x1="1" y1="24" x2="7" y2="24"/><line x1="41" y1="24" x2="47" y2="24"/></g></svg></span>
+                <span class="wordmark">Ride <span class="op">Optimizer</span></span>
+              </div>
+              <span class="phone-clock">6:42 AM</span>
+            </div>
+            <div class="phone-content">
+              <div class="p-hero">
+                <span class="p-badge">94 Match</span>
+                <div class="p-headline">Ride today. Clear until 2pm.</div>
+                <div class="p-stats">34.2 mi · 1,120 ft · 61°F · 6 mph NW · 0% precip</div>
+                <span class="p-cta">Start Reservoir Loop</span>
+              </div>
+              <p class="p-section-label">More routes today</p>
+              <div class="p-route good">
+                <div class="fold"></div>
+                <div class="p-route-name">North Fork Out-and-Back</div>
+                <div class="p-route-stats">28.6 mi · 860 ft</div>
+                <span class="p-tag good">Z2 Endurance · Good fit</span>
+              </div>
+              <div class="p-route caution">
+                <div class="fold"></div>
+                <div class="p-route-name">Cemetery Ridge Loop</div>
+                <div class="p-route-stats">41.0 mi · 2,050 ft</div>
+                <span class="p-tag caution">Exposed climb · check wind</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Weather -->
+    <div class="screen-section-head"><h3 style="font-size:1.1rem;">Weather</h3></div>
+    <div class="screen-pair">
+      <div>
+        <p class="phone-mode-tag">Day</p>
+        <div class="phone day">
+          <div class="phone-body">
+            <div class="phone-nav">
+              <div class="lockup">
+                <span class="mark"><svg width="18" height="18" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="13" stroke="currentColor" stroke-width="5"/><g stroke="currentColor" stroke-width="5" stroke-linecap="round"><line x1="24" y1="1" x2="24" y2="7"/><line x1="24" y1="41" x2="24" y2="47"/><line x1="1" y1="24" x2="7" y2="24"/><line x1="41" y1="24" x2="47" y2="24"/></g></svg></span>
+                <span class="wordmark">Ride <span class="op">Optimizer</span></span>
+              </div>
+              <span class="phone-clock">6:42 AM</span>
+            </div>
+            <div class="phone-content">
+              <p class="p-section-label" style="margin-top:0;">Current conditions</p>
+              <div class="p-temp-row">
+                <div>
+                  <div class="p-temp">61°</div>
+                  <div class="p-cond">Clear, light wind</div>
+                </div>
+                <svg width="46" height="46" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="10" stroke="var(--p-warm)" stroke-width="3"/><g stroke="var(--p-warm)" stroke-width="3" stroke-linecap="round"><line x1="24" y1="4" x2="24" y2="9"/><line x1="24" y1="39" x2="24" y2="44"/><line x1="4" y1="24" x2="9" y2="24"/><line x1="39" y1="24" x2="44" y2="24"/><line x1="10.3" y1="10.3" x2="13.8" y2="13.8"/><line x1="34.2" y1="34.2" x2="37.7" y2="37.7"/><line x1="37.7" y1="10.3" x2="34.2" y2="13.8"/><line x1="13.8" y1="34.2" x2="10.3" y2="37.7"/></g></svg>
+              </div>
+              <div class="p-current-stats">
+                <span class="stat"><svg width="16" height="11" viewBox="0 0 20 14"><g stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="2" y1="4" x2="12" y2="4"/><line x1="2" y1="7" x2="15" y2="7"/><line x1="2" y1="10" x2="9" y2="10"/></g></svg>5 mph NW</span>
+                <span class="stat" style="color:var(--p-accent);"><svg width="13" height="11" viewBox="0 0 14 14"><g stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="4" y1="2" x2="2" y2="10"/><line x1="8" y1="2" x2="6" y2="10"/><line x1="12" y1="2" x2="10" y2="10"/></g></svg>0% chance of rain</span>
+              </div>
+              <div class="p-hourly">
+                <div class="p-hour"><div class="p-hour-time">6a</div><div class="p-hour-temp">58°</div><div class="p-hour-detail"><svg width="14" height="10" viewBox="0 0 20 14"><g stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="2" y1="4" x2="12" y2="4"/><line x1="2" y1="7" x2="15" y2="7"/><line x1="2" y1="10" x2="9" y2="10"/></g></svg>4</div></div>
+                <div class="p-hour active"><div class="p-hour-time">7a</div><div class="p-hour-temp">60°</div><div class="p-hour-detail"><svg width="14" height="10" viewBox="0 0 20 14"><g stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="2" y1="4" x2="12" y2="4"/><line x1="2" y1="7" x2="15" y2="7"/><line x1="2" y1="10" x2="9" y2="10"/></g></svg>5</div></div>
+                <div class="p-hour active"><div class="p-hour-time">8a</div><div class="p-hour-temp">63°</div><div class="p-hour-detail"><svg width="14" height="10" viewBox="0 0 20 14"><g stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="2" y1="4" x2="12" y2="4"/><line x1="2" y1="7" x2="15" y2="7"/><line x1="2" y1="10" x2="9" y2="10"/></g></svg>6</div></div>
+                <div class="p-hour"><div class="p-hour-time">9a</div><div class="p-hour-temp">66°</div><div class="p-hour-detail"><svg width="14" height="10" viewBox="0 0 20 14"><g stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="2" y1="4" x2="12" y2="4"/><line x1="2" y1="7" x2="15" y2="7"/><line x1="2" y1="10" x2="9" y2="10"/></g></svg>8</div></div>
+                <div class="p-hour"><div class="p-hour-time">10a</div><div class="p-hour-temp">69°</div><div class="p-hour-detail"><svg width="14" height="10" viewBox="0 0 20 14"><g stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="2" y1="4" x2="12" y2="4"/><line x1="2" y1="7" x2="15" y2="7"/><line x1="2" y1="10" x2="9" y2="10"/></g></svg>10</div><div class="p-hour-detail precip"><svg width="12" height="10" viewBox="0 0 14 14"><g stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="4" y1="2" x2="2" y2="10"/><line x1="8" y1="2" x2="6" y2="10"/><line x1="12" y1="2" x2="10" y2="10"/></g></svg>20%</div></div>
+                <div class="p-hour"><div class="p-hour-time">11a</div><div class="p-hour-temp">72°</div><div class="p-hour-detail"><svg width="14" height="10" viewBox="0 0 20 14"><g stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="2" y1="4" x2="12" y2="4"/><line x1="2" y1="7" x2="15" y2="7"/><line x1="2" y1="10" x2="9" y2="10"/></g></svg>12</div><div class="p-hour-detail precip"><svg width="12" height="10" viewBox="0 0 14 14"><g stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="4" y1="2" x2="2" y2="10"/><line x1="8" y1="2" x2="6" y2="10"/><line x1="12" y1="2" x2="10" y2="10"/></g></svg>35%</div></div>
+              </div>
+              <p class="p-caption">Best window closes at 8:00 AM — wind and rain chances both rise through the day.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <p class="phone-mode-tag">Night</p>
+        <div class="phone night">
+          <div class="phone-body">
+            <div class="phone-nav">
+              <div class="lockup">
+                <span class="mark"><svg width="18" height="18" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="13" stroke="currentColor" stroke-width="5"/><g stroke="currentColor" stroke-width="5" stroke-linecap="round"><line x1="24" y1="1" x2="24" y2="7"/><line x1="24" y1="41" x2="24" y2="47"/><line x1="1" y1="24" x2="7" y2="24"/><line x1="41" y1="24" x2="47" y2="24"/></g></svg></span>
+                <span class="wordmark">Ride <span class="op">Optimizer</span></span>
+              </div>
+              <span class="phone-clock">6:42 AM</span>
+            </div>
+            <div class="phone-content">
+              <p class="p-section-label" style="margin-top:0;">Current conditions</p>
+              <div class="p-temp-row">
+                <div>
+                  <div class="p-temp">61°</div>
+                  <div class="p-cond">Clear, light wind</div>
+                </div>
+                <svg width="46" height="46" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="10" stroke="var(--p-warm)" stroke-width="3"/><g stroke="var(--p-warm)" stroke-width="3" stroke-linecap="round"><line x1="24" y1="4" x2="24" y2="9"/><line x1="24" y1="39" x2="24" y2="44"/><line x1="4" y1="24" x2="9" y2="24"/><line x1="39" y1="24" x2="44" y2="24"/><line x1="10.3" y1="10.3" x2="13.8" y2="13.8"/><line x1="34.2" y1="34.2" x2="37.7" y2="37.7"/><line x1="37.7" y1="10.3" x2="34.2" y2="13.8"/><line x1="13.8" y1="34.2" x2="10.3" y2="37.7"/></g></svg>
+              </div>
+              <div class="p-current-stats">
+                <span class="stat"><svg width="16" height="11" viewBox="0 0 20 14"><g stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="2" y1="4" x2="12" y2="4"/><line x1="2" y1="7" x2="15" y2="7"/><line x1="2" y1="10" x2="9" y2="10"/></g></svg>5 mph NW</span>
+                <span class="stat" style="color:var(--p-accent);"><svg width="13" height="11" viewBox="0 0 14 14"><g stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="4" y1="2" x2="2" y2="10"/><line x1="8" y1="2" x2="6" y2="10"/><line x1="12" y1="2" x2="10" y2="10"/></g></svg>0% chance of rain</span>
+              </div>
+              <div class="p-hourly">
+                <div class="p-hour"><div class="p-hour-time">6a</div><div class="p-hour-temp">58°</div><div class="p-hour-detail"><svg width="14" height="10" viewBox="0 0 20 14"><g stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="2" y1="4" x2="12" y2="4"/><line x1="2" y1="7" x2="15" y2="7"/><line x1="2" y1="10" x2="9" y2="10"/></g></svg>4</div></div>
+                <div class="p-hour active"><div class="p-hour-time">7a</div><div class="p-hour-temp">60°</div><div class="p-hour-detail"><svg width="14" height="10" viewBox="0 0 20 14"><g stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="2" y1="4" x2="12" y2="4"/><line x1="2" y1="7" x2="15" y2="7"/><line x1="2" y1="10" x2="9" y2="10"/></g></svg>5</div></div>
+                <div class="p-hour active"><div class="p-hour-time">8a</div><div class="p-hour-temp">63°</div><div class="p-hour-detail"><svg width="14" height="10" viewBox="0 0 20 14"><g stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="2" y1="4" x2="12" y2="4"/><line x1="2" y1="7" x2="15" y2="7"/><line x1="2" y1="10" x2="9" y2="10"/></g></svg>6</div></div>
+                <div class="p-hour"><div class="p-hour-time">9a</div><div class="p-hour-temp">66°</div><div class="p-hour-detail"><svg width="14" height="10" viewBox="0 0 20 14"><g stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="2" y1="4" x2="12" y2="4"/><line x1="2" y1="7" x2="15" y2="7"/><line x1="2" y1="10" x2="9" y2="10"/></g></svg>8</div></div>
+                <div class="p-hour"><div class="p-hour-time">10a</div><div class="p-hour-temp">69°</div><div class="p-hour-detail"><svg width="14" height="10" viewBox="0 0 20 14"><g stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="2" y1="4" x2="12" y2="4"/><line x1="2" y1="7" x2="15" y2="7"/><line x1="2" y1="10" x2="9" y2="10"/></g></svg>10</div><div class="p-hour-detail precip"><svg width="12" height="10" viewBox="0 0 14 14"><g stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="4" y1="2" x2="2" y2="10"/><line x1="8" y1="2" x2="6" y2="10"/><line x1="12" y1="2" x2="10" y2="10"/></g></svg>20%</div></div>
+                <div class="p-hour"><div class="p-hour-time">11a</div><div class="p-hour-temp">72°</div><div class="p-hour-detail"><svg width="14" height="10" viewBox="0 0 20 14"><g stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="2" y1="4" x2="12" y2="4"/><line x1="2" y1="7" x2="15" y2="7"/><line x1="2" y1="10" x2="9" y2="10"/></g></svg>12</div><div class="p-hour-detail precip"><svg width="12" height="10" viewBox="0 0 14 14"><g stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="4" y1="2" x2="2" y2="10"/><line x1="8" y1="2" x2="6" y2="10"/><line x1="12" y1="2" x2="10" y2="10"/></g></svg>35%</div></div>
+              </div>
+              <p class="p-caption">Best window closes at 8:00 AM — wind and rain chances both rise through the day.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Route -->
+    <div class="screen-section-head"><h3 style="font-size:1.1rem;">Route</h3></div>
+    <div class="screen-pair">
+      <div>
+        <p class="phone-mode-tag">Day</p>
+        <div class="phone day">
+          <div class="phone-body">
+            <div class="phone-nav">
+              <div class="lockup">
+                <span class="mark"><svg width="18" height="18" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="13" stroke="currentColor" stroke-width="5"/><g stroke="currentColor" stroke-width="5" stroke-linecap="round"><line x1="24" y1="1" x2="24" y2="7"/><line x1="24" y1="41" x2="24" y2="47"/><line x1="1" y1="24" x2="7" y2="24"/><line x1="41" y1="24" x2="47" y2="24"/></g></svg></span>
+                <span class="wordmark">Ride <span class="op">Optimizer</span></span>
+              </div>
+              <span class="phone-clock">6:42 AM</span>
+            </div>
+            <div class="phone-content">
+              <div class="p-route-title">Reservoir Loop</div>
+              <div class="p-route-meta"><span>Dist <b>34.2 mi</b></span><span>Gain <b>1,120 ft</b></span><span>Surface <b>Paved</b></span></div>
+              <div class="p-spark-wrap">
+                <svg viewBox="0 0 280 90" width="100%" height="90" preserveAspectRatio="none">
+                  <line x1="0" y1="22" x2="280" y2="22" stroke="var(--p-line)" stroke-width="1"/>
+                  <line x1="0" y1="46" x2="280" y2="46" stroke="var(--p-line)" stroke-width="1"/>
+                  <line x1="0" y1="70" x2="280" y2="70" stroke="var(--p-line)" stroke-width="1"/>
+                  <polygon points="0,70 20,58 45,64 70,30 100,42 130,20 160,34 190,26 220,48 250,38 280,52 280,90 0,90" fill="var(--p-accent)" opacity="0.14"/>
+                  <polyline points="0,70 20,58 45,64 70,30 100,42 130,20 160,34 190,26 220,48 250,38 280,52" fill="none" stroke="var(--p-accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+                  <circle cx="280" cy="52" r="4" fill="var(--p-accent)"/>
+                </svg>
+              </div>
+              <div class="p-fit-box">
+                <div class="dot"></div>
+                <div>
+                  <div class="p-fit-title">Fits today's plan: Endurance Z2</div>
+                  <div class="p-fit-note">Matches TrainerRoad workout "Mills +1"</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <p class="phone-mode-tag">Night</p>
+        <div class="phone night">
+          <div class="phone-body">
+            <div class="phone-nav">
+              <div class="lockup">
+                <span class="mark"><svg width="18" height="18" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="13" stroke="currentColor" stroke-width="5"/><g stroke="currentColor" stroke-width="5" stroke-linecap="round"><line x1="24" y1="1" x2="24" y2="7"/><line x1="24" y1="41" x2="24" y2="47"/><line x1="1" y1="24" x2="7" y2="24"/><line x1="41" y1="24" x2="47" y2="24"/></g></svg></span>
+                <span class="wordmark">Ride <span class="op">Optimizer</span></span>
+              </div>
+              <span class="phone-clock">6:42 AM</span>
+            </div>
+            <div class="phone-content">
+              <div class="p-route-title">Reservoir Loop</div>
+              <div class="p-route-meta"><span>Dist <b>34.2 mi</b></span><span>Gain <b>1,120 ft</b></span><span>Surface <b>Paved</b></span></div>
+              <div class="p-spark-wrap">
+                <svg viewBox="0 0 280 90" width="100%" height="90" preserveAspectRatio="none">
+                  <line x1="0" y1="22" x2="280" y2="22" stroke="var(--p-line)" stroke-width="1"/>
+                  <line x1="0" y1="46" x2="280" y2="46" stroke="var(--p-line)" stroke-width="1"/>
+                  <line x1="0" y1="70" x2="280" y2="70" stroke="var(--p-line)" stroke-width="1"/>
+                  <polygon points="0,70 20,58 45,64 70,30 100,42 130,20 160,34 190,26 220,48 250,38 280,52 280,90 0,90" fill="var(--p-accent)" opacity="0.18"/>
+                  <polyline points="0,70 20,58 45,64 70,30 100,42 130,20 160,34 190,26 220,48 250,38 280,52" fill="none" stroke="var(--p-accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+                  <circle cx="280" cy="52" r="4" fill="var(--p-accent)"/>
+                </svg>
+              </div>
+              <div class="p-fit-box">
+                <div class="dot"></div>
+                <div>
+                  <div class="p-fit-title">Fits today's plan: Endurance Z2</div>
+                  <div class="p-fit-note">Matches TrainerRoad workout "Mills +1"</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="closing prose">
+    <p>The mark works as an SVG (crisp at any size, recolorable via <code>currentColor</code>) so it can serve as the favicon, the PWA home-screen icon, and the in-app navbar mark from one source. Say the word and I'll wire the actual tokens into <code>main.css</code> and swap the markup in <code>static/*.html</code>.</p>
+  </footer>
+
+</div>

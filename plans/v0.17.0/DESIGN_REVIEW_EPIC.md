@@ -213,7 +213,7 @@ design verdicts from the three reviewers.
 
 - [x] **Consolidated findings** → [`plans/v0.17.0/DESIGN_REVIEW_FINDINGS.md`](./DESIGN_REVIEW_FINDINGS.md)
 - [x] **Reviewer findings** → `plans/v0.17.0/findings-information-density.md`, `findings-discoverability.md`, `findings-card-placement.md`
-- [x] **Design guidelines updated** → [`plans/v0.6.0/DESIGN_PRINCIPLES.md`](../v0.6.0/DESIGN_PRINCIPLES.md) bumped to v2.1
+- [x] **Design guidelines updated** → [`plans/v0.6.0/DESIGN_PRINCIPLES.md`](../v0.6.0/DESIGN_PRINCIPLES.md) bumped to v2.1, then to **v2.2** (2026-07-05, post-epic) adopting the Fair Weather brand identity — see [`docs/designs/FAIR_WEATHER_BRAND_BOOK.md`](../../docs/designs/FAIR_WEATHER_BRAND_BOOK.md). The v2.2 pass also formalized the map+controls-beside-map layout rule already recommended ad hoc in #365/#367.
 - [x] **20 implementation issues created** → #357–#376 (all in v0.17.0 milestone)
 - [x] **#374 resolved directly** (help modal now degrades gracefully via `onerror` fallback — no longer blocked on tutorial asset creation)
 - [x] **Stale `v0.14.0` version strings and "What's New" toast fixed directly** across all 8 templates (part of #376, pulled forward — see `static/index.html`, footers app-wide)
