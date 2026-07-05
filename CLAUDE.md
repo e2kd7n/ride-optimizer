@@ -62,20 +62,11 @@ Flask dev config lives in `.flaskenv`. Encrypted OAuth tokens are auto-generated
 
 ## Unexposed Backend Capabilities
 
-These backend components are fully implemented but have no API endpoints or frontend UI yet. Wire them up before building new versions of the same functionality.
+### PlannerService — API exists, no UI consumes it
 
-### PlannerService (`app/services/planner_service.py`)
+`PlannerService` (`app/services/planner_service.py`) is wired to `/api/planner/recommendations`, `/api/planner/rides/nearby`, `/api/planner/rides/<id>`, and `/api/planner/analyze` (`launch.py`), and `static/js/api-client.js` has matching client methods (`getLongRideRecommendations`, `getRidesNearLocation`, `getLongRideDetails`, `analyzeLongRide`). No page currently calls them — build a planner page/view before adding a competing feature.
 
-Weather-optimized long ride recommendation engine. Initialized at startup (`_planner_service` in `launch.py`) but never called from any route.
-
-**Available methods:**
-- `get_recommendations(forecast_days, min_distance, max_distance, location)` — Scores all long rides against a multi-day weather forecast and returns ranked recommendations per day. Each ride gets a composite score from weather (50%), route variety/freshness (30%), and location proximity (20%). Returns the best day and top 5 rides per day.
-- `get_rides_near_location(lat, lon, radius_miles, limit)` — Spatial search for rides near a point. Requires `geopy`.
-- `get_ride_details(ride_id)` — Full ride detail lookup from the in-memory long ride list.
-- `analyze_long_ride(distance, duration, date)` — Standalone ride analysis: difficulty scoring, weather suitability, and actionable recommendations/warnings for a planned ride.
-- `generate_long_rides_map(long_rides, home_location)` — Generates a Folium HTML map with weather-segmented route coloring, forecast markers, and layer controls.
-
-**To wire up:** Add endpoints in `launch.py` that call `_planner_service.<method>()` (follows the same pattern as `_route_library_service` or `_weather_service`). The service needs `.initialize(long_rides)` called with the analyzed long ride list — check how `_analysis_service` feeds data to other services after analysis completes.
+One method remains fully unexposed: `generate_long_rides_map(long_rides, home_location)`, which builds a Folium HTML map with weather-segmented route coloring — no endpoint calls it yet.
 
 ### `/api/routes/search` endpoint (`launch.py`)
 
@@ -86,5 +77,5 @@ A server-side route search endpoint exists but the frontend ignores it — the r
 - When editing UI: touch `static/*.html`, `static/js/*.js`, `static/css/main.css`, and API endpoints in `launch.py`.
 - When adding business logic: add to or extend an `app/services/` class; keep heavy data processing in `src/`.
 - `main.py` is a deprecated CLI tool — do not extend it for web features.
-- SQLAlchemy models exist in `app/models/` but are not yet wired to a database; persistence still goes through `src/json_storage.py`.
-- Background jobs are managed by APScheduler via `app/scheduler/`.
+- Persistence goes through `src/json_storage.py`; there is no database. `app/models/` and the `apscheduler` dependency are currently unused (no source files / no scheduler wiring exist) — don't assume either is active.
+- Scheduled jobs (`cron/daily_analysis.py`, `cache_cleanup.py`, `weather_refresh.py`, `system_health.py`) run via the system crontab, installed with `cron/install_cron.sh` — not via an in-process scheduler.
