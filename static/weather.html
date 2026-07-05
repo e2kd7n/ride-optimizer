@@ -169,30 +169,6 @@
             </div>
         </div>
 
-        <!-- 7-day forecast -->
-        <div class="card mb-3">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-calendar-week me-2"></i>7-Day Forecast</span>
-                <small id="forecast-updated" class="text-muted"></small>
-            </div>
-            <div class="card-body">
-                <div id="forecast-grid" class="forecast-grid">
-                    <!-- Skeletons while loading -->
-                    <div class="skeleton-forecast"></div>
-                    <div class="skeleton-forecast"></div>
-                    <div class="skeleton-forecast"></div>
-                    <div class="skeleton-forecast"></div>
-                    <div class="skeleton-forecast d-none d-sm-block"></div>
-                    <div class="skeleton-forecast d-none d-sm-block"></div>
-                    <div class="skeleton-forecast d-none d-sm-block"></div>
-                </div>
-                <div id="forecast-error" class="text-center text-muted py-3 d-none">
-                    <i class="bi bi-exclamation-circle me-1"></i>
-                    <span id="forecast-error-msg">Unable to load forecast</span>
-                </div>
-            </div>
-        </div>
-
         <!-- Today's commute windows -->
         <div class="card mb-3">
             <div class="card-header">
@@ -225,6 +201,30 @@
                 </div>
                 <div id="windows-error" class="text-center text-muted py-2 d-none">
                     <i class="bi bi-exclamation-circle me-1"></i>Commute window data unavailable
+                </div>
+            </div>
+        </div>
+
+        <!-- 7-day forecast -->
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-calendar-week me-2"></i>7-Day Forecast</span>
+                <small id="forecast-updated" class="text-muted"></small>
+            </div>
+            <div class="card-body">
+                <div id="forecast-grid" class="forecast-grid">
+                    <!-- Skeletons while loading -->
+                    <div class="skeleton-forecast"></div>
+                    <div class="skeleton-forecast"></div>
+                    <div class="skeleton-forecast"></div>
+                    <div class="skeleton-forecast"></div>
+                    <div class="skeleton-forecast d-none d-sm-block"></div>
+                    <div class="skeleton-forecast d-none d-sm-block"></div>
+                    <div class="skeleton-forecast d-none d-sm-block"></div>
+                </div>
+                <div id="forecast-error" class="text-center text-muted py-3 d-none">
+                    <i class="bi bi-exclamation-circle me-1"></i>
+                    <span id="forecast-error-msg">Unable to load forecast</span>
                 </div>
             </div>
         </div>

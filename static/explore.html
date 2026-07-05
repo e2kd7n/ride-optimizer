@@ -55,6 +55,31 @@
             font-size: 0.7rem;
             line-height: 1.5;
         }
+        .workflow-step {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--color-text-muted);
+        }
+        .workflow-step-num {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--color-border, #dee2e6);
+            color: #495057;
+            font-size: 0.7rem;
+            font-weight: 700;
+        }
+        .workflow-step.workflow-step-done {
+            color: #198754;
+        }
+        .workflow-step.workflow-step-done .workflow-step-num {
+            background: #198754;
+            color: #fff;
+        }
     </style>
 </head>
 <body>
@@ -80,6 +105,13 @@
     </nav>
 
     <main id="main-content" class="container mt-2 mb-4" role="main">
+
+        <!-- Concept explainer -->
+        <p class="small text-muted mb-2">
+            Tiles are map grid squares — covering more of them means you've ridden more unique roads.
+            <strong>Squadrats</strong> are zoom-14 tiles (~1.2&nbsp;km&sup2; each);
+            <strong>Squadratinhos</strong> are zoom-17 tiles (~0.15&nbsp;km&sup2; each).
+        </p>
 
         <!-- Coverage stats -->
         <div class="row g-2 mb-2" id="coverage-stats">
@@ -110,11 +142,21 @@
             </div>
         </div>
 
+        <!-- Workflow steps -->
+        <div class="d-flex flex-wrap gap-3 mb-2 small" id="workflow-steps">
+            <span class="workflow-step" id="workflow-step-1"><span class="workflow-step-num">1</span> Load your coverage</span>
+            <span class="workflow-step" id="workflow-step-2"><span class="workflow-step-num">2</span> Set a start point</span>
+            <span class="workflow-step" id="workflow-step-3"><span class="workflow-step-num">3</span> Generate</span>
+        </div>
+
         <!-- Controls -->
         <div class="card mb-2">
             <div class="card-body py-2 px-3">
                 <div class="d-flex flex-wrap gap-2 align-items-center">
                     <label class="form-label small mb-0 me-1" for="coverage-type-select">Coverage</label>
+                    <i class="bi bi-question-circle text-muted me-1" tabindex="0" role="img"
+                       title="Squadrats = zoom-14 tiles (~1.2 km² each). Squadratinhos = zoom-17 tiles (~0.15 km² each). Covering more tiles means you've ridden more unique roads."
+                       aria-label="What are Squadrats and Squadratinhos?"></i>
                     <select class="form-select form-select-sm" id="coverage-type-select" style="max-width: 180px;" aria-label="Coverage grid granularity — also controls which grid the route generator targets">
                         <option value="14" selected>Squadrats</option>
                         <option value="17">Squadratinhos</option>
@@ -178,7 +220,7 @@
                     </div>
                 </div>
                 <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
-                    <button class="btn btn-sm btn-primary" id="generate-route-btn">
+                    <button class="btn btn-sm btn-outline-primary" id="generate-route-btn" disabled>
                         <i class="bi bi-cursor" aria-hidden="true"></i> Generate Routes
                     </button>
                     <span class="spinner-border spinner-border-sm text-primary d-none" id="worker-spinner" role="status" aria-hidden="true"></span>
