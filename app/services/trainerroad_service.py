@@ -266,13 +266,22 @@ class TrainerRoadService:
             if duration_minutes > 0:
                 return duration_minutes
 
-        summary_match = re.match(r'^(\d+):(\d{2})\s+-\s+', summary)
+        summary_match = re.match(r'^\s*(\d+):(\d{2})\s+-\s+', summary)
         if summary_match:
             hours = int(summary_match.group(1))
             minutes = int(summary_match.group(2))
             return (hours * 60) + minutes
 
         return None
+
+    def _normalize_cached_workout(self, workout: Dict[str, Any]) -> Dict[str, Any]:
+        if workout.get('duration_minutes') is None:
+            workout['duration_minutes'] = self._extract_duration_minutes(
+                workout.get('workout_name', ''),
+                None,
+                None,
+            )
+        return workout
 
     def _extract_metrics(self, description: str) -> tuple[Optional[float], Optional[float]]:
         tss = None
@@ -312,7 +321,8 @@ class TrainerRoadService:
         today = date.today()
         end = today + timedelta(days=days_ahead)
         workouts = [
-            w for w in cache.values()
+            self._normalize_cached_workout(w)
+            for w in cache.values()
             if today.isoformat() <= w.get('workout_date', '') <= end.isoformat()
         ]
         workouts.sort(key=lambda w: w.get('workout_date', ''))
@@ -441,7 +451,7 @@ class TrainerRoadService:
         workout = None
         for entry in cache.values():
             if entry.get('workout_date') == target_str:
-                workout = entry
+                workout = self._normalize_cached_workout(entry)
                 break
 
         if not workout:
