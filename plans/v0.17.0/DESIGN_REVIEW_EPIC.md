@@ -2,8 +2,8 @@
 
 **Version:** v0.17.0
 **Created:** 2026-07-04
-**Updated:** 2026-07-04 (post-review)
-**Status:** Implementation in progress
+**Updated:** 2026-07-05 (staff engineering reprioritization + implementation plan)
+**Status:** Planned for implementation
 **Epic Issue:** [#352](https://github.com/e2kd7n/ride-optimizer/issues/352)
 **Consolidated Findings:** [DESIGN_REVIEW_FINDINGS.md](./DESIGN_REVIEW_FINDINGS.md)
 
@@ -47,7 +47,7 @@ Nothing in the current design is considered sacred **except alignment to the Boo
 
 | Theme | Description | Severity | Issues |
 |-------|-------------|----------|--------|
-| **A — Navigation Gaps** | Reports and Explore absent from mobile bottom nav on all pages | P2 | #362 |
+| **A — Navigation Gaps** | Reports and Explore absent from mobile bottom nav on all pages | P1 | #362 |
 | **B — Placement Inversions** | Context cards placed above action/decision cards; map columns wider than content columns | P1–P2 | #357 #358 #363 #365 #366 #367 #371 |
 | **C — Hidden Features / No Onboarding** | Interactive features undiscoverable; Explore page uses jargon without definitions | P1–P2 | #360 #361 #370 #372 #374 |
 | **D — Information Overload** | Admin controls mixed into analytics; raw JSON rendered; secondary data at primary weight | P1–P2 | #359 #364 #368 #369 |
@@ -57,39 +57,40 @@ Nothing in the current design is considered sacred **except alignment to the Boo
 
 ## Prioritized Child Issues
 
-### 🔴 P1 — Must ship in v0.17.0 (blocks usability)
+### 🔴 P1 — Must ship in v0.17.0 (blocks usability or validation)
 
-These are ordered by **impact breadth × task criticality**. Fix in this sequence — #362 enables
-reliable navigation to test all other fixes on mobile.
+These are ordered by **release gating first, then task criticality**. After review, #362 is elevated
+from P2 to P1 because mobile navigation reach is a release-level usability concern, not just a test
+sequencing concern: two primary sections remain effectively second-class on mobile until it is fixed.
 
-| # | Issue | Page | Why P1 | Unblocks |
-|---|-------|------|--------|----------|
-| 1 | [#362](https://github.com/e2kd7n/ride-optimizer/issues/362) | All pages | Reports and Explore unreachable on mobile — 2 of 6 sections inaccessible | Mobile testing of every other fix |
-| 2 | [#358](https://github.com/e2kd7n/ride-optimizer/issues/358) | Dashboard | Mobile stacking puts Route Status above commute decision; map column wider than decision panel | #363, #370 |
-| 3 | [#357](https://github.com/e2kd7n/ride-optimizer/issues/357) | Weather | 7-day forecast above same-day commute windows — urgency ordering inverted | #373 |
-| 4 | [#359](https://github.com/e2kd7n/ride-optimizer/issues/359) | Route Detail | Raw `JSON.stringify` rendered in primary metrics card | #371 |
-| 5 | [#360](https://github.com/e2kd7n/ride-optimizer/issues/360) | Explore | Zero explanation of Squadrats/tiles — primary task uncompletable for new users | #361, #367 |
-| 6 | [#361](https://github.com/e2kd7n/ride-optimizer/issues/361) | Explore | Multi-step Generate workflow has no sequencing — Load Coverage must precede Generate | #367 |
+| # | Issue | Page | Why first / why P1-for-sequencing | Unblocks |
+|---|-------|------|-----------------------------------|----------|
+| 1 | [#362](https://github.com/e2kd7n/ride-optimizer/issues/362) | All pages | Reports and Explore are unreachable from the primary mobile nav; execute first so mobile validation is possible across the full app | Mobile testing of every other fix |
+| 2 | [#358](https://github.com/e2kd7n/ride-optimizer/issues/358) | Dashboard | Mobile stacking puts Route Status above the commute decision and inverts desktop emphasis on the highest-frequency page | #363, #370 |
+| 3 | [#357](https://github.com/e2kd7n/ride-optimizer/issues/357) | Weather | 7-day forecast above same-day commute windows inverts time urgency on a core commute workflow page | Recommended before #373 |
+| 4 | [#359](https://github.com/e2kd7n/ride-optimizer/issues/359) | Route Detail | Raw `JSON.stringify` rendered in the primary metrics card breaks comprehension of current weather context | #371 |
+| 5 | [#360](https://github.com/e2kd7n/ride-optimizer/issues/360) | Explore | No explanation of tiles / Squadrats makes the primary Explore task uncompletable for new users | #361, #367 |
+| 6 | [#361](https://github.com/e2kd7n/ride-optimizer/issues/361) | Explore | Multi-step Generate workflow has no visible sequencing; Load Coverage must precede Generate | #367 |
 
 ### 🟠 P2 — Should ship in v0.17.0 (significant friction)
 
-Ordered by **dependency chain first, then impact breadth**.
+Ordered by **hard dependencies first, then page-criticality and breadth**.
 
 | # | Issue | Page(s) | Theme | Depends on |
 |---|-------|---------|-------|------------|
 | 7 | [#368](https://github.com/e2kd7n/ride-optimizer/issues/368) | Settings | D | — |
 | 8 | [#369](https://github.com/e2kd7n/ride-optimizer/issues/369) | Reports | D | #368 (gear admin buttons move to Settings) |
-| 9 | [#363](https://github.com/e2kd7n/ride-optimizer/issues/363) | Dashboard | B | #358 (column layout must be correct first) |
-| 10 | [#370](https://github.com/e2kd7n/ride-optimizer/issues/370) | Dashboard | C | #358 (collapse structure must be stable first) |
-| 11 | [#364](https://github.com/e2kd7n/ride-optimizer/issues/364) | Routes Library | D | — |
-| 12 | [#365](https://github.com/e2kd7n/ride-optimizer/issues/365) | Routes Library | B | #364 (filter collapse affects above-fold space) |
-| 13 | [#372](https://github.com/e2kd7n/ride-optimizer/issues/372) | Routes Library | C | #364, #365 (layout must be stable first) |
-| 14 | [#366](https://github.com/e2kd7n/ride-optimizer/issues/366) | Reports | B | #369 (empty stats hidden before reordering) |
-| 15 | [#367](https://github.com/e2kd7n/ride-optimizer/issues/367) | Explore | B | #360, #361 (concept explainer and workflow first) |
-| 16 | [#371](https://github.com/e2kd7n/ride-optimizer/issues/371) | Route Detail | B | #359 (weather card must be replaced first) |
-| 17 | [#373](https://github.com/e2kd7n/ride-optimizer/issues/373) | Weather | E | #357 (card order must be correct first) |
-| 18 | [#374](https://github.com/e2kd7n/ride-optimizer/issues/374) | All pages | C | — |
-| 19 | [#375](https://github.com/e2kd7n/ride-optimizer/issues/375) | Settings/Reports/Explore | E | #368 (Settings restructure first for temp slider) |
+| 9 | [#366](https://github.com/e2kd7n/ride-optimizer/issues/366) | Reports | B | #369 (admin / empty-state cleanup should land before card reorder) |
+| 10 | [#363](https://github.com/e2kd7n/ride-optimizer/issues/363) | Dashboard | B | #358 (dashboard layout should stabilize before relocating explainer content) |
+| 11 | [#370](https://github.com/e2kd7n/ride-optimizer/issues/370) | Dashboard | C | #358 (collapse affordances should be added after the destination structure is stable) |
+| 12 | [#364](https://github.com/e2kd7n/ride-optimizer/issues/364) | Routes Library | D | — |
+| 13 | [#365](https://github.com/e2kd7n/ride-optimizer/issues/365) | Routes Library | B | #364 (filter collapse changes above-the-fold space and should land first) |
+| 14 | [#372](https://github.com/e2kd7n/ride-optimizer/issues/372) | Routes Library | C | #364, #365 (entry points and labels should target the stabilized layout) |
+| 15 | [#367](https://github.com/e2kd7n/ride-optimizer/issues/367) | Explore | B | #360, #361 (concept explainer and workflow guidance should land before control consolidation) |
+| 16 | [#371](https://github.com/e2kd7n/ride-optimizer/issues/371) | Route Detail | B | #359 (formatted weather context should replace the JSON dump first) |
+| 17 | [#373](https://github.com/e2kd7n/ride-optimizer/issues/373) | Weather | E | Recommended after #357 (visual order first), but can proceed independently if needed |
+| 18 | [#375](https://github.com/e2kd7n/ride-optimizer/issues/375) | Settings/Reports/Explore | E | Can run in parallel with #368; only coordinate on the Settings temperature control markup |
+| 19 | [#374](https://github.com/e2kd7n/ride-optimizer/issues/374) | All pages | C | Tutorial assets available, or graceful-degradation fallback defined |
 
 ### 🟡 P3 — Can defer if needed (polish)
 
@@ -108,7 +109,6 @@ Dashboard layout (#358) ──► relocate How It Works (#363)
                         └──► collapse affordances (#370)
 
 Settings restructure (#368) ──► move gear admin (#369) ──► reorder Reports cards (#366)
-                           └──► unit system (temp slider) (#375)
 
 Explore: concept explainer (#360) ──► workflow steps (#361) ──► merge controls/stats (#367)
 
@@ -116,14 +116,72 @@ Routes: filter collapse (#364) ──► column ratio (#365) ──► compare l
 
 Route Detail: fix JSON dump (#359) ──► demote Uses / surface charts (#371)
 
-Weather: swap card order (#357) ──► comfort legend + time labels (#373)
+Weather: swap card order (#357) ──► recommended sequencing for comfort legend + time labels (#373)
 
-Reports: hide empty stats (#369) ──► reorder cards (#366)      [#369 also depends on #368]
+Unit system (#375) ──► can run in parallel with #368, coordinate only where the Settings temp control changes
 
-Unit system (#375) ──► depends on #368 (temp slider lives in Settings)
+Help assets (#374) ──► either ship tutorial media or implement graceful degradation per page
 ```
 
 ---
+
+## Staff Engineering Implementation Plan
+
+### Top-Level Overview
+
+This implementation plan keeps the design review recommendations intact while adjusting sequencing in a
+few places so execution is less likely to thrash layout work across pages. The plan preserves the
+review team's intent, treats their findings as the source of truth, and only changes priority or
+dependency handling where implementation order materially affects validation or creates unnecessary
+rework. The approach is to restore mobile reach first, then complete page-local fixes in dependency
+chains, while allowing independent consistency work to proceed in parallel.
+
+### Sub-Task 1 — Re-baseline epic sequencing and issue metadata
+- **Intent** — Align the epic's execution order with the actual dependency graph so implementers do not start lower-value work before navigation and page-structure blockers are resolved.
+- **Expected Outcomes** — Epic documentation reflects the approved sequencing; any GitHub issue comments or labels needed for sequencing clarity are prepared; the team has one authoritative order of operations.
+- **Todo List**
+  1. Treat [#362](https://github.com/e2kd7n/ride-optimizer/issues/362) as the first implementation item for release sequencing, while preserving the original review severity in supporting docs.
+  2. Record that [#375](https://github.com/e2kd7n/ride-optimizer/issues/375) may proceed in parallel with [#368](https://github.com/e2kd7n/ride-optimizer/issues/368), with coordination limited to the Settings temperature control markup.
+  3. Record that [#373](https://github.com/e2kd7n/ride-optimizer/issues/373) is recommended after [#357](https://github.com/e2kd7n/ride-optimizer/issues/357) for cleaner review, but is not a hard blocker.
+  4. Record that [#374](https://github.com/e2kd7n/ride-optimizer/issues/374) should not start until tutorial asset availability is confirmed or the graceful-degradation fallback is defined.
+- **Relevant Context** — [`plans/v0.17.0/DESIGN_REVIEW_EPIC.md`](plans/v0.17.0/DESIGN_REVIEW_EPIC.md), [`plans/v0.17.0/DESIGN_REVIEW_FINDINGS.md`](plans/v0.17.0/DESIGN_REVIEW_FINDINGS.md)
+- **Status** — [ ] pending
+
+### Sub-Task 2 — Ship the release-gating and P1 page blockers
+- **Intent** — Remove the issues that most directly block mobile validation and first-time task completion on core workflows.
+- **Expected Outcomes** — Mobile users can reach every primary section; dashboard and weather follow urgency order; Route Detail no longer shows raw JSON; Explore has enough context to complete the primary workflow.
+- **Todo List**
+  1. Implement [#362](https://github.com/e2kd7n/ride-optimizer/issues/362) first across shared navigation templates and page markup.
+  2. Implement [#358](https://github.com/e2kd7n/ride-optimizer/issues/358) and [#357](https://github.com/e2kd7n/ride-optimizer/issues/357) next, in parallel if resourcing allows.
+  3. Implement [#359](https://github.com/e2kd7n/ride-optimizer/issues/359) to restore a usable Route Detail summary card.
+  4. Implement [#360](https://github.com/e2kd7n/ride-optimizer/issues/360) before [#361](https://github.com/e2kd7n/ride-optimizer/issues/361) so the Explore workflow uses defined terms before adding sequencing guidance.
+  5. Re-run mobile checks on all affected pages after this phase to confirm the remaining P2 work is now testable.
+- **Relevant Context** — `static/index.html`, `static/weather.html`, `static/route-detail.html`, `static/explore.html`, shared navigation patterns in `static/`
+- **Status** — [ ] pending
+
+### Sub-Task 3 — Resolve page-local P2 dependency chains
+- **Intent** — Complete the medium-priority findings in stable page-level bundles so each page is reviewed once after its structural changes settle.
+- **Expected Outcomes** — Reports, Routes Library, Explore, Dashboard, and Route Detail each end in a coherent layout without follow-on churn from dependent fixes landing later.
+- **Todo List**
+  1. Complete the Reports / Settings chain in order: [#368](https://github.com/e2kd7n/ride-optimizer/issues/368) → [#369](https://github.com/e2kd7n/ride-optimizer/issues/369) → [#366](https://github.com/e2kd7n/ride-optimizer/issues/366).
+  2. Complete the Dashboard follow-ons after [#358](https://github.com/e2kd7n/ride-optimizer/issues/358): [#363](https://github.com/e2kd7n/ride-optimizer/issues/363) and [#370](https://github.com/e2kd7n/ride-optimizer/issues/370).
+  3. Complete the Routes Library chain in order: [#364](https://github.com/e2kd7n/ride-optimizer/issues/364) → [#365](https://github.com/e2kd7n/ride-optimizer/issues/365) → [#372](https://github.com/e2kd7n/ride-optimizer/issues/372).
+  4. Complete the Explore follow-on [#367](https://github.com/e2kd7n/ride-optimizer/issues/367) after [#360](https://github.com/e2kd7n/ride-optimizer/issues/360) and [#361](https://github.com/e2kd7n/ride-optimizer/issues/361).
+  5. Complete [#371](https://github.com/e2kd7n/ride-optimizer/issues/371) after [#359](https://github.com/e2kd7n/ride-optimizer/issues/359).
+- **Relevant Context** — `static/settings.html`, `static/reports.html`, `static/routes.html`, `static/explore.html`, `static/index.html`, `static/route-detail.html`
+- **Status** — [ ] pending
+
+### Sub-Task 4 — Apply cross-page consistency and asset handling fixes
+- **Intent** — Finish the epic with lower-risk consistency improvements and any asset-dependent onboarding work once page layouts are stable.
+- **Expected Outcomes** — Unit preferences are applied consistently, weather supporting labels match the rendered data, help experiences degrade safely when assets are absent, and the remaining polish items are isolated to the end of the release.
+- **Todo List**
+  1. Implement [#375](https://github.com/e2kd7n/ride-optimizer/issues/375) in parallel with late P2 work, coordinating with Settings changes only where needed.
+  2. Implement [#373](https://github.com/e2kd7n/ride-optimizer/issues/373) after the Weather page structure from [#357](https://github.com/e2kd7n/ride-optimizer/issues/357) is settled, unless staffing makes parallel work more efficient.
+  3. Confirm tutorial asset availability before starting [#374](https://github.com/e2kd7n/ride-optimizer/issues/374); if assets are not ready, implement graceful degradation rather than blocking the release.
+  4. Defer [#376](https://github.com/e2kd7n/ride-optimizer/issues/376) until functional and structural work is complete so polish does not mask regressions.
+  5. Close the epic only after child issues are resolved and the final comment summarizes any deliberate deferrals.
+- **Relevant Context** — `static/weather.html`, `static/settings.html`, `static/reports.html`, `static/explore.html`, remaining shared UI patterns across `static/`
+- **Status** — [ ] pending
 
 ## Output Artifacts
 

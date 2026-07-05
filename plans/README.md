@@ -341,7 +341,7 @@ This release was superseded by v0.12.0 which focuses on production readiness wit
 | v0.11.0 | Jun 2026 | Minor | 9 docs | Architecture Simplification - SUPERSEDED |
 | v0.12.0 | May 2026 | Minor | 3 docs | Production Readiness - CURRENT |
 | v0.13.0 | Jun 2026 | Minor | 1 doc | E2E Testing & Quality - IN PLANNING |
-| v0.17.0 | TBD | Minor | 1 doc | Design Review - IN PLANNING |
+| v0.17.0 | Jul 2026 | Minor | 4 docs | Design Review - IN PLANNING |
 
 **Total Planning Documents:** 51 documents across 10 releases
 
