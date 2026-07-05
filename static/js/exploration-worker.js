@@ -116,16 +116,11 @@ function optimize({ start, end, distanceKm, mode, routeType, coverageData, cover
         );
         if (allCandidates.length === 0) return;
 
-        // For each zone pick a near-edge entry point instead of the centroid.
-        // Find the tile in the zone closest to the start, then place the
-        // waypoint just inside its incoming edge (~5 m from the boundary).
-        const points = allCandidates.map(z => {
-            const closest = z.tiles.reduce((best, t) => {
-                const d = haversineKm(start.lat, start.lon, t.lat, t.lon);
-                return d < best.d ? { t, d } : best;
-            }, { t: z.tiles[0], d: Infinity }).t;
-            return tileEntryPoint(closest, z.zoom, start.lat, start.lon);
-        });
+        // For each zone find the corner that claims the most tiles at once,
+        // inset ~5 m toward the zone centroid so GPS uncertainty is absorbed.
+        const points = allCandidates.map(z =>
+            bestCornerPoint(z.tiles, z.zoom, start.lat, start.lon)
+        );
         const ordered = solveTSP(start, points, end);
 
         const breakdown = gridCandidates
@@ -250,45 +245,78 @@ function tileBounds(x, y, zoom) {
     return { north, south, east, west };
 }
 
-/**
- * Given a tile and an approach point (fromLat/fromLon), return a waypoint
- * that is ~5 m inside the tile edge that faces the approach direction.
- * This ensures the route only needs to cross into the tile (not reach its center).
- *
- * INSET_DEG ≈ 5 m expressed in degrees:
- *   - latitude:  5 m / 111320 m per degree ≈ 0.000045°
- *   - longitude: adjusted by cos(lat) below
- */
 const INSET_M = 5;
-const INSET_LAT = INSET_M / 111320;
 
-function tileEntryPoint(tile, zoom, fromLat, fromLon) {
-    const b = tileBounds(tile.x, tile.y, zoom);
-    const midLat = (b.north + b.south) / 2;
-    const insetLon = INSET_M / (111320 * Math.cos(midLat * Math.PI / 180));
+/**
+ * For a zone (array of tiles), find the single best corner waypoint that
+ * maximises the number of unvisited zone tiles claimed in one pass.
+ *
+ * A tile corner is a grid intersection shared by up to 4 tiles:
+ *   tile (x,y) NE corner == (x+1,y) NW == (x,y-1) SE == (x+1,y-1) SW
+ *
+ * We enumerate every corner of every tile in the zone, count how many
+ * zone tiles share it, then pick the highest-scoring corner that is on
+ * the approach side (closest to fromLat/fromLon).  The returned point is
+ * inset ~5 m diagonally toward the zone centre so the GPS uncertainty
+ * doesn't lose the tiles.
+ */
+function bestCornerPoint(zone, zoom, fromLat, fromLon) {
+    const tileSet = new Set(zone.map(t => t.key));
+    const n = Math.pow(2, zoom);
+    const INSET_LAT = INSET_M / 111320;
 
-    // Determine which edge(s) the approach comes from and set the waypoint
-    // just inside that edge, at the lateral midpoint of the tile.
-    const fromNorth = fromLat > midLat;
-    const fromEast  = fromLon > (b.west + b.east) / 2;
+    // Map corner key "cx,cy" → {lat, lon, score}
+    // A corner (cx, cy) is shared by tiles (cx-1,cy-1), (cx,cy-1), (cx-1,cy), (cx,cy).
+    const corners = new Map();
 
-    // Use whichever axis has the greater angular separation to pick the
-    // dominant entry edge, keeping the other axis at tile mid.
-    const dLat = Math.abs(fromLat - midLat);
-    const dLon = Math.abs(fromLon - (b.west + b.east) / 2) * Math.cos(midLat * Math.PI / 180);
-
-    let lat, lon;
-    if (dLat >= dLon) {
-        // Enter through north or south edge
-        lat = fromNorth ? b.north - INSET_LAT : b.south + INSET_LAT;
-        lon = (b.west + b.east) / 2;
-    } else {
-        // Enter through east or west edge
-        lat = midLat;
-        lon = fromEast ? b.east - insetLon : b.west + insetLon;
+    for (const t of zone) {
+        // Each tile has 4 corners: (x,y), (x+1,y), (x,y+1), (x+1,y+1)
+        for (const [cx, cy] of [[t.x, t.y], [t.x+1, t.y], [t.x, t.y+1], [t.x+1, t.y+1]]) {
+            const key = `${cx},${cy}`;
+            if (!corners.has(key)) {
+                // Compute exact lat/lon for this grid corner
+                const lat = Math.atan(Math.sinh(Math.PI * (1 - 2 * cy / n))) * 180 / Math.PI;
+                const lon = cx / n * 360 - 180;
+                corners.set(key, { lat, lon, score: 0, cx, cy });
+            }
+            // Count how many zone tiles this corner touches
+            // (the 4 tiles that share corner (cx,cy) are (cx-1,cy-1),(cx,cy-1),(cx-1,cy),(cx,cy))
+            let score = 0;
+            for (const [dx, dy] of [[0,0],[1,0],[0,1],[1,1]]) {
+                if (tileSet.has(`${cx - dx},${cy - dy}`)) score++;
+            }
+            corners.get(key).score = Math.max(corners.get(key).score, score);
+        }
     }
 
-    return { lat, lon };
+    // Pick best corner: highest score, tie-break by proximity to fromLat/fromLon
+    let best = null;
+    for (const c of corners.values()) {
+        if (!best || c.score > best.score ||
+            (c.score === best.score &&
+             Math.hypot(c.lat - fromLat, (c.lon - fromLon) * Math.cos(fromLat * Math.PI / 180)) <
+             Math.hypot(best.lat - fromLat, (best.lon - fromLon) * Math.cos(fromLat * Math.PI / 180)))) {
+            best = c;
+        }
+    }
+
+    if (!best) {
+        // Fallback: use first tile's center
+        return { lat: zone[0].lat, lon: zone[0].lon };
+    }
+
+    // Inset the corner ~5 m toward the zone centroid so we're safely inside all tiles.
+    const centLat = zone.reduce((s, t) => s + t.lat, 0) / zone.length;
+    const centLon = zone.reduce((s, t) => s + t.lon, 0) / zone.length;
+    const dLat = centLat - best.lat;
+    const dLon = centLon - best.lon;
+    const dist = Math.hypot(dLat, dLon * Math.cos(best.lat * Math.PI / 180)) || 1;
+    const insetLon = INSET_M / (111320 * Math.cos(best.lat * Math.PI / 180));
+
+    return {
+        lat: best.lat + (dLat / dist) * INSET_LAT,
+        lon: best.lon + (dLon / dist) * insetLon,
+    };
 }
 
 // ── Flood-fill zone detection ───────────────────────────────────
