@@ -331,6 +331,40 @@
 
                             <hr class="my-3">
 
+                            <!-- OpenRouteService -->
+                            <h3 class="h6 fw-bold mb-2"><i class="bi bi-signpost-split me-1" aria-hidden="true"></i>OpenRouteService (Road Routing)</h3>
+                            <div class="mb-3 d-flex align-items-center gap-3 flex-wrap">
+                                <div id="ors-connection-status">
+                                    <span class="text-muted small"><i class="bi bi-hourglass-split"></i> Checking…</span>
+                                </div>
+                            </div>
+
+                            <p class="small text-muted mb-3">
+                                Required for the Explore page's "Plot road route" feature. Get a free key at
+                                <a href="https://openrouteservice.org/dev/#/signup" target="_blank" rel="noopener">openrouteservice.org</a>
+                                (free tier: 2,000 req/day). Paste the token from your ORS dashboard below.
+                            </p>
+
+                            <div class="row g-3">
+                                <div class="col-md-9">
+                                    <label class="form-label fw-bold" for="ors-api-key">API Key</label>
+                                    <input type="password" class="form-control" id="ors-api-key"
+                                           placeholder="your ORS API key"
+                                           autocomplete="new-password" spellcheck="false">
+                                    <div class="form-text">
+                                        Sign in to openrouteservice.org → Dashboard → <strong>API Keys</strong> — copy the token shown there.
+                                    </div>
+                                </div>
+                                <div class="col-md-3 d-flex align-items-end">
+                                    <button type="button" class="btn btn-primary w-100" id="ors-save-btn">
+                                        <i class="bi bi-floppy" aria-hidden="true"></i> Save
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="ors-save-feedback" class="mt-2" style="display:none"></div>
+
+                            <hr class="my-3">
+
                             <!-- Garmin Connect -->
                             <h3 class="h6 fw-bold mb-2"><i class="bi bi-smartwatch me-1" aria-hidden="true"></i>Garmin Connect</h3>
                             <div class="mb-3 d-flex align-items-center gap-3 flex-wrap">
@@ -605,6 +639,7 @@
             // Load cache info and wire analysis button
             loadStravaStatus();
             loadIcuStatus();
+            loadOrsStatus();
             loadGarminStatus();
             loadTrainerRoadStatus();
             loadCacheInfo();
@@ -1059,6 +1094,63 @@
                 } finally {
                     btn.disabled = false;
                     btn.innerHTML = '<i class="bi bi-link-45deg"></i> Connect';
+                }
+            });
+        }
+
+        // ── OpenRouteService ─────────────────────────────────────
+
+        async function loadOrsStatus() {
+            const statusEl = document.getElementById('ors-connection-status');
+            try {
+                const s = await window.apiClient.fetch('/ors/status');
+                if (s.configured) {
+                    statusEl.innerHTML = '<span class="badge bg-success"><i class="bi bi-check-circle"></i> ORS configured</span>';
+                } else {
+                    statusEl.innerHTML = '<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle"></i> Not configured — road routing unavailable</span>';
+                }
+            } catch (e) {
+                statusEl.innerHTML = '<span class="text-muted small">Status unknown</span>';
+            }
+
+            document.getElementById('ors-save-btn').addEventListener('click', async () => {
+                const btn = document.getElementById('ors-save-btn');
+                const feedback = document.getElementById('ors-save-feedback');
+                const keyInput = document.getElementById('ors-api-key');
+                const apiKey = keyInput.value.trim();
+
+                if (!apiKey) {
+                    feedback.style.display = '';
+                    feedback.innerHTML = '<span class="text-danger small"><i class="bi bi-exclamation-triangle"></i> API key is required.</span>';
+                    return;
+                }
+
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Saving…';
+                feedback.style.display = 'none';
+
+                try {
+                    const res = await window.apiClient.fetch('/ors/connect', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ api_key: apiKey })
+                    });
+                    if (res.success) {
+                        feedback.style.display = '';
+                        feedback.innerHTML = '<span class="text-success small"><i class="bi bi-check-circle"></i> API key saved. Road routing is now available on the Explore page.</span>';
+                        keyInput.value = '';
+                        await loadOrsStatus();
+                        if (typeof showToast === 'function') showToast('ORS API key saved!', 'success');
+                    } else {
+                        feedback.style.display = '';
+                        feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${res.error || 'Save failed'}</span>`;
+                    }
+                } catch (e) {
+                    feedback.style.display = '';
+                    feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${e.message || 'Save failed'}</span>`;
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-floppy"></i> Save';
                 }
             });
         }

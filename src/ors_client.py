@@ -13,7 +13,9 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-_ORS_DIRECTIONS_URL = "https://api.openrouteservice.org/v2/directions/{profile}/geojson"
+# api.openrouteservice.org is deprecated for new accounts (moved to heigit.org).
+# api.heigit.org/openrouteservice works for both old and new API keys.
+_ORS_DIRECTIONS_URL = "https://api.heigit.org/openrouteservice/v2/directions/{profile}/geojson"
 
 
 def get_route(
@@ -56,6 +58,19 @@ def get_route(
         if response.status_code == 429:
             logger.warning("ORS rate limit hit (429)")
             return {"_ors_rate_limited": True}
+        if response.status_code == 404:
+            # Distinguish "profile endpoint doesn't exist" (nginx 404, no JSON body with 'error.code')
+            # from ORS routing errors like "no routable point" (also 404 but has error.code 2010).
+            try:
+                err_body = response.json()
+                if isinstance(err_body.get("error"), dict) and err_body["error"].get("code"):
+                    # ORS application error (routable point not found, etc) — treat as hard failure
+                    logger.warning("ORS routing error %s: %s", profile, err_body["error"].get("message"))
+                    return None
+            except Exception:
+                pass
+            logger.warning("ORS profile not available (404): %s", profile)
+            return {"_ors_profile_unavailable": True}
         response.raise_for_status()
         return response.json()
     except requests.exceptions.Timeout:
