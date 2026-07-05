@@ -323,6 +323,9 @@ async function generateRoute() {
             statusEl.textContent = routeCount > 0
                 ? `${routeCount} route${routeCount > 1 ? 's' : ''} generated — click "Plot road route" to get real road directions`
                 : 'No reachable unvisited tiles found — try increasing distance or moving the start point';
+            if (routeCount > 0) {
+                map.fitBounds(routeLayer.getBounds(), { padding: [40, 40] });
+            }
             return;
         }
 
