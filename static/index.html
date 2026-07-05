@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ride Optimizer</title>
     
+    <link rel="icon" type="image/svg+xml" href="/img/favicon.svg">
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
@@ -23,11 +24,11 @@
             border-radius: 8px;
         }
 
-        /* Weather banner styles */
+        /* Weather banner styles — flat cobalt (Fair Weather; gradients retired) */
         .weather-banner {
-            background: linear-gradient(135deg, #4a5fd5 0%, #764ba2 100%);
+            background: var(--accent);
             color: white;
-            border-radius: 8px;
+            border-radius: 16px 16px 0 0;
             padding: var(--space-3) var(--space-4);
             box-shadow: 0 2px 8px rgba(0,0,0,0.15);
             display: flex;
@@ -90,8 +91,8 @@
 
         /* Commute card styles */
         .commute-card {
-            background: white;
-            border-radius: 8px;
+            background: var(--surface);
+            border-radius: 16px;
             padding: var(--space-3);
             margin-bottom: var(--space-3);
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
@@ -236,35 +237,23 @@
         }
 
         /* â”€â”€ Design system: purple gradient buttons (#280) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-        .btn-primary {
-            background: linear-gradient(135deg, #4a5fd5 0%, #764ba2 100%);
-            border: none;
-            transition: opacity 0.2s ease-out, transform 0.2s ease-out;
-        }
-
-        .btn-primary:hover,
-        .btn-primary:focus {
-            opacity: 0.9;
-            transform: translateY(-1px);
-            background: linear-gradient(135deg, #4a5fd5 0%, #764ba2 100%);
-            border: none;
-        }
+        /* Primary buttons: flat cobalt via main.css .btn-primary override (Fair Weather) */
 
         /* Commute compare chevron rotation */
         .commute-chevron { transition: transform 0.2s; display: inline-block; }
         [data-bs-target="#commute-detail"][aria-expanded="true"] .commute-chevron { transform: rotate(180deg); }
 
         .card {
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-            border: 1px solid rgba(0,0,0,0.07);
+            border-radius: 16px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+            border: 1px solid var(--line);
         }
 
         .weather-hourly-strip {
-            background: rgba(74, 95, 213, 0.08);
-            border-radius: 0 0 8px 8px;
+            background: rgba(var(--accent-rgb), 0.08);
+            border-radius: 0 0 16px 16px;
             padding: var(--space-2) var(--space-3);
-            margin-top: -8px;
+            margin-top: 0;
         }
     </style>
 </head>
@@ -274,10 +263,19 @@
     <a href="#home-tab" class="skip-link">Skip to navigation</a>
     
     <!-- Top Navigation (Mobile & Desktop) -->
-    <nav class="navbar navbar-expand-lg navbar-dark navbar-gradient" role="navigation" aria-label="Main navigation">
+    <nav class="navbar navbar-expand-lg navbar-fairweather" role="navigation" aria-label="Main navigation">
         <div class="container">
             <a class="navbar-brand" href="/" aria-label="Ride Optimizer Home">
-                <i class="bi bi-bicycle" aria-hidden="true"></i> Ride Optimizer
+                <svg class="brand-mark" viewBox="0 0 48 48" fill="none" aria-hidden="true" focusable="false">
+                    <circle cx="24" cy="24" r="12" stroke="currentColor" stroke-width="3.4"/>
+                    <g stroke="currentColor" stroke-width="3.4" stroke-linecap="round">
+                        <line x1="24" y1="2" x2="24" y2="8"/><line x1="24" y1="40" x2="24" y2="46"/>
+                        <line x1="2" y1="24" x2="8" y2="24"/><line x1="40" y1="24" x2="46" y2="24"/>
+                        <line x1="8.3" y1="8.3" x2="12.5" y2="12.5"/><line x1="35.5" y1="35.5" x2="39.7" y2="39.7"/>
+                        <line x1="39.7" y1="8.3" x2="35.5" y2="12.5"/><line x1="12.5" y1="35.5" x2="8.3" y2="39.7"/>
+                    </g>
+                </svg>
+                <span><span class="brand-ride">Ride</span>&nbsp;<span class="brand-optimizer">Optimizer</span></span>
             </a>
             
             <!-- Mobile Menu Toggle Button -->
@@ -449,27 +447,43 @@
     </main>
 
     <!-- Bottom Navigation (Mobile) -->
+    <div id="bottom-nav-more" class="bottom-nav-drawer collapse d-md-none" aria-label="More pages">
+        <a class="bottom-nav-drawer-item" href="/explore.html">
+            <i class="bi bi-compass" aria-hidden="true"></i>
+            <span>Explore</span>
+        </a>
+        <a class="bottom-nav-drawer-item" href="/settings.html">
+            <i class="bi bi-gear" aria-hidden="true"></i>
+            <span>Settings</span>
+        </a>
+    </div>
     <nav id="bottom-nav" class="bottom-nav d-md-none" role="navigation" aria-label="Mobile navigation">
-        <button class="bottom-nav-item active" aria-label="Home" aria-current="page">
+        <button type="button" class="bottom-nav-item active" aria-label="Home" aria-current="page" onclick="window.location.href='/'">
             <i class="bi bi-house-door" aria-hidden="true"></i>
             <span>Home</span>
         </button>
-        <button class="bottom-nav-item" aria-label="Routes" onclick="window.location.href='/routes.html'">
+        <button type="button" class="bottom-nav-item" aria-label="Routes" onclick="window.location.href='/routes.html'">
             <i class="bi bi-map" aria-hidden="true"></i>
             <span>Routes</span>
         </button>
-        <button class="bottom-nav-item" aria-label="Weather" onclick="window.location.href='/weather.html'">
+        <button type="button" class="bottom-nav-item" aria-label="Weather" onclick="window.location.href='/weather.html'">
             <i class="bi bi-cloud-sun" aria-hidden="true"></i>
             <span>Weather</span>
         </button>
-        <button class="bottom-nav-item" aria-label="Settings" onclick="window.location.href='/settings.html'">
-            <i class="bi bi-gear" aria-hidden="true"></i>
-            <span>Settings</span>
+        <button type="button" class="bottom-nav-item" aria-label="Reports" onclick="window.location.href='/reports.html'">
+            <i class="bi bi-bar-chart-line" aria-hidden="true"></i>
+            <span>Reports</span>
+        </button>
+        <button type="button" class="bottom-nav-item" aria-label="More pages"
+                data-bs-toggle="collapse" data-bs-target="#bottom-nav-more"
+                aria-expanded="false" aria-controls="bottom-nav-more">
+            <i class="bi bi-three-dots" aria-hidden="true"></i>
+            <span>More</span>
         </button>
     </nav>
     
     <!-- Footer -->
-    <footer class="mt-3 bg-light">
+    <footer class="mt-3">
         <div class="container text-center text-muted">
             <small>Ride Optimizer v0.17.0 - Smart Static Architecture</small>
         </div>

@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Weather Forecast - Ride Optimizer</title>
+    <link rel="icon" type="image/svg+xml" href="/img/favicon.svg">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <link rel="stylesheet" href="/css/main.css">
@@ -25,9 +26,9 @@
         }
 
         .forecast-card {
-            background: var(--surface-card, #fff);
-            border: 1px solid rgba(0,0,0,0.08);
-            border-radius: 8px;
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: 16px;
             padding: var(--space-2);
             text-align: center;
             transition: box-shadow 0.2s;
@@ -36,17 +37,17 @@
             box-shadow: 0 4px 12px rgba(0,0,0,0.12);
         }
         .forecast-card.today {
-            border-color: #667eea;
+            border-color: var(--accent);
             border-width: 2px;
         }
         .forecast-day {
             font-size: var(--font-size-xs);
             font-weight: 600;
             text-transform: uppercase;
-            color: #6c757d;
+            color: var(--ink-soft);
         }
         .forecast-card.today .forecast-day {
-            color: #667eea;
+            color: var(--accent);
         }
         .forecast-icon {
             font-size: var(--font-size-lg);
@@ -79,9 +80,9 @@
         .comfort-pill.unfavorable { background: #fee2e2; color: #991b1b; }
 
         .commute-window-card {
-            border-radius: 8px;
+            border-radius: 16px;
             padding: var(--space-3);
-            border: 1px solid rgba(0,0,0,0.08);
+            border: 1px solid var(--line);
         }
         .commute-window-card.morning { border-left: 4px solid #f59e0b; }
         .commute-window-card.evening { border-left: 4px solid #6366f1; }
@@ -116,10 +117,19 @@
 <body>
     <a href="#main-content" class="skip-link">Skip to main content</a>
 
-    <nav class="navbar navbar-expand-lg navbar-dark navbar-gradient" role="navigation" aria-label="Main navigation">
+    <nav class="navbar navbar-expand-lg navbar-fairweather" role="navigation" aria-label="Main navigation">
         <div class="container">
             <a class="navbar-brand" href="/" aria-label="Ride Optimizer Home">
-                <i class="bi bi-bicycle" aria-hidden="true"></i> Ride Optimizer
+                <svg class="brand-mark" viewBox="0 0 48 48" fill="none" aria-hidden="true" focusable="false">
+                    <circle cx="24" cy="24" r="12" stroke="currentColor" stroke-width="3.4"/>
+                    <g stroke="currentColor" stroke-width="3.4" stroke-linecap="round">
+                        <line x1="24" y1="2" x2="24" y2="8"/><line x1="24" y1="40" x2="24" y2="46"/>
+                        <line x1="2" y1="24" x2="8" y2="24"/><line x1="40" y1="24" x2="46" y2="24"/>
+                        <line x1="8.3" y1="8.3" x2="12.5" y2="12.5"/><line x1="35.5" y1="35.5" x2="39.7" y2="39.7"/>
+                        <line x1="39.7" y1="8.3" x2="35.5" y2="12.5"/><line x1="12.5" y1="35.5" x2="8.3" y2="39.7"/>
+                    </g>
+                </svg>
+                <span><span class="brand-ride">Ride</span>&nbsp;<span class="brand-optimizer">Optimizer</span></span>
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
@@ -230,28 +240,44 @@
         </div>
     </main>
 
-    <footer class="mt-3 bg-light">
+    <footer class="mt-3">
         <div class="container text-center text-muted">
             <small>Ride Optimizer v0.17.0 - Smart Static Architecture</small>
         </div>
     </footer>
 
+    <div id="bottom-nav-more" class="bottom-nav-drawer collapse d-md-none" aria-label="More pages">
+        <a class="bottom-nav-drawer-item" href="/explore.html">
+            <i class="bi bi-compass" aria-hidden="true"></i>
+            <span>Explore</span>
+        </a>
+        <a class="bottom-nav-drawer-item" href="/settings.html">
+            <i class="bi bi-gear" aria-hidden="true"></i>
+            <span>Settings</span>
+        </a>
+    </div>
     <nav id="bottom-nav" class="bottom-nav d-md-none" role="navigation" aria-label="Mobile navigation">
-        <button class="bottom-nav-item" onclick="window.location.href='/'" aria-label="Home">
+        <button type="button" class="bottom-nav-item" aria-label="Home" onclick="window.location.href='/'">
             <i class="bi bi-house-door" aria-hidden="true"></i>
             <span>Home</span>
         </button>
-        <button class="bottom-nav-item" onclick="window.location.href='/routes.html'" aria-label="Routes">
+        <button type="button" class="bottom-nav-item" aria-label="Routes" onclick="window.location.href='/routes.html'">
             <i class="bi bi-map" aria-hidden="true"></i>
             <span>Routes</span>
         </button>
-        <button class="bottom-nav-item active" aria-label="Weather" aria-current="page">
+        <button type="button" class="bottom-nav-item active" aria-label="Weather" aria-current="page" onclick="window.location.href='/weather.html'">
             <i class="bi bi-cloud-sun" aria-hidden="true"></i>
             <span>Weather</span>
         </button>
-        <button class="bottom-nav-item" onclick="window.location.href='/settings.html'" aria-label="Settings">
-            <i class="bi bi-gear" aria-hidden="true"></i>
-            <span>Settings</span>
+        <button type="button" class="bottom-nav-item" aria-label="Reports" onclick="window.location.href='/reports.html'">
+            <i class="bi bi-bar-chart-line" aria-hidden="true"></i>
+            <span>Reports</span>
+        </button>
+        <button type="button" class="bottom-nav-item" aria-label="More pages"
+                data-bs-toggle="collapse" data-bs-target="#bottom-nav-more"
+                aria-expanded="false" aria-controls="bottom-nav-more">
+            <i class="bi bi-three-dots" aria-hidden="true"></i>
+            <span>More</span>
         </button>
     </nav>
 
