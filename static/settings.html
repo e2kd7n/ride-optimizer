@@ -206,6 +206,9 @@
                                 <a href="/api/strava/connect" class="btn btn-sm btn-outline-primary" id="strava-connect-btn" style="display:none">
                                     <i class="bi bi-link-45deg"></i> Connect to Strava
                                 </a>
+                                <button type="button" class="btn btn-sm btn-outline-danger" id="strava-disconnect-btn" style="display:none">
+                                    <i class="bi bi-x-lg" aria-hidden="true"></i> Disconnect
+                                </button>
                             </div>
 
                             <div id="cache-info" class="mb-3">
@@ -298,6 +301,9 @@
                                 <div id="icu-connection-status">
                                     <span class="text-muted small"><i class="bi bi-hourglass-split"></i> Checking intervals.icu…</span>
                                 </div>
+                                <button type="button" class="btn btn-sm btn-outline-danger" id="icu-disconnect-btn" style="display:none">
+                                    <i class="bi bi-x-lg" aria-hidden="true"></i> Disconnect
+                                </button>
                             </div>
 
                             <p class="small text-muted mb-3">
@@ -337,6 +343,9 @@
                                 <div id="ors-connection-status">
                                     <span class="text-muted small"><i class="bi bi-hourglass-split"></i> Checking…</span>
                                 </div>
+                                <button type="button" class="btn btn-sm btn-outline-danger" id="ors-disconnect-btn" style="display:none">
+                                    <i class="bi bi-x-lg" aria-hidden="true"></i> Disconnect
+                                </button>
                             </div>
 
                             <p class="small text-muted mb-3">
@@ -1043,18 +1052,34 @@
             const statusEl = document.getElementById('icu-connection-status');
             const athleteInput = document.getElementById('icu-athlete-id');
             const keyInput = document.getElementById('icu-api-key');
+            const disconnectBtn = document.getElementById('icu-disconnect-btn');
             try {
                 const s = await window.apiClient.fetch('/intervals/status');
                 if (s.connected) {
                     statusEl.innerHTML = `<span class="badge bg-success"><i class="bi bi-check-circle"></i> intervals.icu connected</span> <span class="text-muted small">${s.athlete_name || s.athlete_id}</span>`;
                     athleteInput.value = s.athlete_id || '';
                     athleteInput.placeholder = s.athlete_id || 'e.g. i12345';
+                    disconnectBtn.style.display = '';
                 } else {
                     statusEl.innerHTML = '<span class="badge bg-secondary"><i class="bi bi-x-circle"></i> Not connected</span>';
+                    disconnectBtn.style.display = 'none';
                 }
             } catch (e) {
                 statusEl.innerHTML = '<span class="text-muted small">Not configured</span>';
+                disconnectBtn.style.display = 'none';
             }
+
+            disconnectBtn.addEventListener('click', async () => {
+                if (!confirm('Disconnect intervals.icu? This will remove your saved credentials.')) return;
+                try {
+                    await window.apiClient.fetch('/intervals/disconnect', { method: 'POST' });
+                    if (typeof showToast === 'function') showToast('intervals.icu disconnected', 'info');
+                    athleteInput.value = '';
+                    await loadIcuStatus();
+                } catch (e) {
+                    if (typeof showToast === 'function') showToast('Failed to disconnect intervals.icu', 'error');
+                }
+            }, { once: true });
 
             document.getElementById('icu-connect-btn').addEventListener('click', async () => {
                 const btn = document.getElementById('icu-connect-btn');
@@ -1102,16 +1127,32 @@
 
         async function loadOrsStatus() {
             const statusEl = document.getElementById('ors-connection-status');
+            const disconnectBtn = document.getElementById('ors-disconnect-btn');
             try {
                 const s = await window.apiClient.fetch('/ors/status');
                 if (s.configured) {
                     statusEl.innerHTML = '<span class="badge bg-success"><i class="bi bi-check-circle"></i> ORS configured</span>';
+                    disconnectBtn.style.display = '';
                 } else {
                     statusEl.innerHTML = '<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle"></i> Not configured — road routing unavailable</span>';
+                    disconnectBtn.style.display = 'none';
                 }
             } catch (e) {
                 statusEl.innerHTML = '<span class="text-muted small">Status unknown</span>';
+                disconnectBtn.style.display = 'none';
             }
+
+            disconnectBtn.addEventListener('click', async () => {
+                if (!confirm('Remove ORS API key? Road routing on the Explore page will be unavailable until you add a new key.')) return;
+                try {
+                    await window.apiClient.fetch('/ors/disconnect', { method: 'POST' });
+                    if (typeof showToast === 'function') showToast('ORS API key removed', 'info');
+                    document.getElementById('ors-api-key').value = '';
+                    await loadOrsStatus();
+                } catch (e) {
+                    if (typeof showToast === 'function') showToast('Failed to remove ORS key', 'error');
+                }
+            }, { once: true });
 
             document.getElementById('ors-save-btn').addEventListener('click', async () => {
                 const btn = document.getElementById('ors-save-btn');
@@ -1417,20 +1458,34 @@
         async function loadStravaStatus() {
             const statusEl = document.getElementById('strava-connection-status');
             const connectBtn = document.getElementById('strava-connect-btn');
+            const disconnectBtn = document.getElementById('strava-disconnect-btn');
             try {
                 const s = await window.apiClient.getStravaStatus();
                 if (s.connected) {
                     const exp = new Date(s.expires_at * 1000).toLocaleDateString();
                     statusEl.innerHTML = `<span class="badge bg-success"><i class="bi bi-check-circle"></i> Strava connected</span> <span class="text-muted small">token expires ${exp}</span>`;
                     connectBtn.style.display = 'none';
+                    disconnectBtn.style.display = '';
                 } else {
                     const reason = s.reason === 'token_expired' ? 'token expired' : 'not connected';
                     statusEl.innerHTML = `<span class="badge bg-danger"><i class="bi bi-x-circle"></i> Strava ${reason}</span>`;
                     connectBtn.style.display = '';
+                    disconnectBtn.style.display = 'none';
                 }
             } catch (e) {
                 statusEl.innerHTML = '<span class="text-warning small"><i class="bi bi-exclamation-triangle"></i> Could not check Strava status</span>';
             }
+
+            disconnectBtn.addEventListener('click', async () => {
+                if (!confirm('Disconnect Strava? This will remove your saved credentials and you will need to re-authenticate.')) return;
+                try {
+                    await window.apiClient.fetch('/strava/disconnect', { method: 'POST' });
+                    if (typeof showToast === 'function') showToast('Strava disconnected', 'info');
+                    await loadStravaStatus();
+                } catch (e) {
+                    if (typeof showToast === 'function') showToast('Failed to disconnect Strava', 'error');
+                }
+            }, { once: true });
         }
 
         async function loadCacheInfo() {
