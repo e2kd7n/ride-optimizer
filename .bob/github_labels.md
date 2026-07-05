@@ -42,6 +42,7 @@
 - `touch` - Touch interaction
 - `gestures` - Gesture support
 - `routes` - Route-related features
+- `explore` - Explore tab — tile coverage, route generation, yard(inho)
 - `notifications` - Notifications and toasts
 - `toast` - Toast notifications
 - `undo` - Undo functionality
