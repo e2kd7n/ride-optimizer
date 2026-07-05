@@ -99,6 +99,8 @@ The following additions and modifications were made to [`plans/v0.6.0/DESIGN_PRI
 | §7 Discoverable Features | Extended with new guideline: "Workflow sequencing" — multi-step workflows must have visible step numbers or progressive button enablement. Added field note citing DISC-EXPLORE-2, DISC-SETTINGS-1. Also extended with: "Jargon-free first use" — domain-specific terms require in-page definitions. Citing DISC-EXPLORE-1. |
 | §10 Consistent Patterns | Extended with new guideline: "Destructive action styling" — destructive actions must use `btn-outline-danger` or `btn-danger` with a confirmation step. Added field note citing DISC-EXPLORE-5. Extended with: "Unit system applied globally" — all labels, sliders, and static strings displaying measurements must read the user unit preference on page load. Citing DISC-SETTINGS-3, DISC-REPORTS-4, DISC-EXPLORE-3. |
 
+> **Addendum (2026-07-05, post-epic):** `DESIGN_PRINCIPLES.md` was bumped again to **v2.2** outside this review, adopting the "Fair Weather" brand identity (full spec: [`docs/designs/FAIR_WEATHER_BRAND_BOOK.md`](../../docs/designs/FAIR_WEATHER_BRAND_BOOK.md)). This replaced the Primary/Semantic Colors tables in §4, and added two new guidelines directly relevant to this epic's open issues: §2 now requires weather cards to show wind and precipitation whenever available, and §3 now formalizes "map + controls beside each other on desktop," which generalizes the column-ratio recommendations already made in #365 and #367 below.
+
 ---
 
 ## Implementation Issues Created

@@ -72,6 +72,12 @@ One method remains fully unexposed: `generate_long_rides_map(long_rides, home_lo
 
 A server-side route search endpoint exists but the frontend ignores it — the routes page fetches all routes via `/api/routes` and filters client-side in `routes.js`. The endpoint works and is rate-limited, but is redundant unless the route count grows large enough to justify server-side filtering.
 
+## Visual Design
+
+**Brand identity:** `docs/designs/FAIR_WEATHER_BRAND_BOOK.md` (adopted 2026-07-05) — logo mark, Day/Night color tokens, type, and reference screens for the current "Fair Weather" identity. `docs/designs/BRAND_CONCEPTS_COMPARISON.html` holds the two alternate directions that were reviewed and not chosen. **Design rules:** `plans/v0.6.0/DESIGN_PRINCIPLES.md` (v2.2) is the living guideline doc — mobile-first, visual hierarchy, color usage, map/controls layout, etc.
+
+`static/css/main.css` and `static/*.html` have **not yet been updated** to the Fair Weather tokens — they still carry the pre-rebrand indigo gradient (`#667eea`/`#764ba2`). When touching UI, check the brand book before introducing a new color, icon, or shape rather than matching the current (soon-to-be-replaced) styling.
+
 ## Key Patterns
 
 - When editing UI: touch `static/*.html`, `static/js/*.js`, `static/css/main.css`, and API endpoints in `launch.py`.

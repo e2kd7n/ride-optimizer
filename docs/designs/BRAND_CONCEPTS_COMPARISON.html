@@ -1,0 +1,461 @@
+<title>Ride Optimizer — Brand Concepts</title>
+<style>
+  :root {
+    --shell-bg: #FAFAF8;
+    --shell-surface: #FFFFFF;
+    --shell-ink: #1C1D1B;
+    --shell-ink-soft: #63645D;
+    --shell-line: #E4E2DA;
+    --shell-accent: #4B5A6A;
+    --shell-accent-soft: rgba(75,90,106,0.09);
+    --font-shell-head: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-shell-body: Georgia, "Iowan Old Style", "Times New Roman", serif;
+    --font-shell-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --shell-bg: #17181B;
+      --shell-surface: #1E2023;
+      --shell-ink: #E9E8E3;
+      --shell-ink-soft: #9A9C96;
+      --shell-line: #2D2F32;
+      --shell-accent: #93AAC0;
+      --shell-accent-soft: rgba(147,170,192,0.12);
+    }
+  }
+  :root[data-theme="dark"] {
+    --shell-bg: #17181B; --shell-surface: #1E2023; --shell-ink: #E9E8E3;
+    --shell-ink-soft: #9A9C96; --shell-line: #2D2F32; --shell-accent: #93AAC0;
+    --shell-accent-soft: rgba(147,170,192,0.12);
+  }
+  :root[data-theme="light"] {
+    --shell-bg: #FAFAF8; --shell-surface: #FFFFFF; --shell-ink: #1C1D1B;
+    --shell-ink-soft: #63645D; --shell-line: #E4E2DA; --shell-accent: #4B5A6A;
+    --shell-accent-soft: rgba(75,90,106,0.09);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--shell-bg);
+    color: var(--shell-ink);
+    font-family: var(--font-shell-body);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1080px; margin: 0 auto; padding: 4rem 1.75rem 6rem; }
+  .prose { max-width: 62ch; }
+  h1, h2, h3 { font-family: var(--font-shell-head); text-wrap: balance; margin: 0; }
+
+  .eyebrow {
+    font-family: var(--font-shell-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--shell-accent);
+    margin: 0 0 0.9rem;
+  }
+  .masthead h1 {
+    font-size: clamp(2rem, 4.2vw, 3rem);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--shell-ink);
+    margin-bottom: 1.1rem;
+  }
+  .dek { font-size: 1.08rem; color: var(--shell-ink-soft); }
+
+  section.audit { margin-top: 4rem; padding-top: 3rem; border-top: 1px solid var(--shell-line); }
+  .audit h2 {
+    font-size: 1.6rem; font-weight: 700; margin-bottom: 1.75rem;
+  }
+  .audit-grid {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.75rem 2.5rem;
+  }
+  .audit-point h3 {
+    font-size: 1rem; font-weight: 700; margin-bottom: 0.4rem; color: var(--shell-ink);
+  }
+  .audit-point p { margin: 0; font-size: 0.98rem; color: var(--shell-ink-soft); }
+
+  .current-swatch {
+    margin-top: 2.25rem; display: flex; align-items: center; gap: 0.5rem;
+  }
+  .current-swatch .chip {
+    width: 28px; height: 28px; border-radius: 4px;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08);
+  }
+  .chip-caption {
+    font-family: var(--font-shell-mono); font-size: 0.78rem; color: var(--shell-ink-soft);
+    margin-left: 0.5rem;
+  }
+
+  /* ===== Concept sections ===== */
+  section.concept { margin-top: 5.5rem; }
+  .concept-head { margin-bottom: 2rem; }
+  .concept-kicker {
+    font-family: var(--font-shell-mono); font-size: 0.72rem; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--shell-ink-soft); margin-bottom: 0.5rem;
+  }
+  .concept-name { font-size: clamp(1.7rem, 3.2vw, 2.3rem); font-weight: 800; margin-bottom: 0.5rem; }
+  .concept-thesis { font-family: var(--font-shell-head); font-size: 1.05rem; color: var(--shell-ink-soft); max-width: 56ch; }
+
+  .concept-layout { display: grid; grid-template-columns: 1fr 1.3fr; gap: 2.5rem; margin-bottom: 1.75rem; }
+  @media (max-width: 820px) { .concept-layout { grid-template-columns: 1fr; } }
+
+  .swatch-row { display: flex; flex-wrap: wrap; gap: 0.9rem 1.1rem; margin-bottom: 1.9rem; }
+  .swatch { width: 84px; }
+  .swatch-color { height: 56px; border-radius: 5px; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.12); margin-bottom: 0.4rem; }
+  .swatch-name { font-family: var(--font-shell-head); font-size: 0.72rem; font-weight: 600; color: var(--shell-ink); line-height: 1.2; }
+  .swatch-hex { font-family: var(--font-shell-mono); font-size: 0.68rem; color: var(--shell-ink-soft); }
+
+  .specimen-block + .specimen-block { margin-top: 1.1rem; padding-top: 1.1rem; border-top: 1px dashed var(--shell-line); }
+  .specimen-label {
+    font-family: var(--font-shell-mono); font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--shell-ink-soft); margin-bottom: 0.45rem;
+  }
+
+  .mock-frame {
+    border-radius: 10px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.08), 0 12px 32px -18px rgba(0,0,0,0.35);
+  }
+
+  /* shared mock UI parts, driven by --vars set per concept scope */
+  .mock { background: var(--bg); color: var(--ink); }
+  .mock-nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.9rem 1.4rem; border-bottom: 1px solid var(--line);
+  }
+  .mock-wordmark { font-family: var(--font-display); color: var(--ink); }
+  .mock-readouts { display: flex; gap: 1.1rem; font-family: var(--font-mono); font-size: 0.8rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+  .mock-body { padding: 1.6rem 1.4rem 1.8rem; }
+  .mock-hero { background: var(--surface); border-radius: var(--radius); padding: 1.5rem 1.6rem; position: relative; overflow: hidden; border: 1px solid var(--line); }
+  .mock-eyebrow { font-family: var(--font-body); font-size: 0.72rem; letter-spacing: 0.13em; text-transform: uppercase; color: var(--ink-soft); margin-bottom: 0.6rem; }
+  .mock-hero-title { font-family: var(--font-display); color: var(--ink); margin: 0 0 0.9rem; text-wrap: balance; }
+  .mock-hero-stats { display: flex; flex-wrap: wrap; gap: 0.35rem 1.3rem; font-family: var(--font-mono); font-size: 0.86rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+  .mock-hero-stats b { color: var(--ink); font-weight: 700; }
+  .mock-route-list { margin-top: 1.1rem; }
+  .mock-route-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    padding: 0.9rem 0; border-top: 1px solid var(--line);
+  }
+  .mock-route-name { font-family: var(--font-display); color: var(--ink); }
+  .mock-route-stats { font-family: var(--font-mono); font-size: 0.82rem; color: var(--ink-soft); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .mock-fit-tag {
+    display: inline-block; font-family: var(--font-body); font-size: 0.7rem; font-weight: 700;
+    letter-spacing: 0.04em; padding: 0.15rem 0.5rem; border-radius: 3px; margin-top: 0.3rem;
+  }
+
+  /* ---- Instrument ---- */
+  .mock.instrument {
+    --bg:#14171A; --surface:#1C2023; --line:#2E3336; --ink:#EDEAE2; --ink-soft:#888F93;
+    --accent:#E2A63B; --accent-2:#5FA8A6; --radius: 3px;
+    --font-display: "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  .mock.instrument .mock-wordmark { font-weight: 800; text-transform: uppercase; letter-spacing: 0.09em; font-stretch: condensed; font-size: 0.95rem; }
+  .mock.instrument .mock-hero { background-image: repeating-linear-gradient(180deg, rgba(255,255,255,0.02) 0 1px, transparent 1px 3px); }
+  .mock.instrument .mock-hero::before { content: ""; position: absolute; top:0; left:0; right:0; height: 3px; background: var(--accent); }
+  .mock.instrument .mock-score { font-family: var(--font-mono); font-size: 2.6rem; font-weight: 700; color: var(--accent); line-height: 1; }
+  .mock.instrument .mock-score-label { font-family: var(--font-body); font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-soft); }
+  .mock.instrument .mock-hero-title { font-size: 1.5rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em; font-stretch: condensed; }
+  .mock.instrument .mock-route-row .mock-rank { font-family: var(--font-mono); color: var(--ink-soft); width: 1.6rem; }
+  .mock.instrument .mock-route-name { font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; font-size: 0.92rem; font-stretch: condensed; }
+  .mock.instrument .mock-fit-tag { background: rgba(95,168,166,0.15); color: var(--accent-2); text-transform: uppercase; }
+
+  /* ---- Contour ---- */
+  .mock.contour {
+    --bg:#E3E6DB; --surface:#EFF1E7; --line:#C7CBBB; --ink:#232920; --ink-soft:#666F5C;
+    --accent:#8C5A2E; --accent-2:#2E5C6E; --radius: 2px;
+    --font-display: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  .mock.contour .mock-wordmark { font-size: 1.02rem; font-weight: 600; font-style: italic; }
+  .mock.contour .contour-rule {
+    height: 16px; margin: 0.9rem 0 1.1rem;
+    background-image: repeating-radial-gradient(ellipse at 50% -520%, transparent 0 9px, var(--line) 9px 10px);
+    background-position: center top; opacity: 0.9;
+  }
+  .mock.contour .mock-hero-title { font-size: 1.85rem; font-weight: 600; font-style: normal; }
+  .mock.contour .mock-window { font-family: var(--font-display); font-style: italic; color: var(--accent); font-size: 0.92rem; margin-top: 0.7rem; }
+  .mock.contour .mock-route-row { border-top-style: dashed; }
+  .mock.contour .mock-route-row .mock-tick { display:inline-block; width: 3px; height: 1.1rem; background: var(--accent); margin-right: 0.6rem; vertical-align: -3px; }
+  .mock.contour .mock-route-name { font-size: 1.05rem; }
+  .mock.contour .mock-fit-tag { background: rgba(46,92,110,0.14); color: var(--accent-2); font-variant: small-caps; letter-spacing: 0.03em; }
+
+  /* ---- Fair Weather ---- */
+  .mock.fairweather {
+    --bg:#F3F6F7; --surface:#FFFFFF; --line:#DCE3E6; --ink:#0F2233; --ink-soft:#5B7686;
+    --accent:#0B6FA6; --accent-2:#F2662D; --success:#3E8E63; --radius: 16px;
+    --font-display: "Century Gothic", "Avenir Next", "Futura", -apple-system, sans-serif;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-mono: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  .mock.fairweather .mock-wordmark { font-weight: 700; letter-spacing: 0.01em; }
+  .mock.fairweather .mock-wordmark span { color: var(--accent); }
+  .mock.fairweather .mock-hero { border-radius: var(--radius); box-shadow: 0 1px 0 var(--line); }
+  .mock.fairweather .mock-hero::before {
+    content: ""; position: absolute; top: -60px; right: -60px; width: 200px; height: 200px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(242,102,45,0.16), transparent 70%);
+  }
+  .mock.fairweather .sun-glyph { position: absolute; top: 1.4rem; right: 1.5rem; }
+  .mock.fairweather .mock-hero-title { font-size: 1.7rem; font-weight: 700; letter-spacing: -0.01em; max-width: 20ch; }
+  .mock.fairweather .mock-badge {
+    display: inline-flex; align-items: center; gap: 0.35rem; background: var(--accent-2); color: #fff;
+    font-family: var(--font-display); font-weight: 700; font-size: 0.85rem; padding: 0.3rem 0.7rem; border-radius: 999px;
+    margin-bottom: 0.9rem;
+  }
+  .mock.fairweather .mock-cta {
+    display: inline-block; margin-top: 1.1rem; background: var(--accent); color: #fff; font-family: var(--font-display);
+    font-weight: 700; font-size: 0.86rem; padding: 0.62rem 1.2rem; border-radius: 999px;
+  }
+  .mock.fairweather .mock-route-row { border-top: none; background: var(--surface); border-radius: 12px; padding: 1rem 1.1rem; margin-bottom: 0.7rem; box-shadow: 0 1px 0 var(--line); position: relative; }
+  .mock.fairweather .fold {
+    position: absolute; top: 0; right: 0; width: 0; height: 0;
+    border-style: solid; border-width: 0 22px 22px 0; border-color: transparent var(--success) transparent transparent;
+    border-top-right-radius: 12px;
+  }
+  .mock.fairweather .mock-route-name { font-weight: 700; }
+  .mock.fairweather .mock-route-stats { text-align: left; color: var(--ink-soft); }
+  .mock.fairweather .mock-fit-tag { background: rgba(62,142,99,0.13); color: var(--success); }
+
+  footer.closing { margin-top: 5.5rem; padding-top: 2.5rem; border-top: 1px solid var(--shell-line); color: var(--shell-ink-soft); font-size: 1rem; }
+
+  @media (max-width: 600px) {
+    .audit-grid { grid-template-columns: 1fr; }
+    .mock-hero-stats, .mock-readouts { font-size: 0.76rem; }
+  }
+</style>
+
+<div class="page">
+
+  <header class="masthead">
+    <p class="eyebrow">Visual identity review — Ride Optimizer</p>
+    <h1>Three ways to make this look worth paying for</h1>
+    <p class="dek prose">The app has real engineering behind it: Fréchet-distance route matching, live weather scoring, skeleton loading states, WCAG-conscious focus rings. None of that shows on screen. Visually it reads as an unstyled Bootstrap admin panel with one gradient standing in for a brand. Below is an honest read of what's there now, then three complete identities built from the app's own material — instrumentation, terrain, and weather — each carried through the navigation, the ride decision card, and a route row.</p>
+  </header>
+
+  <section class="audit">
+    <h2>Where it stands today</h2>
+    <div class="audit-grid">
+      <div class="audit-point">
+        <h3>One gradient, doing every job</h3>
+        <p><code>#667eea → #764ba2</code> covers the navbar, the hero banner, badges, card borders, and focus rings. When a color means "brand," "focus," "selected," and "this is the optimal route" all at once, it stops reading as a decision and starts reading as a default nobody removed.</p>
+      </div>
+      <div class="audit-point">
+        <h3>No point of view on numbers</h3>
+        <p>Temperature, match score, distance, elevation gain — the things a cyclist actually scans for — are set in the same system-font weight as body copy. On a data-driven app, the numbers should look designed, not left over.</p>
+      </div>
+      <div class="audit-point">
+        <h3>Bootstrap Icons, Bootstrap radii, Bootstrap shadows</h3>
+        <p>The 8px card radius, the <code>bi-*</code> icon set, the default drop shadows — these are the framework's defaults, unedited. Nothing about the surface says "cycling" or "weather" specifically; it could be an invoicing tool.</p>
+      </div>
+      <div class="audit-point">
+        <h3>Good bones, generic skin</h3>
+        <p>Touch-target sizing, <code>:focus-visible</code> handling, skeleton loaders, reduced-motion support — genuinely well built and worth keeping. Each concept below reuses that structure and replaces only the surface.</p>
+      </div>
+    </div>
+    <div class="current-swatch">
+      <div class="chip" style="background:#667eea"></div>
+      <div class="chip" style="background:#764ba2"></div>
+      <div class="chip" style="background:#6c757d"></div>
+      <span class="chip-caption">current palette — indigo gradient + Bootstrap grey</span>
+    </div>
+  </section>
+
+  <!-- ============ CONCEPT 1: INSTRUMENT ============ -->
+  <section class="concept">
+    <div class="concept-head">
+      <p class="concept-kicker">Concept — Instrument</p>
+      <h2 class="concept-name">Instrument</h2>
+      <p class="concept-thesis">Reads like a bike computer, not a dashboard template. Dark graphite ground, tabular numerals, a single amber accent reserved for "this is the one."</p>
+    </div>
+    <div class="concept-layout">
+      <div>
+        <div class="swatch-row">
+          <div class="swatch"><div class="swatch-color" style="background:#14171A"></div><div class="swatch-name">Graphite</div><div class="swatch-hex">#14171A</div></div>
+          <div class="swatch"><div class="swatch-color" style="background:#1C2023"></div><div class="swatch-name">Panel</div><div class="swatch-hex">#1C2023</div></div>
+          <div class="swatch"><div class="swatch-color" style="background:#EDEAE2"></div><div class="swatch-name">Ink</div><div class="swatch-hex">#EDEAE2</div></div>
+          <div class="swatch"><div class="swatch-color" style="background:#E2A63B"></div><div class="swatch-name">Amber (go)</div><div class="swatch-hex">#E2A63B</div></div>
+          <div class="swatch"><div class="swatch-color" style="background:#5FA8A6"></div><div class="swatch-name">Teal (data)</div><div class="swatch-hex">#5FA8A6</div></div>
+        </div>
+        <div class="specimen-block">
+          <div class="specimen-label">Display — condensed, uppercase, tracked</div>
+          <div style="font-family:'Arial Narrow','Helvetica Neue',sans-serif;font-stretch:condensed;font-weight:800;text-transform:uppercase;letter-spacing:0.04em;font-size:1.6rem;">Reservoir Loop</div>
+        </div>
+        <div class="specimen-block">
+          <div class="specimen-label">Data — tabular monospace</div>
+          <div style="font-family:ui-monospace,'SF Mono','JetBrains Mono',Menlo,monospace;font-size:1.15rem;font-variant-numeric:tabular-nums;">34.2 MI · 1,120 FT · 61°F</div>
+        </div>
+        <div class="specimen-block">
+          <div class="specimen-label">Body — quiet utility face</div>
+          <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#63645D;">Departure window, workout fit, and route notes.</div>
+        </div>
+      </div>
+      <div class="mock-frame">
+        <div class="mock instrument">
+          <div class="mock-nav">
+            <div class="mock-wordmark">Ride Optimizer</div>
+            <div class="mock-readouts"><span>06:42</span><span>61°F</span><span>6 MPH NW</span></div>
+          </div>
+          <div class="mock-body">
+            <div class="mock-hero">
+              <div class="mock-eyebrow">Today's recommendation</div>
+              <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:1rem;flex-wrap:wrap;">
+                <div>
+                  <div class="mock-hero-title">Reservoir Loop</div>
+                  <div class="mock-hero-stats">
+                    <span>DIST <b>34.2 MI</b></span><span>GAIN <b>1,120 FT</b></span><span>WIND <b>6 MPH NW</b></span><span>WINDOW <b>06:15–08:00</b></span>
+                  </div>
+                </div>
+                <div style="text-align:right;">
+                  <div class="mock-score">94</div>
+                  <div class="mock-score-label">Match</div>
+                </div>
+              </div>
+            </div>
+            <div class="mock-route-list">
+              <div class="mock-route-row">
+                <div style="display:flex;align-items:center;">
+                  <span class="mock-rank">02</span>
+                  <div>
+                    <div class="mock-route-name">North Fork Out-and-Back</div>
+                    <span class="mock-fit-tag">Z2 Endurance — Good Fit</span>
+                  </div>
+                </div>
+                <div class="mock-route-stats">28.6 MI<br>860 FT</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CONCEPT 2: CONTOUR ============ -->
+  <section class="concept">
+    <div class="concept-head">
+      <p class="concept-kicker">Concept — Contour</p>
+      <h2 class="concept-name">Contour</h2>
+      <p class="concept-thesis">A field guide for the ride, not a corporate panel. Topo-paper ground, an editorial serif for route names, umber for elevation, a cool tarn blue for water and climbs.</p>
+    </div>
+    <div class="concept-layout">
+      <div>
+        <div class="swatch-row">
+          <div class="swatch"><div class="swatch-color" style="background:#E3E6DB"></div><div class="swatch-name">Map paper</div><div class="swatch-hex">#E3E6DB</div></div>
+          <div class="swatch"><div class="swatch-color" style="background:#EFF1E7"></div><div class="swatch-name">Card paper</div><div class="swatch-hex">#EFF1E7</div></div>
+          <div class="swatch"><div class="swatch-color" style="background:#232920"></div><div class="swatch-name">Pine ink</div><div class="swatch-hex">#232920</div></div>
+          <div class="swatch"><div class="swatch-color" style="background:#8C5A2E"></div><div class="swatch-name">Umber (elevation)</div><div class="swatch-hex">#8C5A2E</div></div>
+          <div class="swatch"><div class="swatch-color" style="background:#2E5C6E"></div><div class="swatch-name">Tarn (climb)</div><div class="swatch-hex">#2E5C6E</div></div>
+        </div>
+        <div class="specimen-block">
+          <div class="specimen-label">Display — editorial serif</div>
+          <div style="font-family:'Iowan Old Style','Palatino Linotype',Georgia,serif;font-size:1.7rem;color:#232920;">Reservoir Loop</div>
+        </div>
+        <div class="specimen-block">
+          <div class="specimen-label">Annotation — serif italic</div>
+          <div style="font-family:'Iowan Old Style','Palatino Linotype',Georgia,serif;font-style:italic;font-size:1.05rem;color:#8C5A2E;">Best window 6:15–8:00 AM</div>
+        </div>
+        <div class="specimen-block">
+          <div class="specimen-label">Data — cue-sheet monospace</div>
+          <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:1.1rem;">34.2 mi · 1,120 ft gain</div>
+        </div>
+      </div>
+      <div class="mock-frame">
+        <div class="mock contour">
+          <div class="mock-nav">
+            <div class="mock-wordmark">Ride Optimizer</div>
+            <div class="mock-readouts"><span>61°F, CLEAR</span><span>6 MPH NW</span></div>
+          </div>
+          <div class="mock-body">
+            <div class="mock-hero">
+              <div class="mock-eyebrow">Today's recommended ride</div>
+              <div class="mock-hero-title">Reservoir Loop</div>
+              <div class="contour-rule"></div>
+              <div class="mock-hero-stats">
+                <span><span class="mock-tick"></span>34.2 mi · 1,120 ft gain · 61°F, clear, wind 6 mph NW</span>
+              </div>
+              <div class="mock-window">Best window 6:15 – 8:00 AM, before the afternoon headwind</div>
+            </div>
+            <div class="mock-route-list">
+              <div class="mock-route-row">
+                <div>
+                  <div class="mock-route-name"><span class="mock-tick"></span>North Fork Out-and-Back</div>
+                  <span class="mock-fit-tag">Z2 Endurance — Good Fit</span>
+                </div>
+                <div class="mock-route-stats">28.6 mi<br>860 ft</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CONCEPT 3: FAIR WEATHER ============ -->
+  <section class="concept">
+    <div class="concept-head">
+      <p class="concept-kicker">Concept — Fair Weather</p>
+      <h2 class="concept-name">Fair Weather</h2>
+      <p class="concept-thesis">Built around the one decision that matters: is today a good day to ride. Bright and confident, cobalt for structure, a single warm coral reserved for the one call to action.</p>
+    </div>
+    <div class="concept-layout">
+      <div>
+        <div class="swatch-row">
+          <div class="swatch"><div class="swatch-color" style="background:#F3F6F7"></div><div class="swatch-name">Sky white</div><div class="swatch-hex">#F3F6F7</div></div>
+          <div class="swatch"><div class="swatch-color" style="background:#0F2233"></div><div class="swatch-name">Deep navy</div><div class="swatch-hex">#0F2233</div></div>
+          <div class="swatch"><div class="swatch-color" style="background:#0B6FA6"></div><div class="swatch-name">Cobalt</div><div class="swatch-hex">#0B6FA6</div></div>
+          <div class="swatch"><div class="swatch-color" style="background:#F2662D"></div><div class="swatch-name">Sun coral</div><div class="swatch-hex">#F2662D</div></div>
+          <div class="swatch"><div class="swatch-color" style="background:#3E8E63"></div><div class="swatch-name">Good-fit sage</div><div class="swatch-hex">#3E8E63</div></div>
+        </div>
+        <div class="specimen-block">
+          <div class="specimen-label">Display — geometric, confident</div>
+          <div style="font-family:'Century Gothic','Avenir Next','Futura',sans-serif;font-weight:700;font-size:1.6rem;color:#0F2233;">Ride today.</div>
+        </div>
+        <div class="specimen-block">
+          <div class="specimen-label">Body / data — same face, tabular numerals</div>
+          <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:1.05rem;font-variant-numeric:tabular-nums;color:#0F2233;">34.2 mi · 1,120 ft · 61°F · 6 mph NW</div>
+        </div>
+      </div>
+      <div class="mock-frame">
+        <div class="mock fairweather">
+          <div class="mock-nav">
+            <div class="mock-wordmark">Ride<span>Optimizer</span></div>
+            <div class="mock-readouts"><span>61°F</span><span>6 mph NW</span></div>
+          </div>
+          <div class="mock-body">
+            <div class="mock-hero">
+              <svg class="sun-glyph" width="30" height="30" viewBox="0 0 30 30" aria-hidden="true">
+                <circle cx="15" cy="15" r="6" fill="none" stroke="#F2662D" stroke-width="2"/>
+                <g stroke="#F2662D" stroke-width="2" stroke-linecap="round">
+                  <line x1="15" y1="1" x2="15" y2="5"/><line x1="15" y1="25" x2="15" y2="29"/>
+                  <line x1="1" y1="15" x2="5" y2="15"/><line x1="25" y1="15" x2="29" y2="15"/>
+                  <line x1="5" y1="5" x2="7.8" y2="7.8"/><line x1="22.2" y1="22.2" x2="25" y2="25"/>
+                  <line x1="25" y1="5" x2="22.2" y2="7.8"/><line x1="7.8" y1="22.2" x2="5" y2="25"/>
+                </g>
+              </svg>
+              <div class="mock-badge">94 MATCH</div>
+              <div class="mock-hero-title">Ride today. Clear until 2pm.</div>
+              <div class="mock-hero-stats"><span>34.2 mi · 1,120 ft · 61°F · 6 mph NW</span></div>
+              <div class="mock-cta">Start Reservoir Loop</div>
+            </div>
+            <div class="mock-route-list">
+              <div class="mock-route-row">
+                <div class="fold"></div>
+                <div>
+                  <div class="mock-route-name">North Fork Out-and-Back</div>
+                  <span class="mock-fit-tag">Z2 Endurance · Good fit</span>
+                </div>
+                <div class="mock-route-stats">28.6 mi · 860 ft</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="closing prose">
+    <p>All three keep the existing information architecture — hero decision card, ranked route list, weather readout, workout-fit tag — and only change how it's dressed, so any of them drops into the current templates without a data model change. They can also cross-pollinate: Contour's serif route names would sit fine on Fair Weather's bright ground, for instance. Let me know which direction earns a full pass, or which pieces of each you'd want combined.</p>
+  </footer>
+
+</div>
