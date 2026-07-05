@@ -117,6 +117,40 @@ class ExplorationService:
             profile = "cycling-regular"
             raw = ors_client.get_route(ors_coords, profile, api_key=api_key, timeout=timeout)
 
+        # Unroutable waypoints: drop every interior bad waypoint and retry.
+        # "Interior" = not the first (start) or last (end) coordinate.
+        # We identify bad waypoints by their [lon, lat] coordinates, not by
+        # index, because ORS index numbering can vary across versions.
+        # Retry until no interior waypoints remain to drop (guard against loops).
+        _drop_attempts = 0
+        while raw is not None and raw.get("_ors_unroutable"):
+            bad_coords = {(round(lon, 4), round(lat, 4)) for lon, lat in raw["_ors_unroutable"]}
+            # Only drop interior points (preserve first and last).
+            interior = ors_coords[1:-1]
+            pruned = [c for c in interior if (round(c[0], 4), round(c[1], 4)) not in bad_coords]
+            if len(pruned) == len(interior):
+                # None of the bad coords matched an interior waypoint — can't fix.
+                break
+            ors_coords = [ors_coords[0]] + pruned + [ors_coords[-1]]
+            logger.info(
+                "Dropped %d unroutable interior waypoint(s); retrying with %d coords",
+                len(interior) - len(pruned), len(ors_coords),
+            )
+            _drop_attempts += 1
+            if len(ors_coords) < 2 or _drop_attempts > 10:
+                break
+            # Re-check cache for the pruned list.
+            cache_key = (
+                tuple((round(c[1], 6), round(c[0], 6)) for c in ors_coords),
+                profile,
+            )
+            cached = self._route_cache.get(cache_key)
+            if cached is not None:
+                result, expires_at = cached
+                if time.monotonic() < expires_at:
+                    return result
+            raw = ors_client.get_route(ors_coords, profile, api_key=api_key, timeout=timeout)
+
         if raw is None:
             return {"status": "error", "message": "Road routing request failed"}
         if raw.get("_ors_rate_limited"):
@@ -124,6 +158,8 @@ class ExplorationService:
                 "status": "error",
                 "message": "Road routing rate limit reached — try again shortly",
             }
+        if raw.get("_ors_unroutable"):
+            return {"status": "error", "message": "Road routing failed: no routable path near waypoints"}
 
         try:
             result = self._parse_ors_response(raw)

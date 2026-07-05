@@ -150,6 +150,56 @@ class TestOrsClient:
         assert result is not None
         assert result.get("_ors_rate_limited") is True
 
+    def test_unroutable_waypoint_returns_sentinel_with_coords(self):
+        """ORS error 2010 returns _ors_unroutable list of (lon, lat) tuples."""
+        from src import ors_client
+
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+        mock_response.json.return_value = {
+            "error": {
+                "code": 2010,
+                "message": (
+                    "Could not find routable point within a radius of 350.0 meters of "
+                    "specified coordinate 1: -85.1439937 41.8041137."
+                ),
+            }
+        }
+
+        with patch("src.ors_client.requests.post", return_value=mock_response):
+            result = ors_client.get_route([[0, 0], [1, 1]], "cycling-regular", api_key="k")
+
+        assert result is not None
+        assert "_ors_unroutable" in result
+        assert len(result["_ors_unroutable"]) == 1
+        lon, lat = result["_ors_unroutable"][0]
+        assert abs(lon - (-85.1439937)) < 1e-4
+        assert abs(lat - 41.8041137) < 1e-4
+
+    def test_unroutable_multiple_waypoints(self):
+        """Multiple unroutable waypoints in one error message are all extracted."""
+        from src import ors_client
+
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+        mock_response.json.return_value = {
+            "error": {
+                "code": 2010,
+                "message": (
+                    "Could not find routable point within a radius of 350.0 meters of "
+                    "specified coordinate 0: -85.2979086 41.7549539.; "
+                    "Could not find routable point within a radius of 350.0 meters of "
+                    "specified coordinate 1: -85.1439937 41.8041137."
+                ),
+            }
+        }
+
+        with patch("src.ors_client.requests.post", return_value=mock_response):
+            result = ors_client.get_route([[0, 0], [1, 1]], "cycling-regular", api_key="k")
+
+        assert result is not None
+        assert len(result["_ors_unroutable"]) == 2
+
 
 # ── compute_route: no API key ────────────────────────────────────
 
@@ -200,6 +250,42 @@ class TestComputeRoute:
     def test_ors_failure_returns_error(self, service_with_key):
         with patch("src.ors_client.get_route", return_value=None):
             result = service_with_key.compute_route([[0, 0], [1, 1]])
+        assert result["status"] == "error"
+
+    def test_unroutable_interior_waypoint_is_dropped_and_retried(self, service_with_key):
+        """When an interior waypoint is unroutable, it is dropped and ORS is retried."""
+        good_raw = {
+            "features": [{
+                "geometry": {"coordinates": [[-87.65, 41.98], [-87.64, 41.99]]},
+                "properties": {
+                    "summary": {"distance": 5000.0, "duration": 900.0},
+                    "extras": {},
+                },
+            }],
+        }
+        # First call: interior waypoint [-85.14, 41.80] is unroutable.
+        # Second call (after drop): succeeds.
+        side_effects = [
+            {"_ors_unroutable": [(-85.1439937, 41.8041137)]},
+            good_raw,
+        ]
+        with patch("src.ors_client.get_route", side_effect=side_effects) as mock_ors:
+            result = service_with_key.compute_route([
+                [41.98, -87.65],            # start (routable)
+                [41.8041137, -85.1439937],  # interior (off-road)
+                [41.99, -87.64],            # end (routable)
+            ])
+
+        assert result["status"] == "success"
+        assert mock_ors.call_count == 2
+        # Second call must not include the bad interior waypoint.
+        second_coords = mock_ors.call_args_list[1][0][0]
+        assert len(second_coords) == 2  # only start + end
+
+    def test_unroutable_start_cannot_be_dropped(self, service_with_key):
+        """When the start (first) waypoint is unroutable, no retry is possible."""
+        with patch("src.ors_client.get_route", return_value={"_ors_unroutable": [(-87.65, 41.98)]}):
+            result = service_with_key.compute_route([[41.98, -87.65], [41.99, -87.64]])
         assert result["status"] == "error"
 
     def test_memoization_within_ttl(self, service_with_key):

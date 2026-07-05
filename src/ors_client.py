@@ -7,7 +7,8 @@ Distinguishes HTTP 429 so callers can surface a rate-limit message.
 """
 
 import logging
-from typing import Optional
+import re
+from typing import List, Optional, Tuple
 
 import requests
 
@@ -16,6 +17,14 @@ logger = logging.getLogger(__name__)
 # api.openrouteservice.org is deprecated for new accounts (moved to heigit.org).
 # api.heigit.org/openrouteservice works for both old and new API keys.
 _ORS_DIRECTIONS_URL = "https://api.heigit.org/openrouteservice/v2/directions/{profile}/geojson"
+
+# ORS error 2010 = "Could not find routable point within a radius of N metres of
+# specified coordinate K: <lon> <lat>."
+# The latitude value may be followed by a period (sentence end), so stop at \b or non-digit.
+_RE_UNROUTABLE = re.compile(
+    r"coordinate\s+\d+:\s*([-\d.]+)\s+([-\d]+(?:\.\d+)?)",
+    re.IGNORECASE,
+)
 
 
 def get_route(
@@ -37,6 +46,8 @@ def get_route(
     Returns:
         Parsed JSON response dict on success, or None on any failure.
         On HTTP 429 the returned dict is ``{"_ors_rate_limited": True}``.
+        On error 2010 (unroutable waypoint) the returned dict is
+        ``{"_ors_unroutable": [(lon, lat), ...]}``.
     """
     if not api_key:
         logger.debug("ORS API key not configured")
@@ -64,8 +75,17 @@ def get_route(
             try:
                 err_body = response.json()
                 if isinstance(err_body.get("error"), dict) and err_body["error"].get("code"):
-                    # ORS application error (routable point not found, etc) — treat as hard failure
-                    logger.warning("ORS routing error %s: %s", profile, err_body["error"].get("message"))
+                    err_code = err_body["error"].get("code")
+                    err_msg = err_body["error"].get("message", "")
+                    logger.warning("ORS routing error %s: %s", profile, err_msg)
+                    # Error 2010 = unroutable point(s).  Extract every (lon, lat) pair
+                    # mentioned in the message so the caller can drop them and retry.
+                    if err_code == 2010:
+                        bad: List[Tuple[float, float]] = [
+                            (float(lon), float(lat))
+                            for lon, lat in _RE_UNROUTABLE.findall(err_msg)
+                        ]
+                        return {"_ors_unroutable": bad}
                     return None
             except Exception:
                 pass
