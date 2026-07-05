@@ -671,6 +671,20 @@
         const plusBadge = route.is_plus_route ? '<span class="badge bg-success-subtle text-success-emphasis me-1" style="font-size:.65em;vertical-align:middle">PLUS</span>' : '';
         const diffBadge = `<span class="badge ${difficultyColors[difficulty]} flex-shrink-0" style="font-size:.7em" title="${difficulty}" aria-label="Difficulty: ${difficulty}"><i class="bi ${difficultyIcons[difficulty]}" aria-hidden="true"></i></span>`;
 
+        // Direction badge for commute routes
+        let dirBadge = '';
+        if (route.direction === 'home_to_work') {
+            dirBadge = '<span class="badge border border-info-subtle text-info-emphasis flex-shrink-0 ms-1" style="font-size:.65em" title="Direction: To Work" aria-label="Direction: To Work"><i class="bi bi-sunrise" aria-hidden="true"></i> To Work</span>';
+        } else if (route.direction === 'work_to_home') {
+            dirBadge = '<span class="badge border border-warning-subtle text-warning-emphasis flex-shrink-0 ms-1" style="font-size:.65em" title="Direction: To Home" aria-label="Direction: To Home"><i class="bi bi-sunset" aria-hidden="true"></i> To Home</span>';
+        }
+
+        // Terrain label for sub-line (extracted from name)
+        const terrainMatch = route.name && route.name.match(/\((rolling|hilly)\)/i);
+        const terrainLabel = terrainMatch
+            ? `<span title="Terrain">${terrainMatch[1]}</span>`
+            : '';
+
         card.innerHTML = `
             <div class="card-body py-2 px-3">
                 <div class="d-flex align-items-center gap-2">
@@ -681,12 +695,13 @@
                     <span class="fw-semibold text-truncate flex-grow-1" style="font-size:.875rem;cursor:pointer" title="${route.name}" data-route-link>
                         ${favIcon}${plusBadge}${route.name}
                     </span>
-                    ${diffBadge}
+                    ${diffBadge}${dirBadge}
                 </div>
                 <div class="d-flex align-items-center gap-3 mt-1 text-muted" style="font-size:.78rem;padding-left:1.65rem">
                     <span title="Distance"><i class="bi bi-arrow-left-right" aria-hidden="true"></i> ${window.formatDistance(route.distance)}</span>
                     <span title="Duration"><i class="bi bi-clock" aria-hidden="true"></i> ${formatDuration(route.duration)}</span>
                     <span title="Elevation gain"><i class="bi bi-arrow-up" aria-hidden="true"></i> ${window.formatElevation(route.elevation_gain || route.elevation || 0)}</span>
+                    ${terrainLabel}
                     <span class="uses-link" role="button" tabindex="0" title="View activities" data-route-uses
                           style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted"
                           ><i class="bi bi-repeat" aria-hidden="true"></i> ${route.uses || 0}</span>

@@ -1467,6 +1467,70 @@ end tell
         # Terminal process is detached and managed by the OS
         # No subprocess reference stored, so nothing to clean up
     
+    @staticmethod
+    def _dedupe_route_names(all_groups_for_direction: List[RouteGroup]) -> None:
+        """
+        Deduplicate route names across *all* groups for a direction (not just the
+        current geocoding batch) so that names generated in previous runs cannot
+        collide with newly geocoded names.
+
+        Disambiguation priority:
+          1. Terrain character (flat / rolling / hilly) if routes differ in terrain
+          2. Distance bracket (short / long) if terrain alone doesn't differentiate
+          3. Ordinal (#2, #3) as final fallback
+        """
+        from collections import defaultdict
+
+        # Build name → [group] map
+        by_name: Dict[str, List[RouteGroup]] = defaultdict(list)
+        for g in all_groups_for_direction:
+            if g.name:
+                by_name[g.name].append(g)
+
+        for name, clashing in by_name.items():
+            if len(clashing) <= 1:
+                continue
+
+            # ---- Pass 1: terrain disambiguation ----
+            def _terrain_label(g: RouteGroup) -> str:
+                """Derive a terrain label from elevation_gain / distance."""
+                rep = g.representative_route
+                dist_m = rep.distance or 0
+                elev_m = rep.elevation_gain or 0
+                if dist_m <= 0:
+                    return 'flat'
+                gain_per_km = elev_m / (dist_m / 1000.0)
+                if gain_per_km > 30:
+                    return 'hilly'
+                if gain_per_km > 15:
+                    return 'rolling'
+                return 'flat'
+
+            terrain_labels = [_terrain_label(g) for g in clashing]
+            if len(set(terrain_labels)) > 1:
+                for g, label in zip(clashing, terrain_labels):
+                    g.name = f"{name} — {label}"
+                continue
+
+            # ---- Pass 2: distance bracket disambiguation ----
+            distances = [g.representative_route.distance or 0 for g in clashing]
+            median_dist = sorted(distances)[len(distances) // 2]
+
+            if len(set(distances)) > 1:
+                def _dist_label(d: float) -> str:
+                    return 'short' if d < median_dist else 'long'
+
+                dist_labels = [_dist_label(d) for d in distances]
+                if len(set(dist_labels)) > 1:
+                    for g, label in zip(clashing, dist_labels):
+                        g.name = f"{name} — {label}"
+                    continue
+
+            # ---- Pass 3: ordinal fallback ----
+            # Keep the first group's name intact; suffix the rest
+            for idx, g in enumerate(clashing[1:], start=2):
+                g.name = f"{name} #{idx}"
+
     def _geocode_routes_synchronous(self, groups: List[RouteGroup]) -> None:
         """
         Geocode route names synchronously (blocking).
@@ -1493,7 +1557,9 @@ end tell
                 route_name = self.route_namer.name_route(
                     group.representative_route.coordinates,
                     group.id,
-                    group.direction
+                    group.direction,
+                    elevation_gain=group.representative_route.elevation_gain,
+                    distance=group.representative_route.distance,
                 )
                 
                 # Update the group name
@@ -1502,6 +1568,13 @@ end tell
             except Exception as e:
                 logger.warning(f"Failed to geocode route {group.id}: {e}")
                 # Keep the temporary name on failure
+
+        # Deduplicate names across all groups (including previously-named ones)
+        by_direction: Dict[str, List[RouteGroup]] = {}
+        for g in groups:
+            by_direction.setdefault(g.direction, []).append(g)
+        for direction_groups in by_direction.values():
+            self._dedupe_route_names(direction_groups)
         
         logger.info(f"Geocoding complete: {len(groups_to_geocode)} routes named")
     
@@ -1567,7 +1640,9 @@ end tell
                     route_name = self.route_namer.name_route(
                         group.representative_route.coordinates,
                         group.id,
-                        group.direction
+                        group.direction,
+                        elevation_gain=group.representative_route.elevation_gain,
+                        distance=group.representative_route.distance,
                     )
                     
                     # Update the group name with thread safety
@@ -1635,6 +1710,13 @@ end tell
                         logger.error("Rate limit detected, stopping geocoding")
                         break
             
+            # Deduplicate names across all groups (including previously-named ones)
+            by_direction: Dict[str, List[RouteGroup]] = {}
+            for g in groups:
+                by_direction.setdefault(g.direction, []).append(g)
+            for direction_groups in by_direction.values():
+                self._dedupe_route_names(direction_groups)
+
             # Phase 2: Saving caches
             try:
                 with open(progress_file, 'a') as f:
