@@ -1,7 +1,7 @@
 # Design Principles & Guidelines
 
-**Version:** 2.0  
-**Last Updated:** 2026-03-26  
+**Version:** 2.1
+**Last Updated:** 2026-07-04
 **Status:** Active
 
 ---
@@ -37,6 +37,10 @@ This document establishes the design principles and guidelines for the Strava Co
 - Collapse secondary information by default
 - Provide clear visual hierarchy (primary → secondary → tertiary)
 - Avoid information overload on initial view
+- **Time-urgency ordering:** When a page contains both time-sensitive actionable content and lower-urgency planning/context content, the time-sensitive content must appear first in DOM source order (so mobile stacking is correct without CSS overrides). Example: same-day commute windows before a 7-day forecast; hero decision card before supporting map context.
+- **Teaser before collapse:** Any collapsible section containing useful secondary data must include a visible teaser or count in the collapsed state so users know expandable content exists. Never render a bare chevron with no accompanying text.
+
+> **Field note (v0.17.0 Design Review):** Findings PLACE-WEATHER-1 and PLACE-DASH-1 confirmed two P1 ordering violations where planning-horizon content preceded same-day actionable data. Finding ID-WX-1 independently corroborated the Weather page ordering problem. Findings DISC-DASH-1, DISC-DASH-2, and ID-DASH-3 documented three collapse toggles with no teaser content across the Dashboard alone.
 
 **Rationale:** Reduces cognitive load, especially for new users.
 
@@ -48,9 +52,13 @@ This document establishes the design principles and guidelines for the Strava Co
 **Guidelines:**
 - Optimal route: Largest, most prominent (gradient border, elevated shadow)
 - Alternative routes: Standard cards with subtle styling
-- Typography scale: H1 (2.5rem) → H2 (2rem) → H3 (1.5rem) → Body (1rem)
+- Typography scale: H1 (2.5rem) → H2 (2rem) → H3 (1.5rem) → Body (1rem); every page must have exactly one `<h1>` as its first visible heading
 - Spacing scale: xs (4px) → sm (8px) → md (16px) → lg (24px) → xl (32px)
 - Use whitespace generously to separate content groups
+- **Card column ratios:** On two-column layouts, the column containing primary decision data or the route list must receive equal or greater Bootstrap column width than the column containing a map or supporting context (minimum `col-lg-6` for the primary data column). Maps are confirmatory, not primary.
+- **Secondary metrics demoted:** Metrics that are social signals (popularity/uses), administrative counts (pipeline health), or derived redundancies (near-zero percentages) must not appear in the same visual tier (same CSS class, same card slot, same grid cell) as primary decision metrics (distance, duration, score).
+
+> **Field note (v0.17.0 Design Review):** Findings PLACE-DASH-2, PLACE-ROUTES-2, and PLACE-DETAIL-2 identified three pages where the map column received more Bootstrap columns than the decision/data column. Finding ID-RDTL-2 documented the "Uses" popularity metric sharing equal visual weight with Distance, Duration, and Elevation in the Route Detail primary grid. CP-4 (Information Density) documented this secondary-at-primary-weight pattern recurring across Dashboard, Reports, Route Detail, and Explore.
 
 **Rationale:** Users should immediately understand what's most important.
 
@@ -199,6 +207,12 @@ This document establishes the design principles and guidelines for the Strava Co
 - Show keyboard shortcuts in UI (e.g., "Ctrl+Click to select multiple")
 - Add examples in empty states
 - Use progressive disclosure for advanced features
+- **Workflow sequencing:** Multi-step workflows (where step N is a prerequisite for step N+1) must have visible step numbers, a numbered header, or progressive button enablement. A button that will fail silently without a preceding action must be disabled with a visible explanation of what is needed to enable it.
+- **Jargon-free first use:** Domain-specific or subculture terms (e.g. "Squadrats", "Squadratinhos") that are not part of general cycling vocabulary must have an in-page definition — a one-line explainer, tooltip, or help popover — present on first render, not hidden behind an additional interaction.
+- **Interactive elements visually distinct:** Elements with `cursor: pointer` or click/tap handlers must be visually distinguishable from static content. Touch devices receive no hover affordance; labels, visible borders, or icons must convey interactivity without hover.
+- **Post-action navigation hints:** After a user completes a save/create action that produces an artifact visible on another page, show a toast or inline link directing them to where the result can be found.
+
+> **Field note (v0.17.0 Design Review):** Findings DISC-EXPLORE-1 (P1) and DISC-EXPLORE-2 (P1) documented that the Explore page's primary task (generating a coverage route) is not completable by a new user without guessing due to absent jargon definitions and an unsequenced multi-step workflow. DISC-SETTINGS-1 found the same sequencing gap for the Strava fetch → analyze two-step pipeline. DISC-ROUTES-1 documented the route-compare feature being invisible on mobile due to a label-free checkbox.
 
 **Rationale:** Users shouldn't have to guess how to use features.
 
@@ -243,8 +257,11 @@ This document establishes the design principles and guidelines for the Strava Co
 **Buttons:**
 - Primary action: Solid color (`#667eea`)
 - Secondary action: Outline style
-- Destructive action: Red (`#dc3545`)
+- Destructive action: Red (`#dc3545`) with `btn-danger` or `btn-outline-danger` styling; must be accompanied by a confirmation dialog (`confirm()` or a Bootstrap confirmation popover) before executing irreversible operations
 - Disabled: 50% opacity, no pointer events
+- **Unit system applied globally:** Any label, static string, slider range, or stat header that displays a measurement (distance, temperature, speed) must read the user's unit preference from `window.getUnitSystem()` / `window.getDistanceUnit()` on page load. Hard-coded unit strings (e.g. `"Miles"`, `"°F"`, `"km"` in HTML) are not permitted.
+
+> **Field note (v0.17.0 Design Review):** Finding DISC-EXPLORE-5 documented the "Clear Cache" destructive action on Explore using identical button styling to the safe "Load Coverage" action, with no confirmation. Findings DISC-SETTINGS-3, DISC-REPORTS-4, and DISC-EXPLORE-3 documented three separate pages where unit-system preference was not applied to measurement labels, each independently found by the Discoverability reviewer.
 
 **Cards:**
 - Border radius: 10px
@@ -396,6 +413,7 @@ Before merging UI/UX changes:
 
 ## Version History
 
+- **v2.1** (2026-07-04): Field notes and extended guidelines added from v0.17.0 Design Review (Epic #352). New sub-guidelines added to §2 (time-urgency ordering, teaser before collapse), §3 (card column ratios, secondary metrics demoted), §7 (workflow sequencing, jargon-free first use, interactive elements visually distinct, post-action navigation hints), §10 (destructive action confirmation, unit system applied globally).
 - **v2.0** (2026-03-26): Comprehensive design system with mobile-first approach
 - **v1.0** (2024): Initial design guidelines
 
