@@ -427,11 +427,52 @@
 
                 const weatherMarkup = route.weather
                     ? `
-                        <div class="card mt-4">
-                            <div class="card-body">
-                                <h2 class="h5">Weather</h2>
-                                <pre class="mb-0 small">${JSON.stringify(route.weather, null, 2)}</pre>
-                            </div>
+                        <hr class="my-2">
+                        <div class="row g-2">
+                            ${route.weather.temp_c != null ? `
+                                <div class="col-6">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <i class="bi bi-thermometer-half text-danger"></i>
+                                        <div>
+                                            <div class="small text-muted">Temperature</div>
+                                            <div class="fw-semibold">${window.formatTemperature(route.weather.temp_c)}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ` : ''}
+                            ${route.weather.wind_speed_kph != null ? `
+                                <div class="col-6">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <i class="bi bi-wind text-info"></i>
+                                        <div>
+                                            <div class="small text-muted">Wind</div>
+                                            <div class="fw-semibold">${window.formatSpeed(route.weather.wind_speed_kph)}${route.weather.wind_direction_cardinal ? ` ${route.weather.wind_direction_cardinal}` : ''}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ` : ''}
+                            ${route.weather.precipitation_mm != null ? `
+                                <div class="col-6">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <i class="bi bi-cloud-rain text-primary"></i>
+                                        <div>
+                                            <div class="small text-muted">Precipitation</div>
+                                            <div class="fw-semibold">${route.weather.precipitation_mm} mm</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ` : ''}
+                            ${route.weather.conditions ? `
+                                <div class="col-6">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <i class="bi bi-cloud-sun text-secondary"></i>
+                                        <div>
+                                            <div class="small text-muted">Conditions</div>
+                                            <div class="fw-semibold">${route.weather.conditions}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ` : ''}
                         </div>
                     `
                     : '';
@@ -525,7 +566,7 @@
                                                 </div>
                                             </div>
                                         </div>
-                                        ${weatherMarkup ? `<hr class="my-2"><div class="small"><strong>Weather</strong><pre class="mb-0 small mt-1">${route.weather ? JSON.stringify(route.weather, null, 2) : ''}</pre></div>` : ''}
+                                        ${weatherMarkup}
                                     </div>
                                 </div>
                                 ${routeHistoryMarkup}
