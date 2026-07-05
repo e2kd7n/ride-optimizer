@@ -1652,9 +1652,10 @@ def strava_status():
     if tokens.get('expires_at', 0) < time.time():
         try:
             import requests as http_req
+            _env = _read_env()
             resp = http_req.post('https://www.strava.com/oauth/token', data={
-                'client_id': os.getenv('STRAVA_CLIENT_ID'),
-                'client_secret': os.getenv('STRAVA_CLIENT_SECRET'),
+                'client_id': os.getenv('STRAVA_CLIENT_ID') or _env.get('STRAVA_CLIENT_ID'),
+                'client_secret': os.getenv('STRAVA_CLIENT_SECRET') or _env.get('STRAVA_CLIENT_SECRET'),
                 'refresh_token': tokens['refresh_token'],
                 'grant_type': 'refresh_token',
             }, timeout=15)
@@ -1711,9 +1712,10 @@ def strava_callback():
 
     try:
         import requests as http_req
+        _env = _read_env()
         resp = http_req.post('https://www.strava.com/oauth/token', data={
-            'client_id': os.getenv('STRAVA_CLIENT_ID'),
-            'client_secret': os.getenv('STRAVA_CLIENT_SECRET'),
+            'client_id': os.getenv('STRAVA_CLIENT_ID') or _env.get('STRAVA_CLIENT_ID'),
+            'client_secret': os.getenv('STRAVA_CLIENT_SECRET') or _env.get('STRAVA_CLIENT_SECRET'),
             'code': code,
             'grant_type': 'authorization_code',
         }, timeout=15)
@@ -1743,6 +1745,23 @@ def strava_callback():
         if setup_redirect:
             return redirect('/setup.html?strava_error=token_exchange_failed')
         return redirect('/settings.html?strava_error=token_exchange_failed')
+
+
+@app.route('/api/strava/disconnect', methods=['POST'])
+@csrf.exempt
+def strava_disconnect():
+    """Remove saved Strava credentials, severing the connection."""
+    try:
+        creds_path = Path('config/credentials.json')
+        if creds_path.exists():
+            creds_path.unlink()
+        global _services_initialized
+        _services_initialized = False
+        logger.info("Strava credentials removed — integration disconnected")
+        return jsonify({'success': True})
+    except Exception as exc:
+        logger.error("Strava disconnect failed: %s", exc)
+        return jsonify({'success': False, 'error': 'Could not remove credentials'}), 500
 
 
 # ---------------------------------------------------------------------------
@@ -1989,6 +2008,19 @@ def intervals_connect():
         return jsonify({'success': False, 'error': 'Could not save credentials'}), 500
 
 
+@app.route('/api/intervals/disconnect', methods=['POST'])
+@csrf.exempt
+def intervals_disconnect():
+    """Remove saved intervals.icu credentials."""
+    try:
+        _intervals_creds.delete()
+        logger.info("intervals.icu credentials removed")
+        return jsonify({'success': True})
+    except Exception as exc:
+        logger.error("intervals.icu: failed to delete credentials: %s", exc)
+        return jsonify({'success': False, 'error': 'Could not remove credentials'}), 500
+
+
 @app.route('/api/ors/status')
 def ors_status():
     """Return whether ORS API key is configured."""
@@ -2018,6 +2050,21 @@ def ors_connect():
     except OSError as exc:
         logger.error("ORS: failed to write .env: %s", exc)
         return jsonify({'success': False, 'error': 'Could not save API key'}), 500
+
+
+@app.route('/api/ors/disconnect', methods=['POST'])
+@csrf.exempt
+def ors_disconnect():
+    """Remove ORS API key from .env and unset it in the running process."""
+    try:
+        _write_env({'ORS_API_KEY': ''})
+        os.environ.pop('ORS_API_KEY', None)
+        ConfigManager.get_instance().reload()
+        logger.info("ORS API key removed")
+        return jsonify({'success': True})
+    except OSError as exc:
+        logger.error("ORS: failed to clear .env: %s", exc)
+        return jsonify({'success': False, 'error': 'Could not remove API key'}), 500
 
 
 # ── Planner / Long Rides ──────────────────────────────────────────
