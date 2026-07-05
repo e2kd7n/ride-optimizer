@@ -50,9 +50,9 @@ Flask dev config lives in `.flaskenv`. Encrypted OAuth tokens are auto-generated
 
 **Stack:** Flask 3 backend + vanilla JS/HTML frontend (no SSR — all pages are static HTML in `static/`).
 
-**Frontend** (`static/`): Eight HTML pages served statically. Each page has a corresponding JS module in `static/js/`. Leaflet 1.9.4 handles maps; Bootstrap 5.3 handles UI. There is no JS build step. `static/js/api-client.js` wraps all `fetch` calls to the Flask API.
+**Frontend** (`static/`): Ten HTML pages served statically (`index`, `commute`, `compare`, `explore`, `reports`, `route-detail`, `routes`, `settings`, `setup`, `weather`; `test-error-handling.html` is a manual dev harness, not a product page). Each page has a corresponding JS module in `static/js/`. Leaflet 1.9.4 handles maps; Bootstrap 5.3 handles UI. There is no JS build step. `static/js/api-client.js` wraps all `fetch` calls to the Flask API.
 
-**Backend** (`launch.py` + `app/`): `launch.py` is the main Flask server defining API endpoints. Business logic lives in `app/services/` (six service classes — `AnalysisService`, `CommuteService`, `PlannerService`, `RouteLibraryService`, `WeatherService`, `TrainerRoadService`). Services use a two-step init pattern: constructor then `.initialize()`. Blueprints for map endpoints are in `app/api/`.
+**Backend** (`launch.py` + `app/`): `launch.py` is the main Flask server defining API endpoints. Business logic lives in `app/services/` — ten service classes: `AnalysisService`, `CommuteService`, `PlannerService`, `RouteLibraryService`, `WeatherService`, `TrainerRoadService`, `GarminService`, `ExplorationService` (ORS route/tile-coverage computation), `GeocodingService` (forward geocoding via Nominatim), `SettingsService` (user preference persistence). Services use a two-step init pattern: constructor then `.initialize()`. The `maps_api` Blueprint (`app/api/maps_api.py`) serves map-tile endpoints under `/api/maps`.
 
 **Core analysis** (`src/`): The heavy lifting for route analysis. `src/route_analyzer.py` (~73KB) is the central engine using Fréchet distance (via `similaritymeasures`) for route similarity matching. `src/data_fetcher.py` handles Strava API calls with rate-limit retry. `src/json_storage.py` is the current persistence layer (SQLite migration planned — Issue #131). Activity data is cached under `data/cache/`.
 
