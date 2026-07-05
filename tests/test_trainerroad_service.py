@@ -608,6 +608,15 @@ class TestGetWorkoutConstraints:
 
             assert constraints is None
 
+    def test_constraints_backfill_duration_from_workout_name(self, trainerroad_service):
+        """Test constraints derive duration from cached workout names."""
+        cache = _make_workout_cache('Endurance', '2:00 - Brenta', duration=None, tss=100)
+        with patch.object(trainerroad_service, '_load_workouts_cache', return_value=cache):
+            constraints = trainerroad_service.get_workout_constraints(date.today())
+
+            assert constraints['min_duration_minutes'] == 120
+            assert constraints['max_duration_minutes'] == 150
+
     def test_constraints_high_tss_note(self, trainerroad_service):
         """Test that high TSS adds note."""
         cache = _make_workout_cache('Threshold', 'Hard Workout', duration=120, tss=150)
