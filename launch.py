@@ -3346,7 +3346,8 @@ if __name__ == '__main__':
         sys.exit(0)
     
     # Main launcher process
-    port = int(os.environ.get('PORT', 8083))
+    PORT = 8083
+    port = int(os.environ.get('RIDE_OPTIMIZER_PORT', PORT))
     
     # Kill any existing server on this port
     kill_existing_server(port)
