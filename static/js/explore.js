@@ -529,6 +529,87 @@ function addRouteListItem(route, index, targetDistanceKm) {
 
 // ── Phase 2: Road routing ────────────────────────────────────────
 
+/**
+ * Displace a lat/lon point by `distKm` in the direction of `bearingDeg`.
+ * Used to insert padding waypoints that force the router to travel farther.
+ */
+function displace(lat, lon, distKm, bearingDeg) {
+    const R = 6371;
+    const d = distKm / R;
+    const b = bearingDeg * Math.PI / 180;
+    const lat1 = lat * Math.PI / 180;
+    const lon1 = lon * Math.PI / 180;
+    const lat2 = Math.asin(Math.sin(lat1) * Math.cos(d) + Math.cos(lat1) * Math.sin(d) * Math.cos(b));
+    const lon2 = lon1 + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(lat1), Math.cos(d) - Math.sin(lat1) * Math.sin(lat2));
+    return [lat2 * 180 / Math.PI, lon2 * 180 / Math.PI];
+}
+
+/**
+ * Run one refinement loop targeting `targetKm`.
+ * Returns the best result object, or null on failure.
+ *
+ * Strategy when too short: insert a displacement point pushed out along the
+ * route's main bearing so the road router must travel farther out-and-back.
+ * Strategy when too long: drop the lowest-priority waypoint.
+ */
+async function refineRoute(baseWaypoints, targetKm, surfacePref, candidateList, dirBearing) {
+    const TOLERANCE = 0.15;
+    const MAX_ITERATIONS = 6;
+    let waypoints = baseWaypoints.map(w => [...w]); // deep copy
+    let result = null;
+    let candidates = candidateList.slice();
+
+    for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
+        try {
+            result = await api.getExplorationRoute({ waypoints, surfacePreference: surfacePref });
+        } catch (err) {
+            return null;
+        }
+
+        if (!result || result.status !== 'success') return null;
+
+        const ratio = result.distance_km / targetKm;
+        if (Math.abs(ratio - 1) <= TOLERANCE) break; // within 15% — done
+
+        if (ratio > 1 + TOLERANCE && waypoints.length > 3) {
+            // Too long: drop the furthest (last inner) waypoint.
+            waypoints = [waypoints[0], ...waypoints.slice(1, -2), waypoints[waypoints.length - 1]];
+        } else if (ratio < 1 - TOLERANCE) {
+            // Too short: try adding next candidate zone first, then fall back
+            // to pushing a displacement waypoint out along the route bearing.
+            if (candidates.length > 0) {
+                const next = candidates.shift();
+                const wp = next.centroid || next;
+                waypoints = [
+                    waypoints[0],
+                    ...waypoints.slice(1, -1),
+                    [wp.lat, wp.lon],
+                    waypoints[waypoints.length - 1],
+                ];
+            } else {
+                // No more candidates — insert a padding point pushed out by
+                // half the deficit distance along the main quadrant bearing.
+                const deficitKm = (targetKm - result.distance_km) / 2;
+                const start = waypoints[0];
+                const padPt = displace(start[0], start[1], deficitKm, dirBearing);
+                // Insert after start, before the existing inner waypoints.
+                waypoints = [
+                    waypoints[0],
+                    padPt,
+                    ...waypoints.slice(1),
+                ];
+            }
+        } else {
+            break;
+        }
+    }
+
+    return result;
+}
+
+/** Bearing (degrees) from the start toward the quadrant centre. */
+const QUADRANT_BEARING = { NE: 45, SE: 135, SW: 225, NW: 315 };
+
 async function plotRoadRoute(direction, route, targetDistanceKm, color, badgeEl) {
     const plotBtn = badgeEl.querySelector('.plot-road-btn');
     const infoEl = badgeEl.querySelector('.route-phase2-info');
@@ -540,54 +621,27 @@ async function plotRoadRoute(direction, route, targetDistanceKm, color, badgeEl)
 
     const startPos = startMarker.getLatLng();
     const surfacePref = document.getElementById('surface-preference-select').value;
+    const bearing = QUADRANT_BEARING[direction] || 45;
 
-    // Build waypoints list: start → route waypoints → start (round trip).
     const baseWaypoints = [
         [startPos.lat, startPos.lng],
         ...route.waypoints.map(wp => [wp.lat, wp.lon]),
         [startPos.lat, startPos.lng],
     ];
 
-    // Iterative refinement: adjust waypoints up to 3 iterations to get within 10% of target.
-    const TOLERANCE = 0.10;
-    const MAX_ITERATIONS = 3;
-    let waypoints = baseWaypoints;
-    let result = null;
-    let candidateList = (_phase1Candidates[direction] || []).slice(); // remaining candidates
+    const candidates = (_phase1Candidates[direction] || []).slice();
+    const shortTarget = targetDistanceKm * 0.85;
+    const longTarget  = targetDistanceKm * 1.15;
 
-    for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
-        try {
-            result = await api.getExplorationRoute({ waypoints, surfacePreference: surfacePref });
-        } catch (err) {
-            // Network/API error — fall back gracefully.
-            result = null;
-            break;
-        }
+    // Run both variants in parallel.
+    infoEl.textContent = 'Computing short and long variants…';
+    const [shortResult, longResult] = await Promise.all([
+        refineRoute(baseWaypoints, shortTarget,  surfacePref, candidates, bearing),
+        refineRoute(baseWaypoints, longTarget,   surfacePref, candidates, bearing),
+    ]);
 
-        if (!result || result.status !== 'success') break;
-
-        const ratio = result.distance_km / targetDistanceKm;
-        if (Math.abs(ratio - 1) <= TOLERANCE) break; // within 10% — done
-
-        if (ratio > 1 + TOLERANCE && waypoints.length > 3) {
-            // Too long: drop the last non-start/end waypoint (lowest-priority).
-            waypoints = [waypoints[0], ...waypoints.slice(1, -2), waypoints[waypoints.length - 1]];
-        } else if (ratio < 1 - TOLERANCE && candidateList.length > 0) {
-            // Too short: pull in the next candidate zone.
-            const next = candidateList.shift();
-            waypoints = [
-                waypoints[0],
-                ...waypoints.slice(1, -1),
-                [next.centroid.lat, next.centroid.lon],
-                waypoints[waypoints.length - 1],
-            ];
-        } else {
-            break; // Nothing more to adjust.
-        }
-    }
-
-    if (!result || result.status !== 'success') {
-        const errMsg = (result && result.message) || 'Road routing unavailable';
+    if (!shortResult && !longResult) {
+        const errMsg = 'Road routing unavailable';
         if (typeof showToast === 'function') showToast(errMsg, 'warning');
         infoEl.textContent = errMsg;
         plotBtn.disabled = false;
@@ -595,44 +649,77 @@ async function plotRoadRoute(direction, route, targetDistanceKm, color, badgeEl)
         return;
     }
 
-    // Replace dashed preview with solid road-following polyline.
+    // Remove old phase-1 dashed preview.
     if (_phase1Polylines[direction]) {
         routeLayer.removeLayer(_phase1Polylines[direction]);
         delete _phase1Polylines[direction];
     }
     if (_phase2Polylines[direction]) {
         routeLayer.removeLayer(_phase2Polylines[direction]);
+        delete _phase2Polylines[direction];
     }
 
-    const latlngs = result.coordinates.map(([lat, lon]) => [lat, lon]);
-    const solidLine = L.polyline(latlngs, { color, weight: 4, opacity: 0.9 });
-    const distLabel = window.formatDistance ? window.formatDistance(result.distance_km, 1) : `${result.distance_km} km`;
-    solidLine.bindPopup(`${DIRECTION_LABELS[direction]} (road) — ${distLabel}, ${result.duration_min} min`);
-    routeLayer.addLayer(solidLine);
-    addArrows(latlngs, color);
-    _phase2Polylines[direction] = solidLine;
+    // Render each variant on the map and build badge rows.
+    let badgeRows = '';
 
-    // Update badge: replace straight-line stats with real stats + surface + GPX button.
-    const sb = result.surface_breakdown || {};
-    const surfaceText = (sb.paved_pct != null)
-        ? `${sb.paved_pct}% paved · ${sb.unpaved_pct}% unpaved · ${sb.unknown_pct}% unknown`
-        : '';
+    function renderVariant(result, label, opacity) {
+        if (!result) return null;
+        const latlngs = result.coordinates.map(([lat, lon]) => [lat, lon]);
+        const line = L.polyline(latlngs, { color, weight: 4, opacity });
+        const distLabel = window.formatDistance ? window.formatDistance(result.distance_km, 1) : `${result.distance_km} km`;
+        line.bindPopup(`${DIRECTION_LABELS[direction]} ${label} — ${distLabel}, ${result.duration_min} min`);
+        routeLayer.addLayer(line);
+        addArrows(latlngs, color);
+        return { line, result, distLabel };
+    }
+
+    const short = renderVariant(shortResult, '(−)', 0.7);
+    const long  = renderVariant(longResult,  '(+)', 1.0);
+
+    // Store last (long preferred) as phase-2 ref for cleanup.
+    _phase2Polylines[direction] = (long || short).line;
+
+    function variantRow(v, label, suffix) {
+        if (!v) return '';
+        const sb = v.result.surface_breakdown || {};
+        const surfText = (sb.paved_pct != null)
+            ? `${sb.paved_pct}% paved · ${sb.unpaved_pct}% unpaved · ${sb.unknown_pct}% unknown`
+            : '';
+        const dataKey = `${direction}-${suffix}`;
+        return `
+            <div class="d-flex align-items-center gap-2 flex-wrap" style="margin-top:4px">
+                <span class="text-muted small">${label} ${v.distLabel} · ${v.result.duration_min} min
+                    ${surfText ? `· ${surfText}` : ''}</span>
+                <button class="btn btn-xs btn-outline-secondary export-gpx-btn ms-auto"
+                        data-variant="${dataKey}"
+                        aria-label="Export GPX ${label}">
+                    <i class="bi bi-download" aria-hidden="true"></i> Export GPX
+                </button>
+            </div>`;
+    }
 
     const labelEl = badgeEl.querySelector('.route-label');
     if (labelEl) {
-        labelEl.textContent = `${DIRECTION_LABELS[direction]} · ${distLabel} · ${result.duration_min} min`;
+        const parts = [];
+        if (short) parts.push(`${short.distLabel} (−)`);
+        if (long)  parts.push(`${long.distLabel} (+)`);
+        labelEl.textContent = `${DIRECTION_LABELS[direction]} · ${parts.join(' / ')}`;
     }
 
-    infoEl.innerHTML = `
-        ${surfaceText ? `<span>${surfaceText}</span> · ` : ''}
-        <button class="btn btn-xs btn-outline-secondary export-gpx-btn"
-                aria-label="Export GPX for ${DIRECTION_LABELS[direction]}">
-            <i class="bi bi-download" aria-hidden="true"></i> Export GPX
-        </button>
-    `;
+    infoEl.innerHTML =
+        variantRow(short, 'Short:', 'short') +
+        variantRow(long,  'Long:',  'long');
+    infoEl.classList.remove('d-none');
 
-    infoEl.querySelector('.export-gpx-btn').addEventListener('click', () => {
-        downloadGpx(result.coordinates, direction);
+    // Wire up GPX exports.
+    infoEl.querySelectorAll('.export-gpx-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const key = btn.dataset.variant;
+            const coords = key.endsWith('-short')
+                ? (shortResult && shortResult.coordinates)
+                : (longResult  && longResult.coordinates);
+            if (coords) downloadGpx(coords, direction);
+        });
     });
 
     plotBtn.innerHTML = '<i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Re-plot';
