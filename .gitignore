@@ -32,7 +32,6 @@ docker-compose.override.yml
 # Mock object directories (test artifacts)
 <Mock*
 <Magic*
-config/.trainerroad_encryption_key
 
 # AI Code Assistant internals
 .claude/worktrees/
@@ -46,7 +45,3 @@ backups/maintenance/*.tar.gz
 
 # Bob tmp workspace
 .bob/tmp/
-
-# Garmin tokens and untracked encryption keys
-config/.garmin_tokens/
-config/trainerroad_encryption_key
