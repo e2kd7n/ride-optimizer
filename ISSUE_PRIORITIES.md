@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-07-04 22:52:03 UTC / 2026-07-04 17:52:03 CDT
+**Last Updated:** 2026-07-05 00:42:31 UTC / 2026-07-04 19:42:31 CDT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -8,13 +8,13 @@ This file reflects the current state of GitHub issues organized by release miles
 
 ## 📍 Release Context
 
-- **Current Release:** v0.14.0 (deployed)
-- **Next Release:** v0.17.0 (in development)
-- **Future Releases:** 
+- **Current Release:** none (deployed, milestone fully closed)
+- **Next Release:** v0.16.0 (in development)
+- **Future Releases:** v0.17.0
 
 ---
 
-## 🎯 v0.17.0 (Next Release - IN DEVELOPMENT)
+## 🎯 v0.16.0 (Next Release - IN DEVELOPMENT)
 
 **Priority within this release determines work order. Complete P0/P1 issues before moving to future releases.**
 
@@ -22,18 +22,47 @@ This file reflects the current state of GitHub issues organized by release miles
 **No P0 issues** ✅
 
 ### 🔴 P1 - HIGH
-- #352 - Epic: Design Review — Information Density, Discoverability & Card Placement
+**No P1 issues** ✅
 
 ### 🟡 P2 - MEDIUM
-- #355 - Design Review: Evaluate card and object placement for workflow optimization
-- #354 - Design Review: Evaluate discoverability and ease of use across all pages
-- #353 - Design Review: Evaluate information density across all pages
+- #356 - Improve route names: deduplicate, reduce noise, and add visual direction indicator for commute routes
 
 ### 🟢 P3 - LOW
 **No P3 issues** ✅
 
 ### 📋 P4 - FUTURE
 **No P4 issues** ✅
+
+---
+
+## 📅 v0.17.0 (Future Release)
+
+### 🔴 P1 - HIGH
+- #361 - [Design Review] Explore: add numbered workflow steps and progressive button enablement
+- #360 - [Design Review] Explore: add tile/Squadrats concept explainer and coverage legend
+- #359 - [Design Review] Route Detail: replace raw JSON weather dump with formatted card
+- #358 - [Design Review] Dashboard: fix mobile column stacking and widen decision panel
+- #357 - [Design Review] Weather: swap 7-day forecast and same-day commute windows order
+- #352 - Epic: Design Review — Information Density, Discoverability & Card Placement
+
+### 🟡 P2 - MEDIUM
+- #375 - [Design Review] Apply unit system preference to temperature slider, Reports distance label, and Explore distance slider
+- #374 - [Design Review] Ship or gracefully degrade help modal tutorial assets
+- #373 - [Design Review] Weather: add comfort score legend; fix hardcoded commute window time labels
+- #372 - [Design Review] Routes Library: label compare checkbox; add entry-point for Saved Plans
+- #370 - [Design Review] Dashboard: add affordance labels and count badges to collapse toggles
+- #371 - [Design Review] Route Detail: demote Uses metric; surface performance charts above history tables
+- #369 - [Design Review] Reports: hide empty secondary stats; move admin gear buttons to Settings
+- #368 - [Design Review] Settings: split Connections card; nest Outdoor Prefs; move Save above About
+- #367 - [Design Review] Explore: move coverage stats below map; merge controls into route generation card
+- #366 - [Design Review] Reports: reorder cards — Activities before Gear; consolidate chart cards
+- #365 - [Design Review] Routes Library: invert column ratio to give route list more space than map
+- #363 - [Design Review] Dashboard: relocate 'How It Works' button out of above-the-fold content
+- #364 - [Design Review] Routes Library: collapse advanced filters behind 'More Filters' toggle
+- #362 - [Design Review] Navigation: add Reports and Explore to mobile bottom nav
+
+### 🟢 P3 - LOW
+- #376 - [Design Review] P3 polish bundle: stale versions, missing H1s, a11y minor, UX polish items
 
 ---
 
