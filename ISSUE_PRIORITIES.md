@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-07-05 16:21:40 UTC / 2026-07-05 11:21:40 CDT
+**Last Updated:** 2026-07-05 19:42:35 UTC / 2026-07-05 14:42:35 CDT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -30,6 +30,13 @@ This file reflects the current state of GitHub issues organized by release miles
 - #352 - Epic: Design Review — Information Density, Discoverability & Card Placement
 
 ### 🟡 P2 - MEDIUM
+- #408 - Explore: clicking a map polyline highlights the corresponding route in the list
+- #407 - Explore: clicking a route list item highlights the polyline on the map
+- #406 - Explore: suggest adjacent-tile routes for future yard(inho) expansion in low-coverage areas
+- #405 - Explore: generate a tile-acquisition overlay for today's workout route
+- #404 - Explore: add yard(inho) optimization mode — max new tiles vs. infill
+- #403 - Explore: support round-trip vs. point-to-point route type with configurable endpoint
+- #402 - Explore: support round-trip vs. point-to-point route type with configurable endpoint
 - #375 - [Design Review] Apply unit system preference to temperature slider, Reports distance label, and Explore distance slider
 - #374 - [Design Review] Ship or gracefully degrade help modal tutorial assets
 - #373 - [Design Review] Weather: add comfort score legend; fix hardcoded commute window time labels
@@ -38,14 +45,16 @@ This file reflects the current state of GitHub issues organized by release miles
 - #371 - [Design Review] Route Detail: demote Uses metric; surface performance charts above history tables
 - #369 - [Design Review] Reports: hide empty secondary stats; move admin gear buttons to Settings
 - #368 - [Design Review] Settings: split Connections card; nest Outdoor Prefs; move Save above About
-- #367 - [Design Review] Explore: move coverage stats below map; merge controls into route generation card
 - #366 - [Design Review] Reports: reorder cards — Activities before Gear; consolidate chart cards
+- #367 - [Design Review] Explore: move coverage stats below map; merge controls into route generation card
 - #365 - [Design Review] Routes Library: invert column ratio to give route list more space than map
 - #363 - [Design Review] Dashboard: relocate 'How It Works' button out of above-the-fold content
 - #364 - [Design Review] Routes Library: collapse advanced filters behind 'More Filters' toggle
 - #362 - [Design Review] Navigation: add Reports and Explore to mobile bottom nav
 
 ### 🟢 P3 - LOW
+- #410 - Explore: minimize route overlap with already-visited tiles where possible
+- #409 - Explore: differentiate Phase-1 and Phase-2 polylines for the same direction with tonal color variants
 - #376 - [Design Review] P3 polish bundle: stale versions, missing H1s, a11y minor, UX polish items
 
 ### 📋 P4 - FUTURE
