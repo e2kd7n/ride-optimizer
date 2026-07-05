@@ -34,8 +34,10 @@ The legacy method `_get_street_name()` (line ~878) defines only one parameter (`
 
 **Bug fixes (do first):**
 - **Store `highway_type` in `_get_location_details()`**: add `'highway_type': address.get('highway')` to the cached result dict so it is available to downstream filters. This is a prerequisite for the road-type noise filter below.
+  - Gotcha: `self.cache` (`cache/geocoding_cache.json`) is a flat, unversioned dict loaded once at startup — points geocoded before this change will simply be missing the `highway_type` key. Given Nominatim's 1 req/sec limit, forcing a full re-geocode to backfill it isn't worth it. Treat a missing key as "unknown, don't filter" (the natural default of `.get('highway_type')`) so the noise filter phases in as the cache organically refreshes, rather than requiring a cache wipe.
 - **Fix `_get_street_name()` retry signature**: add `retry_count: int = 0` to its parameter list to match its body.
 - **Fix out-and-back turnaround detection**: in `_format_out_and_back_name()`, define the turnaround as the unique street with the highest `start_idx` where `start_idx < total_sample_points / 2` (i.e. only consider streets encountered in the first half of the route, before retracing begins).
+  - Gotcha: `_format_out_and_back_name()` currently only receives `unique_streets` — it has no denominator to compare `start_idx` against. Add `total_sample_points` as a key on `route_info` (set in `_analyze_route_geography()`, where `len(sample_points)` is already computed) rather than a new positional parameter, so `_generate_descriptive_name(route_info, ...)` keeps working with the hand-built dicts used throughout `tests/test_route_namer.py`.
 
 **Naming improvements:**
 - **Add terrain tag to name**: compute elevation gain per km using data already available in the route group. Append a parenthetical only when it adds signal:
@@ -43,15 +45,18 @@ The legacy method `_get_street_name()` (line ~878) defines only one parameter (`
   - 15–30 m/km → `(rolling)`
   - > 30 m/km → `(hilly)`
   - Thresholds configurable in `config.yaml` under `route_naming`.
+  - Gotcha: `name_route(coordinates, route_id, direction)` never receives elevation or distance — both live on `RouteGroup.representative_route`, one level up in `route_analyzer.py`. The call sites (`_geocode_routes_synchronous`/`_geocode_routes_background`, ~lines 1493 and 1567) need to pass `group.representative_route.elevation_gain` and `.distance` in, and `name_route()` should stash the computed m/km as a key on `route_info` (e.g. `route_info['elevation_gain_per_km']`) rather than adding positional params, again to avoid breaking the existing `_generate_descriptive_name()` unit tests.
 - **Embed direction suffix in commute route names**: append `→ Work` or `→ Home` to every commute route name (not just as a UI badge). This makes direction visible everywhere the name appears — GPX exports, browser tab, toasts, future integrations. The `→` character reads as a destination, not a label.
 - **Deduplicate names — elevation-first disambiguation**: after all names for a direction are generated, detect collisions and append a disambiguating token in this priority order:
   1. Terrain character (`flat`, `rolling`, `hilly`) if routes differ in terrain
   2. Distance bracket (`short`, `long`) if terrain alone doesn't differentiate
   3. Ordinal (`#2`, `#3`) as final fallback
+  - Gotcha: this pass must compare a route's proposed name against *all* existing named groups in that direction, not just the batch currently being geocoded (`groups_to_geocode`) — otherwise a newly-named route can collide with one named in a previous run and slip through. `_geocode_routes_synchronous()` and `_geocode_routes_background()` (route_analyzer.py:1470 and 1508) are two independent copies of the same loop; implement the dedup pass as one shared helper (e.g. `_dedupe_route_names(all_groups_for_direction)`) called from both, instead of writing the logic twice and letting them drift.
 - **Road-type noise filter** (requires `highway_type` fix above): in `_generate_descriptive_name()`, drop any segment from the name whose `highway_type` is `service`, `track`, `path`, or `unclassified`. The segment still contributes to routing; it is just excluded from the displayed name.
 - **Anchor names to suburb, not neighbourhood**: when the primary street or trail name alone is ambiguous, append the geocoded `suburb` of the start point (prefer `suburb` over `neighbourhood` — suburb coverage in Nominatim is significantly more consistent, especially on trails, parks, and waterfront paths where `neighbourhood` is frequently absent).
 - **Loop routes: prefer park/landmark over street**: for loop routes, check whether any sample point returns a named `leisure` area (park), `natural` feature, or `tourism` landmark from Nominatim. These fields are already fetched in `_get_location_details()` but only used in the legacy path. If a park or landmark is found, use it as the primary name anchor: `Loop through Lincoln Park` is more meaningful to a cyclist than `Loop via Lakefront Trail`.
 - **Raise sampling density for commute routes**: increase `sampling_density` from 10 to 20 points for routes where `direction` is set. All results are cached after the first geocoding run so the extra 10 API calls are a one-time cost per route.
+  - Gotcha: `_get_strategic_sample_points()` and `_analyze_route_geography()` currently take only `coordinates` — `direction` isn't passed down from `name_route()`. Add it as an optional parameter with a default (e.g. `direction: Optional[str] = None`) so the existing calls in `tests/test_route_namer.py` (which invoke `_get_strategic_sample_points(coords)` with one arg) keep working unchanged.
 - **Always include the geographic midpoint** (by cumulative distance, not array index) in the sample point set. For out-and-back routes this is the actual turnaround; for loops it is the far end. This is the point cyclists remember most and is currently missed when it falls between evenly-spaced sample indices.
 
 ### Frontend / route card (`static/js/routes.js`)
@@ -92,6 +97,8 @@ The legacy method `_get_street_name()` (line ~878) defines only one parameter (`
 - [ ] `_get_location_details()` caches `highway_type` in its result dict
 - [ ] `_get_street_name()` retry logic no longer raises `TypeError`
 - [ ] No regression in naming for non-commute routes (loops, out-and-back, point-to-point)
+- [ ] Existing `tests/test_route_namer.py` suite passes unmodified — new data (elevation, direction, total sample count) is threaded via optional `route_info` keys / default-valued params, not new required positional args
+- [ ] Dedup pass compares each candidate name against all previously-named groups in its direction (not just the current geocoding batch), and is implemented once and shared between `_geocode_routes_synchronous()` and `_geocode_routes_background()`
 
 ---
 
@@ -99,15 +106,16 @@ The legacy method `_get_street_name()` (line ~878) defines only one parameter (`
 
 | File | Location | Notes |
 |------|----------|-------|
-| `src/route_namer.py` | `_get_location_details()` ~line 565 | Add `highway_type` to cached result |
+| `src/route_namer.py` | `_get_location_details()` ~line 565 | Add `highway_type` to cached result; missing key on old cache entries must default to "don't filter" |
 | `src/route_namer.py` | `_generate_descriptive_name()` ~line 686 | Primary naming logic — add terrain tag, direction suffix, road-type filter |
 | `src/route_namer.py` | `_format_loop_name()` ~line 740 | Add park/landmark preference |
-| `src/route_namer.py` | `_format_out_and_back_name()` ~line 761 | Fix turnaround detection (first-half only) |
+| `src/route_namer.py` | `_format_out_and_back_name()` ~line 761 | Fix turnaround detection (first-half only); needs `total_sample_points` threaded in via `route_info` |
 | `src/route_namer.py` | `_filter_significant_streets()` ~line 631 | Add road-type guard using cached `highway_type` |
-| `src/route_namer.py` | `_get_strategic_sample_points()` ~line 254 | Raise density for commutes; always include cumulative midpoint |
+| `src/route_namer.py` | `_get_strategic_sample_points()` ~line 254 | Raise density for commutes (needs optional `direction` param); always include cumulative midpoint |
+| `src/route_namer.py` | `_analyze_route_geography()` ~line 200 | Stash `len(sample_points)` and elevation-per-km onto `route_info` here for downstream use |
 | `src/route_namer.py` | `_get_street_name()` ~line 878 | Fix `retry_count` parameter |
-| `src/route_namer.py` | `name_route()` ~line 153 | Add post-processing dedup pass |
-| `src/route_analyzer.py` | lines 1480–1506 | Loop calling `name_route()` — dedup pass fits here |
+| `src/route_namer.py` | `name_route()` ~line 153 | Accept elevation/distance inputs; compute terrain tag before calling `_generate_descriptive_name()` |
+| `src/route_analyzer.py` | lines 1470–1506 (`_geocode_routes_synchronous`) and 1508+ (`_geocode_routes_background`) | Both call `name_route()` and will need to pass `group.representative_route.elevation_gain`/`.distance`; add a single shared dedup helper called from both instead of duplicating the pass |
 | `app/services/route_library_service.py` | lines 452 and 477 | `direction` already in API response |
 | `static/js/routes.js` | lines 672–684 | Badge rendering — add direction badge next to `diffBadge` |
 | `config/config.yaml` | `route_naming` block | Add `terrain_rolling_threshold`, `terrain_hilly_threshold`, `commute_sampling_density` |

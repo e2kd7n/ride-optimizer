@@ -45,3 +45,5 @@ backups/maintenance/*.tar.gz
 
 # Bob tmp workspace
 .bob/tmp/
+config/intervals_credentials.json
+config/.intervals_encryption_key
