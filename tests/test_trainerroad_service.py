@@ -307,7 +307,9 @@ class TestParseICSFeed:
         
         assert len(workouts) == 2
         assert workouts[0]['workout_name'] == 'Endurance Ride'
+        assert workouts[0]['duration_minutes'] == 60
         assert workouts[1]['workout_name'] == 'Threshold Intervals'
+        assert workouts[1]['duration_minutes'] == 90
     
     def test_parse_empty_content(self, trainerroad_service):
         """Test parsing empty content."""
@@ -347,6 +349,40 @@ END:VCALENDAR"""
         
         assert len(workouts) == 1
         assert workouts[0]['workout_name'] == 'Valid Workout'
+
+    def test_parse_date_only_event_uses_title_duration(self, trainerroad_service):
+        """Test parsing date-only events with duration embedded in the summary."""
+        ics_content = """BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:date_only_event
+SUMMARY:2:00 - Boy
+DTSTART;VALUE=DATE:20260705
+END:VEVENT
+END:VCALENDAR"""
+
+        workouts = trainerroad_service.parse_ics_feed(ics_content)
+
+        assert len(workouts) == 1
+        assert workouts[0]['workout_name'] == '2:00 - Boy'
+        assert workouts[0]['duration_minutes'] == 120
+
+    def test_parse_date_only_event_without_title_duration_leaves_blank(self, trainerroad_service):
+        """Test parsing date-only events without duration embedded in the summary."""
+        ics_content = """BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:date_only_event
+SUMMARY:Group Ride
+DTSTART;VALUE=DATE:20260708
+END:VEVENT
+END:VCALENDAR"""
+
+        workouts = trainerroad_service.parse_ics_feed(ics_content)
+
+        assert len(workouts) == 1
+        assert workouts[0]['workout_name'] == 'Group Ride'
+        assert workouts[0]['duration_minutes'] is None
 
 
 class TestWorkoutTypeExtraction:
