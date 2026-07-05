@@ -12,6 +12,7 @@ const api = new APIClient('/api');
 let map = null;
 let tileLayer = null;
 let tileLayerSecondary = null;
+let newTilesLayer = null;   // green highlight for tiles a route will claim
 let routeLayer = null;
 let waypointMarkers = null;
 let startMarker = null;
@@ -40,6 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     initDistanceSlider();
+    updateWorkflowState();
     loadCoverage();
 });
 
@@ -66,6 +68,7 @@ function initMap() {
     }).addTo(map);
     tileLayer = L.layerGroup().addTo(map);
     tileLayerSecondary = L.layerGroup().addTo(map);
+    newTilesLayer = L.layerGroup().addTo(map);  // above coverage, below routes
     routeLayer = L.layerGroup().addTo(map);
     waypointMarkers = L.layerGroup().addTo(map);
 
@@ -81,6 +84,41 @@ function setStart(lat, lon, label = null) {
         alt: 'Route start point',
     }).addTo(map).bindPopup('Start').openPopup();
     document.getElementById('start-display').textContent = label || `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+    updateWorkflowState();
+}
+
+// ── Workflow step tracking (#361) ──────────────────────────────
+
+function isCoverageReady() {
+    const mode = getCoverageMode();
+    return !!coverageData && !(mode === 'both' && !coverageDataSecondary);
+}
+
+function updateWorkflowState() {
+    const coverageReady = isCoverageReady();
+    const startReady = !!startMarker;
+    const ready = coverageReady && startReady;
+
+    document.getElementById('workflow-step-1').classList.toggle('workflow-step-done', coverageReady);
+    document.getElementById('workflow-step-2').classList.toggle('workflow-step-done', startReady);
+    document.getElementById('workflow-step-3').classList.toggle('workflow-step-done', ready);
+
+    if (!explorationWorker) return; // unsupported-worker state already disables the button with its own message
+
+    const btn = document.getElementById('generate-route-btn');
+    btn.disabled = !ready;
+    btn.classList.toggle('btn-primary', ready);
+    btn.classList.toggle('btn-outline-primary', !ready);
+
+    const statusEl = document.getElementById('worker-status');
+    if (!ready) {
+        const missing = [];
+        if (!coverageReady) missing.push('load your coverage');
+        if (!startReady) missing.push('set a start point');
+        statusEl.textContent = `Next: ${missing.join(' and ')} to generate routes.`;
+    } else {
+        statusEl.textContent = 'Ready to generate routes.';
+    }
 }
 
 // ── Location search (geocoding) ──────────────────────────────────
@@ -171,6 +209,7 @@ async function loadCoverage() {
         statusEl.textContent = `Error: ${e.message}`;
     } finally {
         clearTimeout(slowHintTimer);
+        updateWorkflowState();
     }
 }
 
@@ -203,21 +242,26 @@ function renderStats(primary, secondary) {
     }
 }
 
+// Squadrats-matching colors: visited = warm orange fill, outline slightly darker
+const TILE_STYLE_VISITED   = { color: '#c8813a', weight: 0.5, fillColor: '#e8a84c', fillOpacity: 0.55 };
+const TILE_STYLE_SECONDARY = { color: '#c8813a', weight: 0.5, fillColor: '#e8a84c', fillOpacity: 0.55 };
+const TILE_STYLE_BOTH_PRIMARY = { color: '#c8813a', weight: 1,   fillColor: '#e8a84c', fillOpacity: 0.35 };
+// New tiles a route will claim: bright Squadrats-green
+const TILE_STYLE_NEW = { color: '#2e7d32', weight: 0.5, fillColor: '#4caf50', fillOpacity: 0.65 };
+
 function renderTiles(primary, secondary) {
     tileLayer.clearLayers();
     tileLayerSecondary.clearLayers();
+    newTilesLayer.clearLayers();
 
-    // In single-grid mode, keep the original green-fill styling. In "both"
-    // mode, distinguish the coarser squadrat grid (blue outline) from the
-    // finer squadratinho grid (green fill) drawn on top of it.
-    const primaryStyle = secondary
-        ? { color: '#0d6efd', weight: 1, fillOpacity: 0.08 }
-        : { color: '#28a745', weight: 0.5, fillOpacity: 0.35 };
-    const secondaryStyle = { color: '#28a745', weight: 0.5, fillOpacity: 0.35 };
+    // In single-grid mode show a solid orange fill. In "both" mode the
+    // squadrat grid gets a lighter orange outline so the squadratinho
+    // grid can show on top with full fill.
+    const primaryStyle = secondary ? TILE_STYLE_BOTH_PRIMARY : TILE_STYLE_VISITED;
 
     drawTileGrid(tileLayer, primary.visited, primary.zoom, primaryStyle);
     if (secondary) {
-        drawTileGrid(tileLayerSecondary, secondary.visited, secondary.zoom, secondaryStyle);
+        drawTileGrid(tileLayerSecondary, secondary.visited, secondary.zoom, TILE_STYLE_SECONDARY);
     }
 }
 
@@ -239,6 +283,28 @@ function drawTileGrid(layerGroup, visited, zoom, style) {
             interactive: false,
         });
         layerGroup.addLayer(rect);
+    }
+}
+
+/**
+ * Render green highlight rectangles for the new (unvisited) tiles a route
+ * will claim, using the same tile-boundary math as drawTileGrid.
+ * newTilesByZoom: [{zoom, tiles: [{x, y}]}]
+ */
+function renderNewTiles(newTilesByZoom) {
+    if (!newTilesByZoom) return;
+    for (const { zoom, tiles } of newTilesByZoom) {
+        const n = Math.pow(2, zoom);
+        for (const { x, y } of tiles) {
+            const west  = x / n * 360 - 180;
+            const east  = (x + 1) / n * 360 - 180;
+            const north = Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n)))       * 180 / Math.PI;
+            const south = Math.atan(Math.sinh(Math.PI * (1 - 2 * (y + 1) / n))) * 180 / Math.PI;
+            newTilesLayer.addLayer(L.rectangle([[south, west], [north, east]], {
+                ...TILE_STYLE_NEW,
+                interactive: false,
+            }));
+        }
     }
 }
 
@@ -317,6 +383,7 @@ async function generateRoute() {
     statusEl.textContent = 'Computing exploration routes…';
 
     waypointMarkers.clearLayers();
+    newTilesLayer.clearLayers();
     routeLayer.clearLayers();
     document.getElementById('route-list').innerHTML = '';
     _phase1Candidates = {};
@@ -334,9 +401,9 @@ async function generateRoute() {
     }, 8000);
 
     const stopWorking = () => {
-        btn.disabled = false;
         spinnerEl.classList.add('d-none');
         clearTimeout(slowHintTimer);
+        updateWorkflowState();
     };
 
     explorationWorker.onmessage = (e) => {
@@ -351,6 +418,8 @@ async function generateRoute() {
             // Phase 1 result: render dashed preview and add badge with "Plot road route" button.
             renderRoute(msg.route, routeCount);
             addRouteListItem(msg.route, routeCount, distanceKm);
+            // Highlight the new tiles this route will claim.
+            renderNewTiles(msg.route.newTilesByZoom);
             // Store Phase-1 candidate data for iterative refinement.
             if (msg.candidates) {
                 _phase1Candidates[msg.route.direction] = msg.candidates;
