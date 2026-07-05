@@ -126,10 +126,14 @@ class APIClient {
                 });
                 
                 // Don't retry on client errors (4xx) except 408 (timeout) and 429 (rate limit)
+                // Don't retry on server errors (5xx) — these are deterministic failures (misconfiguration, etc.)
                 if (error.status && error.status >= 400 && error.status < 500) {
                     if (error.status !== 408 && error.status !== 429) {
                         throw error;
                     }
+                }
+                if (error.status && error.status >= 500) {
+                    throw error;
                 }
                 
                 // If this was the last attempt, throw the error

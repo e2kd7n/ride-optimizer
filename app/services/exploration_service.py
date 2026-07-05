@@ -111,6 +111,12 @@ class ExplorationService:
         ors_coords = [[lon, lat] for lat, lon in waypoints]
         raw = ors_client.get_route(ors_coords, profile, api_key=api_key, timeout=timeout)
 
+        # Preferred profile not enabled on this account — fall back to cycling-regular.
+        if raw is not None and raw.get("_ors_profile_unavailable") and profile != "cycling-regular":
+            logger.info("Profile %s unavailable, falling back to cycling-regular", profile)
+            profile = "cycling-regular"
+            raw = ors_client.get_route(ors_coords, profile, api_key=api_key, timeout=timeout)
+
         if raw is None:
             return {"status": "error", "message": "Road routing request failed"}
         if raw.get("_ors_rate_limited"):

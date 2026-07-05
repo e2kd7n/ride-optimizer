@@ -1753,6 +1753,65 @@ def _env_path() -> Path:
     return Path('.env')
 
 
+# ---------------------------------------------------------------------------
+# intervals.icu credential store — encrypted file, same pattern as TrainerRoad
+# ---------------------------------------------------------------------------
+
+class _IntervalsCredStore:
+    """Persist intervals.icu credentials in an encrypted JSON file.
+
+    Survives server restarts; never written to .env so an env-file wipe
+    doesn't silently destroy the connection.
+    """
+    _CREDS_PATH = Path('config/intervals_credentials.json')
+    _KEY_PATH   = Path('config/.intervals_encryption_key')
+
+    def __init__(self):
+        from cryptography.fernet import Fernet
+        self._Fernet = Fernet
+        self._cipher = self._load_or_create_key()
+
+    def _load_or_create_key(self):
+        from cryptography.fernet import Fernet
+        if self._KEY_PATH.exists():
+            try:
+                return Fernet(self._KEY_PATH.read_bytes())
+            except Exception as exc:
+                logger.warning("intervals: bad encryption key, regenerating: %s", exc)
+        key = Fernet.generate_key()
+        self._KEY_PATH.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        self._KEY_PATH.write_bytes(key)
+        os.chmod(self._KEY_PATH, 0o600)
+        return Fernet(key)
+
+    def load(self) -> dict:
+        """Return {'athlete_id': ..., 'api_key': ...} or {}."""
+        if not self._CREDS_PATH.exists():
+            return {}
+        try:
+            encrypted = self._CREDS_PATH.read_bytes()
+            data = json.loads(self._cipher.decrypt(encrypted).decode())
+            return data if data.get('athlete_id') and data.get('api_key') else {}
+        except Exception as exc:
+            logger.warning("intervals: failed to load credentials: %s", exc)
+            return {}
+
+    def save(self, athlete_id: str, api_key: str) -> None:
+        self._CREDS_PATH.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        encrypted = self._cipher.encrypt(json.dumps(
+            {'athlete_id': athlete_id, 'api_key': api_key}
+        ).encode())
+        self._CREDS_PATH.write_bytes(encrypted)
+        os.chmod(self._CREDS_PATH, 0o600)
+
+    def delete(self) -> None:
+        if self._CREDS_PATH.exists():
+            self._CREDS_PATH.unlink()
+
+
+_intervals_creds = _IntervalsCredStore()
+
+
 def _read_env() -> dict:
     """Parse .env file into a dict. Returns {} when file is absent."""
     env_file = _env_path()
@@ -1877,12 +1936,10 @@ def setup_verify():
 @app.route('/api/intervals/status')
 def intervals_status():
     """Return whether intervals.icu credentials are configured and valid."""
-    env = _read_env()
-    athlete_id = os.getenv('INTERVALS_ATHLETE_ID') or env.get('INTERVALS_ATHLETE_ID', '')
-    api_key = os.getenv('INTERVALS_API_KEY') or env.get('INTERVALS_API_KEY', '')
-    if not athlete_id or not api_key:
+    creds = _intervals_creds.load()
+    if not creds:
         return jsonify({'connected': False})
-    return jsonify({'connected': True, 'athlete_id': athlete_id})
+    return jsonify({'connected': True, 'athlete_id': creds['athlete_id']})
 
 
 @app.route('/api/intervals/connect', methods=['POST'])
@@ -1922,16 +1979,45 @@ def intervals_connect():
         logger.warning("intervals.icu connect error: %s", exc)
         return jsonify({'success': False, 'error': 'Could not reach intervals.icu'}), 503
 
-    # Persist credentials
+    # Persist to encrypted file — survives server restarts
     try:
-        _write_env({'INTERVALS_ATHLETE_ID': athlete_id, 'INTERVALS_API_KEY': api_key})
-        os.environ['INTERVALS_ATHLETE_ID'] = athlete_id
-        os.environ['INTERVALS_API_KEY'] = api_key
+        _intervals_creds.save(athlete_id, api_key)
         logger.info("intervals.icu credentials saved for athlete %s (%s)", athlete_id, athlete_name)
         return jsonify({'success': True, 'athlete_id': athlete_id, 'athlete_name': athlete_name})
-    except OSError as exc:
-        logger.error("intervals.icu: failed to write .env: %s", exc)
+    except Exception as exc:
+        logger.error("intervals.icu: failed to save credentials: %s", exc)
         return jsonify({'success': False, 'error': 'Could not save credentials'}), 500
+
+
+@app.route('/api/ors/status')
+def ors_status():
+    """Return whether ORS API key is configured."""
+    env = _read_env()
+    api_key = os.getenv('ORS_API_KEY') or env.get('ORS_API_KEY', '')
+    return jsonify({'configured': bool(api_key and api_key != 'your_ors_api_key')})
+
+
+@app.route('/api/ors/connect', methods=['POST'])
+@csrf.exempt
+@limiter.limit("5 per minute")
+def ors_connect():
+    """Save ORS API key to .env."""
+    data = request.get_json(silent=True) or {}
+    api_key = str(data.get('api_key', '')).strip()
+
+    if not api_key:
+        return jsonify({'success': False, 'error': 'API key is required'}), 400
+
+    try:
+        _write_env({'ORS_API_KEY': api_key})
+        os.environ['ORS_API_KEY'] = api_key
+        # Reload config so the running process picks it up immediately
+        ConfigManager.get_instance().reload()
+        logger.info("ORS API key saved")
+        return jsonify({'success': True})
+    except OSError as exc:
+        logger.error("ORS: failed to write .env: %s", exc)
+        return jsonify({'success': False, 'error': 'Could not save API key'}), 500
 
 
 # ── Planner / Long Rides ──────────────────────────────────────────
