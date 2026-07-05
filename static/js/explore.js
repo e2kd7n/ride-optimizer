@@ -252,6 +252,48 @@ const _phase1Polylines = {};
 // Per-direction Phase-2 polyline references
 const _phase2Polylines = {};
 
+/**
+ * Draw small arrowhead triangles at the midpoint of each segment in `coords`.
+ * Each arrow is a filled L.polygon added to routeLayer.
+ * `coords` is an array of [lat, lng] pairs.
+ */
+function addArrows(coords, color) {
+    const ARROW_SIZE_DEG = 0.0004; // ~40m half-length at mid-latitudes
+    for (let i = 0; i < coords.length - 1; i++) {
+        const [lat1, lng1] = coords[i];
+        const [lat2, lng2] = coords[i + 1];
+        // Skip degenerate segments
+        if (lat1 === lat2 && lng1 === lng2) continue;
+
+        // Midpoint
+        const midLat = (lat1 + lat2) / 2;
+        const midLng = (lng1 + lng2) / 2;
+
+        // Direction vector (screen space approx — correct enough at any reasonable zoom)
+        const dLat = lat2 - lat1;
+        const dLng = (lng2 - lng1) * Math.cos(midLat * Math.PI / 180);
+        const len = Math.sqrt(dLat * dLat + dLng * dLng);
+        if (len === 0) continue;
+        const uLat = dLat / len;
+        const uLng = dLng / len / Math.cos(midLat * Math.PI / 180);
+
+        // Arrow tip (forward), two base corners (perpendicular)
+        const tip  = [midLat + uLat * ARROW_SIZE_DEG,       midLng + uLng * ARROW_SIZE_DEG];
+        const base1 = [midLat - uLat * ARROW_SIZE_DEG * 0.6 - uLng * ARROW_SIZE_DEG * 0.5,
+                        midLng - uLng * ARROW_SIZE_DEG * 0.6 + uLat * ARROW_SIZE_DEG * 0.5];
+        const base2 = [midLat - uLat * ARROW_SIZE_DEG * 0.6 + uLng * ARROW_SIZE_DEG * 0.5,
+                        midLng - uLng * ARROW_SIZE_DEG * 0.6 - uLat * ARROW_SIZE_DEG * 0.5];
+
+        routeLayer.addLayer(L.polygon([tip, base1, base2], {
+            color,
+            fillColor: color,
+            fillOpacity: 0.9,
+            weight: 0,
+            interactive: false,
+        }));
+    }
+}
+
 async function generateRoute() {
     if (!explorationWorker) {
         if (typeof showToast === 'function') showToast('Web Workers not supported', 'error');
@@ -378,6 +420,7 @@ function renderRoute(route, index) {
         opacity: 0.8,
     }).bindPopup(`${DIRECTION_LABELS[route.direction]} — ${distanceLabel}, ${newTilesLabel(route.stats)}`);
     routeLayer.addLayer(line);
+    addArrows(coords, color);
     _phase1Polylines[route.direction] = line;
 }
 
@@ -497,6 +540,7 @@ async function plotRoadRoute(direction, route, targetDistanceKm, color, badgeEl)
     const distLabel = window.formatDistance ? window.formatDistance(result.distance_km, 1) : `${result.distance_km} km`;
     solidLine.bindPopup(`${DIRECTION_LABELS[direction]} (road) — ${distLabel}, ${result.duration_min} min`);
     routeLayer.addLayer(solidLine);
+    addArrows(latlngs, color);
     _phase2Polylines[direction] = solidLine;
 
     // Update badge: replace straight-line stats with real stats + surface + GPX button.
