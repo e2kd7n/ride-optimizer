@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-07-05 02:10:44 UTC / 2026-07-04 21:10:44 CDT
+**Last Updated:** 2026-07-05 02:46:26 UTC / 2026-07-04 21:46:26 CDT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -8,34 +8,18 @@ This file reflects the current state of GitHub issues organized by release miles
 
 ## 📍 Release Context
 
-- **Current Release:** none (deployed, milestone fully closed)
-- **Next Release:** v0.16.0 (in development)
-- **Future Releases:** v0.17.0
+- **Current Release:** v0.16.0 (deployed, milestone fully closed)
+- **Next Release:** v0.17.0 (in development)
+- **Future Releases:** 
 
 ---
 
-## 🎯 v0.16.0 (Next Release - IN DEVELOPMENT)
+## 🎯 v0.17.0 (Next Release - IN DEVELOPMENT)
 
 **Priority within this release determines work order. Complete P0/P1 issues before moving to future releases.**
 
 ### 🔴 P0 - CRITICAL
 **No P0 issues** ✅
-
-### 🔴 P1 - HIGH
-- #356 - Improve route names: deduplicate, reduce noise, and add visual direction indicator for commute routes
-
-### 🟡 P2 - MEDIUM
-**No P2 issues** ✅
-
-### 🟢 P3 - LOW
-**No P3 issues** ✅
-
-### 📋 P4 - FUTURE
-**No P4 issues** ✅
-
----
-
-## 📅 v0.17.0 (Future Release)
 
 ### 🔴 P1 - HIGH
 - #361 - [Design Review] Explore: add numbered workflow steps and progressive button enablement
@@ -63,6 +47,9 @@ This file reflects the current state of GitHub issues organized by release miles
 
 ### 🟢 P3 - LOW
 - #376 - [Design Review] P3 polish bundle: stale versions, missing H1s, a11y minor, UX polish items
+
+### 📋 P4 - FUTURE
+**No P4 issues** ✅
 
 ---
 

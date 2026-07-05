@@ -41,3 +41,6 @@ backups/maintenance/*.tar.gz
 
 # Backup files — pushed to private backup repo via scripts/backup-env.sh
 *.backup
+
+config/intervals_credentials.json
+config/.intervals_encryption_key
