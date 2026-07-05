@@ -1,7 +1,7 @@
 # Design Principles & Guidelines
 
-**Version:** 2.1
-**Last Updated:** 2026-07-04
+**Version:** 2.2
+**Last Updated:** 2026-07-05
 **Status:** Active
 
 ---
@@ -9,6 +9,41 @@
 ## Overview
 
 This document establishes the design principles and guidelines for the Strava Commute Analyzer. All new features and modifications must adhere to these principles to ensure a consistent, accessible, and delightful user experience.
+
+---
+
+## Brand Identity — Fair Weather
+
+**Adopted:** 2026-07-05. Full spec, rationale, and screen mockups: [`docs/designs/FAIR_WEATHER_BRAND_BOOK.md`](../../docs/designs/FAIR_WEATHER_BRAND_BOOK.md).
+
+The app's visual identity is **Fair Weather** — built around the one decision the product actually exists to support: *is today a good day to ride, and which route fits it.* It replaces the previous unstyled Bootstrap defaults (indigo/purple gradient, system font stack, `bi-*` icons with no supporting type or color system).
+
+**Mark:** a circle with eight radiating ticks — reads simultaneously as a wheel hub and a sun, since the product sits at exactly that intersection. Defined once as an SVG using `stroke="currentColor"` so it can be recolored per context (navbar, favicon, PWA icon) from one source. Below 24px, drop the diagonal rays and keep only the circle plus the four cardinal ticks.
+
+**Wordmark:** "Ride" in ink, "Optimizer" in the cobalt accent, set in the display face. Tagline: *"Know before you go."*
+
+**Typography:**
+- Display (headlines, decision copy, CTAs): a geometric sans — `"Century Gothic", "Avenir Next", "Futura", -apple-system, sans-serif`.
+- Body (everything read at length): the existing system UI stack — `-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`.
+- No separate mono face in-product. Numerals that line up in a column (temperature, distance, elevation, match score) use `font-variant-numeric: tabular-nums` on the body/display face instead.
+
+**Color — two grounds, not one inverted into the other.** Day is an overcast-bright sky; Night is a clear one. Accents shift in brightness between modes to stay correct on each ground, not just recolored. This supersedes the Primary Colors and Semantic Colors tables in §4 below, which are updated to these values.
+
+| Role | Day | Night |
+|---|---|---|
+| Ground | `#F3F6F7` | `#0B1620` |
+| Surface (cards) | `#FFFFFF` | `#122232` |
+| Surface 2 | `#EDF2F4` | `#16283A` |
+| Ink (text) | `#0F2233` | `#EAF0F3` |
+| Ink soft (secondary text) | `#5B7686` | `#8FA6B4` |
+| Line (borders/dividers) | `#DCE3E6` | `#223243` |
+| Accent — cobalt (brand, structure, links, info) | `#0B6FA6` | `#4FB3E8` |
+| Accent — coral (reserved for the single most important CTA/badge per screen) | `#F2662D` | `#FF8A57` |
+| Good fit / favorable / success | `#3E8E63` | `#57B384` |
+| Caution / neutral | `#C98A1D` | `#E0A63E` |
+| Poor fit / unfavorable / danger | `#C4483A` | `#E2695C` |
+
+**Rule:** coral is spent in exactly one place per screen — the primary call to action or the day's headline decision badge. Cobalt carries everything structural (nav, links, accent borders, informational data). Diluting coral into badges, borders, and hover states the way the old indigo gradient was overused is the failure mode this palette is designed to avoid.
 
 ---
 
@@ -39,6 +74,7 @@ This document establishes the design principles and guidelines for the Strava Co
 - Avoid information overload on initial view
 - **Time-urgency ordering:** When a page contains both time-sensitive actionable content and lower-urgency planning/context content, the time-sensitive content must appear first in DOM source order (so mobile stacking is correct without CSS overrides). Example: same-day commute windows before a 7-day forecast; hero decision card before supporting map context.
 - **Teaser before collapse:** Any collapsible section containing useful secondary data must include a visible teaser or count in the collapsed state so users know expandable content exists. Never render a bare chevron with no accompanying text.
+- **Weather cards show wind and precipitation whenever available:** Any card or hourly cell displaying weather must surface wind speed/direction and precipitation chance alongside temperature, not temperature alone — both affect ride decisions as much as temperature does. In a single-instance card (a hero decision card, a current-conditions summary) show the value even when it's zero, since confirming "0% chance of rain" is itself useful information. In a repeated list (an hourly forecast strip), omit a field for a given cell only when its value is trivial/zero, to avoid clutter across many repeated cells — do not omit it simply because it's unavailable from a lower-priority data source without checking a fallback first.
 
 > **Field note (v0.17.0 Design Review):** Findings PLACE-WEATHER-1 and PLACE-DASH-1 confirmed two P1 ordering violations where planning-horizon content preceded same-day actionable data. Finding ID-WX-1 independently corroborated the Weather page ordering problem. Findings DISC-DASH-1, DISC-DASH-2, and ID-DASH-3 documented three collapse toggles with no teaser content across the Dashboard alone.
 
@@ -56,9 +92,12 @@ This document establishes the design principles and guidelines for the Strava Co
 - Spacing scale: xs (4px) → sm (8px) → md (16px) → lg (24px) → xl (32px)
 - Use whitespace generously to separate content groups
 - **Card column ratios:** On two-column layouts, the column containing primary decision data or the route list must receive equal or greater Bootstrap column width than the column containing a map or supporting context (minimum `col-lg-6` for the primary data column). Maps are confirmatory, not primary.
+- **Map + controls placed side-by-side on desktop:** On `lg` (≥1024px) and wider viewports, controls or lists that operate on a map (route-generation controls, filters, coverage stats, a route list) must be placed in a column beside the map, not stacked above or below it — stacking wastes the vertical real estate a wide viewport provides and pushes the primary action below the fold. Use `col-lg-4`/`col-lg-8` (compact controls / map) or the column-ratio rule above (data-dense list / map) depending on what the side column contains. Below `lg`, stack per the Mobile-First principle — controls or the list above the map, since there's no width to spare.
 - **Secondary metrics demoted:** Metrics that are social signals (popularity/uses), administrative counts (pipeline health), or derived redundancies (near-zero percentages) must not appear in the same visual tier (same CSS class, same card slot, same grid cell) as primary decision metrics (distance, duration, score).
 
 > **Field note (v0.17.0 Design Review):** Findings PLACE-DASH-2, PLACE-ROUTES-2, and PLACE-DETAIL-2 identified three pages where the map column received more Bootstrap columns than the decision/data column. Finding ID-RDTL-2 documented the "Uses" popularity metric sharing equal visual weight with Distance, Duration, and Elevation in the Route Detail primary grid. CP-4 (Information Density) documented this secondary-at-primary-weight pattern recurring across Dashboard, Reports, Route Detail, and Explore.
+
+> **Field note (v2.2 — Fair Weather):** The map + controls side-by-side rule formalizes a recommendation already made ad hoc in #367 (Explore: "two-column layout on desktop: generation controls left `col-lg-4` / map right `col-lg-8`"). It also applies to #365 (Routes Library column ratio) and should be checked against Route Detail's existing `col-lg-5`/`col-lg-7` split (`route-detail.html`), which already follows this pattern and can serve as the reference implementation.
 
 **Rationale:** Users should immediately understand what's most important.
 
@@ -69,53 +108,52 @@ This document establishes the design principles and guidelines for the Strava Co
 
 ### Color Palette
 
+**As of v2.2, sourced from the Fair Weather brand (see Brand Identity section above for full Day/Night table).** Primary Colors and Semantic Colors below give the flattened reference for implementers; the Day/Night table above is authoritative when the two disagree.
+
 **Primary Colors:**
-- `#667eea` - Primary (actions, links, brand)
-- `#764ba2` - Primary Dark (hover states, gradients)
+- `#0B6FA6` (Day) / `#4FB3E8` (Night) - Cobalt (structure, links, brand, informational)
+- `#F2662D` (Day) / `#FF8A57` (Night) - Coral (reserved for the single primary CTA/badge per screen — do not use for structural elements)
 
 **Semantic Colors (WCAG AA Compliant):**
 
-**Success (Green) - Optimal, Favorable, Positive:**
-- `#28a745` - Success (optimal routes, tailwind, favorable conditions)
-- `#d4edda` - Success Light (backgrounds, selected states)
-- `#155724` - Success Dark (text on light backgrounds)
+**Success (Green) - Optimal, Favorable, Good fit:**
+- `#3E8E63` (Day) / `#57B384` (Night) - Success (optimal routes, tailwind, favorable conditions)
+- `rgba(62,142,99,0.13)` - Success Light (backgrounds, selected states; use `rgba(87,179,132,0.16)` on Night surfaces)
+- `#1F5C3F` - Success Dark (text on light backgrounds)
 
-**Danger (Red) - Unfavorable, Warning, Negative:**
-- `#dc3545` - Danger (headwind, unfavorable conditions)
-- `#f8d7da` - Danger Light (backgrounds)
-- `#721c24` - Danger Dark (text on light backgrounds)
+**Danger (Red) - Unfavorable, Poor fit:**
+- `#C4483A` (Day) / `#E2695C` (Night) - Danger (headwind, unfavorable conditions)
+- `rgba(196,72,58,0.12)` - Danger Light (backgrounds)
+- `#7A2A21` - Danger Dark (text on light backgrounds)
 
-**Warning (Yellow) - Caution, Neutral:**
-- `#ffc107` - Warning (neutral conditions, caution)
-- `#fff3cd` - Warning Light (backgrounds, temporary highlights)
-- `#856404` - Warning Dark (text on light backgrounds)
+**Warning (Amber) - Caution, Neutral:**
+- `#C98A1D` (Day) / `#E0A63E` (Night) - Warning (neutral conditions, caution — e.g. an exposed climb, rising wind)
+- `rgba(201,138,29,0.15)` - Warning Light (backgrounds, temporary highlights)
+- `#6E4C0F` - Warning Dark (text on light backgrounds)
 
 **Info (Blue) - Informational:**
-- `#007bff` - Info (informational elements)
-- `#e7f3ff` - Info Light (backgrounds)
+- Use the Cobalt primary above. A separate Info color is retired in v2.2 — cobalt already carries this role, and a third blue alongside it diluted the palette.
 
 **Neutral (Grey) - Secondary, Muted:**
-- `#6c757d` - Neutral (secondary text, muted info)
-- `#e2e3e5` - Neutral Light (backgrounds)
-- `#383d41` - Neutral Dark (text)
-- `#808080` - Grey (dimmed/unselected routes)
-- `#f0f0f0` - Light Grey (hover states)
-- `#f8f9fa` - Background (page background)
+- `#5B7686` (Day) / `#8FA6B4` (Night) - Ink soft (secondary text, muted info)
+- `#DCE3E6` (Day) / `#223243` (Night) - Line (borders, dividers, hover backgrounds)
+- `#808080` - Grey (dimmed/unselected routes on map — unchanged, functional not brand color)
+- `#F3F6F7` (Day) / `#0B1620` (Night) - Ground (page background)
 
 ### Color Usage Rules
 
 1. **Route States:**
-   - Selected: `#d4edda` (green background) - clearly indicates selection
-   - Highlighted: `#fff3cd` (yellow background) - temporary highlight
-   - Hover: `#f0f0f0` (light grey) - subtle feedback
+   - Selected: `rgba(62,142,99,0.13)` (success-tinted background) - clearly indicates selection
+   - Highlighted: `rgba(201,138,29,0.15)` (warning-tinted background) - temporary highlight
+   - Hover: Line color (`#DCE3E6` Day / `#223243` Night) - subtle feedback
    - Dimmed: `#808080` at 40% opacity - unselected routes on map
 
 2. **Wind Conditions:**
-   - Favorable (Tailwind): Green (`#d4edda` background, `#28a745` border)
-   - Unfavorable (Headwind): Red (`#f8d7da` background, `#dc3545` border)
-   - Neutral: Grey (`#e2e3e5` background, `#6c757d` border)
+   - Favorable (Tailwind): Success-tinted background, success border
+   - Unfavorable (Headwind): Danger-tinted background, danger border
+   - Neutral: Line-colored background, ink-soft border
 
-3. **Map Routes:**
+3. **Map Routes:** Functional categorical palette for showing multiple simultaneous route overlays — kept constant across Day/Night since it's a data-encoding palette, not a brand one:
    - Route 1 (Primary): `#28a745` (green)
    - Route 2: `#dc3545` (red)
    - Route 3: `#007bff` (blue)
@@ -347,28 +385,36 @@ Before merging UI/UX changes:
 ### Button Styles
 ```css
 .btn-primary {
-    background: #667eea;
+    background: var(--accent); /* #0B6FA6 Day / #4FB3E8 Night */
     color: white;
     border: none;
     padding: 12px 24px;
-    border-radius: 6px;
-    font-weight: 600;
+    border-radius: 999px;
+    font-weight: 700;
     transition: all 0.2s;
 }
 
 .btn-primary:hover {
-    background: #764ba2;
+    filter: brightness(0.92);
     transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+    box-shadow: 0 4px 8px rgba(11, 111, 166, 0.3);
+}
+
+/* Reserve for exactly one primary CTA/badge per screen — see Brand Identity */
+.btn-cta {
+    background: var(--accent-warm); /* #F2662D Day / #FF8A57 Night */
+    color: white;
+    border-radius: 999px;
 }
 ```
 
 ### Card Styles
 ```css
 .card {
-    background: white;
-    border-radius: 10px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    background: var(--surface); /* #FFFFFF Day / #122232 Night */
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.08);
     padding: 20px;
     margin-bottom: 20px;
     transition: all 0.2s;
@@ -383,18 +429,18 @@ Before merging UI/UX changes:
 ### Route State Styles
 ```css
 .route-row.selected {
-    background-color: #d4edda;
-    border-left: 4px solid #28a745;
+    background-color: rgba(62,142,99,0.13); /* success-tinted, both modes via var(--success) */
+    border-left: 4px solid var(--success);
     font-weight: 600;
 }
 
 .route-row.highlighted {
-    background-color: #fff3cd;
-    border-left: 4px solid #ffc107;
+    background-color: rgba(201,138,29,0.15); /* warning-tinted */
+    border-left: 4px solid var(--warning);
 }
 
 .route-row:hover {
-    background-color: #f0f0f0;
+    background-color: var(--line);
     transform: translateX(4px);
 }
 ```
@@ -413,6 +459,7 @@ Before merging UI/UX changes:
 
 ## Version History
 
+- **v2.2** (2026-07-05): Fair Weather brand identity adopted — new Brand Identity section (mark, wordmark, type, tagline); Primary/Semantic Colors in §4 replaced with Day/Night cobalt/coral tokens (full spec: [`docs/designs/FAIR_WEATHER_BRAND_BOOK.md`](../../docs/designs/FAIR_WEATHER_BRAND_BOOK.md)); §2 new guideline that weather cards show wind and precipitation alongside temperature whenever meaningful; §3 new guideline that map controls/lists sit beside the map on desktop (`lg`+), not stacked above or below it, formalizing prior ad hoc recommendations in #365 and #367; Common Patterns Library CSS snippets updated to the new tokens and 999px/16px shape language.
 - **v2.1** (2026-07-04): Field notes and extended guidelines added from v0.17.0 Design Review (Epic #352). New sub-guidelines added to §2 (time-urgency ordering, teaser before collapse), §3 (card column ratios, secondary metrics demoted), §7 (workflow sequencing, jargon-free first use, interactive elements visually distinct, post-action navigation hints), §10 (destructive action confirmation, unit system applied globally).
 - **v2.0** (2026-03-26): Comprehensive design system with mobile-first approach
 - **v1.0** (2024): Initial design guidelines

@@ -284,17 +284,21 @@ plans/
 
 ## Design Principles (Non-Negotiable)
 
+**Full spec:** `plans/v0.6.0/DESIGN_PRINCIPLES.md` (v2.2). **Brand identity:** `docs/designs/FAIR_WEATHER_BRAND_BOOK.md` — logo, color tokens (Day/Night), type, and reference screens for the current "Fair Weather" brand, adopted 2026-07-05. Not yet wired into `static/css/main.css` (still on pre-rebrand tokens) — check the brand book before hand-picking a color or icon for new UI work.
+
 ### Mobile-First Approach
 - Start with 320px viewport (iPhone SE)
 - Touch targets minimum 44x44px
 - Stack vertically on mobile, side-by-side on desktop
+- **On `lg`+ desktop viewports, map controls/lists go beside the map, not stacked above or below it** (new in v2.2 — see DESIGN_PRINCIPLES.md §3)
 - Test on real devices, not just emulators
 
-### Semantic Color System
-- **Green (#28a745)**: Optimal routes, favorable conditions, success
-- **Red (#dc3545)**: Unfavorable conditions, warnings, danger
-- **Yellow (#ffc107)**: Neutral conditions, caution
-- **Blue (#007bff)**: Informational elements
+### Semantic Color System (Fair Weather, v2.2 — see brand book for Night-mode values)
+- **Cobalt (`#0B6FA6`)**: Brand, structure, links, informational — NOT `#667eea`/`#764ba2`, which are retired
+- **Coral (`#F2662D`)**: Reserved for exactly one CTA/badge per screen — never used structurally
+- **Green (`#3E8E63`)**: Optimal routes, favorable conditions, good fit
+- **Red (`#C4483A`)**: Unfavorable conditions, warnings, poor fit
+- **Amber (`#C98A1D`)**: Neutral conditions, caution
 - All colors WCAG AA compliant for accessibility
 
 ### Progressive Disclosure
@@ -302,6 +306,7 @@ plans/
 - Use "Show More" buttons for additional details
 - Collapse secondary information by default
 - Avoid information overload on initial view
+- **Weather cards show wind and precipitation whenever available, not temperature alone** (new in v2.2 — see DESIGN_PRINCIPLES.md §2)
 
 ## Shared Pi Infrastructure
 

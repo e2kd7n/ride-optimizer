@@ -11,10 +11,17 @@ and expandable detail rows** rather than standalone cards.
 
 ## Design Tokens Reference
 
+> **Superseded 2026-07-05:** `--primary-color`, `--success-color`, `--warning-color`, and
+> `--danger-color` below are the pre-rebrand values. The app's brand colors are now the
+> Fair Weather palette — see [`docs/designs/FAIR_WEATHER_BRAND_BOOK.md`](FAIR_WEATHER_BRAND_BOOK.md)
+> and `plans/v0.6.0/DESIGN_PRINCIPLES.md` §4. `--workout-color` (burnt orange) is unaffected —
+> it was chosen to be distinct from the brand palette and remains so under Fair Weather.
+
 ```
 Spacing:  --space-1: 4px  --space-2: 8px  --space-3: 16px  --space-4: 24px
 Type:     --font-size-xs: 0.75rem  --font-size-sm: 0.875rem  --font-size-base: 1rem
-Colors:   --primary-color: #667eea  --success-color: #28a745
+Colors (pre-rebrand):
+          --primary-color: #667eea  --success-color: #28a745
           --warning-color: #ffc107  --danger-color: #dc3545
 New:      --workout-color: #e85d04 (burnt orange — distinct from all existing palette)
           --workout-bg: rgba(232, 93, 4, 0.08)
