@@ -341,6 +341,7 @@ This release was superseded by v0.12.0 which focuses on production readiness wit
 | v0.11.0 | Jun 2026 | Minor | 9 docs | Architecture Simplification - SUPERSEDED |
 | v0.12.0 | May 2026 | Minor | 3 docs | Production Readiness - CURRENT |
 | v0.13.0 | Jun 2026 | Minor | 1 doc | E2E Testing & Quality - IN PLANNING |
+| v0.17.0 | TBD | Minor | 1 doc | Design Review - IN PLANNING |
 
 **Total Planning Documents:** 51 documents across 10 releases
 
@@ -349,7 +350,7 @@ This release was superseded by v0.12.0 which focuses on production readiness wit
 ## Related Documentation
 
 - **[VERSIONING_PLAN.md](../docs/VERSIONING_PLAN.md)** - Complete versioning strategy and rationale
-- **[RELEASE_ROADMAP.md](../RELEASE_ROADMAP.md)** - Future release planning
+- **[RELEASE_ROADMAP.md](../docs/archive/RELEASE_ROADMAP.md)** - ~~Future release planning~~ (archived — release state now from GitHub milestones)
 - **[ISSUE_PRIORITIES.md](../ISSUE_PRIORITIES.md)** - Current issue priorities and roadmap
 - **[docs/TECHNICAL_SPEC.md](../docs/TECHNICAL_SPEC.md)** - System architecture and specifications
 

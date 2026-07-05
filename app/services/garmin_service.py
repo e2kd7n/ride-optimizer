@@ -22,6 +22,7 @@ class GarminService:
 
     def __init__(self):
         self._client = None
+        self._display_name: Optional[str] = None
 
     def is_connected(self) -> bool:
         if self._client is not None:
@@ -34,7 +35,10 @@ class GarminService:
         try:
             import garth
             garth.resume(str(GARMIN_TOKEN_DIR))
-            garth.client.username  # triggers token validation
+            # Just check that both token files loaded — don't touch .username,
+            # .profile, or .user_profile; all three hit connectapi over the
+            # network and can trigger an SSO refresh.
+            assert garth.client.oauth1_token is not None
             self._client = garth
             return True
         except Exception as e:
@@ -49,11 +53,24 @@ class GarminService:
             GARMIN_TOKEN_DIR.mkdir(parents=True, exist_ok=True)
             garth.save(str(GARMIN_TOKEN_DIR))
             self._client = garth
-            display_name = garth.client.username or email.split('@')[0]
+            try:
+                display_name = garth.client.username or email.split('@')[0]
+            except Exception:
+                display_name = email.split('@')[0]
+            self._display_name = display_name
             return {'success': True, 'display_name': display_name}
         except Exception as e:
-            logger.error(f"Garmin Connect login failed: {e}")
-            return {'success': False, 'error': str(e)}
+            err = str(e)
+            logger.error(f"Garmin Connect login failed: {err}")
+            if '429' in err or 'Too Many Requests' in err:
+                return {
+                    'success': False,
+                    'error': (
+                        'Garmin is rate-limiting login attempts (429 Too Many Requests). '
+                        'Wait 15–30 minutes before trying again.'
+                    ),
+                }
+            return {'success': False, 'error': err}
 
     def disconnect(self):
         import shutil
@@ -64,11 +81,8 @@ class GarminService:
     def get_status(self) -> Dict[str, Any]:
         connected = self.is_connected()
         result: Dict[str, Any] = {'connected': connected}
-        if connected and self._client:
-            try:
-                result['display_name'] = self._client.client.username
-            except Exception:
-                pass
+        if connected and self._display_name:
+            result['display_name'] = self._display_name
         return result
 
     def fetch_activities(self, days: int = 90, limit: int = 200) -> List[Activity]:

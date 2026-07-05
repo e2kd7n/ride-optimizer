@@ -534,27 +534,50 @@ echo ""
 echo "**Priority is now WITHIN a release** - P0/P1 issues in the current release take precedence over all issues in future releases."
 echo ""
 
-# Get current release from RELEASE_ROADMAP.md
-CURRENT_RELEASE=$(grep -A 1 "^\*\*Current Release:\*\*" RELEASE_ROADMAP.md 2>/dev/null | tail -1 | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1 | tr -d '\r')
-NEXT_RELEASE=$(grep -A 1 "^\*\*Next Release:\*\*" RELEASE_ROADMAP.md 2>/dev/null | tail -1 | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1 | tr -d '\r')
+# Derive release state from GitHub milestones (single source of truth).
+# All open milestones are fetched and sorted by version.
+# CURRENT_RELEASE = highest-version open milestone with 0 open issues (work is done, not yet closed/tagged).
+# NEXT_RELEASE    = lowest-version open milestone that still has open issues (active development).
+# FUTURE_MILESTONES = remaining open milestones beyond NEXT_RELEASE.
+ALL_MILESTONES_JSON=$(gh api repos/:owner/:repo/milestones --jq \
+  '[.[] | select(.state=="open") | {title: .title, open: .open_issues}]' 2>/dev/null)
 
-if [ -z "$CURRENT_RELEASE" ]; then
-  CURRENT_RELEASE="v0.10.0"
-fi
-if [ -z "$NEXT_RELEASE" ]; then
-  NEXT_RELEASE="v0.11.0"
-fi
+# Sort milestone titles by version, lowest first
+MILESTONES_SORTED=$(echo "$ALL_MILESTONES_JSON" | jq -r '.[].title' | tr -d '\r' | sort -V)
 
-log_action "Current Release: $CURRENT_RELEASE, Next Release: $NEXT_RELEASE" >&2
+CURRENT_RELEASE=""
+NEXT_MILESTONE=""
+FUTURE_MILESTONES=""
+
+first_active=true
+for milestone in $MILESTONES_SORTED; do
+  open_count=$(echo "$ALL_MILESTONES_JSON" | jq -r --arg t "$milestone" '.[] | select(.title==$t) | .open')
+  if [ "$open_count" -eq 0 ]; then
+    # No open issues — treat as the deployed/current release
+    CURRENT_RELEASE="$milestone"
+  else
+    # Has open issues — this is an active or future release
+    if [ "$first_active" = true ]; then
+      NEXT_MILESTONE="$milestone"
+      first_active=false
+    else
+      FUTURE_MILESTONES="$FUTURE_MILESTONES $milestone"
+    fi
+  fi
+done
+
+NEXT_RELEASE="${NEXT_MILESTONE:-unknown}"
+
+log_action "Current Release: ${CURRENT_RELEASE:-none} | Next Release: $NEXT_RELEASE" >&2
 
 # Function to display issues for a milestone and priority
 display_milestone_priority() {
   local milestone="$1"
   local priority_label="$2"
   local priority_name="$3"
-  
+
   local issues=$(gh issue list --state open --milestone "$milestone" --label "$priority_label" --json number,title 2>/dev/null | jq -r '.[] | "- #\(.number) - \(.title)"')
-  
+
   if [ -n "$issues" ]; then
     echo "$issues"
   fi
@@ -564,39 +587,15 @@ display_milestone_priority() {
 get_issue_count() {
   local milestone="$1"
   local priority_label="$2"
-  
+
   gh issue list --state open --milestone "$milestone" --label "$priority_label" --json number 2>/dev/null | jq '. | length'
 }
 
-# Get all unique milestones, sorted by version number
-MILESTONES=$(gh issue list --state open --json milestone --limit 200 2>/dev/null | jq -r '.[].milestone.title // empty' | tr -d '\r' | sort -u -V)
-
-# Separate milestones into next and future
-# The FIRST milestone (lowest version) is the "next release"
-# All others are "future releases"
-NEXT_MILESTONE=""
-FUTURE_MILESTONES=""
-
-first_milestone=true
-for milestone in $MILESTONES; do
-  if [ "$first_milestone" = true ]; then
-    NEXT_MILESTONE="$milestone"
-    first_milestone=false
-  else
-    FUTURE_MILESTONES="$FUTURE_MILESTONES $milestone"
-  fi
-done
-
-# Update NEXT_RELEASE to match actual next milestone
-if [ -n "$NEXT_MILESTONE" ]; then
-  NEXT_RELEASE="$NEXT_MILESTONE"
-fi
-
 echo "## 📍 Release Context"
 echo ""
-echo "- **Current Release:** $CURRENT_RELEASE (deployed)"
+echo "- **Current Release:** ${CURRENT_RELEASE:-none} (deployed, milestone fully closed)"
 echo "- **Next Release:** $NEXT_RELEASE (in development)"
-echo "- **Future Releases:** $(echo $FUTURE_MILESTONES | tr ' ' ', ' | sed 's/,$//')"
+echo "- **Future Releases:** $(echo $FUTURE_MILESTONES | tr ' ' ', ' | sed 's/^,//;s/,$//')"
 echo ""
 echo "---"
 echo ""

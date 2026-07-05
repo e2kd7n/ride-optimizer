@@ -82,7 +82,7 @@ Archived documentation for historical reference, including:
 **Planning & Priorities:**
 - [Technical Specification](TECHNICAL_SPEC.md)
 - [Issue Priorities](../ISSUE_PRIORITIES.md)
-- [Release Roadmap](../RELEASE_ROADMAP.md)
+- [Release Roadmap](archive/RELEASE_ROADMAP.md) *(archived — release state now from GitHub milestones)*
 
 ### By Version
 - **v0.5.0:** [Release Notes](releases/v0.5.0/RELEASE_NOTES.md)

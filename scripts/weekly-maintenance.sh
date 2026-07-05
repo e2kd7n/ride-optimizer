@@ -178,7 +178,7 @@ echo "Please review the following:" | tee -a "$MAINTENANCE_LOG"
 echo "  [ ] docs/VERSIONING_PLAN.md - Version scheme current?" | tee -a "$MAINTENANCE_LOG"
 echo "  [ ] docs/TECHNICAL_SPEC.md - Architecture up to date?" | tee -a "$MAINTENANCE_LOG"
 echo "  [ ] README.md - Setup instructions accurate?" | tee -a "$MAINTENANCE_LOG"
-echo "  [ ] RELEASE_ROADMAP.md - Milestones current?" | tee -a "$MAINTENANCE_LOG"
+echo "  [ ] GitHub Milestones - Are open milestones and their issues current? (gh milestone list)" | tee -a "$MAINTENANCE_LOG"
 echo "" | tee -a "$MAINTENANCE_LOG"
 
 # 7. Quick stats
