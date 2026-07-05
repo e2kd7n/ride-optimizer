@@ -282,6 +282,24 @@ This release was superseded by v0.12.0 which focuses on production readiness wit
 
 ---
 
+## Release v0.16.0 - `launch.py` Blueprint Refactor (IN PLANNING)
+
+**Target Date:** TBD
+**Status:** 📝 IN PLANNING
+
+### Planning Documents
+- **LAUNCH_PY_BLUEPRINT_REFACTOR.md** - Full refactor plan: Blueprint layout, parallel service init, thread-safe job state
+
+### Key Features
+- Split 3,404-line `launch.py` into 9 focused Blueprints under `app/api/`
+- `app/factory.py` app factory + `app/container.py` service container
+- Wave-parallel service initialisation via `ThreadPoolExecutor` (3 services in parallel on cold start)
+- Thread-safe `JobState` + `JobRegistry` replacing module-level globals
+- Extracted infrastructure: `_IntervalsCredStore`, env helpers, process management
+- `launch.py` reduced to ~120-line CLI entry point
+
+---
+
 ## Release v0.17.0 - Design Review: Information Density, Discoverability & Card Placement (IN PLANNING)
 
 **Target Date:** July 2026
