@@ -32,6 +32,14 @@
             margin-top: var(--space-1);
         }
 
+        /* Secondary stat cards (#369a) — visibly smaller than the four primary stats above */
+        .stat-card-secondary {
+            padding: var(--space-2) var(--space-1);
+        }
+        .stat-card-secondary .stat-value {
+            font-size: var(--font-size-base);
+        }
+
         .record-card {
             display: flex;
             flex-direction: column;
@@ -98,11 +106,12 @@
             color: var(--color-text-muted);
         }
 
+        /* Consolidated trend chart tabs (#366c) — taller than the old 64px per-chart cards */
         .bar-chart {
             display: flex;
             align-items: flex-end;
             gap: 2px;
-            height: 64px;
+            height: 120px;
         }
         .bar-chart .bar {
             flex: 1;
@@ -114,6 +123,11 @@
             transition: opacity 0.15s;
         }
         .bar-chart .bar:hover { opacity: 1; }
+
+        .trend-tabs .nav-link {
+            font-size: var(--font-size-sm);
+            padding: 4px 12px;
+        }
 
         .activity-row {
             font-size: var(--font-size-sm);
@@ -225,7 +239,7 @@
             <div class="col-6 col-md-3">
                 <div class="card stat-card">
                     <div class="stat-value" id="stat-distance">—</div>
-                    <div class="stat-label">Miles</div>
+                    <div class="stat-label" id="stat-distance-label">Miles</div>
                     <div class="stat-sub" id="stat-avg-distance"></div>
                 </div>
             </div>
@@ -245,22 +259,22 @@
             </div>
         </div>
 
-        <!-- Extra stats row: HR, power, kudos -->
+        <!-- Extra stats row: HR, power, kudos — hidden/resized when empty (#369a) -->
         <div class="row g-2 mb-2" id="extra-stats-row">
-            <div class="col-4">
-                <div class="card stat-card">
+            <div class="col-4" id="stat-hr-col">
+                <div class="card stat-card stat-card-secondary">
                     <div class="stat-value" id="stat-hr">—</div>
                     <div class="stat-label">Avg HR</div>
                 </div>
             </div>
-            <div class="col-4">
-                <div class="card stat-card">
+            <div class="col-4" id="stat-kj-col">
+                <div class="card stat-card stat-card-secondary">
                     <div class="stat-value" id="stat-kj">—</div>
                     <div class="stat-label">Kilojoules</div>
                 </div>
             </div>
-            <div class="col-4">
-                <div class="card stat-card">
+            <div class="col-4" id="stat-kudos-col">
+                <div class="card stat-card stat-card-secondary">
                     <div class="stat-value" id="stat-kudos">—</div>
                     <div class="stat-label">Kudos</div>
                 </div>
@@ -268,14 +282,59 @@
         </div>
 
         <div class="row g-2">
-            <!-- Left column: PRs + type breakdown + activity chart -->
+            <!-- Left column: trend chart + PRs + type breakdown (#366b) -->
             <div class="col-lg-5">
+
+                <!-- Your Trend: consolidated Distance / Speed / Elevation tabs (#366c) -->
+                <div class="card mb-2">
+                    <div class="card-body py-2 px-3">
+                        <div class="section-header">
+                            <h6><i class="bi bi-graph-up" aria-hidden="true"></i> Your Trend</h6>
+                        </div>
+                        <ul class="nav nav-tabs nav-tabs-sm trend-tabs mb-2" id="trend-tabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="tab-monthly" data-bs-toggle="tab" data-bs-target="#pane-monthly"
+                                        type="button" role="tab" aria-controls="pane-monthly" aria-selected="true">Distance</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="tab-speed" data-bs-toggle="tab" data-bs-target="#pane-speed"
+                                        type="button" role="tab" aria-controls="pane-speed" aria-selected="false">Speed</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="tab-elevation" data-bs-toggle="tab" data-bs-target="#pane-elevation"
+                                        type="button" role="tab" aria-controls="pane-elevation" aria-selected="false">Elevation</button>
+                            </li>
+                        </ul>
+                        <div class="tab-content" id="trend-tab-content">
+                            <div class="tab-pane fade show active" id="pane-monthly" role="tabpanel" aria-labelledby="tab-monthly">
+                                <div class="bar-chart" id="monthly-chart" role="group" aria-label="Monthly distance bar chart">
+                                    <div class="text-muted small">Loading…</div>
+                                </div>
+                                <div id="monthly-chart-label" class="text-muted" style="font-size:10px; margin-top:var(--space-1); text-align:center;"></div>
+                            </div>
+                            <div class="tab-pane fade" id="pane-speed" role="tabpanel" aria-labelledby="tab-speed">
+                                <div class="bar-chart" id="speed-chart" role="group" aria-label="Speed distribution histogram">
+                                    <div class="text-muted small">Loading…</div>
+                                </div>
+                                <div id="speed-chart-label" class="text-muted" style="font-size:10px; margin-top:var(--space-1); text-align:center;"></div>
+                            </div>
+                            <div class="tab-pane fade" id="pane-elevation" role="tabpanel" aria-labelledby="tab-elevation">
+                                <div class="bar-chart" id="elevation-chart" role="group" aria-label="Elevation gain distribution histogram">
+                                    <div class="text-muted small">Loading…</div>
+                                </div>
+                                <div id="elevation-chart-label" class="text-muted" style="font-size:10px; margin-top:var(--space-1); text-align:center;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
                 <!-- Personal Records -->
                 <div class="card mb-2">
                     <div class="card-body py-2 px-3">
                         <div class="section-header mb-2">
-                            <h6><i class="bi bi-trophy" aria-hidden="true"></i> Personal Records</h6>
+                            <h6><i class="bi bi-trophy" aria-hidden="true"></i> Personal Records
+                                <span id="records-qualifier" class="text-muted" style="text-transform:none; letter-spacing:normal; font-weight:400;"></span>
+                            </h6>
                         </div>
                         <div class="row g-2" id="records-grid">
                             <div class="col-6">
@@ -326,79 +385,13 @@
                     </div>
                 </div>
 
-                <!-- Monthly distance chart -->
-                <div class="card mb-2">
-                    <div class="card-body py-2 px-3">
-                        <div class="section-header">
-                            <h6><i class="bi bi-graph-up" aria-hidden="true"></i> Monthly Distance</h6>
-                        </div>
-                        <div class="bar-chart" id="monthly-chart" role="img" aria-label="Monthly distance bar chart">
-                            <div class="text-muted small">Loading…</div>
-                        </div>
-                        <div id="monthly-chart-label" class="text-muted" style="font-size:10px; margin-top:var(--space-1); text-align:center;"></div>
-                    </div>
-                </div>
-
-                <!-- Speed distribution -->
-                <div class="card mb-2">
-                    <div class="card-body py-2 px-3">
-                        <div class="section-header">
-                            <h6><i class="bi bi-speedometer2" aria-hidden="true"></i> Speed Distribution</h6>
-                        </div>
-                        <div class="bar-chart" id="speed-chart" role="img" aria-label="Speed distribution histogram">
-                            <div class="text-muted small">Loading…</div>
-                        </div>
-                        <div id="speed-chart-label" class="text-muted" style="font-size:10px; margin-top:var(--space-1); text-align:center;"></div>
-                    </div>
-                </div>
-
-                <!-- Elevation distribution -->
-                <div class="card mb-2">
-                    <div class="card-body py-2 px-3">
-                        <div class="section-header">
-                            <h6><i class="bi bi-arrow-up-right" aria-hidden="true"></i> Elevation per Ride</h6>
-                        </div>
-                        <div class="bar-chart" id="elevation-chart" role="img" aria-label="Elevation gain distribution histogram">
-                            <div class="text-muted small">Loading…</div>
-                        </div>
-                        <div id="elevation-chart-label" class="text-muted" style="font-size:10px; margin-top:var(--space-1); text-align:center;"></div>
-                    </div>
-                </div>
-
             </div>
 
-            <!-- Right column: Gear + activity list -->
+            <!-- Right column: Activities + Gear (#366a) -->
             <div class="col-lg-7">
 
-                <!-- Gear breakdown -->
-                <div class="card mb-2">
-                    <div class="card-body py-2 px-3">
-                        <div class="section-header flex-wrap">
-                            <h6><i class="bi bi-bicycle" aria-hidden="true"></i> Gear</h6>
-                            <div class="d-flex flex-wrap gap-1 align-items-center">
-                                <span id="gear-cache-status" class="text-muted" style="font-size:10px;"></span>
-                                <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-1"
-                                        id="refresh-gear-btn" title="Fetch gear names from Strava" style="font-size:11px;">
-                                    <i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Sync Gear
-                                </button>
-                                <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-1"
-                                        id="backfill-gear-btn" title="Patch gear IDs on cached activities without re-fetching everything" style="font-size:11px;">
-                                    <i class="bi bi-patch-check" aria-hidden="true"></i> Backfill Gear IDs
-                                </button>
-                                <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-1"
-                                        id="clear-gear-filter-btn" title="Show all rides" style="font-size:11px; display:none;">
-                                    <i class="bi bi-x-circle" aria-hidden="true"></i> Clear Filter
-                                </button>
-                            </div>
-                        </div>
-                        <div id="gear-cards" class="row g-1">
-                            <div class="text-muted small">Loading…</div>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- Activity list (filtered by selected gear) -->
-                <div class="card">
+                <div class="card mb-2">
                     <div class="card-body py-2 px-3">
                         <div class="section-header flex-wrap">
                             <h6><i class="bi bi-list-ul" aria-hidden="true"></i> Activities
@@ -443,6 +436,25 @@
                     </div>
                 </div>
 
+                <!-- Gear breakdown -->
+                <div class="card mb-2">
+                    <div class="card-body py-2 px-3">
+                        <div class="section-header flex-wrap">
+                            <h6><i class="bi bi-bicycle" aria-hidden="true"></i> Gear</h6>
+                            <div class="d-flex flex-wrap gap-1 align-items-center">
+                                <span id="gear-cache-status" class="text-muted" style="font-size:10px;"></span>
+                                <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-1"
+                                        id="clear-gear-filter-btn" title="Show all rides" style="font-size:11px; display:none;">
+                                    <i class="bi bi-x-circle" aria-hidden="true"></i> Clear Filter
+                                </button>
+                            </div>
+                        </div>
+                        <div id="gear-cards" class="row g-1">
+                            <div class="text-muted small">Loading…</div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
     </main>
@@ -456,7 +468,7 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="/js/common.js"></script>
     <script src="/js/api-client.js?v=4"></script>
-    <script src="/js/reports.js?v=1"></script>
+    <script src="/js/reports.js?v=2"></script>
 
     <!-- Bottom Navigation (Mobile) -->
     <div id="bottom-nav-more" class="bottom-nav-drawer collapse d-md-none" aria-label="More pages">
