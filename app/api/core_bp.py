@@ -19,14 +19,11 @@ from pathlib import Path
 from flask import Blueprint, current_app, jsonify, request
 from flask_wtf.csrf import generate_csrf
 
-from src.json_storage import JSONStorage
 from src.secure_logger import SecureLogger
 
 logger = SecureLogger(__name__)
 
 bp = Blueprint('core', __name__, url_prefix='/api')
-
-_storage = JSONStorage()
 
 
 @bp.route('/csrf-token')
@@ -142,7 +139,7 @@ def delete_user_data():
 
     deleted = []
 
-    storage = JSONStorage()
+    storage = current_app.container.storage
     for filename in storage.list_files():
         if storage.delete(filename):
             deleted.append(f'data/{filename}')
@@ -174,7 +171,7 @@ def delete_user_data():
 @bp.route('/plans', methods=['GET'])
 def get_plans():
     """List all saved plans."""
-    plans = _storage.read('saved_plans.json', default=[])
+    plans = current_app.container.storage.read('saved_plans.json', default=[])
     return jsonify({'status': 'success', 'plans': plans})
 
 
@@ -195,7 +192,7 @@ def save_plan():
     if len(str(note)) > 500:
         return jsonify({'status': 'error', 'message': 'Note must be 500 characters or less'}), 400
 
-    plans = _storage.read('saved_plans.json', default=[])
+    plans = current_app.container.storage.read('saved_plans.json', default=[])
     plan = {
         'id': secrets.token_hex(8),
         'route_id': str(route_id),
@@ -208,7 +205,7 @@ def save_plan():
         'created_at': datetime.now().isoformat(),
     }
     plans.insert(0, plan)
-    _storage.write('saved_plans.json', plans)
+    current_app.container.storage.write('saved_plans.json', plans)
     return jsonify({'status': 'success', 'plan': plan}), 201
 
 
@@ -218,12 +215,12 @@ def delete_plan(plan_id):
     if not plan_id or not plan_id.replace('-', '').replace('_', '').isalnum():
         return jsonify({'status': 'error', 'message': 'Invalid plan ID'}), 400
 
-    plans = _storage.read('saved_plans.json', default=[])
+    plans = current_app.container.storage.read('saved_plans.json', default=[])
     original_len = len(plans)
     plans = [p for p in plans if p.get('id') != plan_id]
 
     if len(plans) == original_len:
         return jsonify({'status': 'error', 'message': 'Plan not found'}), 404
 
-    _storage.write('saved_plans.json', plans)
+    current_app.container.storage.write('saved_plans.json', plans)
     return jsonify({'status': 'success'})

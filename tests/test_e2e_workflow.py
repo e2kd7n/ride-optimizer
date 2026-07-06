@@ -35,14 +35,14 @@ def client():
 
 @pytest.fixture
 def mock_services(monkeypatch):
-    """Mock all services for E2E testing."""
-    # Create mock instances
-    config = Mock()
-    config.get.side_effect = lambda key, default=None: {
-        'location.home.latitude': 40.7128,
-        'location.home.longitude': -74.0060,
-    }.get(key, default)
-    
+    """Mock all services for E2E testing.
+
+    Services live on ``app.container`` (a ``ServiceContainer``), populated
+    lazily by ``container.initialise()`` on first request. We monkeypatch
+    the container's service attributes directly and mark it as already
+    initialised so route handlers use our mocks instead of triggering a
+    real (network-touching) initialisation.
+    """
     analysis = Mock()
     analysis.get_analysis_status.return_value = {
         'has_data': True,
@@ -75,20 +75,15 @@ def mock_services(monkeypatch):
     }
     
     planner = Mock()
-    
-    # Patch initialize_services
-    def mock_initialize():
-        import launch
-        launch._services_initialized = True
-        launch._analysis_service = analysis
-        launch._weather_service = weather
-        launch._commute_service = commute
-        launch._route_library_service = routes
-        launch._planner_service = planner
-    
-    monkeypatch.setattr('launch.config', config)
-    monkeypatch.setattr('launch.initialize_services', mock_initialize)
-    
+
+    container = app.container
+    monkeypatch.setattr(container, '_initialised', True)
+    monkeypatch.setattr(container, 'analysis_service', analysis)
+    monkeypatch.setattr(container, 'weather_service', weather)
+    monkeypatch.setattr(container, 'commute_service', commute)
+    monkeypatch.setattr(container, 'route_library_service', routes)
+    monkeypatch.setattr(container, 'planner_service', planner)
+
     return {
         'analysis': analysis,
         'weather': weather,
