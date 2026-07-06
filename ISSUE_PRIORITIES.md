@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-07-06 14:19:46 UTC / 2026-07-06 09:19:46 CDT
+**Last Updated:** 2026-07-06 15:56:50 UTC / 2026-07-06 10:56:50 CDT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -25,10 +25,6 @@ This file reflects the current state of GitHub issues organized by release miles
 **No P1 issues** ✅
 
 ### 🟡 P2 - MEDIUM
-- #449 - Epic: Fair Weather Rebrand — Completion Gaps
-- #448 - Route Detail: col-lg-5/col-lg-7 split still violates the col-lg-6 minimum column-ratio rule
-- #447 - Retarget Bootstrap's semantic RGB variables (success/warning/danger/info) to Fair Weather tokens
-- #446 - Fair Weather Night mode is inert — no toggle, no system-preference detection
 - #444 - Wire static/js/mobile.js into all 7 pages (bottom nav keyboard/swipe/touch support)
 
 ### 🟢 P3 - LOW
@@ -41,7 +37,14 @@ This file reflects the current state of GitHub issues organized by release miles
 
 ## 📅 v0.18.0 (Future Release)
 
+### 🟡 P2 - MEDIUM
+- #454 - Epic: Exploration route generator — maximize new-tile coverage instead of shortest-path out-and-back
+- #451 - Exploration route generator: extend overlap penalty to tiles claimed within the in-progress tour
+- #450 - Exploration route generator: replace top-N zone selection + TSP with cheapest-insertion construction
+
 ### 🟢 P3 - LOW
+- #453 - Exploration route generator: wind-aware outbound/return orientation (headwind out, tailwind back)
+- #452 - Exploration route generator: detect and label unavoidable out-and-back routes
 - #430 - Coverage tracker should include Garmin activities, not just Strava
 
 ---
@@ -50,7 +53,23 @@ This file reflects the current state of GitHub issues organized by release miles
 
 These issues need to be assigned to a release milestone and prioritized.
 
-**All issues are assigned to releases** ✅
+### 🔴 P0 - CRITICAL
+None
+
+### 🔴 P1 - HIGH
+None
+
+### 🟡 P2 - MEDIUM
+None
+
+### 🟢 P3 - LOW
+None
+
+### 📋 P4 - FUTURE
+None
+
+### ⚠️ Unprioritized (No P-label)
+- #457 - Night mode token drift: Route Detail stat values use Bootstrap's default text color, not --ink
 
 ---
 

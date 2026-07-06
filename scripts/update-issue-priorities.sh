@@ -328,7 +328,7 @@ create_issues_from_todos() {
   # Find TODO comments with issue markers
   grep -rn --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" \
     --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=dist --exclude-dir=build \
-    --exclude-dir=coverage --exclude-dir=.next --exclude-dir=test-results \
+    --exclude-dir=coverage --exclude-dir=.next --exclude-dir=test-results --exclude-dir=.claude \
     -E "TODO.*#issue|FIXME.*#issue|TODO.*\[create-issue\]|FIXME.*\[create-issue\]" . 2>/dev/null > "$temp_file"
   
   if [ -s "$temp_file" ]; then
@@ -389,7 +389,7 @@ scan_workspace_todos() {
   # Search patterns
   grep -rn --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" \
     --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=dist --exclude-dir=build \
-    --exclude-dir=coverage --exclude-dir=.next --exclude-dir=test-results \
+    --exclude-dir=coverage --exclude-dir=.next --exclude-dir=test-results --exclude-dir=.claude \
     -E "(TODO|FIXME|HACK|XXX|NOTE):" . 2>/dev/null | \
     sed 's/:/ - /' | \
     awk -F' - ' '{
