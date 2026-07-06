@@ -334,15 +334,14 @@ class APIClient {
         return this.fetch('/exploration/invalidate', { method: 'POST' });
     }
 
-    async getExplorationRoute({ waypoints, surfacePreference = 'any' } = {}) {
+    async getExplorationRoute({ waypoints, surfacePreference = 'any', exclude } = {}) {
         // Route computation involves a live ORS call; allow generous timeout.
+        const body = { waypoints, surface_preference: surfacePreference };
+        if (exclude) body.exclude = exclude;
         return this.fetch('/exploration/route', {
             method: 'POST',
             timeoutMs: 60000,
-            body: JSON.stringify({
-                waypoints,
-                surface_preference: surfacePreference,
-            }),
+            body: JSON.stringify(body),
         });
     }
 
