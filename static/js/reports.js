@@ -4,6 +4,10 @@
 
 const api = new APIClient('/api');
 
+// Sport types treated as "cycling" for Personal Records filtering (#376) — matches the
+// activity-type-filter dropdown options minus Run.
+const CYCLING_TYPES = ['Ride', 'GravelRide', 'EBikeRide', 'VirtualRide'];
+
 let currentPeriod = 'this_year';
 let currentGearId = null;   // null = all gear
 let statsData = null;       // last /api/stats response
@@ -50,7 +54,7 @@ async function loadStats() {
         if (resp.status !== 'success') throw new Error(resp.message || 'Unknown error');
         statsData = resp.data;
         renderHeadlineStats(statsData.summary);
-        renderRecords(statsData.records);
+        loadRecords();
         renderTypeBreakdown(statsData.by_type);
         renderMonthlyChart(statsData.by_month);
         renderDistributionChart(statsData.speed_distribution, 'speed-chart', 'speed-chart-label', 'mph');
@@ -64,18 +68,89 @@ async function loadStats() {
 
 function renderHeadlineStats(s) {
     setText('stat-rides', fmt(s.total_rides));
-    setText('stat-distance', fmt(s.total_distance_mi));
+    // Backend returns distance in miles (`_mi` fields). Label is dynamic per unit
+    // preference (#375b) — the value must convert too, or a metric user sees a
+    // "Kilometers" label on a number that's still in miles.
+    const distUnit = typeof window.getDistanceUnit === 'function' ? window.getDistanceUnit() : 'mi';
+    const toDisplayDistance = (mi) => (mi == null ? null : (distUnit === 'km' ? mi * 1.60934 : mi));
+    setText('stat-distance', fmt(toDisplayDistance(s.total_distance_mi)));
+    setText('stat-distance-label', distUnit === 'km' ? 'Kilometers' : 'Miles');
     setText('stat-time', fmt(s.total_time_h));
     setText('stat-elevation', fmtInt(s.total_elevation_ft));
-    setText('stat-avg-distance', s.total_rides ? `avg ${fmt(s.avg_distance_mi)} mi / ride` : '');
+    setText('stat-avg-distance', s.total_rides ? `avg ${fmt(toDisplayDistance(s.avg_distance_mi))} ${distUnit} / ride` : '');
     setText('stat-avg-speed', s.avg_speed_mph ? `avg ${fmt(s.avg_speed_mph)} mph` : '');
     setText('stat-avg-elevation', s.avg_elevation_ft ? `avg ${fmtInt(s.avg_elevation_ft)} ft / ride` : '');
-    setText('stat-hr', s.avg_heartrate ? `${fmt(s.avg_heartrate)} bpm` : '—');
-    setText('stat-kj', s.total_kilojoules ? fmtInt(s.total_kilojoules) : '—');
-    setText('stat-kudos', fmt(s.total_kudos));
+
+    // Secondary stats (Avg HR / Kilojoules / Kudos): hide whichever are null/zero, and
+    // reflow the remaining columns evenly rather than leaving a blank gap (#369a).
+    const extras = [
+        { col: 'stat-hr-col', has: !!s.avg_heartrate, render: () => setText('stat-hr', `${fmt(s.avg_heartrate)} bpm`) },
+        { col: 'stat-kj-col', has: !!s.total_kilojoules, render: () => setText('stat-kj', fmtInt(s.total_kilojoules)) },
+        { col: 'stat-kudos-col', has: !!s.total_kudos, render: () => setText('stat-kudos', fmt(s.total_kudos)) },
+    ];
+    const visible = extras.filter(e => e.has);
+    const colClass = visible.length === 1 ? 'col-12' : visible.length === 2 ? 'col-6' : 'col-4';
+    extras.forEach(e => {
+        const col = document.getElementById(e.col);
+        if (!col) return;
+        if (e.has) {
+            e.render();
+            col.className = colClass;
+            col.style.display = '';
+        } else {
+            col.style.display = 'none';
+        }
+    });
+    const row = document.getElementById('extra-stats-row');
+    if (row) row.style.display = visible.length ? '' : 'none';
 }
 
-function renderRecords(r) {
+// Personal Records are computed server-side from ALL cached activity types (including
+// WeightTraining etc.), so "Fastest Speed" can surface a non-cycling session (#376). Re-derive
+// the record-worthy metrics from the already-available /api/activities feed, filtered to cycling
+// sport types, so the qualifier we display is actually true.
+async function loadRecords() {
+    const qualifierEl = document.getElementById('records-qualifier');
+    try {
+        const resp = await api.get(`/activities?period=${currentPeriod}&sort=date_desc&limit=1000`);
+        if (resp.status !== 'success') {
+            renderRecords((statsData && statsData.records) || {}, false);
+            return;
+        }
+        const activities = resp.data.activities || [];
+        const cycling = activities.filter(a => CYCLING_TYPES.includes(a.sport_type));
+        if (!cycling.length) {
+            renderRecords((statsData && statsData.records) || {}, false);
+            return;
+        }
+
+        const longest = cycling.reduce((a, b) => (b.distance_mi > a.distance_mi ? b : a));
+        const mostElev = cycling.reduce((a, b) => (b.elevation_ft > a.elevation_ft ? b : a));
+        const fastest = cycling.reduce((a, b) => (b.speed_mph > a.speed_mph ? b : a));
+        const cyclingIds = new Set(cycling.map(a => a.id));
+
+        const records = {
+            longest_ride: { distance_mi: longest.distance_mi, name: longest.name, date: longest.date },
+            most_elevation: { elevation_ft: mostElev.elevation_ft, name: mostElev.name, date: mostElev.date },
+            fastest_speed: { speed_mph: fastest.speed_mph, name: fastest.name, date: fastest.date },
+        };
+
+        // Kilojoules isn't exposed per-activity by /api/activities, so we can't recompute this
+        // one client-side — only show it if the server's record activity happens to be a cycling
+        // activity (verifiable via id); otherwise omit rather than mislabel it.
+        const kj = statsData && statsData.records && statsData.records.most_kilojoules;
+        if (kj && cyclingIds.has(kj.id)) records.most_kilojoules = kj;
+
+        renderRecords(records, true);
+    } catch (e) {
+        renderRecords((statsData && statsData.records) || {}, false);
+    }
+}
+
+function renderRecords(r, cyclingOnly) {
+    const qualifierEl = document.getElementById('records-qualifier');
+    if (qualifierEl) qualifierEl.textContent = cyclingOnly ? '(cycling only)' : '';
+
     if (!r || !Object.keys(r).length) return;
 
     if (r.longest_ride) {
@@ -189,7 +264,7 @@ function gearDisplayName(g) {
 function renderGearCards(data) {
     const container = document.getElementById('gear-cards');
     const statusEl = document.getElementById('gear-cache-status');
-    statusEl.textContent = data.gear_cache_available ? '' : 'No gear names — click Sync Gear';
+    statusEl.textContent = data.gear_cache_available ? '' : 'No gear names — sync gear from Settings → Strava';
 
     if (!data.gear.length && !data.unassigned.total_rides) {
         container.innerHTML = '<div class="text-muted small">No gear data. Re-fetch activities from Strava after syncing gear.</div>';
@@ -260,89 +335,14 @@ function selectGear(gearId) {
 }
 
 function bindGearControls() {
+    // Sync Gear / Repair Gear Names now live in Settings → Strava (#369b) — only the
+    // Clear Filter control remains here, and only shown while a gear filter is active.
     document.getElementById('clear-gear-filter-btn').addEventListener('click', () => {
         currentGearId = null;
         document.querySelectorAll('.gear-card').forEach(c => c.classList.remove('active'));
         document.getElementById('clear-gear-filter-btn').style.display = 'none';
         loadActivities();
     });
-
-    document.getElementById('refresh-gear-btn').addEventListener('click', async () => {
-        const btn = document.getElementById('refresh-gear-btn');
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Syncing…';
-        try {
-            const resp = await api.post('/stats/refresh-gear', {});
-            if (resp.status === 'success') {
-                showToast(resp.message, 'success');
-                await loadGear();
-            } else {
-                showToast(resp.message || 'Sync failed', 'error');
-            }
-        } catch (e) {
-            showToast(`Gear sync failed: ${e.message}`, 'error');
-        } finally {
-            btn.disabled = false;
-            btn.innerHTML = '<i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Sync Gear';
-        }
-    });
-
-    document.getElementById('backfill-gear-btn').addEventListener('click', startBackfill);
-}
-
-let _backfillPollInterval = null;
-
-async function startBackfill() {
-    const btn = document.getElementById('backfill-gear-btn');
-    const statusEl = document.getElementById('gear-cache-status');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Backfilling…';
-
-    try {
-        const resp = await api.post('/stats/backfill-gear-ids', {});
-        if (resp.status === 'started' || resp.status === 'already_running') {
-            _backfillPollInterval = setInterval(pollBackfill, 1500);
-        } else {
-            showToast(resp.message || 'Failed to start backfill', 'error');
-            resetBackfillBtn();
-        }
-    } catch (e) {
-        showToast(`Backfill failed: ${e.message}`, 'error');
-        resetBackfillBtn();
-    }
-}
-
-async function pollBackfill() {
-    const btn = document.getElementById('backfill-gear-btn');
-    const statusEl = document.getElementById('gear-cache-status');
-    try {
-        const resp = await api.get('/stats/backfill-gear-ids/status');
-        if (resp.status === 'running') {
-            statusEl.textContent = resp.label || 'Backfilling…';
-        } else if (resp.status === 'done') {
-            clearInterval(_backfillPollInterval);
-            _backfillPollInterval = null;
-            showToast(resp.label, 'success');
-            statusEl.textContent = '';
-            resetBackfillBtn();
-            await loadGear();
-            loadActivities();
-        } else if (resp.status === 'error') {
-            clearInterval(_backfillPollInterval);
-            _backfillPollInterval = null;
-            showToast(resp.label || 'Backfill error', 'error');
-            statusEl.textContent = '';
-            resetBackfillBtn();
-        }
-    } catch (e) {
-        // ignore transient poll errors
-    }
-}
-
-function resetBackfillBtn() {
-    const btn = document.getElementById('backfill-gear-btn');
-    btn.disabled = false;
-    btn.innerHTML = '<i class="bi bi-patch-check" aria-hidden="true"></i> Backfill Gear IDs';
 }
 
 // -----------------------------------------------------------------------
