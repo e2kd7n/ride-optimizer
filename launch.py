@@ -1,13 +1,21 @@
 """
-Minimal Flask API for Smart Static architecture.
+Flask application entry point for the Ride Optimizer web app (port 8083).
 
-Provides 4 JSON endpoints for static HTML pages to fetch data:
-- /api/weather - Current weather data
-- /api/recommendation - Next commute recommendation
-- /api/routes - All routes for library
-- /api/status - System health and freshness
+This file is the CLI entry point and legacy Flask monolith.  It is being
+progressively migrated to a Blueprint-based architecture (Epic #413):
 
-No sessions, CORS, rate limiting - optimized for single-user Pi deployment.
+  Target structure (in progress):
+    launch.py           -> CLI entry point only (~120 lines)
+    app/factory.py      -> create_app(), Flask app factory
+    app/container.py    -> ServiceContainer, wave-parallel service init
+    app/api/*_bp.py     -> 9 focused Blueprints (one per API domain)
+    app/services/*.py   -> Business logic (unchanged)
+
+Until the Blueprint migration is complete (Phase 5, issue #418), all 65+
+route handlers live in this file.  For API endpoint work, edit this file.
+Once migration is done, edit the relevant app/api/*_bp.py Blueprint instead.
+
+Deployment: single-user Pi, no CORS, CSRF-protected, rate-limited.
 """
 
 from flask import Flask, jsonify, send_from_directory, request, redirect, url_for, session

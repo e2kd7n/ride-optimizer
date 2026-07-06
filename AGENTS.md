@@ -25,7 +25,8 @@ static/commute.html         # Commute recommendations
 static/planner.html         # Long ride planner
 static/css/main.css         # Styles
 static/js/*.js              # Client-side logic
-launch.py                   # API endpoints
+launch.py                   # API endpoints (migration in progress — see Epic #413)
+app/api/*_bp.py             # API Blueprints (target; stubs only until migration complete)
 app/services/*.py           # Business logic
 ```
 
@@ -57,9 +58,14 @@ main.py                                     # CLI tool - not for UI work
 
 **If implementing a UI/UX feature:**
 1. Is it for the web app? → Edit `static/` files
-2. Is it for API endpoints? → Edit `launch.py`
+2. Is it for API endpoints? → Edit `app/api/*_bp.py` (or `launch.py` during migration — see note below)
 3. Is it for business logic? → Edit `app/services/`
 4. Is it for CLI data analysis? → Edit `main.py` (but NOT templates)
+
+**⚠️ Blueprint migration in progress (Epic #413):**
+- Routes are being extracted from `launch.py` into `app/api/*_bp.py` Blueprints (Phases 2–5 still open)
+- Until a route has been extracted, it still lives in `launch.py`
+- Check the relevant `app/api/*_bp.py` stub; if it only contains `bp = Blueprint(...)` with no handlers, the route is still in `launch.py`
 
 **If you see "templates/" in an issue:**
 - STOP and ask for clarification
@@ -67,18 +73,33 @@ main.py                                     # CLI tool - not for UI work
 - Templates are deprecated for UI work
 
 ### Web App Architecture (ACTIVE)
+
+> **Note:** Blueprint migration (Epic #413) is in progress. The target structure below is partially scaffolded. Until Phase 5 (#418) completes, all route handlers live in `launch.py`.
+
+**Target structure (scaffolded, migration in progress):**
 ```
 User Browser
     ↓
-launch.py (Flask API on port 8083)
+launch.py (CLI entry, ~120 lines — target once migration complete)
     ↓
-Serves: static/*.html (client-side rendering)
+app/factory.py (create_app)
     ↓
-Calls: /api/weather, /api/recommendation, /api/routes, /api/status
+app/container.py (ServiceContainer, wave-parallel init)
     ↓
-Uses: app/services/*.py (business logic)
+app/api/*_bp.py (9 Blueprints)
+    weather_bp.py      /api/weather/*
+    commute_bp.py      /api/commute, /api/recommendation, /api/workout-options
+    routes_bp.py       /api/routes/*
+    planner_bp.py      /api/planner/*, /api/exploration/*, /api/geocode
+    strava_bp.py       /api/strava/*, /api/setup/*
+    integrations_bp.py /api/intervals/*, /api/ors/*, /api/garmin/*, /api/trainerroad/*
+    data_bp.py         /api/analyze/*, /api/fetch/*, /api/activities
+    stats_bp.py        /api/stats/*
+    core_bp.py         /api/status, /api/settings/*, /api/plans/*, /api/user/*
     ↓
-Reads: data/*.json (cached data)
+app/services/*.py (business logic — unchanged)
+    ↓
+data/*.json (cached data)
 ```
 
 ### CLI Tool Architecture (DEPRECATED FOR UI)
