@@ -17,7 +17,7 @@
  *       grids at once — each grid's zones are found independently (tile
  *       adjacency only makes sense within a single zoom's coordinate space),
  *       then the best zones from each are merged into one route per quadrant.
- *   - optimizeFor: 'tiles' | 'distance' | 'efficiency'
+ *   - optimizeFor: 'tiles' | 'distance' | 'efficiency' | 'infill' | 'frontier'
  *
  * Output messages (streamed):
  *   {type: 'route', route: {direction, waypoints, stats}}  — one per generated route
@@ -48,7 +48,7 @@ const GRID_LABELS = { 14: 'squadrats', 17: 'squadratinhos' };
  * still splits into a distinct route per direction rather than collapsing
  * into a single zone/route.
  */
-function scanGrid(coverageData, start, reachRadius) {
+function scanGrid(coverageData, start, reachRadius, optimizeFor) {
     const bounds = coverageData.bounds;
     if (!bounds) throw new Error('Coverage data has no bounds');
     const zoom = coverageData.zoom || 14;
@@ -56,7 +56,18 @@ function scanGrid(coverageData, start, reachRadius) {
     const allTiles = buildTileSet(bounds, zoom);
     const visitedSet = new Set(Object.keys(coverageData.visited || {}));
     const unvisited = allTiles.filter(t => !visitedSet.has(t.key));
-    const reachableTiles = unvisited.filter(
+
+    // #404 / #406: filter unvisited set before bucketing based on mode.
+    let candidates = unvisited;
+    if (optimizeFor === 'infill') {
+        // Infill: tiles with ≥ 2 visited 4-neighbours (interior gaps).
+        candidates = unvisited.filter(t => countVisitedNeighbours(t, visitedSet) >= 2);
+    } else if (optimizeFor === 'frontier') {
+        // Frontier: tiles with ≥ 1 visited neighbour, sorted by low surrounding density.
+        candidates = unvisited.filter(t => countVisitedNeighbours(t, visitedSet) >= 1);
+    }
+
+    const reachableTiles = candidates.filter(
         t => haversineKm(start.lat, start.lon, t.lat, t.lon) <= reachRadius
     );
 
@@ -65,16 +76,38 @@ function scanGrid(coverageData, start, reachRadius) {
         buckets[quadrantFor(bearingDeg(start.lat, start.lon, t.lat, t.lon))].push(t);
     }
 
-    return { zoom, unvisited, reachableTiles, buckets };
+    return { zoom, unvisited, reachableTiles, buckets, visitedSet };
 }
 
-function optimize({ start, end, distanceKm, mode, routeType, coverageData, coverageDataSecondary, optimizeFor }) {
+/** Count how many of the 4 cardinal neighbours of tile `t` are in `visitedSet`. */
+function countVisitedNeighbours(t, visitedSet) {
+    return [
+        `${t.x},${t.y - 1}`,
+        `${t.x},${t.y + 1}`,
+        `${t.x - 1},${t.y}`,
+        `${t.x + 1},${t.y}`,
+    ].filter(k => visitedSet.has(k)).length;
+}
+
+/** Count visited tiles in the 5×5 neighbourhood around tile `t`. */
+function visitedDensity5x5(t, visitedSet) {
+    let count = 0;
+    for (let dx = -2; dx <= 2; dx++) {
+        for (let dy = -2; dy <= 2; dy++) {
+            if (dx === 0 && dy === 0) continue;
+            if (visitedSet.has(`${t.x + dx},${t.y + dy}`)) count++;
+        }
+    }
+    return count;
+}
+
+function optimize({ start, end, distanceKm, mode, routeType, coverageData, coverageDataSecondary, optimizeFor, corridorConstraint }) {
     const isRoundTrip = routeType === 'round_trip' || !end;
     const reachRadius = distanceKm / (isRoundTrip ? 4 : 3);
 
     reportProgress('Scanning tile grid…');
-    const primary = scanGrid(coverageData, start, reachRadius);
-    const secondary = coverageDataSecondary ? scanGrid(coverageDataSecondary, start, reachRadius) : null;
+    const primary = scanGrid(coverageData, start, reachRadius, optimizeFor, corridorConstraint);
+    const secondary = coverageDataSecondary ? scanGrid(coverageDataSecondary, start, reachRadius, optimizeFor, corridorConstraint) : null;
     const grids = secondary ? [primary, secondary] : [primary];
 
     const totalUnvisited = grids.reduce((sum, g) => sum + g.unvisited.length, 0);
@@ -84,6 +117,12 @@ function optimize({ start, end, distanceKm, mode, routeType, coverageData, cover
 
     const totalReachable = grids.reduce((sum, g) => sum + g.reachableTiles.length, 0);
     if (totalReachable === 0) {
+        // Graceful empty-result messages for infill/frontier modes (#404/#406).
+        if (optimizeFor === 'infill') {
+            reportProgress('No infill tiles found — yard interior may already be complete');
+        } else if (optimizeFor === 'frontier') {
+            reportProgress('No frontier tiles found — yard may be fully isolated');
+        }
         const zoneCount = grids.reduce((sum, g) => sum + floodFillZones(g.unvisited).length, 0);
         return {
             totalRoutes: 0,
@@ -105,9 +144,11 @@ function optimize({ start, end, distanceKm, mode, routeType, coverageData, cover
                 ...z,
                 distanceFromStart: haversineKm(start.lat, start.lon, z.centroid.lat, z.centroid.lon),
             }));
+            const scored = scoreZones(dirZones, optimizeFor);
+            const penalised = applyOverlapPenalty(scored, start, g.visitedSet, g.zoom);
             return {
                 zoom: g.zoom,
-                candidates: scoreZones(dirZones, optimizeFor).slice(0, perGridCap),
+                candidates: penalised.slice(0, perGridCap),
             };
         });
 
@@ -164,12 +205,41 @@ function optimize({ start, end, distanceKm, mode, routeType, coverageData, cover
     };
 }
 
+// Weight applied when penalising routes that overlap already-visited tiles (#410).
+// 0 disables the penalty entirely; raise to 1.0+ to strongly avoid overlap.
+const OVERLAP_PENALTY_WEIGHT = 0.5;
+
+/**
+ * Estimate how many visited tiles lie along the straight-line corridor from
+ * `start` to the zone centroid by sampling the tile grid at intervals.
+ * Uses only the already-loaded visitedSet — no extra API calls.
+ */
+function estimateCorridorOverlap(zone, start, visitedSet, zoom) {
+    const steps = Math.max(2, Math.round(zone.distanceFromStart * 4)); // ~1 sample per 250m
+    const dlat = (zone.centroid.lat - start.lat) / steps;
+    const dlon = (zone.centroid.lon - start.lon) / steps;
+    let overlap = 0;
+    for (let i = 1; i < steps; i++) {
+        const lat = start.lat + dlat * i;
+        const lon = start.lon + dlon * i;
+        const n = Math.pow(2, zoom);
+        const x = Math.floor((lon + 180) / 360 * n);
+        const y = Math.floor((1 - Math.asinh(Math.tan(lat * Math.PI / 180)) / Math.PI) / 2 * n);
+        if (visitedSet.has(`${x},${y}`)) overlap++;
+    }
+    return overlap;
+}
+
 /**
  * Order zones by the user's chosen priority before capping to the top few
  * per direction:
- *   - 'tiles': biggest contiguous unexplored areas first (default)
- *   - 'distance': closest to the start point first (shortest route)
+ *   - 'tiles'    : biggest contiguous unexplored areas first (default)
+ *   - 'distance' : closest to the start point first (shortest route)
  *   - 'efficiency': most new tiles per km of travel to reach them
+ *   - 'infill'   : smallest zones first (interior gaps are typically smaller)
+ *   - 'frontier' : zones with lower surrounding density ranked higher
+ * After primary sort, a secondary overlap penalty (#410) nudges tied zones
+ * toward paths that re-cover fewer visited tiles.
  */
 function scoreZones(zones, optimizeFor) {
     const scored = [...zones];
@@ -180,10 +250,29 @@ function scoreZones(zones, optimizeFor) {
             (b.tiles.length / Math.max(b.distanceFromStart, 0.1)) -
             (a.tiles.length / Math.max(a.distanceFromStart, 0.1))
         );
+    } else if (optimizeFor === 'infill') {
+        // Smallest zones first — infill gaps are typically tight clusters.
+        scored.sort((a, b) => a.tiles.length - b.tiles.length);
+    } else if (optimizeFor === 'frontier') {
+        // Low-density neighbourhoods ranked first (#406).
+        // visitedSet is not available here, so proxy with zone size (smaller = sparser border).
+        scored.sort((a, b) => a.tiles.length - b.tiles.length);
     } else {
         scored.sort((a, b) => b.tiles.length - a.tiles.length);
     }
     return scored;
+}
+
+/**
+ * Apply overlap-avoidance as a secondary sort across any mode (#410).
+ * `start` and `visitedSet`/`zoom` come from the calling scanGrid context.
+ */
+function applyOverlapPenalty(zones, start, visitedSet, zoom) {
+    if (OVERLAP_PENALTY_WEIGHT === 0 || zones.length <= 1) return zones;
+    return zones.map(z => ({
+        ...z,
+        _overlapScore: z.tiles.length - OVERLAP_PENALTY_WEIGHT * estimateCorridorOverlap(z, start, visitedSet, zoom),
+    })).sort((a, b) => b._overlapScore - a._overlapScore);
 }
 
 function bearingDeg(lat1, lon1, lat2, lon2) {

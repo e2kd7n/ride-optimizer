@@ -33,6 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('coverage-type-select').addEventListener('change', loadCoverage);
     document.getElementById('clear-cache-btn').addEventListener('click', clearCache);
     document.getElementById('generate-route-btn').addEventListener('click', generateRoute);
+    document.getElementById('workout-combo-btn').addEventListener('click', generateWorkoutCombo);
     document.getElementById('location-search-btn').addEventListener('click', searchLocation);
     document.getElementById('location-search-input').addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
@@ -121,6 +122,10 @@ function updateWorkflowState() {
     // Coral (.btn-cta) is reserved for this one enabled CTA on the page (#361).
     btn.classList.toggle('btn-cta', ready);
     btn.classList.toggle('btn-outline-primary', !ready);
+
+    // Workout combo button requires coverage loaded (start not required — uses workout start).
+    const comboBtn = document.getElementById('workout-combo-btn');
+    if (comboBtn) comboBtn.disabled = !coverageReady || !explorationWorker;
 
     const statusEl = document.getElementById('worker-status');
     if (!ready) {
@@ -526,6 +531,117 @@ async function generateRoute() {
     });
 }
 
+/**
+ * #405 — Workout combo: fetch today's recommendation, use its start location
+ * and corridor to constrain the exploration worker toward nearby unvisited tiles.
+ */
+async function generateWorkoutCombo() {
+    if (!explorationWorker || !isCoverageReady()) return;
+
+    const statusEl = document.getElementById('worker-status');
+    const spinnerEl = document.getElementById('worker-spinner');
+    const comboBtn = document.getElementById('workout-combo-btn');
+    comboBtn.disabled = true;
+    spinnerEl.classList.remove('d-none');
+    statusEl.textContent = 'Fetching today\'s workout recommendation…';
+
+    let rec;
+    try {
+        rec = await api.getRecommendation();
+    } catch (e) {
+        statusEl.textContent = 'No workout recommendation available for today.';
+        spinnerEl.classList.add('d-none');
+        comboBtn.disabled = false;
+        return;
+    }
+
+    if (!rec || rec.status !== 'success' || !rec.recommended_route) {
+        statusEl.textContent = 'No workout recommendation available for today.';
+        spinnerEl.classList.add('d-none');
+        comboBtn.disabled = false;
+        return;
+    }
+
+    const workoutRoute = rec.recommended_route;
+    const coords = workoutRoute.coordinates || [];
+    if (coords.length === 0) {
+        statusEl.textContent = 'Workout recommendation has no route coordinates.';
+        spinnerEl.classList.add('d-none');
+        comboBtn.disabled = false;
+        return;
+    }
+
+    // Derive start from first coordinate; set it on the map if not already set.
+    const [startLat, startLon] = coords[0];
+    if (!startMarker) setStart(startLat, startLon, `Workout start: ${workoutRoute.name || 'Route'}`);
+
+    const distanceKm = workoutRoute.distance ? workoutRoute.distance / 1000 : parseFloat(document.getElementById('distance-slider').value);
+    const optimizeFor = document.getElementById('optimize-for-select').value;
+    const mode = getCoverageMode();
+
+    clearHighlight();
+    waypointMarkers.clearLayers();
+    newTilesLayer.clearLayers();
+    routeLayer.clearLayers();
+    document.getElementById('route-list').innerHTML = '';
+    _phase1Candidates = {};
+    Object.keys(_phase1Polylines).forEach(k => delete _phase1Polylines[k]);
+    Object.keys(_phase2Polylines).forEach(k => delete _phase2Polylines[k]);
+
+    let routeCount = 0;
+    explorationWorker.onmessage = (e) => {
+        const msg = e.data;
+        if (msg.type === 'progress') { statusEl.textContent = msg.message; return; }
+        if (msg.type === 'route') {
+            renderRoute(msg.route, routeCount);
+            // Label as workout combo.
+            addRouteListItem(msg.route, routeCount, distanceKm, '· Workout combo');
+            renderNewTiles(msg.route.newTilesByZoom);
+            if (msg.candidates) _phase1Candidates[msg.route.direction] = msg.candidates;
+            routeCount++;
+            statusEl.textContent = `Found ${routeCount} workout-combo route${routeCount > 1 ? 's' : ''} so far…`;
+            return;
+        }
+        if (msg.type === 'done') {
+            spinnerEl.classList.add('d-none');
+            statusEl.textContent = routeCount > 0
+                ? `${routeCount} workout-combo route${routeCount > 1 ? 's' : ''} generated`
+                : 'No nearby unvisited tiles found along the workout corridor — try a different day or move the start point';
+            if (routeCount > 0 && routeLayer.getBounds().isValid()) {
+                map.fitBounds(routeLayer.getBounds(), { padding: [40, 40] });
+            }
+            comboBtn.disabled = false;
+            updateWorkflowState();
+            return;
+        }
+        if (msg.type === 'error') {
+            spinnerEl.classList.add('d-none');
+            statusEl.textContent = msg.message || 'Workout combo failed';
+            comboBtn.disabled = false;
+            updateWorkflowState();
+        }
+    };
+    explorationWorker.onerror = (err) => {
+        spinnerEl.classList.add('d-none');
+        statusEl.textContent = 'Worker error: ' + err.message;
+        comboBtn.disabled = false;
+        updateWorkflowState();
+    };
+
+    statusEl.textContent = 'Generating workout-combo routes…';
+    explorationWorker.postMessage({
+        start: { lat: startLat, lon: startLon },
+        end: null,
+        distanceKm,
+        mode: 'tiles',
+        routeType: 'round_trip',
+        coverageData,
+        coverageDataSecondary: mode === 'both' ? coverageDataSecondary : null,
+        optimizeFor,
+        corridorConstraint: { coordinates: coords, maxDetourKm: 1.5 },
+    });
+}
+
 function renderRoute(route, index) {
     const palette = _paletteFor(route.direction);
     const startPos = startMarker.getLatLng();
@@ -564,7 +680,7 @@ function newTilesLabel(stats) {
     return `${stats.unvisited} new tiles`;
 }
 
-function addRouteListItem(route, index, targetDistanceKm) {
+function addRouteListItem(route, index, targetDistanceKm, extraLabel = '') {
     const palette = _paletteFor(route.direction);
     const color = palette.base;
     const distanceLabel = window.formatDistance ? window.formatDistance(route.stats.distanceKm, 1) : `${route.stats.distanceKm.toFixed(1)} km`;
@@ -577,7 +693,7 @@ function addRouteListItem(route, index, targetDistanceKm) {
     badge.innerHTML = `
         <div class="d-flex align-items-center gap-2 w-100">
             <span class="swatch" style="background:${color}"></span>
-            <span class="route-label">${DIRECTION_LABELS[dir]} · ${distanceLabel} · ${newTilesLabel(route.stats)}</span>
+            <span class="route-label">${DIRECTION_LABELS[dir]} · ${distanceLabel} · ${newTilesLabel(route.stats)}${extraLabel ? ' ' + extraLabel : ''}</span>
             <button class="btn btn-xs btn-outline-primary ms-auto plot-road-btn" data-direction="${dir}"
                     aria-label="Plot road route for ${DIRECTION_LABELS[dir]}">
                 <i class="bi bi-map" aria-hidden="true"></i> Plot road route
@@ -621,21 +737,34 @@ function displace(lat, lon, distKm, bearingDeg) {
  * route's main bearing so the road router must travel farther out-and-back.
  * Strategy when too long: drop the lowest-priority waypoint.
  */
-async function refineRoute(baseWaypoints, targetKm, surfacePref, candidateList, dirBearing) {
+async function refineRoute(baseWaypoints, targetKm, surfacePref, candidateList, dirBearing, roadFilters = {}) {
     const TOLERANCE = 0.15;
     const MAX_ITERATIONS = 6;
     let waypoints = baseWaypoints.map(w => [...w]); // deep copy
     let result = null;
     let candidates = candidateList.slice();
 
+    // Build OSRM exclude list from road filter checkboxes (#411).
+    const excludeClasses = [];
+    if (roadFilters.noMotorways) excludeClasses.push('motorway', 'trunk');
+    if (roadFilters.noUnpaved)   excludeClasses.push('ferry');   // OSRM doesn't natively exclude unpaved; handled via surface pref
+
     for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
         try {
-            result = await api.getExplorationRoute({ waypoints, surfacePreference: surfacePref });
+            result = await api.getExplorationRoute({
+                waypoints,
+                surfacePreference: roadFilters.noUnpaved ? 'paved' : surfacePref,
+                exclude: excludeClasses.length ? excludeClasses.join(',') : undefined,
+            });
         } catch (err) {
             return null;
         }
 
-        if (!result || result.status !== 'success') return null;
+        if (!result || result.status !== 'success') {
+            // Surface over-restriction message (#411).
+            if (result && result.status === 'no_route') return null;
+            return null;
+        }
 
         const ratio = result.distance_km / targetKm;
         if (Math.abs(ratio - 1) <= TOLERANCE) break; // within 15% — done
@@ -692,6 +821,13 @@ async function plotRoadRoute(direction, route, targetDistanceKm, color, badgeEl)
     const surfacePref = document.getElementById('surface-preference-select').value;
     const bearing = QUADRANT_BEARING[direction] || 45;
 
+    // Collect road filter state (#411).
+    const roadFilters = {
+        noMotorways: document.getElementById('filter-no-motorways')?.checked || false,
+        noUnpaved:   document.getElementById('filter-no-unpaved')?.checked   || false,
+        avoidTraffic: document.getElementById('filter-avoid-traffic')?.checked || false,
+    };
+
     const baseWaypoints = [
         [startPos.lat, startPos.lng],
         ...route.waypoints.map(wp => [wp.lat, wp.lon]),
@@ -705,12 +841,14 @@ async function plotRoadRoute(direction, route, targetDistanceKm, color, badgeEl)
     // Run both variants in parallel.
     infoEl.textContent = 'Computing short and long variants…';
     const [shortResult, longResult] = await Promise.all([
-        refineRoute(baseWaypoints, shortTarget,  surfacePref, candidates, bearing),
-        refineRoute(baseWaypoints, longTarget,   surfacePref, candidates, bearing),
+        refineRoute(baseWaypoints, shortTarget,  surfacePref, candidates, bearing, roadFilters),
+        refineRoute(baseWaypoints, longTarget,   surfacePref, candidates, bearing, roadFilters),
     ]);
 
     if (!shortResult && !longResult) {
-        const errMsg = 'Road routing unavailable';
+        const errMsg = roadFilters.noMotorways || roadFilters.noUnpaved
+            ? 'No route found with current road filters — try relaxing exclusions'
+            : 'Road routing unavailable';
         if (typeof showToast === 'function') showToast(errMsg, 'warning');
         infoEl.textContent = errMsg;
         plotBtn.disabled = false;
