@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-07-06 02:54:26 UTC / 2026-07-05 21:54:26 CDT
+**Last Updated:** 2026-07-06 03:00:45 UTC / 2026-07-05 22:00:45 CDT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -24,7 +24,6 @@ This file reflects the current state of GitHub issues organized by release miles
 ### 🔴 P1 - HIGH
 - #436 - PR #431: CoverageTracker silently falls back to test fixture data when activities cache is missing
 - #432 - PR #431: kill_existing_server dropped process-ownership check (security regression)
-- #352 - Epic: Design Review — Information Density, Discoverability & Card Placement
 
 ### 🟡 P2 - MEDIUM
 - #435 - PR #431: static/js/mobile.js is dead code — new nav/swipe logic never executes
@@ -51,14 +50,11 @@ This file reflects the current state of GitHub issues organized by release miles
 - #405 - Explore: generate a tile-acquisition overlay for today's workout route
 - #404 - Explore: add yard(inho) optimization mode — max new tiles vs. infill
 - #402 - Explore: support round-trip vs. point-to-point route type with configurable endpoint
-- #375 - [Design Review] Apply unit system preference to temperature slider, Reports distance label, and Explore distance slider
-- #374 - [Design Review] Ship or gracefully degrade help modal tutorial assets
-- #373 - [Design Review] Weather: add comfort score legend; fix hardcoded commute window time labels
-- #371 - [Design Review] Route Detail: demote Uses metric; surface performance charts above history tables
-- #368 - [Design Review] Settings: split Connections card; nest Outdoor Prefs; move Save above About
-- #369 - [Design Review] Reports: hide empty secondary stats; move admin gear buttons to Settings
 
 ### 🟢 P3 - LOW
+- #443 - PR #431: bottom-nav-more drawer markup duplicated across 7 pages
+- #442 - PR #431: reports.js duplicates unit-conversion and stats-derivation logic
+- #441 - PR #431: CLAUDE.md's 'main.css not yet migrated' note goes stale once this PR merges
 - #440 - PR #431: Route Detail stat grid col-4 layout has no responsive breakpoint
 - #439 - PR #431: Night-mode token gaps — hardcoded divider color and .text-muted vs --ink-soft drift
 - #438 - PR #431: three inconsistent disclosure/chevron toggle patterns shipped in one PR
@@ -67,7 +63,6 @@ This file reflects the current state of GitHub issues organized by release miles
 - #419 - Phase 6: Cleanup — remove dead code, update AGENTS.md architecture section
 - #410 - Explore: minimize route overlap with already-visited tiles where possible
 - #409 - Explore: differentiate Phase-1 and Phase-2 polylines for the same direction with tonal color variants
-- #376 - [Design Review] P3 polish bundle: stale versions, missing H1s, a11y minor, UX polish items
 
 ### 📋 P4 - FUTURE
 **No P4 issues** ✅
