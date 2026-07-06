@@ -113,6 +113,12 @@ body {
     line-height: 1.45;
 }
 
+/* Bootstrap's .text-muted is a static gray that doesn't adapt to Night mode;
+   repoint it at the brand's --ink-soft token so both roles stay in sync. */
+.text-muted {
+    color: var(--ink-soft) !important;
+}
+
 /* ===== Fair Weather typography ===== */
 /* Display face on headlines, brand, decision copy, and button labels */
 h1, h2, h3,
