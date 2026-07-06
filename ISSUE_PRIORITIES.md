@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-07-06 03:00:45 UTC / 2026-07-05 22:00:45 CDT
+**Last Updated:** 2026-07-06 03:56:53 UTC / 2026-07-05 22:56:53 CDT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -22,13 +22,10 @@ This file reflects the current state of GitHub issues organized by release miles
 **No P0 issues** ✅
 
 ### 🔴 P1 - HIGH
-- #436 - PR #431: CoverageTracker silently falls back to test fixture data when activities cache is missing
-- #432 - PR #431: kill_existing_server dropped process-ownership check (security regression)
+**No P1 issues** ✅
 
 ### 🟡 P2 - MEDIUM
-- #435 - PR #431: static/js/mobile.js is dead code — new nav/swipe logic never executes
-- #434 - PR #431: Reports Personal Records silently truncate at 1000 activities for all-time period
-- #433 - PR #431: ORS empty-list response bypasses unroutable-waypoint error handling
+- #444 - Wire static/js/mobile.js into all 7 pages (bottom nav keyboard/swipe/touch support)
 - #428 - Phase 4i: Extract strava_bp Blueprint (/api/strava/*, /api/setup/*)
 - #427 - Phase 4h: Extract integrations_bp Blueprint (/api/intervals/*, /api/ors/*, /api/garmin/*, /api/trainerroad/*)
 - #426 - Phase 4g: Extract data_bp Blueprint (/api/analyze/*, /api/fetch/*, /api/cache-info, /api/activities)
@@ -42,27 +39,12 @@ This file reflects the current state of GitHub issues organized by release miles
 - #416 - Phase 3: Parallel service initialisation via ServiceContainer
 - #415 - Phase 2: Extract infrastructure — credentials, env helpers, process management
 - #413 - Epic: launch.py Blueprint Refactor — Split 3,404-line monolith into 9 focused Blueprints
-- #412 - Epic: Explore Tab Enhancements — v0.17.0
-- #411 - Explore: allow exclusion of major highways, unpaved roads, and high-traffic roads
-- #408 - Explore: clicking a map polyline highlights the corresponding route in the list
-- #407 - Explore: clicking a route list item highlights the polyline on the map
-- #406 - Explore: suggest adjacent-tile routes for future yard(inho) expansion in low-coverage areas
-- #405 - Explore: generate a tile-acquisition overlay for today's workout route
-- #404 - Explore: add yard(inho) optimization mode — max new tiles vs. infill
 - #402 - Explore: support round-trip vs. point-to-point route type with configurable endpoint
 
 ### 🟢 P3 - LOW
 - #443 - PR #431: bottom-nav-more drawer markup duplicated across 7 pages
-- #442 - PR #431: reports.js duplicates unit-conversion and stats-derivation logic
-- #441 - PR #431: CLAUDE.md's 'main.css not yet migrated' note goes stale once this PR merges
-- #440 - PR #431: Route Detail stat grid col-4 layout has no responsive breakpoint
-- #439 - PR #431: Night-mode token gaps — hardcoded divider color and .text-muted vs --ink-soft drift
-- #438 - PR #431: three inconsistent disclosure/chevron toggle patterns shipped in one PR
-- #437 - PR #431: Weather comfort pills use hardcoded hex colors instead of brand tokens
 - #430 - Coverage tracker should include Garmin activities, not just Strava
 - #419 - Phase 6: Cleanup — remove dead code, update AGENTS.md architecture section
-- #410 - Explore: minimize route overlap with already-visited tiles where possible
-- #409 - Explore: differentiate Phase-1 and Phase-2 polylines for the same direction with tonal color variants
 
 ### 📋 P4 - FUTURE
 **No P4 issues** ✅
