@@ -2,6 +2,17 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <script>
+    (function () {
+        try {
+            var t = localStorage.getItem('fairWeatherTheme');
+            if (t !== 'day' && t !== 'night') {
+                t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'night' : 'day';
+            }
+            document.documentElement.setAttribute('data-theme', t);
+        } catch (e) {}
+    })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Route Details - Ride Optimizer</title>
     <link rel="icon" type="image/svg+xml" href="/img/favicon.svg">
@@ -623,7 +634,7 @@
                         </div>
 
                         <div class="row g-3">
-                            <div class="col-lg-5">
+                            <div class="col-lg-7">
                                 <div class="card">
                                     <div class="card-body">
                                         <div class="row g-2 mb-3">
@@ -683,7 +694,7 @@
                                 ${routeHistoryMarkup}
                                 ${longRideUsesMarkup}
                             </div>
-                            <div class="col-lg-7">
+                            <div class="col-lg-5">
                                 <div style="position: sticky; top: var(--space-3);">
                                     <div class="card">
                                         <div class="card-body p-0">
