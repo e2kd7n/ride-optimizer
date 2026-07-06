@@ -4,14 +4,21 @@
 
 ### Overall Summary
 
-**Total Time Invested:** ~25.5 hours
-**Estimated Time Without AI:** 185-246 hours
-**Total Time Saved:** 159.5-220.5 hours
+**Total Time Invested:** ~29.5 hours
+**Estimated Time Without AI:** 215-286 hours
+**Total Time Saved:** 185.5-256.5 hours
 **Overall Productivity Multiplier:** 7-10x
 
 ---
 
 ## Time Tracking by Release
+
+### v0.16.0 (July 5-6, 2026) - launch.py Blueprint Refactor (Epic #413)
+- **Time Invested:** 4 hours
+- **Estimated Without AI:** 30-40 hours
+- **Time Saved:** 26-36 hours
+- **Multiplier:** 7-10x
+- **Details:** See below
 
 ### v0.13.0 (May 18-19, 2026) - Decision-First Dashboard
 - **Time Invested:** 3 hours
@@ -195,6 +202,32 @@ Time tracking for future releases will be documented in separate files:
 - `TIME_TRACKING_v0.7.0.md` - Mobile-First UI/UX Redesign (planned)
 - `TIME_TRACKING_v0.8.0.md` - Future enhancements
 - etc.
+
+---
+
+## v0.16.0 Detailed Tracking (July 5-6, 2026)
+
+### Time Investment: 4 hours
+
+**launch.py Blueprint Refactor (Epic #413):**
+- `launch.py` split from 3,404 lines / 65 route handlers into a 133-line CLI entry point
+- 9 Flask Blueprints extracted under `app/api/` (weather, commute, routes, planner, strava, integrations, data, stats, core)
+- Infrastructure extracted to `app/jobs/` (thread-safe `JobState`/`JobRegistry`), `app/credentials/` (env helpers, intervals credential store), `app/process/` (server start/stop/status)
+- Service initialisation moved from serial construction to a wave-parallel `ServiceContainer` (`app/container.py`) using `ThreadPoolExecutor` — Wave 1 (Weather/TrainerRoad/RouteLibrary) and Wave 3 (Commute/Planner) each run concurrently
+- 14 child issues (#414-#428) covering scaffolding, infra extraction, parallel init, one blueprint extraction per phase, launch.py thinning, and cleanup
+
+**Post-merge DoD completion pass:**
+- Moved two remaining module-level singletons (`core_bp._storage`, `integrations_bp._intervals_creds`) onto `ServiceContainer` so no mutable global state lives outside it
+- Removed the `launch.py` backward-compat re-export block and dead `get_locations_from_config` shim that Phase 6 had left in place "pending test updates," bringing `launch.py` from 171 to 133 lines
+- Updated `tests/test_server_process_mgmt.py` to import `app.process.server_control` directly instead of patching the removed `launch` re-exports
+- Fixed two genuine test regressions from the refactor (`tests/test_e2e_workflow.py`, `tests/test_api.py::TestDeleteUserData`) that were patching pre-refactor `launch` module globals
+- Identified 43 pre-existing failing tests (`test_map_advanced_features.py`, `tests/uat/test_scenario_1_daily_commuter.py`, `tests/uat/test_scenario_2_weekend_warrior.py`) as unrelated to this epic — confirmed identical failures against the pre-refactor commit; these tested a Flask-template/SSR routing scheme (`url_for('dashboard.index')`, etc.) that predates the current static-HTML architecture. Deleted per-decision, since the app never had those endpoints.
+
+### Estimated Time Without AI: 30-40 hours
+
+**Why:** Splitting a 3,400-line monolith into 9 Blueprints while preserving all API contracts, converting serial service init to wave-parallel without introducing race conditions, and auditing/fixing Definition-of-Done gaps (global state, dead code, test regressions, stale docs) across ~20 files is the kind of mechanical-but-error-prone work that's slow and easy to get subtly wrong by hand.
+
+### Productivity Multiplier: 7-10x
 
 ---
 
