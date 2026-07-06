@@ -4,8 +4,10 @@ Long Ride Analysis Module
 Analyzes non-commute cycling activities for recreational ride recommendations.
 """
 
+import json
 import logging
 import math
+from pathlib import Path
 from typing import List, Tuple, Dict, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime
@@ -84,7 +86,9 @@ class RideRecommendation:
 
 class LongRideAnalyzer:
     """Analyzes non-commute rides for recreational recommendations."""
-    
+
+    _SIMILARITY_CACHE_PATH = "cache/long_ride_similarity_cache.json"
+
     def __init__(self, activities: List[Activity], config):
         """
         Initialize long ride analyzer.
@@ -97,7 +101,30 @@ class LongRideAnalyzer:
         self.config = config
         self.route_namer = RouteNamer(config)
         self.weather_fetcher = WeatherFetcher()  # WeatherFetcher doesn't take config parameter
+        self._similarity_cache: Dict[str, float] = self._load_similarity_cache()
         
+    def _load_similarity_cache(self) -> Dict[str, float]:
+        """Load long-ride similarity cache from disk."""
+        p = Path(self._SIMILARITY_CACHE_PATH)
+        if p.exists():
+            try:
+                cache = json.loads(p.read_text())
+                logger.info(f"Loaded {len(cache)} long-ride similarity values from cache")
+                return cache
+            except Exception as e:
+                logger.warning(f"Could not load long-ride similarity cache: {e}")
+        return {}
+
+    def _save_similarity_cache(self) -> None:
+        """Persist long-ride similarity cache to disk."""
+        try:
+            p = Path(self._SIMILARITY_CACHE_PATH)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(json.dumps(self._similarity_cache))
+            logger.debug(f"Saved {len(self._similarity_cache)} long-ride similarity values to cache")
+        except Exception as e:
+            logger.warning(f"Could not save long-ride similarity cache: {e}")
+
     def classify_activities(self, commute_activities: List[Activity]) -> Tuple[List[Activity], List[Activity]]:
         """
         Classify activities into commutes and long rides.
@@ -223,6 +250,12 @@ class LongRideAnalyzer:
                     logger.debug(f"Failed to decode polyline for group '{name}': {e}")
                     continue
 
+        # Build representative activity ID map once (used as similarity cache keys)
+        rep_ids = {}
+        for n, acts in name_groups.items():
+            rep = sorted(acts, key=lambda a: a.start_date, reverse=True)[0]
+            rep_ids[n] = rep.id
+
         # Find groups to merge
         merged_groups = {}
         processed = set()
@@ -249,48 +282,59 @@ class LongRideAnalyzer:
                     continue
 
                 try:
-                    # Pre-filter: skip if average distances differ by more than 25%
-                    dists1 = [a.distance for a in name_groups[name1] if a.distance]
-                    dists2 = [a.distance for a in name_groups[name2] if a.distance]
-                    if dists1 and dists2:
-                        avg1 = sum(dists1) / len(dists1)
-                        avg2 = sum(dists2) / len(dists2)
-                        if avg1 > 0 and avg2 > 0 and max(avg1, avg2) / min(avg1, avg2) > 1.25:
+                    # Cache key: sorted pair of representative activity IDs
+                    rid1, rid2 = rep_ids[name1], rep_ids[name2]
+                    cache_key = f"{min(rid1, rid2)}:{max(rid1, rid2)}"
+
+                    if cache_key in self._similarity_cache:
+                        combined_distance = self._similarity_cache[cache_key]
+                    else:
+                        # Pre-filter: skip if average distances differ by more than 25%
+                        dists1 = [a.distance for a in name_groups[name1] if a.distance]
+                        dists2 = [a.distance for a in name_groups[name2] if a.distance]
+                        if dists1 and dists2:
+                            avg1 = sum(dists1) / len(dists1)
+                            avg2 = sum(dists2) / len(dists2)
+                            if avg1 > 0 and avg2 > 0 and max(avg1, avg2) / min(avg1, avg2) > 1.25:
+                                self._similarity_cache[cache_key] = float('inf')
+                                continue
+
+                        # Calculate route similarity in km-scaled coordinates
+                        coords1_km = group_representatives[name1]
+                        coords2_km = group_representatives[name2]
+
+                        # Pre-filter: centroid distance — loops going different places have
+                        # centroids far apart even when they share a start/end point
+                        centroid_dist = float(np.linalg.norm(
+                            coords1_km.mean(axis=0) - coords2_km.mean(axis=0)
+                        ))
+                        if centroid_dist > 5.0:
+                            self._similarity_cache[cache_key] = float('inf')
                             continue
 
-                    # Calculate route similarity in km-scaled coordinates
-                    coords1_km = group_representatives[name1]
-                    coords2_km = group_representatives[name2]
+                        # Pre-filter: extent point distance — the farthest-from-start point
+                        # of each route must be close; routes apexing in different directions
+                        # will fail even if their centroids are coincidentally similar
+                        extent_dist = float(np.linalg.norm(
+                            self._extent_point(coords1_km) - self._extent_point(coords2_km)
+                        ))
+                        if extent_dist > 10.0:
+                            self._similarity_cache[cache_key] = float('inf')
+                            continue
 
-                    # Pre-filter: centroid distance — loops going different places have
-                    # centroids far apart even when they share a start/end point
-                    centroid_dist = float(np.linalg.norm(
-                        coords1_km.mean(axis=0) - coords2_km.mean(axis=0)
-                    ))
-                    if centroid_dist > 5.0:
-                        continue
-
-                    # Pre-filter: extent point distance — the farthest-from-start point
-                    # of each route must be close; routes apexing in different directions
-                    # will fail even if their centroids are coincidentally similar
-                    extent_dist = float(np.linalg.norm(
-                        self._extent_point(coords1_km) - self._extent_point(coords2_km)
-                    ))
-                    if extent_dist > 10.0:
-                        continue
-
-                    frechet_distance = frechet_dist(coords1_km, coords2_km)
-                    hausdorff_dist = max(
-                        directed_hausdorff(coords1_km, coords2_km)[0],
-                        directed_hausdorff(coords2_km, coords1_km)[0]
-                    )
-                    combined_distance = (frechet_distance + hausdorff_dist) / 2
+                        frechet_distance = frechet_dist(coords1_km, coords2_km)
+                        hausdorff_dist = max(
+                            directed_hausdorff(coords1_km, coords2_km)[0],
+                            directed_hausdorff(coords2_km, coords1_km)[0]
+                        )
+                        combined_distance = (frechet_distance + hausdorff_dist) / 2
+                        self._similarity_cache[cache_key] = combined_distance
 
                     # If routes are similar, merge them
                     if combined_distance < similarity_threshold:
                         merged_activities.extend(name_groups[name2])
                         processed.add(name2)
-                        logger.info(f"Consolidating '{name2}' into '{name1}' (similarity: {combined_distance:.3f} km, centroid: {centroid_dist:.3f} km)")
+                        logger.info(f"Consolidating '{name2}' into '{name1}' (similarity: {combined_distance:.3f} km)")
                         
                 except (ValueError, IndexError, TypeError) as e:
                     logger.debug(f"Failed to calculate similarity between '{name1}' and '{name2}': {e}")
@@ -315,7 +359,8 @@ class LongRideAnalyzer:
         
         if len(merged_groups) < len(name_groups):
             logger.info(f"Consolidated {len(name_groups)} named groups into {len(merged_groups)} groups using route similarity")
-        
+
+        self._save_similarity_cache()
         return merged_groups
     
     def consolidate_named_groups(self, name_groups: Dict[str, List[Activity]]) -> List[LongRide]:
