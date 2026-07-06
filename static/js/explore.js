@@ -41,9 +41,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     initDistanceSlider();
+    initTooltips();
     updateWorkflowState();
     loadCoverage();
 });
+
+// ── Bootstrap tooltips (#360 help icon) ────────────────────────
+
+function initTooltips() {
+    if (typeof bootstrap === 'undefined' || !bootstrap.Tooltip) return;
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach((el) => {
+        new bootstrap.Tooltip(el);
+    });
+}
 
 // ── Distance unit display ──────────────────────────────────────
 
@@ -107,7 +117,8 @@ function updateWorkflowState() {
 
     const btn = document.getElementById('generate-route-btn');
     btn.disabled = !ready;
-    btn.classList.toggle('btn-primary', ready);
+    // Coral (.btn-cta) is reserved for this one enabled CTA on the page (#361).
+    btn.classList.toggle('btn-cta', ready);
     btn.classList.toggle('btn-outline-primary', !ready);
 
     const statusEl = document.getElementById('worker-status');
@@ -204,7 +215,7 @@ async function loadCoverage() {
         renderStats(coverageData, coverageDataSecondary);
         renderTiles(coverageData, coverageDataSecondary);
         fitToCoverage(coverageData);
-        statusEl.textContent = `Updated ${new Date(coverageData.computed_at).toLocaleTimeString()}`;
+        statusEl.textContent = `Updated ${new Date(coverageData.computed_at + 'Z').toLocaleTimeString()}`;
     } catch (e) {
         statusEl.textContent = `Error: ${e.message}`;
     } finally {
@@ -764,6 +775,9 @@ function downloadGpx(coordinates, direction) {
 // ── Cache management ────────────────────────────────────────────
 
 async function clearCache() {
+    if (!confirm('Clear cached coverage tile data? Coverage will be recomputed from your existing activity cache on next load.')) {
+        return;
+    }
     try {
         await api.invalidateCoverageCache();
         if (typeof showToast === 'function') showToast('Coverage cache cleared', 'info');
