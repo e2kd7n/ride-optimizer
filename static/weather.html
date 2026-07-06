@@ -161,7 +161,7 @@
 
     <main id="main-content" class="container mt-2" role="main">
         <div class="d-flex align-items-center mb-2">
-            <h2 class="mb-0"><i class="bi bi-cloud-sun me-2" aria-hidden="true"></i>Weather Forecast</h2>
+            <h1 class="fs-4 mb-0"><i class="bi bi-cloud-sun me-2" aria-hidden="true"></i>Weather Forecast</h1>
         </div>
 
         <!-- Transit alert — shown when today is unfavorable -->
@@ -179,6 +179,17 @@
             </div>
         </div>
 
+        <!-- Today at a Glance — shown when the transit alert is hidden (today is favorable) -->
+        <div id="today-glance" class="card mb-3 d-none">
+            <div class="card-body">
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <i class="bi bi-sun text-success fs-5" aria-hidden="true"></i>
+                    <strong>Today at a Glance</strong>
+                </div>
+                <div id="today-glance-content" class="d-flex flex-wrap gap-3"></div>
+            </div>
+        </div>
+
         <!-- Today's commute windows -->
         <div class="card mb-3">
             <div class="card-header">
@@ -190,7 +201,7 @@
                         <div id="morning-window" class="commute-window-card morning">
                             <div class="d-flex align-items-center gap-2 mb-2">
                                 <i class="bi bi-sunrise text-warning fs-5"></i>
-                                <strong>Morning (7–9 AM)</strong>
+                                <strong>Morning <span id="morning-time-range" class="fw-normal text-muted">(loading…)</span></strong>
                             </div>
                             <div id="morning-content">
                                 <div class="text-muted small">Loading…</div>
@@ -201,7 +212,7 @@
                         <div id="evening-window" class="commute-window-card evening">
                             <div class="d-flex align-items-center gap-2 mb-2">
                                 <i class="bi bi-sunset text-primary fs-5"></i>
-                                <strong>Evening (3–6 PM)</strong>
+                                <strong>Evening <span id="evening-time-range" class="fw-normal text-muted">(loading…)</span></strong>
                             </div>
                             <div id="evening-content">
                                 <div class="text-muted small">Loading…</div>
@@ -218,7 +229,16 @@
         <!-- 7-day forecast -->
         <div class="card mb-3">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-calendar-week me-2"></i>7-Day Forecast</span>
+                <span>
+                    <i class="bi bi-calendar-week me-2"></i>7-Day Forecast
+                    <i id="comfort-legend-icon" class="bi bi-question-circle text-muted ms-1"
+                       style="cursor: pointer; font-size: 0.85em;"
+                       tabindex="0" role="button"
+                       aria-label="What does the comfort score and pill color mean?"
+                       data-bs-toggle="popover" data-bs-placement="bottom"
+                       data-bs-title="Comfort score"
+                       data-bs-content="Combines temperature, precipitation risk, and wind into a single 0–100 score. 70+ = favorable, 40–69 = neutral, below 40 = unfavorable."></i>
+                </span>
                 <small id="forecast-updated" class="text-muted"></small>
             </div>
             <div class="card-body">
