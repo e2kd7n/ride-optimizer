@@ -9,13 +9,10 @@ Wave initialisation (parallel where dependencies allow):
   Wave 1 (parallel): WeatherService, TrainerRoadService, RouteLibraryService
   Wave 2 (serial):   AnalysisService(weather_service=...)
   Wave 3 (parallel): CommuteService, PlannerService
-
-This is a stub for Phase 1.  The full wave-parallel implementation is
-delivered in Phase 3.
 """
 
 import logging
-from typing import Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from app.jobs.job_state import JobRegistry
 
@@ -37,6 +34,9 @@ class ServiceContainer:
         self.analysis_service = None
         self.commute_service = None
         self.planner_service = None
+        self.exploration_service = None
+        self.geocoding_service = None
+        self.garmin_service = None
         # SettingsService is eager — constructed immediately
         from app.services.settings_service import SettingsService
         self.settings_service: SettingsService = SettingsService()
@@ -57,21 +57,43 @@ class ServiceContainer:
     def initialise(self) -> None:
         """Initialise all services (idempotent; safe to call multiple times).
 
-        Phase 1: serial initialisation — identical behaviour to the existing
-        ``initialize_services()`` in launch.py.  Phase 3 will replace this
-        with wave-parallel ``ThreadPoolExecutor`` logic.
+        Uses wave-parallel ThreadPoolExecutor for I/O-bound service constructors:
+
+          Wave 1 (parallel): WeatherService, TrainerRoadService, RouteLibraryService
+          Wave 2 (serial):   AnalysisService (depends on WeatherService)
+          Wave 3 (parallel): CommuteService, PlannerService
         """
         if self._initialised:
             return
 
-        logger.info("Initializing services...")
+        logger.info("Initializing services (wave-parallel)...")
 
-        self._init_weather()
-        self._init_trainerroad()
-        self._init_route_library()
+        # Wave 1 — I/O-bound, no mutual dependencies
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            futures = {
+                pool.submit(self._init_weather): 'weather',
+                pool.submit(self._init_trainerroad): 'trainerroad',
+                pool.submit(self._init_route_library): 'route_library',
+            }
+            for f in as_completed(futures):
+                name = futures[f]
+                try:
+                    f.result()
+                except Exception as exc:
+                    logger.warning("Wave-1 service '%s' failed: %s", name, exc)
+
+        # Wave 2 — AnalysisService depends on WeatherService
         self._init_analysis()
-        self._init_commute()
-        self._init_planner()
+
+        # Wave 3 — parallel, depend on Wave 1 + Wave 2 results
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            f_commute = pool.submit(self._init_commute)
+            f_planner = pool.submit(self._init_planner)
+            for f, name in ((f_commute, 'commute'), (f_planner, 'planner')):
+                try:
+                    f.result()
+                except Exception as exc:
+                    logger.warning("Wave-3 service '%s' failed: %s", name, exc)
 
         self._initialised = True
         logger.info("Services initialized successfully")
@@ -119,13 +141,11 @@ class ServiceContainer:
     def _init_commute(self) -> None:
         try:
             from app.services.commute_service import CommuteService
-            from src.config_manager import ConfigManager
             self.commute_service = CommuteService(
                 weather_service=self.weather_service,
                 trainerroad_service=self.trainerroad_service,
                 settings_service=self.settings_service,
             )
-            # Post-construction: load cached analysis data if available
             if self.analysis_service and self.commute_service:
                 self._load_commute_data()
         except Exception as exc:
@@ -161,8 +181,18 @@ class ServiceContainer:
             home_location, work_location = self.analysis_service.get_locations()
 
             if home_location is None or work_location is None:
-                from launch import get_locations_from_config  # temporary; removed in Phase 5
-                home_location, work_location = get_locations_from_config(config)
+                from src.location_finder import Location
+                try:
+                    home_lat = config.get('location.home.latitude')
+                    home_lon = config.get('location.home.longitude')
+                    work_lat = config.get('location.work.latitude')
+                    work_lon = config.get('location.work.longitude')
+                    if None in (home_lat, home_lon, work_lat, work_lon):
+                        raise ValueError("Missing location coordinates in config")
+                    home_location = Location(lat=float(home_lat), lon=float(home_lon), name="Home", activity_count=0)
+                    work_location = Location(lat=float(work_lat), lon=float(work_lon), name="Work", activity_count=0)
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(f"Invalid location coordinates in config: {exc}")
 
             enable_weather = config.get('weather.enabled', True)
             self.commute_service.initialize(
@@ -176,3 +206,28 @@ class ServiceContainer:
             logger.warning("Invalid route data or config; commute service will not be available: %s", exc)
         except Exception as exc:
             logger.error("Failed to initialize commute service: %s", exc, exc_info=True)
+
+    # ------------------------------------------------------------------
+    # Lazy service accessors (for services not in the main init waves)
+    # ------------------------------------------------------------------
+
+    def get_exploration_service(self):
+        """Return ExplorationService, creating it on first access."""
+        if self.exploration_service is None:
+            from app.services.exploration_service import ExplorationService
+            self.exploration_service = ExplorationService()
+        return self.exploration_service
+
+    def get_geocoding_service(self):
+        """Return GeocodingService, creating it on first access."""
+        if self.geocoding_service is None:
+            from app.services.geocoding_service import GeocodingService
+            self.geocoding_service = GeocodingService()
+        return self.geocoding_service
+
+    def get_garmin_service(self):
+        """Return GarminService, creating it on first access."""
+        if self.garmin_service is None:
+            from app.services.garmin_service import GarminService
+            self.garmin_service = GarminService()
+        return self.garmin_service

@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-07-05 16:21:40 UTC / 2026-07-05 11:21:40 CDT
+**Last Updated:** 2026-07-06 12:47:27 UTC / 2026-07-06 07:47:27 CDT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -8,9 +8,9 @@ This file reflects the current state of GitHub issues organized by release miles
 
 ## 📍 Release Context
 
-- **Current Release:** v0.16.0 (deployed, milestone fully closed)
+- **Current Release:** none (deployed, milestone fully closed)
 - **Next Release:** v0.17.0 (in development)
-- **Future Releases:** 
+- **Future Releases:** v0.18.0
 
 ---
 
@@ -22,34 +22,36 @@ This file reflects the current state of GitHub issues organized by release miles
 **No P0 issues** ✅
 
 ### 🔴 P1 - HIGH
-- #361 - [Design Review] Explore: add numbered workflow steps and progressive button enablement
-- #360 - [Design Review] Explore: add tile/Squadrats concept explainer and coverage legend
-- #359 - [Design Review] Route Detail: replace raw JSON weather dump with formatted card
-- #358 - [Design Review] Dashboard: fix mobile column stacking and widen decision panel
-- #357 - [Design Review] Weather: swap 7-day forecast and same-day commute windows order
-- #352 - Epic: Design Review — Information Density, Discoverability & Card Placement
+**No P1 issues** ✅
 
 ### 🟡 P2 - MEDIUM
-- #375 - [Design Review] Apply unit system preference to temperature slider, Reports distance label, and Explore distance slider
-- #374 - [Design Review] Ship or gracefully degrade help modal tutorial assets
-- #373 - [Design Review] Weather: add comfort score legend; fix hardcoded commute window time labels
-- #372 - [Design Review] Routes Library: label compare checkbox; add entry-point for Saved Plans
-- #370 - [Design Review] Dashboard: add affordance labels and count badges to collapse toggles
-- #371 - [Design Review] Route Detail: demote Uses metric; surface performance charts above history tables
-- #369 - [Design Review] Reports: hide empty secondary stats; move admin gear buttons to Settings
-- #368 - [Design Review] Settings: split Connections card; nest Outdoor Prefs; move Save above About
-- #367 - [Design Review] Explore: move coverage stats below map; merge controls into route generation card
-- #366 - [Design Review] Reports: reorder cards — Activities before Gear; consolidate chart cards
-- #365 - [Design Review] Routes Library: invert column ratio to give route list more space than map
-- #363 - [Design Review] Dashboard: relocate 'How It Works' button out of above-the-fold content
-- #364 - [Design Review] Routes Library: collapse advanced filters behind 'More Filters' toggle
-- #362 - [Design Review] Navigation: add Reports and Explore to mobile bottom nav
+- #444 - Wire static/js/mobile.js into all 7 pages (bottom nav keyboard/swipe/touch support)
+- #428 - Phase 4i: Extract strava_bp Blueprint (/api/strava/*, /api/setup/*)
+- #427 - Phase 4h: Extract integrations_bp Blueprint (/api/intervals/*, /api/ors/*, /api/garmin/*, /api/trainerroad/*)
+- #426 - Phase 4g: Extract data_bp Blueprint (/api/analyze/*, /api/fetch/*, /api/cache-info, /api/activities)
+- #425 - Phase 4f: Extract commute_bp Blueprint (/api/commute, /api/recommendation, /api/workout-options)
+- #424 - Phase 4e: Extract core_bp Blueprint (/api/status, /api/settings/*, /api/plans/*, /api/user/*)
+- #423 - Phase 4d: Extract planner_bp Blueprint (/api/planner/*, /api/exploration/*, /api/geocode)
+- #422 - Phase 4c: Extract weather_bp Blueprint (/api/weather/*)
+- #421 - Phase 4b: Extract routes_bp Blueprint (/api/routes/*)
+- #420 - Phase 4a: Extract stats_bp Blueprint (/api/stats/*)
+- #418 - Phase 5: Thin launch.py — wire create_app(), reduce to ~120 lines
+- #416 - Phase 3: Parallel service initialisation via ServiceContainer
+- #415 - Phase 2: Extract infrastructure — credentials, env helpers, process management
+- #413 - Epic: launch.py Blueprint Refactor — Split 3,404-line monolith into 9 focused Blueprints
 
 ### 🟢 P3 - LOW
-- #376 - [Design Review] P3 polish bundle: stale versions, missing H1s, a11y minor, UX polish items
+- #443 - PR #431: bottom-nav-more drawer markup duplicated across 7 pages
 
 ### 📋 P4 - FUTURE
 **No P4 issues** ✅
+
+---
+
+## 📅 v0.18.0 (Future Release)
+
+### 🟢 P3 - LOW
+- #430 - Coverage tracker should include Garmin activities, not just Strava
 
 ---
 
@@ -57,23 +59,7 @@ This file reflects the current state of GitHub issues organized by release miles
 
 These issues need to be assigned to a release milestone and prioritized.
 
-### 🔴 P0 - CRITICAL
-None
-
-### 🔴 P1 - HIGH
-None
-
-### 🟡 P2 - MEDIUM
-None
-
-### 🟢 P3 - LOW
-None
-
-### 📋 P4 - FUTURE
-None
-
-### ⚠️ Unprioritized (No P-label)
-- #345 - [FEATURE] Manage and monitor python launch.py dev server processes (no PID tracking, kill_existing_server is a no-op on Windows)
+**All issues are assigned to releases** ✅
 
 ---
 

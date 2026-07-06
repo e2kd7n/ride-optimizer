@@ -1,9 +1,5 @@
 """Flask application factory.
 
-Phase 1: stub only — create_app() constructs the Flask app and registers
-the blueprints that already exist (maps_api).  Stub blueprints are imported
-but not yet registered here; they will be wired up in Phase 4.
-
 Usage::
 
     from app.factory import create_app
@@ -93,35 +89,83 @@ def create_app(config_overrides: dict | None = None) -> Flask:
     # --- blueprints ---
     _register_blueprints(app)
 
+    # --- error handlers ---
+    _register_error_handlers(app)
+
+    # --- security headers ---
+    _register_after_request(app)
+
     return app
 
 
 def _register_blueprints(app: Flask) -> None:
-    """Register all blueprints with the application.
-
-    Phase 1: only maps_api is registered (already a Blueprint).
-    Stub blueprints are imported so import errors surface immediately,
-    but they are not yet registered — that happens in Phase 4.
-    """
+    """Register all blueprints with the application."""
     from app.api import maps_api
-    app.register_blueprint(maps_api.bp)
+    from app.api.weather_bp import bp as weather_bp
+    from app.api.commute_bp import bp as commute_bp
+    from app.api.routes_bp import bp as routes_bp
+    from app.api.planner_bp import bp as planner_bp
+    from app.api.strava_bp import bp as strava_bp
+    from app.api.integrations_bp import bp as integrations_bp
+    from app.api.data_bp import bp as data_bp
+    from app.api.stats_bp import bp as stats_bp
+    from app.api.core_bp import bp as core_bp
 
-    # Phase 4 will uncomment these one at a time:
-    # from app.api.weather_bp import bp as weather_bp
-    # app.register_blueprint(weather_bp)
-    # from app.api.commute_bp import bp as commute_bp
-    # app.register_blueprint(commute_bp)
-    # from app.api.routes_bp import bp as routes_bp
-    # app.register_blueprint(routes_bp)
-    # from app.api.planner_bp import bp as planner_bp
-    # app.register_blueprint(planner_bp)
-    # from app.api.strava_bp import bp as strava_bp
-    # app.register_blueprint(strava_bp)
-    # from app.api.integrations_bp import bp as integrations_bp
-    # app.register_blueprint(integrations_bp)
-    # from app.api.data_bp import bp as data_bp
-    # app.register_blueprint(data_bp)
-    # from app.api.stats_bp import bp as stats_bp
-    # app.register_blueprint(stats_bp)
-    # from app.api.core_bp import bp as core_bp
-    # app.register_blueprint(core_bp)
+    app.register_blueprint(maps_api.bp)
+    # Static file serving
+    from flask import send_from_directory
+    @app.route('/')
+    def index():
+        return send_from_directory('../static', 'index.html')
+
+    @app.route('/<path:path>')
+    def serve_static(path):
+        return send_from_directory('../static', path)
+
+    app.register_blueprint(weather_bp)
+    app.register_blueprint(commute_bp)
+    app.register_blueprint(routes_bp)
+    app.register_blueprint(planner_bp)
+    app.register_blueprint(strava_bp)
+    app.register_blueprint(integrations_bp)
+    app.register_blueprint(data_bp)
+    app.register_blueprint(stats_bp)
+    app.register_blueprint(core_bp)
+
+
+def _register_error_handlers(app: Flask) -> None:
+    """Register global error handlers."""
+    from flask import jsonify
+
+    @app.errorhandler(404)
+    def not_found(error):
+        return jsonify({'status': 'error', 'message': 'Resource not found'}), 404
+
+    @app.errorhandler(500)
+    def internal_error(error):
+        logger.error('Internal server error: %s', error)
+        return jsonify({'status': 'error', 'message': 'Internal server error'}), 500
+
+
+def _register_after_request(app: Flask) -> None:
+    """Add security headers to all responses."""
+    from flask import request as _request
+
+    @app.after_request
+    def set_security_headers(response):
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['X-Frame-Options'] = 'DENY'
+        response.headers['X-XSS-Protection'] = '1; mode=block'
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        response.headers['Content-Security-Policy'] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
+            "img-src 'self' data: https: blob:; "
+            "font-src 'self' https://cdn.jsdelivr.net; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none'"
+        )
+        if _request.is_secure:
+            response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+        return response
