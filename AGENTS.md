@@ -12,7 +12,7 @@ Please also refer to CLAUDE.md for direction. In the event of a conflict - expla
 
 **THE PRODUCT IS A WEB APPLICATION. Period.**
 
-- ✅ **Active System:** `launch.py` (port 8083) + `static/` files + `app/services/`
+- ✅ **Active System:** `launch.py` (CLI entry, port 8083) + `app/api/*_bp.py` + `static/` files + `app/services/`
 - ❌ **Deprecated System:** `main.py` + `templates/` (archived to `archive/deprecated_cli_system/`)
 
 ### Where to Make Changes
@@ -25,8 +25,10 @@ static/commute.html         # Commute recommendations
 static/planner.html         # Long ride planner
 static/css/main.css         # Styles
 static/js/*.js              # Client-side logic
-launch.py                   # API endpoints
+app/api/*_bp.py             # API route handlers (9 Blueprints)
 app/services/*.py           # Business logic
+app/container.py            # ServiceContainer (wave-parallel init)
+launch.py                   # CLI entry point only (~155 lines)
 ```
 
 #### ❌ NEVER EDIT THESE FOR UI/UX (WRONG):
@@ -57,7 +59,7 @@ main.py                                     # CLI tool - not for UI work
 
 **If implementing a UI/UX feature:**
 1. Is it for the web app? → Edit `static/` files
-2. Is it for API endpoints? → Edit `launch.py`
+2. Is it for API endpoints? → Edit the relevant `app/api/*_bp.py` Blueprint
 3. Is it for business logic? → Edit `app/services/`
 4. Is it for CLI data analysis? → Edit `main.py` (but NOT templates)
 
@@ -67,18 +69,32 @@ main.py                                     # CLI tool - not for UI work
 - Templates are deprecated for UI work
 
 ### Web App Architecture (ACTIVE)
+
+> **Blueprint refactor complete (Epic #413).** All route handlers live in `app/api/` Blueprints.
+
 ```
 User Browser
     ↓
-launch.py (Flask API on port 8083)
+launch.py (~155 lines — CLI entry point only)
     ↓
-Serves: static/*.html (client-side rendering)
+app/factory.py (create_app)
     ↓
-Calls: /api/weather, /api/recommendation, /api/routes, /api/status
+app/container.py (ServiceContainer, wave-parallel init)
     ↓
-Uses: app/services/*.py (business logic)
+app/api/*_bp.py (9 Blueprints — all routes)
+    weather_bp.py      /api/weather/*
+    commute_bp.py      /api/commute, /api/recommendation, /api/workout-options
+    routes_bp.py       /api/routes/*
+    planner_bp.py      /api/planner/*, /api/exploration/*, /api/geocode
+    strava_bp.py       /api/strava/*, /api/setup/*
+    integrations_bp.py /api/intervals/*, /api/ors/*, /api/garmin/*, /api/trainerroad/*
+    data_bp.py         /api/analyze/*, /api/fetch/*, /api/activities
+    stats_bp.py        /api/stats/*
+    core_bp.py         /api/status, /api/settings/*, /api/plans/*, /api/user/*
     ↓
-Reads: data/*.json (cached data)
+app/services/*.py (business logic — unchanged)
+    ↓
+data/*.json (cached data)
 ```
 
 ### CLI Tool Architecture (DEPRECATED FOR UI)
