@@ -35,9 +35,57 @@
         }
 
         #results-summary {
-            padding: var(--space-1) var(--space-2);
-            margin-bottom: var(--space-2);
+            padding: var(--space-1) 0;
             font-size: var(--font-size-sm);
+        }
+
+        /* More Filters toggle: chevron flips when expanded, never a bare icon (§7) */
+        #more-filters-toggle {
+            min-height: 44px;
+        }
+        #more-filters-toggle .more-filters-chevron {
+            transition: transform 0.2s ease;
+        }
+        #more-filters-toggle[aria-expanded="true"] .more-filters-chevron {
+            transform: rotate(180deg);
+        }
+        #more-filters-count:not(:empty) {
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        /* Saved Plans: always-visible stub, highlighted once plans exist */
+        #saved-plans-card {
+            border-color: var(--line);
+        }
+        #toggle-plans-btn {
+            min-height: 44px;
+        }
+        #saved-plans-card.saved-plans-active {
+            border-color: var(--accent);
+        }
+        #saved-plans-card .saved-plans-chevron {
+            transition: transform 0.2s ease;
+        }
+        #toggle-plans-btn[aria-expanded="true"] .saved-plans-chevron {
+            transform: rotate(180deg);
+        }
+        #toggle-plans-btn:disabled {
+            opacity: 0.6;
+        }
+
+        /* Compare checkbox: enlarge the tappable area beyond the visual checkbox+label
+           without inflating the compact card row height (§7 touch target). */
+        .compare-toggle {
+            padding: 10px 6px;
+            margin: -10px 0 -10px -6px;
+            border-radius: var(--radius-sm, 4px);
+            min-height: 44px;
+            display: flex;
+            align-items: center;
+        }
+        .compare-toggle:hover {
+            background: var(--surface-2);
         }
     </style>
 </head>
@@ -96,9 +144,29 @@
                         <input type="text" id="search-query" class="form-control form-control-sm"
                                placeholder="Search routes…" aria-label="Search routes">
                     </div>
+                    <div style="min-width: 144px;">
+                        <label for="sort-by" class="form-label mb-0 small">Sort</label>
+                        <select id="sort-by" class="form-select form-select-sm">
+                            <option value="name">Name (A–Z)</option>
+                            <option value="name-desc">Name (Z–A)</option>
+                            <option value="distance">Distance ↑</option>
+                            <option value="distance-desc">Distance ↓</option>
+                            <option value="elevation">Elevation ↑</option>
+                            <option value="elevation-desc">Elevation ↓</option>
+                            <option value="uses">Most Used</option>
+                            <option value="recent">Most Recent</option>
+                        </select>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary ms-auto" id="more-filters-toggle"
+                            data-bs-toggle="collapse" data-bs-target="#more-filters-panel"
+                            aria-expanded="false" aria-controls="more-filters-panel">
+                        <i class="bi bi-sliders" aria-hidden="true"></i> More Filters<span id="more-filters-count"></span>
+                        <i class="bi bi-chevron-down more-filters-chevron" aria-hidden="true"></i>
+                    </button>
                 </div>
-                <!-- Row 2: Dropdown filters + sort -->
-                <div class="d-flex flex-wrap gap-2 align-items-end">
+                <!-- Row 2: Advanced filters, collapsed by default (Issue #364) -->
+                <div class="collapse" id="more-filters-panel">
+                    <div class="d-flex flex-wrap gap-2 align-items-end pt-2 mt-1 border-top">
                     <div style="min-width: 112px;">
                         <label for="filter-favorite" class="form-label mb-0 small">Favorites</label>
                         <select id="filter-favorite" class="form-select form-select-sm">
@@ -155,47 +223,40 @@
                             <option value="365">Last 12 months</option>
                         </select>
                     </div>
-                    <div style="min-width: 144px;">
-                        <label for="sort-by" class="form-label mb-0 small">Sort</label>
-                        <select id="sort-by" class="form-select form-select-sm">
-                            <option value="name">Name (A–Z)</option>
-                            <option value="name-desc">Name (Z–A)</option>
-                            <option value="distance">Distance ↑</option>
-                            <option value="distance-desc">Distance ↓</option>
-                            <option value="elevation">Elevation ↑</option>
-                            <option value="elevation-desc">Elevation ↓</option>
-                            <option value="uses">Most Used</option>
-                            <option value="recent">Most Recent</option>
-                        </select>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Saved Plans -->
-        <div id="saved-plans-section" class="mb-3" style="display: none;">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center py-2">
-                    <span class="small fw-semibold"><i class="bi bi-calendar-check" aria-hidden="true"></i> Saved Plans</span>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" id="toggle-plans-btn" aria-expanded="true" aria-label="Toggle saved plans">
-                        <i class="bi bi-chevron-up" aria-hidden="true"></i>
+        <!-- Saved Plans: persistent entry point, always visible even with zero plans (Issue #372b) -->
+        <div id="saved-plans-section" class="mb-3">
+            <div class="card" id="saved-plans-card">
+                <div class="card-header py-2">
+                    <button type="button" class="btn btn-sm btn-link text-decoration-none p-0 fw-semibold d-flex align-items-center gap-1 w-100"
+                            id="toggle-plans-btn" data-bs-toggle="collapse" data-bs-target="#saved-plans-collapse"
+                            aria-expanded="false" aria-controls="saved-plans-collapse" disabled>
+                        <i class="bi bi-calendar-check" aria-hidden="true"></i>
+                        <span id="saved-plans-title">Saved Plans (0)</span>
+                        <i class="bi bi-chevron-down saved-plans-chevron ms-auto" aria-hidden="true"></i>
                     </button>
                 </div>
-                <div class="card-body py-2" id="saved-plans-body">
-                    <div id="saved-plans-list"></div>
+                <div class="collapse" id="saved-plans-collapse">
+                    <div class="card-body py-2" id="saved-plans-body">
+                        <div id="saved-plans-list"></div>
+                    </div>
                 </div>
             </div>
         </div>
 
         <!-- Results summary -->
-        <div id="results-summary" class="alert alert-info">
+        <p id="results-summary" class="text-muted small mb-2">
             <i class="bi bi-info-circle" aria-hidden="true"></i> Loading routes…
-        </div>
+        </p>
 
         <!-- Side-by-side: scrollable route list (left) + sticky map (right) -->
         <div class="row g-2">
-            <!-- Route list -->
-            <div class="col-lg-5">
+            <!-- Route list: primary decision surface, gets more space than the map (§3) -->
+            <div class="col-lg-7">
                 <div id="routes-container" class="route-list-scroll">
                     <!-- Skeleton loaders -->
                     <div class="row g-3">
@@ -238,8 +299,8 @@
                 <div id="pagination-container" class="mt-3"></div>
             </div>
 
-            <!-- Map (sticky) -->
-            <div class="col-lg-7">
+            <!-- Map (sticky), confirmatory support column (§3) -->
+            <div class="col-lg-5">
                 <div class="card map-panel-sticky">
                     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2 py-2">
                         <span class="small fw-semibold">
