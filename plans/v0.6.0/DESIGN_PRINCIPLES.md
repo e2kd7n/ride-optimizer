@@ -1,6 +1,6 @@
 # Design Principles & Guidelines
 
-**Version:** 2.2
+**Version:** 2.3
 **Last Updated:** 2026-07-05
 **Status:** Active
 
@@ -97,7 +97,9 @@ The app's visual identity is **Fair Weather** — built around the one decision 
 
 > **Field note (v0.17.0 Design Review):** Findings PLACE-DASH-2, PLACE-ROUTES-2, and PLACE-DETAIL-2 identified three pages where the map column received more Bootstrap columns than the decision/data column. Finding ID-RDTL-2 documented the "Uses" popularity metric sharing equal visual weight with Distance, Duration, and Elevation in the Route Detail primary grid. CP-4 (Information Density) documented this secondary-at-primary-weight pattern recurring across Dashboard, Reports, Route Detail, and Explore.
 
-> **Field note (v2.2 — Fair Weather):** The map + controls side-by-side rule formalizes a recommendation already made ad hoc in #367 (Explore: "two-column layout on desktop: generation controls left `col-lg-4` / map right `col-lg-8`"). It also applies to #365 (Routes Library column ratio) and should be checked against Route Detail's existing `col-lg-5`/`col-lg-7` split (`route-detail.html`), which already follows this pattern and can serve as the reference implementation.
+> **Field note (v2.2 — Fair Weather):** The map + controls side-by-side rule formalizes a recommendation already made ad hoc in #367 (Explore: "two-column layout on desktop: generation controls left `col-lg-4` / map right `col-lg-8`"). It also applies to #365 (Routes Library column ratio).
+>
+> **Correction (v2.3):** An earlier version of this note called Route Detail's existing `col-lg-5`/`col-lg-7` split (`route-detail.html`) "the reference implementation" for this rule. That was wrong: `col-lg-5` for the stats column is below the `col-lg-6` minimum the ratio rule above requires, and finding PLACE-DETAIL-2 (v0.17.0 Design Review, field note above) already flagged this exact split as an instance of the map column outweighing the data column — the two field notes contradicted each other. Route Detail *does* correctly follow the side-by-side placement rule (stats beside the map, not stacked, on `lg`+); it does *not* comply with the column-ratio rule. Treat the placement as the reference example and the ratio as a known, not-yet-corrected deviation — don't cite the split as compliant with both rules.
 
 **Rationale:** Users should immediately understand what's most important.
 
@@ -459,6 +461,7 @@ Before merging UI/UX changes:
 
 ## Version History
 
+- **v2.3** (2026-07-05): Corrected an internal contradiction in §3 — the v2.2 field note called Route Detail's `col-lg-5`/`col-lg-7` split "the reference implementation" for the map+controls side-by-side rule, but the v0.17.0 field note directly above it (finding PLACE-DETAIL-2) already flagged that same split as violating the column-ratio rule's `col-lg-6` minimum. Route Detail remains the reference example for side-by-side *placement* only; the ratio itself is a known, uncorrected deviation.
 - **v2.2** (2026-07-05): Fair Weather brand identity adopted — new Brand Identity section (mark, wordmark, type, tagline); Primary/Semantic Colors in §4 replaced with Day/Night cobalt/coral tokens (full spec: [`docs/designs/FAIR_WEATHER_BRAND_BOOK.md`](../../docs/designs/FAIR_WEATHER_BRAND_BOOK.md)); §2 new guideline that weather cards show wind and precipitation alongside temperature whenever meaningful; §3 new guideline that map controls/lists sit beside the map on desktop (`lg`+), not stacked above or below it, formalizing prior ad hoc recommendations in #365 and #367; Common Patterns Library CSS snippets updated to the new tokens and 999px/16px shape language.
 - **v2.1** (2026-07-04): Field notes and extended guidelines added from v0.17.0 Design Review (Epic #352). New sub-guidelines added to §2 (time-urgency ordering, teaser before collapse), §3 (card column ratios, secondary metrics demoted), §7 (workflow sequencing, jargon-free first use, interactive elements visually distinct, post-action navigation hints), §10 (destructive action confirmation, unit system applied globally).
 - **v2.0** (2026-03-26): Comprehensive design system with mobile-first approach
