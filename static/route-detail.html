@@ -18,6 +18,11 @@
         @media (max-width: 991.98px) {
             #route-map { height: 320px; }
         }
+        @media (max-width: 767.98px) {
+            /* #371c: fixed 320px map fills the whole viewport on short mobile screens;
+               cap it so content peeks above/below. */
+            #route-map { max-height: 50vh; }
+        }
         .metric-card {
             height: 100%;
         }
@@ -27,12 +32,22 @@
             gap: var(--space-1);
             padding: var(--space-1) var(--space-2);
             border-radius: 999px;
-            background: #f8f9fa;
+            background: var(--surface-2);
             margin: 0 var(--space-2) var(--space-2) 0;
+        }
+        /* Demoted secondary metric (popularity/uses) — same chip shape, muted ink */
+        .detail-chip-muted {
+            color: var(--ink-soft);
+        }
+        .performance-placeholder {
+            color: var(--ink-soft);
         }
     </style>
 </head>
 <body>
+    <!-- Skip Links for Accessibility -->
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+
     <nav class="navbar navbar-expand-lg navbar-fairweather" role="navigation" aria-label="Main navigation">
         <div class="container">
             <a class="navbar-brand" href="/" aria-label="Ride Optimizer Home">
@@ -63,9 +78,6 @@
         </div>
     </nav>
 
-    <!-- Skip Links for Accessibility -->
-    <a href="#main-content" class="skip-link">Skip to main content</a>
-
     <main id="main-content" class="container mt-4" role="main">
         <div class="row mb-3">
             <div class="col-12">
@@ -78,6 +90,7 @@
         <div id="route-detail-live-region" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
 
         <div id="route-details">
+            <h1 class="mb-3">Route Details</h1>
             <div class="text-center py-5">
                 <div class="spinner-border text-primary" role="status">
                     <span class="visually-hidden">Loading route details...</span>
@@ -165,6 +178,7 @@
 
             function renderError(message, variant = 'danger') {
                 byId('route-details').innerHTML = `
+                    <h1 class="mb-3">Route Details</h1>
                     <div class="alert alert-${variant}" role="alert">
                         <i class="bi bi-exclamation-triangle"></i> ${message}
                     </div>
@@ -206,18 +220,66 @@
 
                 L.marker(start).addTo(mapInstance).bindTooltip('Start');
                 L.marker(end).addTo(mapInstance).bindTooltip('End');
+
+                // #371c: container height now comes from CSS (incl. the mobile max-height:
+                // 50vh rule) rather than an inline style, so re-measure after first paint
+                // in case layout wasn't final at init time.
+                setTimeout(() => {
+                    if (mapInstance) {
+                        mapInstance.invalidateSize();
+                    }
+                }, 100);
             }
 
             function renderPerformanceCharts(route) {
-                // Only show if we have route history with multiple data points
-                if (!Array.isArray(route.routes) || route.routes.length < 2) {
+                const content = byId('performance-content');
+                if (!content) return;
+
+                const dataPoints = Array.isArray(route.routes) ? route.routes.length : 0;
+                const usesCount = Array.isArray(route.activity_ids) ? route.activity_ids.length : 0;
+
+                // #371b/#376: card is always rendered now (never hidden). Fall back to an
+                // informative placeholder when there isn't enough history to chart trends.
+                if (dataPoints < 2) {
+                    if (dataPoints === 0 && usesCount > 0) {
+                        // Long-ride-style routes track uses via activity_ids, not route.routes.
+                        content.innerHTML = `
+                            <p class="performance-placeholder mb-0">
+                                <i class="bi bi-info-circle" aria-hidden="true"></i>
+                                History: ${usesCount} recorded ride${usesCount === 1 ? '' : 's'}. Not enough performance data yet to chart trends.
+                            </p>
+                        `;
+                    } else {
+                        content.innerHTML = `
+                            <p class="performance-placeholder mb-0">
+                                <i class="bi bi-info-circle" aria-hidden="true"></i>
+                                Not enough rides yet to chart trends — ride this route again to see performance over time.
+                            </p>
+                        `;
+                    }
                     return;
                 }
 
-                const metricsCard = byId('performance-metrics-card');
-                if (metricsCard) {
-                    metricsCard.style.display = 'block';
-                }
+                content.innerHTML = `
+                    <div class="row g-4">
+                        <div class="col-12 col-lg-6">
+                            <h3 class="h6 text-muted mb-3">Average Speed Over Time</h3>
+                            <canvas id="speed-chart" style="max-height: var(--chart-height);"></canvas>
+                        </div>
+                        <div class="col-12 col-lg-6">
+                            <h3 class="h6 text-muted mb-3">Duration Trends</h3>
+                            <canvas id="duration-chart" style="max-height: var(--chart-height);"></canvas>
+                        </div>
+                        <div class="col-12 col-lg-6">
+                            <h3 class="h6 text-muted mb-3">Heart Rate (if available)</h3>
+                            <canvas id="heartrate-chart" style="max-height: var(--chart-height);"></canvas>
+                        </div>
+                        <div class="col-12 col-lg-6">
+                            <h3 class="h6 text-muted mb-3">Power Output (if available)</h3>
+                            <canvas id="power-chart" style="max-height: var(--chart-height);"></canvas>
+                        </div>
+                    </div>
+                `;
 
                 // Sort routes by timestamp
                 const sortedRoutes = [...route.routes].sort((a, b) =>
@@ -454,11 +516,12 @@
                 const weatherMarkup = route.weather
                     ? `
                         <hr class="my-2">
+                        <h3 class="h6 text-muted mb-2">Weather at ride time</h3>
                         <div class="row g-2">
                             ${route.weather.temp_c != null ? `
                                 <div class="col-6">
                                     <div class="d-flex align-items-center gap-2">
-                                        <i class="bi bi-thermometer-half text-danger"></i>
+                                        <i class="bi bi-thermometer-half" style="color: var(--accent);" aria-hidden="true"></i>
                                         <div>
                                             <div class="small text-muted">Temperature</div>
                                             <div class="fw-semibold">${window.formatTemperature(route.weather.temp_c)}</div>
@@ -469,7 +532,7 @@
                             ${route.weather.wind_speed_kph != null ? `
                                 <div class="col-6">
                                     <div class="d-flex align-items-center gap-2">
-                                        <i class="bi bi-wind text-info"></i>
+                                        <i class="bi bi-wind" style="color: var(--accent);" aria-hidden="true"></i>
                                         <div>
                                             <div class="small text-muted">Wind</div>
                                             <div class="fw-semibold">${window.formatSpeed(route.weather.wind_speed_kph)}${route.weather.wind_direction_cardinal ? ` ${route.weather.wind_direction_cardinal}` : ''}</div>
@@ -480,7 +543,7 @@
                             ${route.weather.precipitation_mm != null ? `
                                 <div class="col-6">
                                     <div class="d-flex align-items-center gap-2">
-                                        <i class="bi bi-cloud-rain text-primary"></i>
+                                        <i class="bi bi-cloud-rain" style="color: var(--accent);" aria-hidden="true"></i>
                                         <div>
                                             <div class="small text-muted">Precipitation</div>
                                             <div class="fw-semibold">${route.weather.precipitation_mm} mm</div>
@@ -491,7 +554,7 @@
                             ${route.weather.conditions ? `
                                 <div class="col-6">
                                     <div class="d-flex align-items-center gap-2">
-                                        <i class="bi bi-cloud-sun text-secondary"></i>
+                                        <i class="bi bi-cloud-sun" style="color: var(--ink-soft);" aria-hidden="true"></i>
                                         <div>
                                             <div class="small text-muted">Conditions</div>
                                             <div class="fw-semibold">${route.weather.conditions}</div>
@@ -502,6 +565,14 @@
                         </div>
                     `
                     : '';
+
+                // #371a: Uses is a popularity/social signal — demote it out of the primary
+                // metrics grid. Backfill the freed slot with avg speed (derivable from the
+                // distance/duration already in the API response) when possible; otherwise
+                // fall back to a 3-up grid rather than showing a placeholder value.
+                const avgSpeedKmh = (route.distance > 0 && route.duration > 0)
+                    ? route.distance / (route.duration / 60)
+                    : null;
 
                 // Long rides store uses as parallel arrays: activity_ids + activity_dates
                 const longRideUsesMarkup = route.type === 'long_ride' && Array.isArray(route.activity_ids) && route.activity_ids.length > 1
@@ -533,12 +604,13 @@
                                     ${route.sport_type ? `<span class="detail-chip"><i class="bi bi-bicycle"></i> ${route.sport_type}</span>` : ''}
                                     ${route.difficulty ? `<span class="detail-chip"><i class="bi bi-bar-chart"></i> ${route.difficulty}</span>` : ''}
                                     ${route.is_favorite ? `<span class="detail-chip"><i class="bi bi-star-fill text-warning"></i> Favorite</span>` : ''}
+                                    <span class="detail-chip detail-chip-muted"><i class="bi bi-arrow-repeat" aria-hidden="true"></i> ${route.uses || 0} use${route.uses === 1 ? '' : 's'}</span>
                                 </div>
                             </div>
                             <div class="text-md-end d-flex flex-column align-items-md-end gap-1">
                                 ${route.is_plus_route ? '<div class="text-muted">PLUS route</div>' : ''}
                                 <div class="d-flex gap-2 flex-wrap justify-content-md-end">
-                                    <button class="btn btn-sm btn-primary" id="save-plan-btn" title="Save this route as a plan to ride again">
+                                    <button class="btn btn-sm btn-cta" id="save-plan-btn" title="Save this route as a plan to ride again">
                                         <i class="bi bi-calendar-plus"></i> Ride Again
                                     </button>
                                     ${route.type === 'long_ride' && route.id
@@ -555,46 +627,59 @@
                                 <div class="card">
                                     <div class="card-body">
                                         <div class="row g-2 mb-3">
-                                            <div class="col-6">
+                                            <div class="col-4">
                                                 <div class="d-flex align-items-center gap-2">
                                                     <i class="bi bi-rulers text-primary"></i>
                                                     <div>
                                                         <div class="small text-muted">Distance</div>
-                                                        <div class="fw-semibold">${window.formatDistance(route.distance)}</div>
+                                                        <div class="fw-semibold tabular-nums">${window.formatDistance(route.distance)}</div>
                                                     </div>
                                                 </div>
                                             </div>
-                                            <div class="col-6">
+                                            <div class="col-4">
                                                 <div class="d-flex align-items-center gap-2">
-                                                    <i class="bi bi-clock text-info"></i>
+                                                    <i class="bi bi-clock" style="color: var(--accent);" aria-hidden="true"></i>
                                                     <div>
                                                         <div class="small text-muted">Duration</div>
-                                                        <div class="fw-semibold">${formatDuration(route.duration)}</div>
+                                                        <div class="fw-semibold tabular-nums">${formatDuration(route.duration)}</div>
                                                     </div>
                                                 </div>
                                             </div>
-                                            <div class="col-6">
+                                            <div class="col-4">
                                                 <div class="d-flex align-items-center gap-2">
                                                     <i class="bi bi-graph-up-arrow text-success"></i>
                                                     <div>
                                                         <div class="small text-muted">Elevation</div>
-                                                        <div class="fw-semibold">${window.formatElevation(route.elevation)}</div>
+                                                        <div class="fw-semibold tabular-nums">${window.formatElevation(route.elevation)}</div>
                                                     </div>
                                                 </div>
                                             </div>
-                                            <div class="col-6">
-                                                <div class="d-flex align-items-center gap-2">
-                                                    <i class="bi bi-arrow-repeat text-warning"></i>
-                                                    <div>
-                                                        <div class="small text-muted">Uses</div>
-                                                        <div class="fw-semibold">${route.uses || 0}</div>
+                                            ${avgSpeedKmh != null ? `
+                                                <div class="col-4">
+                                                    <div class="d-flex align-items-center gap-2">
+                                                        <i class="bi bi-speedometer2 text-primary"></i>
+                                                        <div>
+                                                            <div class="small text-muted">Avg Speed</div>
+                                                            <div class="fw-semibold tabular-nums">${window.formatSpeed(avgSpeedKmh)}</div>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
+                                            ` : ''}
                                         </div>
                                         ${weatherMarkup}
                                     </div>
                                 </div>
+
+                                <!-- Performance Metrics Charts (#371b: moved into stats column, above history/uses) -->
+                                <div class="card mt-3" id="performance-metrics-card">
+                                    <div class="card-body">
+                                        <h2 id="performance" class="h5 mb-4">
+                                            <i class="bi bi-graph-up" aria-hidden="true"></i> Performance Trends
+                                        </h2>
+                                        <div id="performance-content"></div>
+                                    </div>
+                                </div>
+
                                 ${routeHistoryMarkup}
                                 ${longRideUsesMarkup}
                             </div>
@@ -602,35 +687,8 @@
                                 <div style="position: sticky; top: var(--space-3);">
                                     <div class="card">
                                         <div class="card-body p-0">
-                                            <div id="route-map" style="height: var(--map-height-standard); border-radius: 8px;" aria-label="Interactive route map"></div>
+                                            <div id="route-map" aria-label="Interactive route map"></div>
                                         </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Performance Metrics Charts -->
-                        <div class="card mt-3" id="performance-metrics-card" style="display: none;">
-                            <div class="card-body">
-                                <h2 class="h5 mb-4">
-                                    <i class="bi bi-graph-up"></i> Performance Trends
-                                </h2>
-                                <div class="row g-4">
-                                    <div class="col-12 col-lg-6">
-                                        <h3 class="h6 text-muted mb-3">Average Speed Over Time</h3>
-                                        <canvas id="speed-chart" style="max-height: var(--chart-height);"></canvas>
-                                    </div>
-                                    <div class="col-12 col-lg-6">
-                                        <h3 class="h6 text-muted mb-3">Duration Trends</h3>
-                                        <canvas id="duration-chart" style="max-height: var(--chart-height);"></canvas>
-                                    </div>
-                                    <div class="col-12 col-lg-6">
-                                        <h3 class="h6 text-muted mb-3">Heart Rate (if available)</h3>
-                                        <canvas id="heartrate-chart" style="max-height: var(--chart-height);"></canvas>
-                                    </div>
-                                    <div class="col-12 col-lg-6">
-                                        <h3 class="h6 text-muted mb-3">Power Output (if available)</h3>
-                                        <canvas id="power-chart" style="max-height: var(--chart-height);"></canvas>
                                     </div>
                                 </div>
                             </div>
@@ -669,7 +727,7 @@
                                 elevation: route.elevation,
                             });
                             savePlanBtn.innerHTML = '<i class="bi bi-check-lg"></i> Saved';
-                            savePlanBtn.classList.replace('btn-primary', 'btn-success');
+                            savePlanBtn.classList.replace('btn-cta', 'btn-success');
                             announce('Plan saved');
                         } catch (err) {
                             savePlanBtn.disabled = false;
