@@ -113,6 +113,12 @@ body {
     line-height: 1.45;
 }
 
+/* Bootstrap's .text-muted is a static gray that doesn't adapt to Night mode;
+   repoint it at the brand's --ink-soft token so both roles stay in sync. */
+.text-muted {
+    color: var(--ink-soft) !important;
+}
+
 /* ===== Fair Weather typography ===== */
 /* Display face on headlines, brand, decision copy, and button labels */
 h1, h2, h3,
@@ -2260,6 +2266,13 @@ h5.card-title {
 /* TrainerRoad settings chevron */
 [aria-expanded="true"] .tr-chevron { transform: rotate(90deg); }
 .tr-chevron { transition: transform 0.2s; display: inline-block; }
+
+/* Dashboard mobile disclosure chevrons (Conditions summary, Route Status) —
+   CSS-driven off aria-expanded so rotation can't desync from the ARIA state. */
+.conditions-chevron,
+.route-status-chevron { transition: transform 0.2s; }
+[aria-expanded="true"] .conditions-chevron,
+[aria-expanded="true"] .route-status-chevron { transform: rotate(180deg); }
 
 @media (max-width: 767.98px) {
     .workout-strip {
