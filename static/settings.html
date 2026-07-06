@@ -4,19 +4,81 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Settings - Ride Optimizer</title>
-    
+
     <link rel="icon" type="image/svg+xml" href="/img/favicon.svg">
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
-    
+
     <!-- Custom CSS -->
     <link rel="stylesheet" href="/css/main.css">
+
+    <!-- Page-specific styles (#368/#376 design-review restructure) -->
+    <style>
+        .card-header-btn {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: var(--space-2, 8px);
+            width: 100%;
+            border: none;
+            text-align: left;
+            cursor: pointer;
+            min-height: 44px;
+            font: inherit;
+        }
+        .card-header-btn:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: -2px;
+        }
+        .card-header-btn .chevron {
+            transition: transform 0.2s;
+            flex-shrink: 0;
+        }
+        .card-header-btn[aria-expanded="true"] .chevron {
+            transform: rotate(180deg);
+        }
+        .card-header-status {
+            font-weight: 400;
+            color: #fff;
+        }
+        .card-header-status .text-muted {
+            color: rgba(255, 255, 255, 0.8) !important;
+        }
+        .danger-zone-toggle {
+            min-height: 44px;
+        }
+        .danger-zone-body {
+            border: 1px solid var(--danger);
+            border-radius: 10px;
+            padding: 16px;
+            margin-top: 8px;
+            background: rgba(196, 72, 58, 0.06);
+        }
+        .about-card-header {
+            background: var(--surface-2);
+            color: var(--ink);
+        }
+        .save-behavior-line {
+            font-size: 0.875rem;
+            color: var(--ink-soft);
+        }
+        .requires-tr-note {
+            font-size: 0.875rem;
+        }
+        .workflow-explainer {
+            font-size: 0.875rem;
+            color: var(--ink-soft);
+        }
+        .step-badge {
+            font-weight: 700;
+        }
+    </style>
 </head>
 <body>
     <!-- Skip Links for Accessibility -->
     <a href="#main-content" class="skip-link">Skip to main content</a>
-    
+
     <!-- Navigation -->
     <nav class="navbar navbar-expand-lg navbar-fairweather" role="navigation" aria-label="Main navigation">
         <div class="container">
@@ -59,7 +121,7 @@
             </div>
         </div>
     </nav>
-    
+
     <!-- Main Content -->
     <main id="main-content" class="container mt-2 mb-3" role="main">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
@@ -70,7 +132,7 @@
                 <i class="bi bi-exclamation-circle" aria-hidden="true"></i> Unsaved changes
             </span>
         </div>
-        
+
         <!-- Settings Form -->
         <form id="settings-form" aria-label="Application settings form">
             <div class="row">
@@ -98,7 +160,7 @@
                                         <i class="bi bi-info-circle"></i> Distance and temperature units used throughout the app
                                     </div>
                                 </div>
-                                
+
                                 <div class="mb-3">
                                     <label for="default-view" class="form-label fw-bold">
                                         Default View
@@ -112,7 +174,7 @@
                                         <i class="bi bi-info-circle"></i> Page to show when you open the app
                                     </div>
                                 </div>
-                                
+
                                 <div class="mb-0">
                                     <label class="form-label fw-bold d-block mb-2">Display Options</label>
                                     <div class="form-check mb-2">
@@ -121,16 +183,10 @@
                                             Show detailed weather information
                                         </label>
                                     </div>
-                                    <div class="form-check mb-2">
+                                    <div class="form-check">
                                         <input class="form-check-input" type="checkbox" id="show-elevation" checked>
                                         <label class="form-check-label" for="show-elevation">
                                             Show elevation data
-                                        </label>
-                                    </div>
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" id="auto-save" checked>
-                                        <label class="form-check-label" for="auto-save">
-                                            Auto-save preferences
                                         </label>
                                     </div>
                                 </div>
@@ -138,7 +194,7 @@
                         </div>
                     </div>
                 </div>
-            
+
                 <!-- Data Management -->
                 <div class="col-md-6 mb-4">
                     <div class="card h-100">
@@ -150,7 +206,7 @@
                         <div class="card-body">
                             <fieldset>
                                 <legend class="visually-hidden">Data management options</legend>
-                                
+
                                 <div class="mb-3">
                                     <label class="form-label fw-bold d-block mb-2">Export Data</label>
                                     <div class="d-grid gap-2">
@@ -165,16 +221,23 @@
                                         <i class="bi bi-info-circle"></i> Download your data as JSON files for backup
                                     </div>
                                 </div>
-                                
-                                <div class="mb-3">
+
+                                <div class="mb-0">
                                     <label for="import-file" class="form-label fw-bold">Import Data</label>
                                     <input type="file" class="form-control" id="import-file" accept=".json" aria-describedby="import-file-help">
                                     <div id="import-file-help" class="form-text">
                                         <i class="bi bi-info-circle"></i> Import previously exported JSON files
                                     </div>
                                 </div>
-                                
-                                <div class="mb-0">
+
+                                <hr>
+
+                                <button type="button" class="btn btn-outline-danger btn-sm danger-zone-toggle" id="danger-zone-toggle"
+                                        data-bs-toggle="collapse" data-bs-target="#danger-zone-body"
+                                        aria-expanded="false" aria-controls="danger-zone-body">
+                                    <i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Show Danger Zone
+                                </button>
+                                <div class="collapse danger-zone-body" id="danger-zone-body">
                                     <label class="form-label fw-bold d-block mb-2 text-danger">
                                         <i class="bi bi-exclamation-triangle"></i> Danger Zone
                                     </label>
@@ -195,265 +258,330 @@
                     </div>
                 </div>
             </div>
-        
-            <!-- Connections -->
-            <div class="row mb-4">
+
+            <!-- Strava -->
+            <div class="row mb-3">
                 <div class="col-12">
                     <div class="card">
-                        <div class="card-header bg-primary text-white">
-                            <h2 class="h5 mb-0">
-                                <i class="bi bi-plug" aria-hidden="true"></i> Connections
-                            </h2>
-                        </div>
-                        <div class="card-body">
-
-                            <!-- Strava -->
-                            <h3 class="h6 fw-bold mb-2"><i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>Strava</h3>
-                            <div class="mb-3 d-flex align-items-center gap-3 flex-wrap">
-                                <div id="strava-connection-status">
+                        <button type="button" class="card-header bg-primary text-white card-header-btn" id="strava-card-toggle"
+                                data-bs-toggle="collapse" data-bs-target="#strava-card-body"
+                                aria-expanded="false" aria-controls="strava-card-body">
+                            <span class="h5 mb-0"><i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i> Strava</span>
+                            <span class="d-flex align-items-center gap-2">
+                                <span id="strava-connection-status" class="card-header-status">
                                     <span class="text-muted small"><i class="bi bi-hourglass-split"></i> Checking Strava…</span>
-                                </div>
-                                <a href="/api/strava/connect" class="btn btn-sm btn-outline-primary" id="strava-connect-btn" style="display:none">
-                                    <i class="bi bi-link-45deg"></i> Connect to Strava
-                                </a>
-                                <button type="button" class="btn btn-sm btn-outline-danger" id="strava-disconnect-btn" style="display:none">
-                                    <i class="bi bi-x-lg" aria-hidden="true"></i> Disconnect
-                                </button>
-                            </div>
+                                </span>
+                                <i class="bi bi-chevron-down chevron" aria-hidden="true"></i>
+                            </span>
+                        </button>
+                        <div class="collapse" id="strava-card-body">
+                            <div class="card-body">
 
-                            <div id="cache-info" class="mb-3">
-                                <span class="text-muted small"><i class="bi bi-hourglass-split"></i> Loading cache info…</span>
-                            </div>
-
-                            <!-- Strava Sync section -->
-                            <div class="mb-3">
-                                <label class="form-label fw-bold d-block mb-1">Sync from Strava</label>
-                                <p class="small text-muted mb-2">Fetch activities from Strava and merge into local cache. Runs independently — you can sync while analysis is running.</p>
-
-                                <div class="mb-2">
-                                    <p class="small fw-semibold text-body-secondary mb-1">How far back to fetch</p>
-                                    <div class="d-flex flex-wrap gap-1 mb-1">
-                                        <button type="button" class="btn btn-sm btn-outline-secondary fetch-preset active" data-preset="latest">Latest</button>
-                                        <button type="button" class="btn btn-sm btn-outline-secondary fetch-preset" data-preset="1yr" id="preset-1yr">+1 year back</button>
-                                        <button type="button" class="btn btn-sm btn-outline-secondary fetch-preset" data-preset="2yr" id="preset-2yr">+2 years back</button>
-                                        <button type="button" class="btn btn-sm btn-outline-secondary fetch-preset" data-preset="alltime">All time</button>
-                                        <button type="button" class="btn btn-sm btn-outline-secondary fetch-preset" data-preset="custom">Custom…</button>
-                                    </div>
-                                    <div id="custom-date-fields" class="d-flex flex-wrap gap-2 align-items-end mt-2" style="display:none">
-                                        <div>
-                                            <label class="form-label small mb-0" for="fetch-after">From</label>
-                                            <input type="date" class="form-control form-control-sm" id="fetch-after">
-                                        </div>
-                                        <div>
-                                            <label class="form-label small mb-0" for="fetch-before">To (optional)</label>
-                                            <input type="date" class="form-control form-control-sm" id="fetch-before">
-                                        </div>
-                                    </div>
-                                    <p id="date-preset-hint" class="small text-muted mb-0 mt-1"></p>
+                                <div class="mb-3 d-flex align-items-center gap-3 flex-wrap">
+                                    <a href="/api/strava/connect" class="btn btn-sm btn-outline-primary" id="strava-connect-btn" style="display:none">
+                                        <i class="bi bi-link-45deg"></i> Connect to Strava
+                                    </a>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" id="strava-disconnect-btn" style="display:none">
+                                        <i class="bi bi-x-lg" aria-hidden="true"></i> Disconnect
+                                    </button>
                                 </div>
 
-                                <button type="button" class="btn btn-primary" id="fetch-btn">
-                                    <i class="bi bi-cloud-download" aria-hidden="true"></i> Fetch Activities
-                                </button>
+                                <div id="cache-info" class="mb-3">
+                                    <span class="text-muted small"><i class="bi bi-hourglass-split"></i> Loading cache info…</span>
+                                </div>
 
-                                <!-- Fetch progress -->
-                                <div id="fetch-progress" class="mt-2" style="display:none">
+                                <!-- Gear admin (moved from Reports — #369b) -->
+                                <div class="mb-3 d-flex flex-wrap gap-2 align-items-center">
+                                    <span class="small fw-semibold text-body-secondary">Gear:</span>
+                                    <span id="gear-cache-status-settings" class="text-muted small"></span>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="sync-gear-btn" title="Fetch gear names from Strava">
+                                        <i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Sync Gear
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="repair-gear-btn" title="Patch gear IDs on cached activities without re-fetching everything">
+                                        <i class="bi bi-patch-check" aria-hidden="true"></i> Repair Gear Names
+                                    </button>
+                                </div>
+                                <div id="gear-admin-feedback" class="mb-2" style="display:none"></div>
+
+                                <!-- Strava Sync section -->
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold d-block mb-1">Sync from Strava</label>
+                                    <p class="workflow-explainer mb-2">
+                                        Fetching downloads activities into your local cache — it doesn't analyze them.
+                                        Run Step 1 to fetch, then Step 2 to group the cached activities into routes.
+                                    </p>
+
+                                    <div class="mb-2">
+                                        <p class="small fw-semibold text-body-secondary mb-1">How far back to fetch</p>
+                                        <div class="d-flex flex-wrap gap-1 mb-1">
+                                            <button type="button" class="btn btn-sm btn-outline-secondary fetch-preset active" data-preset="latest">Latest</button>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary fetch-preset" data-preset="1yr" id="preset-1yr">+1 year back</button>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary fetch-preset" data-preset="2yr" id="preset-2yr">+2 years back</button>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary fetch-preset" data-preset="alltime">All time</button>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary fetch-preset" data-preset="custom"
+                                                    aria-expanded="false" aria-controls="custom-date-fields">Custom…</button>
+                                        </div>
+                                        <div id="custom-date-fields" class="d-flex flex-wrap gap-2 align-items-end mt-2" style="display:none">
+                                            <div>
+                                                <label class="form-label small mb-0" for="fetch-after">From</label>
+                                                <input type="date" class="form-control form-control-sm" id="fetch-after">
+                                            </div>
+                                            <div>
+                                                <label class="form-label small mb-0" for="fetch-before">To (optional)</label>
+                                                <input type="date" class="form-control form-control-sm" id="fetch-before">
+                                            </div>
+                                        </div>
+                                        <p id="date-preset-hint" class="small text-muted mb-0 mt-1"></p>
+                                    </div>
+
+                                    <button type="button" class="btn btn-primary" id="fetch-btn">
+                                        <span class="step-badge">Step 1:</span> <i class="bi bi-cloud-download" aria-hidden="true"></i> Fetch Activities
+                                    </button>
+
+                                    <!-- Fetch progress -->
+                                    <div id="fetch-progress" class="mt-2" style="display:none">
+                                        <div class="d-flex align-items-center gap-2 mb-1">
+                                            <span class="spinner-border spinner-border-sm text-primary flex-shrink-0"
+                                                  id="fetch-spinner" role="status" aria-hidden="true"></span>
+                                            <span id="fetch-status" class="small fw-medium text-body"></span>
+                                        </div>
+                                        <div class="progress progress-xs">
+                                            <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+                                                 role="progressbar" style="width:100%"></div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <hr class="my-3">
+
+                                <!-- Analysis section -->
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold d-block mb-1">Run Analysis</label>
+                                    <p class="small text-muted mb-2">Re-run route grouping on cached activities.</p>
+                                </div>
+
+                                <div>
+                                    <button type="button" class="btn btn-success" id="run-analysis-btn">
+                                        <span class="step-badge">Step 2:</span> <i class="bi bi-play-fill" aria-hidden="true"></i> Run Analysis
+                                    </button>
+                                </div>
+
+                                <!-- Progress panel (hidden until analysis starts) -->
+                                <div id="analysis-progress" class="mt-3" style="display:none">
                                     <div class="d-flex align-items-center gap-2 mb-1">
-                                        <span class="spinner-border spinner-border-sm text-primary flex-shrink-0"
-                                              id="fetch-spinner" role="status" aria-hidden="true"></span>
-                                        <span id="fetch-status" class="small fw-medium text-body"></span>
+                                        <span class="spinner-border spinner-border-sm text-success flex-shrink-0"
+                                              id="analysis-spinner" role="status" aria-hidden="true"></span>
+                                        <span id="analysis-status" class="small fw-medium text-body"></span>
                                     </div>
-                                    <div class="progress progress-xs">
-                                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
-                                             role="progressbar" style="width:100%"></div>
+                                    <div class="progress progress-xs mb-2">
+                                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+                                             id="analysis-progress-bar" role="progressbar" style="width:100%"
+                                             aria-valuenow="100" aria-valuemin="0" aria-valuemax="100"></div>
+                                    </div>
+                                    <div id="preview-ready-msg" class="small text-success" style="display:none">
+                                        <i class="bi bi-check-circle-fill me-1" aria-hidden="true"></i>
+                                        Preview ready —
+                                        <a href="/routes.html" class="text-success fw-medium">view routes →</a>
                                     </div>
                                 </div>
+
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-                            <hr class="my-3">
-
-                            <!-- Analysis section -->
-                            <div class="mb-3">
-                                <label class="form-label fw-bold d-block mb-1">Run Analysis</label>
-                                <p class="small text-muted mb-2">Re-run route grouping on cached activities.</p>
-                            </div>
-
-                            <div>
-                                <button type="button" class="btn btn-success" id="run-analysis-btn">
-                                    <i class="bi bi-play-fill" aria-hidden="true"></i> Run Analysis
-                                </button>
-                            </div>
-
-                            <!-- Progress panel (hidden until analysis starts) -->
-                            <div id="analysis-progress" class="mt-3" style="display:none">
-                                <div class="d-flex align-items-center gap-2 mb-1">
-                                    <span class="spinner-border spinner-border-sm text-success flex-shrink-0"
-                                          id="analysis-spinner" role="status" aria-hidden="true"></span>
-                                    <span id="analysis-status" class="small fw-medium text-body"></span>
-                                </div>
-                                <div class="progress progress-xs mb-2">
-                                    <div class="progress-bar progress-bar-striped progress-bar-animated bg-success"
-                                         id="analysis-progress-bar" role="progressbar" style="width:100%"
-                                         aria-valuenow="100" aria-valuemin="0" aria-valuemax="100"></div>
-                                </div>
-                                <div id="preview-ready-msg" class="small text-success" style="display:none">
-                                    <i class="bi bi-check-circle-fill me-1" aria-hidden="true"></i>
-                                    Preview ready —
-                                    <a href="/routes.html" class="text-success fw-medium">view routes →</a>
-                                </div>
-                            </div>
-
-                            <hr class="my-4">
-
-                            <!-- intervals.icu -->
-                            <h3 class="h6 fw-bold mb-2"><i class="bi bi-activity me-1" aria-hidden="true"></i>intervals.icu</h3>
-                            <div class="mb-3 d-flex align-items-center gap-3 flex-wrap">
-                                <div id="icu-connection-status">
+            <!-- intervals.icu -->
+            <div class="row mb-3">
+                <div class="col-12">
+                    <div class="card">
+                        <button type="button" class="card-header bg-primary text-white card-header-btn" id="icu-card-toggle"
+                                data-bs-toggle="collapse" data-bs-target="#icu-card-body"
+                                aria-expanded="false" aria-controls="icu-card-body">
+                            <span class="h5 mb-0"><i class="bi bi-activity me-1" aria-hidden="true"></i> intervals.icu</span>
+                            <span class="d-flex align-items-center gap-2">
+                                <span id="icu-connection-status" class="card-header-status">
                                     <span class="text-muted small"><i class="bi bi-hourglass-split"></i> Checking intervals.icu…</span>
-                                </div>
-                                <button type="button" class="btn btn-sm btn-outline-danger" id="icu-disconnect-btn" style="display:none">
-                                    <i class="bi bi-x-lg" aria-hidden="true"></i> Disconnect
-                                </button>
-                            </div>
-
-                            <p class="small text-muted mb-3">
-                                Connect intervals.icu to enable direct links from each activity to its intervals.icu page.
-                            </p>
-
-                            <div class="row g-3">
-                                <div class="col-md-4">
-                                    <label class="form-label fw-bold" for="icu-athlete-id">Athlete ID</label>
-                                    <input type="text" class="form-control" id="icu-athlete-id" placeholder="e.g. i12345"
-                                           autocomplete="off" spellcheck="false">
-                                    <div class="form-text">
-                                        Find it at intervals.icu → Settings → <strong>API</strong> — listed as "Athlete id".
-                                    </div>
-                                </div>
-                                <div class="col-md-5">
-                                    <label class="form-label fw-bold" for="icu-api-key">API Key</label>
-                                    <input type="password" class="form-control" id="icu-api-key" placeholder="your API key"
-                                           autocomplete="new-password" spellcheck="false">
-                                    <div class="form-text">
-                                        Find it at intervals.icu → Settings → <strong>API</strong> — copy the key shown there.
-                                    </div>
-                                </div>
-                                <div class="col-md-3 d-flex align-items-end">
-                                    <button type="button" class="btn btn-primary w-100" id="icu-connect-btn">
-                                        <i class="bi bi-link-45deg" aria-hidden="true"></i> Connect
+                                </span>
+                                <i class="bi bi-chevron-down chevron" aria-hidden="true"></i>
+                            </span>
+                        </button>
+                        <div class="collapse" id="icu-card-body">
+                            <div class="card-body">
+                                <div class="mb-3 d-flex align-items-center gap-3 flex-wrap">
+                                    <button type="button" class="btn btn-sm btn-outline-danger" id="icu-disconnect-btn" style="display:none">
+                                        <i class="bi bi-x-lg" aria-hidden="true"></i> Disconnect
                                     </button>
                                 </div>
-                            </div>
-                            <div id="icu-connect-feedback" class="mt-2" style="display:none"></div>
 
-                            <hr class="my-3">
+                                <p class="small text-muted mb-3">
+                                    Connect intervals.icu to enable direct links from each activity to its intervals.icu page.
+                                </p>
 
-                            <!-- OpenRouteService -->
-                            <h3 class="h6 fw-bold mb-2"><i class="bi bi-signpost-split me-1" aria-hidden="true"></i>OpenRouteService (Road Routing)</h3>
-                            <div class="mb-3 d-flex align-items-center gap-3 flex-wrap">
-                                <div id="ors-connection-status">
-                                    <span class="text-muted small"><i class="bi bi-hourglass-split"></i> Checking…</span>
-                                </div>
-                                <button type="button" class="btn btn-sm btn-outline-danger" id="ors-disconnect-btn" style="display:none">
-                                    <i class="bi bi-x-lg" aria-hidden="true"></i> Disconnect
-                                </button>
-                            </div>
-
-                            <p class="small text-muted mb-3">
-                                Required for the Explore page's "Plot road route" feature. Get a free key at
-                                <a href="https://openrouteservice.org/dev/#/signup" target="_blank" rel="noopener">openrouteservice.org</a>
-                                (free tier: 2,000 req/day). Paste the token from your ORS dashboard below.
-                            </p>
-
-                            <div class="row g-3">
-                                <div class="col-md-9">
-                                    <label class="form-label fw-bold" for="ors-api-key">API Key</label>
-                                    <input type="password" class="form-control" id="ors-api-key"
-                                           placeholder="your ORS API key"
-                                           autocomplete="new-password" spellcheck="false">
-                                    <div class="form-text">
-                                        Sign in to openrouteservice.org → Dashboard → <strong>API Keys</strong> — copy the token shown there.
-                                    </div>
-                                </div>
-                                <div class="col-md-3 d-flex align-items-end">
-                                    <button type="button" class="btn btn-primary w-100" id="ors-save-btn">
-                                        <i class="bi bi-floppy" aria-hidden="true"></i> Save
-                                    </button>
-                                </div>
-                            </div>
-                            <div id="ors-save-feedback" class="mt-2" style="display:none"></div>
-
-                            <hr class="my-3">
-
-                            <!-- Garmin Connect -->
-                            <h3 class="h6 fw-bold mb-2"><i class="bi bi-smartwatch me-1" aria-hidden="true"></i>Garmin Connect</h3>
-                            <div class="mb-3 d-flex align-items-center gap-3 flex-wrap">
-                                <div id="garmin-connection-status">
-                                    <span class="text-muted small"><i class="bi bi-hourglass-split"></i> Checking Garmin…</span>
-                                </div>
-                            </div>
-
-                            <p class="small text-muted mb-3">
-                                Import cycling activities from Garmin Connect as a secondary data source alongside Strava.
-                            </p>
-
-                            <div id="garmin-connect-form">
                                 <div class="row g-3">
                                     <div class="col-md-4">
-                                        <label class="form-label fw-bold" for="garmin-email">Email</label>
-                                        <input type="email" class="form-control" id="garmin-email" placeholder="you@example.com"
-                                               autocomplete="email" spellcheck="false">
+                                        <label class="form-label fw-bold" for="icu-athlete-id">Athlete ID</label>
+                                        <input type="text" class="form-control" id="icu-athlete-id" placeholder="e.g. i12345"
+                                               autocomplete="off" spellcheck="false">
+                                        <div class="form-text">
+                                            Find it at intervals.icu → Settings → <strong>API</strong> — listed as "Athlete id".
+                                        </div>
                                     </div>
                                     <div class="col-md-5">
-                                        <label class="form-label fw-bold" for="garmin-password">Password</label>
-                                        <input type="password" class="form-control" id="garmin-password" placeholder="Garmin password"
-                                               autocomplete="new-password">
+                                        <label class="form-label fw-bold" for="icu-api-key">API Key</label>
+                                        <input type="password" class="form-control" id="icu-api-key" placeholder="your API key"
+                                               autocomplete="new-password" spellcheck="false">
+                                        <div class="form-text">
+                                            Find it at intervals.icu → Settings → <strong>API</strong> — copy the key shown there.
+                                        </div>
                                     </div>
                                     <div class="col-md-3 d-flex align-items-end">
-                                        <button type="button" class="btn btn-primary w-100" id="garmin-connect-btn">
+                                        <button type="button" class="btn btn-primary w-100" id="icu-connect-btn">
                                             <i class="bi bi-link-45deg" aria-hidden="true"></i> Connect
                                         </button>
                                     </div>
                                 </div>
-                                <div id="garmin-connect-feedback" class="mt-2" style="display:none"></div>
+                                <div id="icu-connect-feedback" class="mt-2" style="display:none"></div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-                            <div id="garmin-connected-state" style="display:none">
-                                <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-                                    <span class="badge bg-success"><i class="bi bi-check-circle"></i> Connected</span>
-                                    <span class="text-muted small" id="garmin-display-name"></span>
-                                </div>
-                                <div class="d-flex gap-2 flex-wrap">
-                                    <button type="button" class="btn btn-sm btn-outline-primary" id="garmin-sync-btn">
-                                        <i class="bi bi-arrow-repeat" aria-hidden="true"></i> Sync Activities
-                                    </button>
-                                    <button type="button" class="btn btn-sm btn-outline-danger" id="garmin-disconnect-btn">
+            <!-- OpenRouteService -->
+            <div class="row mb-3">
+                <div class="col-12">
+                    <div class="card">
+                        <button type="button" class="card-header bg-primary text-white card-header-btn" id="ors-card-toggle"
+                                data-bs-toggle="collapse" data-bs-target="#ors-card-body"
+                                aria-expanded="false" aria-controls="ors-card-body">
+                            <span class="h5 mb-0"><i class="bi bi-signpost-split me-1" aria-hidden="true"></i> OpenRouteService</span>
+                            <span class="d-flex align-items-center gap-2">
+                                <span id="ors-connection-status" class="card-header-status">
+                                    <span class="text-muted small"><i class="bi bi-hourglass-split"></i> Checking…</span>
+                                </span>
+                                <i class="bi bi-chevron-down chevron" aria-hidden="true"></i>
+                            </span>
+                        </button>
+                        <div class="collapse" id="ors-card-body">
+                            <div class="card-body">
+                                <div class="mb-3 d-flex align-items-center gap-3 flex-wrap">
+                                    <button type="button" class="btn btn-sm btn-outline-danger" id="ors-disconnect-btn" style="display:none">
                                         <i class="bi bi-x-lg" aria-hidden="true"></i> Disconnect
                                     </button>
                                 </div>
-                                <div id="garmin-sync-feedback" class="mt-2" style="display:none"></div>
-                            </div>
 
-                            <hr class="my-3">
+                                <p class="small text-muted mb-3">
+                                    Required for the Explore page's "Plot road route" feature. Get a free key at
+                                    <a href="https://openrouteservice.org/dev/#/signup" target="_blank" rel="noopener">openrouteservice.org</a>
+                                    (free tier: 2,000 req/day). Paste the token from your ORS dashboard below.
+                                </p>
 
-                            <!-- TrainerRoad -->
-                            <div class="d-flex align-items-start gap-2"
-                                 style="cursor:pointer"
-                                 data-bs-toggle="collapse" data-bs-target="#trainerroad-section"
-                                 aria-expanded="false" aria-controls="trainerroad-section"
-                                 role="button">
-                                <i class="bi bi-chevron-right tr-chevron" aria-hidden="true"></i>
-                                <div class="flex-grow-1">
-                                    <h3 class="h6 fw-bold mb-0">
-                                        <i class="bi bi-calendar-week me-1" aria-hidden="true"></i>TrainerRoad Calendar
-                                    </h3>
-                                    <p class="small text-muted mb-0">Sync structured workouts from your TrainerRoad plan</p>
+                                <div class="row g-3">
+                                    <div class="col-md-9">
+                                        <label class="form-label fw-bold" for="ors-api-key">API Key</label>
+                                        <input type="password" class="form-control" id="ors-api-key"
+                                               placeholder="your ORS API key"
+                                               autocomplete="new-password" spellcheck="false">
+                                        <div class="form-text">
+                                            Sign in to openrouteservice.org → Dashboard → <strong>API Keys</strong> — copy the token shown there.
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3 d-flex align-items-end">
+                                        <button type="button" class="btn btn-primary w-100" id="ors-save-btn">
+                                            <i class="bi bi-floppy" aria-hidden="true"></i> Save
+                                        </button>
+                                    </div>
                                 </div>
-                                <div id="tr-status-badge">
+                                <div id="ors-save-feedback" class="mt-2" style="display:none"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Garmin Connect -->
+            <div class="row mb-3">
+                <div class="col-12">
+                    <div class="card">
+                        <button type="button" class="card-header bg-primary text-white card-header-btn" id="garmin-card-toggle"
+                                data-bs-toggle="collapse" data-bs-target="#garmin-card-body"
+                                aria-expanded="false" aria-controls="garmin-card-body">
+                            <span class="h5 mb-0"><i class="bi bi-smartwatch me-1" aria-hidden="true"></i> Garmin Connect</span>
+                            <span class="d-flex align-items-center gap-2">
+                                <span id="garmin-connection-status" class="card-header-status">
+                                    <span class="text-muted small"><i class="bi bi-hourglass-split"></i> Checking Garmin…</span>
+                                </span>
+                                <i class="bi bi-chevron-down chevron" aria-hidden="true"></i>
+                            </span>
+                        </button>
+                        <div class="collapse" id="garmin-card-body">
+                            <div class="card-body">
+                                <p class="small text-muted mb-3">
+                                    Import cycling activities from Garmin Connect as a secondary data source alongside Strava.
+                                </p>
+
+                                <div id="garmin-connect-form">
+                                    <div class="row g-3">
+                                        <div class="col-md-4">
+                                            <label class="form-label fw-bold" for="garmin-email">Email</label>
+                                            <input type="email" class="form-control" id="garmin-email" placeholder="you@example.com"
+                                                   autocomplete="email" spellcheck="false">
+                                        </div>
+                                        <div class="col-md-5">
+                                            <label class="form-label fw-bold" for="garmin-password">Password</label>
+                                            <input type="password" class="form-control" id="garmin-password" placeholder="Garmin password"
+                                                   autocomplete="new-password">
+                                        </div>
+                                        <div class="col-md-3 d-flex align-items-end">
+                                            <button type="button" class="btn btn-primary w-100" id="garmin-connect-btn">
+                                                <i class="bi bi-link-45deg" aria-hidden="true"></i> Connect
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div id="garmin-connect-feedback" class="mt-2" style="display:none"></div>
+                                </div>
+
+                                <div id="garmin-connected-state" style="display:none">
+                                    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                                        <span class="badge bg-success"><i class="bi bi-check-circle"></i> Connected</span>
+                                        <span class="text-muted small" id="garmin-display-name"></span>
+                                    </div>
+                                    <div class="d-flex gap-2 flex-wrap">
+                                        <button type="button" class="btn btn-sm btn-outline-primary" id="garmin-sync-btn">
+                                            <i class="bi bi-arrow-repeat" aria-hidden="true"></i> Sync Activities
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" id="garmin-disconnect-btn">
+                                            <i class="bi bi-x-lg" aria-hidden="true"></i> Disconnect
+                                        </button>
+                                    </div>
+                                    <div id="garmin-sync-feedback" class="mt-2" style="display:none"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TrainerRoad Calendar + nested Outdoor Workout Preferences (#368) -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <button type="button" class="card-header bg-primary text-white card-header-btn" id="tr-card-toggle"
+                                data-bs-toggle="collapse" data-bs-target="#tr-card-body"
+                                aria-expanded="false" aria-controls="tr-card-body">
+                            <span class="h5 mb-0"><i class="bi bi-calendar-week me-1" aria-hidden="true"></i> TrainerRoad Calendar</span>
+                            <span class="d-flex align-items-center gap-2">
+                                <span id="tr-status-badge" class="card-header-status">
                                     <span class="badge bg-secondary">Not connected</span>
-                                </div>
-                            </div>
+                                </span>
+                                <i class="bi bi-chevron-down chevron" aria-hidden="true"></i>
+                            </span>
+                        </button>
+                        <div class="collapse" id="tr-card-body">
+                            <div class="card-body">
+                                <p class="small text-muted mb-3">Sync structured workouts from your TrainerRoad plan</p>
 
-                            <div class="collapse mt-3" id="trainerroad-section">
                                 <!-- Connect form (shown when disconnected) -->
                                 <div id="tr-connect-form">
                                     <div class="row g-3">
@@ -497,58 +625,50 @@
                                     </div>
                                     <div id="tr-sync-feedback" class="mt-2" style="display:none"></div>
                                 </div>
-                            </div>
 
-                        </div>
-                    </div>
-                </div>
-            </div>
+                                <hr class="my-4">
 
-            <!-- Outdoor Workout Preferences (#338) -->
-            <div class="row mb-4">
-                <div class="col-12">
-                    <div class="card">
-                        <div class="card-header bg-primary text-white">
-                            <h2 class="h5 mb-0">
-                                <i class="bi bi-sun" aria-hidden="true"></i> Outdoor Workout Preferences
-                            </h2>
-                        </div>
-                        <div class="card-body">
-                            <p class="small text-muted mb-3">
-                                When a TrainerRoad workout is scheduled, these thresholds determine whether
-                                to recommend riding outdoors or on the trainer.
-                            </p>
-                            <div class="row g-3">
-                                <div class="col-md-6">
-                                    <label class="form-label fw-bold" for="outdoor-min-temp">
-                                        Minimum temperature for outdoor workouts
-                                    </label>
-                                    <div class="d-flex align-items-center gap-2">
-                                        <input type="range" class="form-range flex-grow-1"
-                                               id="outdoor-min-temp" min="0" max="80" step="5" value="40"
-                                               aria-describedby="outdoor-min-temp-value">
-                                        <span id="outdoor-min-temp-value" class="badge bg-secondary"
-                                              style="min-width: 48px">40°F</span>
-                                    </div>
-                                    <div class="form-text">
-                                        <i class="bi bi-info-circle" aria-hidden="true"></i>
-                                        Below this temperature, indoor trainer is recommended regardless of workout type.
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label fw-bold d-block">
-                                        Precipitation
-                                    </label>
-                                    <div class="form-check mt-2">
-                                        <input class="form-check-input" type="checkbox"
-                                               id="outdoor-allow-rain">
-                                        <label class="form-check-label" for="outdoor-allow-rain">
-                                            Allow outdoor workouts in light rain
+                                <!-- Outdoor Workout Preferences (#338), nested under TrainerRoad per #368 -->
+                                <h3 class="h6 fw-bold mb-2"><i class="bi bi-sun" aria-hidden="true"></i> Outdoor Workout Preferences</h3>
+                                <p class="small text-muted mb-2">
+                                    When a TrainerRoad workout is scheduled, these thresholds determine whether
+                                    to recommend riding outdoors or on the trainer.
+                                </p>
+                                <p class="small text-muted requires-tr-note" id="outdoor-prefs-requires-note" style="display:none">
+                                    <i class="bi bi-info-circle" aria-hidden="true"></i> Requires TrainerRoad — connect above to put these thresholds to use.
+                                </p>
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold" for="outdoor-min-temp">
+                                            Minimum temperature for outdoor workouts
                                         </label>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <input type="range" class="form-range flex-grow-1"
+                                                   id="outdoor-min-temp" min="0" max="80" step="5" value="40"
+                                                   aria-describedby="outdoor-min-temp-value">
+                                            <span id="outdoor-min-temp-value" class="badge bg-secondary"
+                                                  style="min-width: 48px">40°F</span>
+                                        </div>
+                                        <div class="form-text">
+                                            <i class="bi bi-info-circle" aria-hidden="true"></i>
+                                            Below this temperature, indoor trainer is recommended regardless of workout type.
+                                        </div>
                                     </div>
-                                    <div class="form-text">
-                                        <i class="bi bi-info-circle" aria-hidden="true"></i>
-                                        When unchecked, any active precipitation triggers indoor recommendation.
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold d-block">
+                                            Precipitation
+                                        </label>
+                                        <div class="form-check mt-2">
+                                            <input class="form-check-input" type="checkbox"
+                                                   id="outdoor-allow-rain">
+                                            <label class="form-check-label" for="outdoor-allow-rain">
+                                                Allow outdoor workouts in light rain
+                                            </label>
+                                        </div>
+                                        <div class="form-text">
+                                            <i class="bi bi-info-circle" aria-hidden="true"></i>
+                                            When unchecked, any active precipitation triggers indoor recommendation.
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -557,11 +677,31 @@
                 </div>
             </div>
 
-            <!-- About Section -->
-            <div class="row">
+            <!-- Form Actions (moved above About per #368) -->
+            <div class="row mt-2">
+                <div class="col-12">
+                    <div class="d-flex gap-2 flex-wrap align-items-center">
+                        <button type="submit" class="btn btn-cta btn-lg" id="save-settings">
+                            <i class="bi bi-check-circle" aria-hidden="true"></i> Save Settings
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-lg" id="reset-settings">
+                            <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i> Reset to Defaults
+                        </button>
+                        <div class="form-check ms-2 save-behavior-line">
+                            <input class="form-check-input" type="checkbox" id="auto-save" checked>
+                            <label class="form-check-label" for="auto-save">
+                                Auto-save preferences on change
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- About Section (moved to bottom per #368) -->
+            <div class="row mt-4">
                 <div class="col-12">
                     <div class="card">
-                        <div class="card-header bg-primary text-white">
+                        <div class="card-header about-card-header">
                             <h2 class="h5 mb-0">
                                 <i class="bi bi-info-circle" aria-hidden="true"></i> About
                             </h2>
@@ -591,23 +731,9 @@
                     </div>
                 </div>
             </div>
-            
-            <!-- Form Actions -->
-            <div class="row mt-4">
-                <div class="col-12">
-                    <div class="d-flex gap-2 flex-wrap align-items-center">
-                        <button type="submit" class="btn btn-primary btn-lg" id="save-settings">
-                            <i class="bi bi-check-circle" aria-hidden="true"></i> Save Settings
-                        </button>
-                        <button type="button" class="btn btn-outline-secondary btn-lg" id="reset-settings">
-                            <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i> Reset to Defaults
-                        </button>
-                    </div>
-                </div>
-            </div>
         </form>
     </main>
-    
+
     <!-- Bottom Navigation (Mobile) -->
     <div id="bottom-nav-more" class="bottom-nav-drawer collapse d-md-none" aria-label="More pages">
         <a class="bottom-nav-drawer-item" href="/explore.html">
@@ -643,17 +769,17 @@
             <span>More</span>
         </button>
     </nav>
-    
+
     <!-- Footer -->
     <footer class="mt-3">
         <div class="container text-center text-muted">
             <small>Ride Optimizer v0.17.0 - Smart Static Architecture</small>
         </div>
     </footer>
-    
+
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    
+
     <!-- Custom JavaScript -->
     <script src="/js/common.js"></script>
     <script src="/js/help-modal.js"></script>
@@ -661,6 +787,35 @@
     <script src="/js/api-client.js"></script>
 
     <script>
+        // Canonical temperature (always stored/sent as Fahrenheit) + current display unit for the
+        // outdoor-min-temp slider. See #375a.
+        let _outdoorMinTempF = 40;
+        let _isMetricTemp = false;
+
+        function fToC(f) { return Math.round((f - 32) * 5 / 9); }
+        function cToF(c) { return Math.round((c * 9 / 5) + 32); }
+
+        function setOutdoorTempSliderUnit(isMetric) {
+            const slider = document.getElementById('outdoor-min-temp');
+            const label = document.getElementById('outdoor-min-temp-value');
+            if (!slider || !label) return;
+            _isMetricTemp = isMetric;
+            if (isMetric) {
+                slider.min = -20;
+                slider.max = 30;
+                slider.step = 5;
+                const c = fToC(_outdoorMinTempF);
+                slider.value = Math.min(Math.max(c, -20), 30);
+                label.textContent = slider.value + '°C';
+            } else {
+                slider.min = 0;
+                slider.max = 80;
+                slider.step = 5;
+                slider.value = Math.min(Math.max(_outdoorMinTempF, 0), 80);
+                label.textContent = slider.value + '°F';
+            }
+        }
+
         // Initialize page
         document.addEventListener('DOMContentLoaded', function() {
             console.log('✓ Settings page initialized');
@@ -670,6 +825,8 @@
 
             // Setup event listeners
             setupEventListeners();
+            bindGearAdminControls();
+            setupDangerZoneToggle();
 
             // Load cache info and wire analysis button
             loadStravaStatus();
@@ -725,17 +882,17 @@
                 if (typeof showToast === 'function') showToast('Strava connection failed: ' + params.get('strava_error'), 'error');
                 history.replaceState({}, '', '/settings.html');
             }
-            
+
             // Setup form validation
             setupFormValidation();
         });
-        
+
         function setupFormValidation() {
             const form = document.getElementById('settings-form');
             if (form) {
                 form.addEventListener('submit', function(e) {
                     e.preventDefault();
-                    
+
                     // Validate form
                     if (form.checkValidity()) {
                         saveSettings();
@@ -748,7 +905,32 @@
                 });
             }
         }
-        
+
+        // Toggle collapse state + aria on a card-header-btn/collapse pair based on connected state
+        function setCardExpanded(toggleId, bodyId, expand) {
+            const toggleBtn = document.getElementById(toggleId);
+            const bodyEl = document.getElementById(bodyId);
+            if (!toggleBtn || !bodyEl || typeof bootstrap === 'undefined') return;
+            const collapse = bootstrap.Collapse.getOrCreateInstance(bodyEl, { toggle: false });
+            if (expand) {
+                collapse.show();
+            } else {
+                collapse.hide();
+            }
+        }
+
+        function setupDangerZoneToggle() {
+            const toggleBtn = document.getElementById('danger-zone-toggle');
+            const bodyEl = document.getElementById('danger-zone-body');
+            if (!toggleBtn || !bodyEl) return;
+            bodyEl.addEventListener('shown.bs.collapse', () => {
+                toggleBtn.innerHTML = '<i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Hide Danger Zone';
+            });
+            bodyEl.addEventListener('hidden.bs.collapse', () => {
+                toggleBtn.innerHTML = '<i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Show Danger Zone';
+            });
+        }
+
         function applySettingsToForm(settings) {
             if (settings.unit_system || settings.unitSystem) {
                 document.getElementById('unit-system').value = settings.unit_system || settings.unitSystem;
@@ -769,16 +951,16 @@
                     settings.auto_save !== undefined ? settings.auto_save : settings.autoSave;
             }
 
-            // Outdoor workout preferences
+            // Outdoor workout preferences — canonical value always stored/sent in Fahrenheit;
+            // only the displayed slider converts to Celsius when unit_system is metric (#375a).
             if (settings.outdoor_min_temp_f !== undefined) {
-                const slider = document.getElementById('outdoor-min-temp');
-                const label = document.getElementById('outdoor-min-temp-value');
-                slider.value = settings.outdoor_min_temp_f;
-                label.textContent = settings.outdoor_min_temp_f + '°F';
+                _outdoorMinTempF = settings.outdoor_min_temp_f;
             }
             if (settings.outdoor_allow_rain !== undefined) {
                 document.getElementById('outdoor-allow-rain').checked = settings.outdoor_allow_rain;
             }
+            const unitSystem = document.getElementById('unit-system').value;
+            setOutdoorTempSliderUnit(unitSystem === 'metric');
         }
 
         async function loadUserPreferences() {
@@ -795,28 +977,44 @@
             const local = JSON.parse(localStorage.getItem('rideOptimizerSettings') || '{}');
             applySettingsToForm(local);
         }
-        
+
         function setupEventListeners() {
             // Settings reset button (save is handled by form submit)
             document.getElementById('reset-settings').addEventListener('click', resetSettings);
 
-            // Outdoor temp slider live display
+            // Outdoor temp slider live display (unit-aware — #375a)
             const tempSlider = document.getElementById('outdoor-min-temp');
             const tempLabel = document.getElementById('outdoor-min-temp-value');
             if (tempSlider && tempLabel) {
                 tempSlider.addEventListener('input', function() {
-                    tempLabel.textContent = this.value + '°F';
+                    const val = Number(this.value);
+                    if (_isMetricTemp) {
+                        _outdoorMinTempF = cToF(val);
+                        tempLabel.textContent = val + '°C';
+                    } else {
+                        _outdoorMinTempF = val;
+                        tempLabel.textContent = val + '°F';
+                    }
                 });
             }
-            
+
+            // Keep the outdoor temp slider's display unit in sync if the user changes Unit System
+            // before saving.
+            const unitSelect = document.getElementById('unit-system');
+            if (unitSelect) {
+                unitSelect.addEventListener('change', function() {
+                    setOutdoorTempSliderUnit(this.value === 'metric');
+                });
+            }
+
             // Export buttons
             document.getElementById('export-preferences').addEventListener('click', exportPreferences);
             document.getElementById('export-favorites').addEventListener('click', exportFavorites);
-            
+
             // Clear buttons
             document.getElementById('clear-favorites').addEventListener('click', clearFavorites);
             document.getElementById('clear-all-data').addEventListener('click', clearAllData);
-            
+
             // Auto-save on settings change
             const settingsInputs = document.querySelectorAll('input, select');
             settingsInputs.forEach(input => {
@@ -832,15 +1030,15 @@
                 });
             });
         }
-        
+
         function markUnsavedChanges() {
             document.getElementById('unsaved-indicator').style.display = 'inline';
         }
-        
+
         function clearUnsavedChanges() {
             document.getElementById('unsaved-indicator').style.display = 'none';
         }
-        
+
         async function saveSettings() {
             const serverPayload = {
                 unit_system: document.getElementById('unit-system').value,
@@ -848,7 +1046,7 @@
                 show_weather_details: document.getElementById('show-weather-details').checked,
                 show_elevation: document.getElementById('show-elevation').checked,
                 auto_save: document.getElementById('auto-save').checked,
-                outdoor_min_temp_f: parseInt(document.getElementById('outdoor-min-temp').value, 10),
+                outdoor_min_temp_f: _outdoorMinTempF,
                 outdoor_allow_rain: document.getElementById('outdoor-allow-rain').checked,
             };
 
@@ -882,7 +1080,7 @@
                 setTimeout(() => { saveBtn.innerHTML = original; }, 2000);
             }
         }
-        
+
         async function resetSettings() {
             if (confirm('Are you sure you want to reset all settings to defaults?')) {
                 localStorage.removeItem('rideOptimizerSettings');
@@ -900,8 +1098,8 @@
                 document.getElementById('show-weather-details').checked = true;
                 document.getElementById('show-elevation').checked = true;
                 document.getElementById('auto-save').checked = true;
-                document.getElementById('outdoor-min-temp').value = 40;
-                document.getElementById('outdoor-min-temp-value').textContent = '40°F';
+                _outdoorMinTempF = 40;
+                setOutdoorTempSliderUnit(false);
                 document.getElementById('outdoor-allow-rain').checked = false;
 
                 clearUnsavedChanges();
@@ -913,47 +1111,47 @@
                 }
             }
         }
-        
+
         function exportPreferences() {
             const settings = JSON.parse(localStorage.getItem('rideOptimizerSettings') || '{}');
             const dataStr = JSON.stringify(settings, null, 2);
             const dataBlob = new Blob([dataStr], { type: 'application/json' });
             const url = URL.createObjectURL(dataBlob);
-            
+
             const link = document.createElement('a');
             link.href = url;
             link.download = `ride-optimizer-preferences-${new Date().toISOString().split('T')[0]}.json`;
             link.click();
-            
+
             URL.revokeObjectURL(url);
-            
+
             if (typeof showToast === 'function') {
                 showToast('Preferences exported successfully!', 'success');
             }
         }
-        
+
         function exportFavorites() {
             const favorites = JSON.parse(localStorage.getItem('favoriteRoutes') || '[]');
             const dataStr = JSON.stringify(favorites, null, 2);
             const dataBlob = new Blob([dataStr], { type: 'application/json' });
             const url = URL.createObjectURL(dataBlob);
-            
+
             const link = document.createElement('a');
             link.href = url;
             link.download = `ride-optimizer-favorites-${new Date().toISOString().split('T')[0]}.json`;
             link.click();
-            
+
             URL.revokeObjectURL(url);
-            
+
             if (typeof showToast === 'function') {
                 showToast('Favorites exported successfully!', 'success');
             }
         }
-        
+
         function clearFavorites() {
             if (confirm('Are you sure you want to clear all favorites? This cannot be undone.')) {
                 localStorage.removeItem('favoriteRoutes');
-                
+
                 if (typeof showToast === 'function') {
                     showToast('Favorites cleared', 'warning');
                 } else {
@@ -961,7 +1159,7 @@
                 }
             }
         }
-        
+
         function clearAllData() {
             if (confirm('Are you sure you want to clear ALL local data? This includes settings, favorites, and hidden routes. This cannot be undone.')) {
                 if (confirm('This is your last chance. Are you absolutely sure?')) {
@@ -987,7 +1185,7 @@
         function updateRunBtnLabel() {
             const btn = document.getElementById('run-analysis-btn');
             if (btn.disabled) return;
-            btn.innerHTML = '<i class="bi bi-play-fill" aria-hidden="true"></i> Run Analysis';
+            btn.innerHTML = '<span class="step-badge">Step 2:</span> <i class="bi bi-play-fill" aria-hidden="true"></i> Run Analysis';
             btn.onclick = null;
         }
 
@@ -997,8 +1195,10 @@
                     document.querySelectorAll('.fetch-preset').forEach(b => b.classList.remove('active'));
                     this.classList.add('active');
                     _currentFetchPreset = this.dataset.preset;
-                    document.getElementById('custom-date-fields').style.display =
-                        _currentFetchPreset === 'custom' ? '' : 'none';
+                    const isCustom = _currentFetchPreset === 'custom';
+                    document.getElementById('custom-date-fields').style.display = isCustom ? '' : 'none';
+                    const customBtn = document.querySelector('.fetch-preset[data-preset="custom"]');
+                    if (customBtn) customBtn.setAttribute('aria-expanded', isCustom ? 'true' : 'false');
                     updateDatePresetHint();
                 });
             });
@@ -1090,9 +1290,11 @@
                     statusEl.innerHTML = '<span class="badge bg-secondary"><i class="bi bi-x-circle"></i> Not connected</span>';
                     disconnectBtn.style.display = 'none';
                 }
+                setCardExpanded('icu-card-toggle', 'icu-card-body', !!s.connected);
             } catch (e) {
                 statusEl.innerHTML = '<span class="text-muted small">Not configured</span>';
                 disconnectBtn.style.display = 'none';
+                setCardExpanded('icu-card-toggle', 'icu-card-body', false);
             }
 
             disconnectBtn.addEventListener('click', async () => {
@@ -1160,12 +1362,14 @@
                     statusEl.innerHTML = '<span class="badge bg-success"><i class="bi bi-check-circle"></i> ORS configured</span>';
                     disconnectBtn.style.display = '';
                 } else {
-                    statusEl.innerHTML = '<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle"></i> Not configured — road routing unavailable</span>';
+                    statusEl.innerHTML = '<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle"></i> Not configured</span>';
                     disconnectBtn.style.display = 'none';
                 }
+                setCardExpanded('ors-card-toggle', 'ors-card-body', !!s.configured);
             } catch (e) {
                 statusEl.innerHTML = '<span class="text-muted small">Status unknown</span>';
                 disconnectBtn.style.display = 'none';
+                setCardExpanded('ors-card-toggle', 'ors-card-body', false);
             }
 
             disconnectBtn.addEventListener('click', async () => {
@@ -1228,8 +1432,10 @@
             const statusEl = document.getElementById('garmin-connection-status');
             const connectForm = document.getElementById('garmin-connect-form');
             const connectedState = document.getElementById('garmin-connected-state');
+            let connected = false;
             try {
                 const s = await window.apiClient.fetch('/garmin/status');
+                connected = !!s.connected;
                 if (s.connected) {
                     statusEl.innerHTML = '<span class="badge bg-success"><i class="bi bi-check-circle"></i> Garmin connected</span>';
                     const nameEl = document.getElementById('garmin-display-name');
@@ -1244,6 +1450,7 @@
             } catch (e) {
                 statusEl.innerHTML = '<span class="text-muted small">Not configured</span>';
             }
+            setCardExpanded('garmin-card-toggle', 'garmin-card-body', connected);
 
             document.getElementById('garmin-connect-btn').addEventListener('click', async () => {
                 const btn = document.getElementById('garmin-connect-btn');
@@ -1344,9 +1551,12 @@
             const statusBadge = document.getElementById('tr-status-badge');
             const connectForm = document.getElementById('tr-connect-form');
             const connectedState = document.getElementById('tr-connected-state');
+            const requiresNote = document.getElementById('outdoor-prefs-requires-note');
+            let connected = false;
 
             try {
                 const s = await window.apiClient.getTrainerRoadStatus();
+                connected = !!s.connected;
                 if (s.connected) {
                     statusBadge.innerHTML = '<span class="badge bg-success"><i class="bi bi-check-circle"></i> Connected</span>';
                     connectForm.style.display = 'none';
@@ -1371,6 +1581,8 @@
             } catch (e) {
                 statusBadge.innerHTML = '<span class="text-muted small">Not configured</span>';
             }
+            setCardExpanded('tr-card-toggle', 'tr-card-body', connected);
+            if (requiresNote) requiresNote.style.display = connected ? 'none' : '';
 
             // Connect button
             document.getElementById('tr-connect-btn').addEventListener('click', async () => {
@@ -1485,8 +1697,10 @@
             const statusEl = document.getElementById('strava-connection-status');
             const connectBtn = document.getElementById('strava-connect-btn');
             const disconnectBtn = document.getElementById('strava-disconnect-btn');
+            let connected = false;
             try {
                 const s = await window.apiClient.getStravaStatus();
+                connected = !!s.connected;
                 if (s.connected) {
                     const exp = new Date(s.expires_at * 1000).toLocaleDateString();
                     statusEl.innerHTML = `<span class="badge bg-success"><i class="bi bi-check-circle"></i> Strava connected</span> <span class="text-muted small">token expires ${exp}</span>`;
@@ -1501,6 +1715,7 @@
             } catch (e) {
                 statusEl.innerHTML = '<span class="text-warning small"><i class="bi bi-exclamation-triangle"></i> Could not check Strava status</span>';
             }
+            setCardExpanded('strava-card-toggle', 'strava-card-body', connected);
 
             disconnectBtn.addEventListener('click', async () => {
                 if (!confirm('Disconnect Strava? This will remove your saved credentials and you will need to re-authenticate.')) return;
@@ -1561,7 +1776,7 @@
                 pollAnalysisStatus();
             } catch (e) {
                 btn.disabled = false;
-                btn.innerHTML = '<i class="bi bi-play-fill"></i> Run Analysis';
+                btn.innerHTML = '<span class="step-badge">Step 2:</span> <i class="bi bi-play-fill"></i> Run Analysis';
                 progressEl.style.display = 'none';
                 statusEl.textContent = 'Failed to start: ' + (e.message || 'Unknown error');
                 if (typeof showToast === 'function') showToast('Failed to start analysis', 'error');
@@ -1698,7 +1913,7 @@
                 pollFetchStatus();
             } catch (e) {
                 btn.disabled = false;
-                btn.innerHTML = '<i class="bi bi-cloud-download"></i> Fetch Activities';
+                btn.innerHTML = '<span class="step-badge">Step 1:</span> <i class="bi bi-cloud-download"></i> Fetch Activities';
                 progressEl.style.display = 'none';
                 if (typeof showToast === 'function') showToast('Failed to start fetch: ' + (e.message || 'Unknown error'), 'error');
             }
@@ -1719,19 +1934,111 @@
                         clearInterval(poll);
                         spinnerEl.style.display = 'none';
                         btn.disabled = false;
-                        btn.innerHTML = '<i class="bi bi-cloud-download"></i> Fetch Activities';
+                        btn.innerHTML = '<span class="step-badge">Step 1:</span> <i class="bi bi-cloud-download"></i> Fetch Activities';
                         if (typeof showToast === 'function') showToast(job.label || 'Fetch complete', 'success');
                         loadCacheInfo();
                     } else if (job.status === 'error') {
                         clearInterval(poll);
                         spinnerEl.style.display = 'none';
                         btn.disabled = false;
-                        btn.innerHTML = '<i class="bi bi-cloud-download"></i> Fetch Activities';
+                        btn.innerHTML = '<span class="step-badge">Step 1:</span> <i class="bi bi-cloud-download"></i> Fetch Activities';
                         statusEl.textContent = job.label || 'Fetch failed';
                         if (typeof showToast === 'function') showToast(job.label || 'Fetch failed', 'error');
                     }
                 } catch (_) {}
             }, 3000);
+        }
+
+        // ── Gear admin (moved from Reports — #369b) ──────────────
+
+        function bindGearAdminControls() {
+            const syncBtn = document.getElementById('sync-gear-btn');
+            const repairBtn = document.getElementById('repair-gear-btn');
+            if (!syncBtn || !repairBtn) return;
+
+            syncBtn.addEventListener('click', async () => {
+                const feedback = document.getElementById('gear-admin-feedback');
+                syncBtn.disabled = true;
+                syncBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Syncing…';
+                feedback.style.display = 'none';
+                try {
+                    const resp = await window.apiClient.fetch('/stats/refresh-gear', {
+                        method: 'POST',
+                        body: JSON.stringify({}),
+                    });
+                    if (resp.status === 'success') {
+                        feedback.style.display = '';
+                        feedback.innerHTML = `<span class="text-success small"><i class="bi bi-check-circle"></i> ${window.escapeHtml(resp.message || 'Gear synced')}</span>`;
+                        if (typeof showToast === 'function') showToast(resp.message || 'Gear synced', 'success');
+                    } else {
+                        feedback.style.display = '';
+                        feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(resp.message || 'Sync failed')}</span>`;
+                    }
+                } catch (e) {
+                    feedback.style.display = '';
+                    feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(e.message || 'Sync failed')}</span>`;
+                } finally {
+                    syncBtn.disabled = false;
+                    syncBtn.innerHTML = '<i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Sync Gear';
+                }
+            });
+
+            repairBtn.addEventListener('click', startGearRepair);
+        }
+
+        let _gearRepairPollInterval = null;
+
+        async function startGearRepair() {
+            const btn = document.getElementById('repair-gear-btn');
+            const statusEl = document.getElementById('gear-cache-status-settings');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Repairing…';
+
+            try {
+                const resp = await window.apiClient.fetch('/stats/backfill-gear-ids', {
+                    method: 'POST',
+                    body: JSON.stringify({}),
+                });
+                if (resp.status === 'started' || resp.status === 'already_running') {
+                    _gearRepairPollInterval = setInterval(pollGearRepair, 1500);
+                } else {
+                    if (typeof showToast === 'function') showToast(resp.message || 'Failed to start repair', 'error');
+                    resetGearRepairBtn();
+                }
+            } catch (e) {
+                if (typeof showToast === 'function') showToast(`Repair failed: ${e.message}`, 'error');
+                resetGearRepairBtn();
+            }
+        }
+
+        async function pollGearRepair() {
+            const statusEl = document.getElementById('gear-cache-status-settings');
+            try {
+                const resp = await window.apiClient.fetch('/stats/backfill-gear-ids/status');
+                if (resp.status === 'running') {
+                    statusEl.textContent = resp.label || 'Repairing…';
+                } else if (resp.status === 'done') {
+                    clearInterval(_gearRepairPollInterval);
+                    _gearRepairPollInterval = null;
+                    if (typeof showToast === 'function') showToast(resp.label || 'Gear names repaired', 'success');
+                    statusEl.textContent = '';
+                    resetGearRepairBtn();
+                } else if (resp.status === 'error') {
+                    clearInterval(_gearRepairPollInterval);
+                    _gearRepairPollInterval = null;
+                    if (typeof showToast === 'function') showToast(resp.label || 'Repair error', 'error');
+                    statusEl.textContent = '';
+                    resetGearRepairBtn();
+                }
+            } catch (e) {
+                // ignore transient poll errors
+            }
+        }
+
+        function resetGearRepairBtn() {
+            const btn = document.getElementById('repair-gear-btn');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-patch-check" aria-hidden="true"></i> Repair Gear Names';
         }
     </script>
 </body>
