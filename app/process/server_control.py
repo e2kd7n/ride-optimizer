@@ -1,79 +1,227 @@
-"""Server process management helpers.
+"""Server process management helpers (cross-platform, uses psutil).
 
-Extracted from launch.py (kill_existing_server, open_browser, run_server).
-Called by launch.py at startup/shutdown; not used inside any blueprint.
+Extracted from launch.py. Called by launch.py at startup/shutdown;
+not used inside any blueprint.
 """
 
+import json
 import logging
 import os
+import tempfile
 import time
 import webbrowser
+from datetime import datetime
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# PID file helpers
+# ---------------------------------------------------------------------------
+
+def _pid_file_path() -> str:
+    """Return the canonical path for the server PID file."""
+    return os.path.join(tempfile.gettempdir(), 'ride-optimizer-server.pid')
+
+
+def _write_pid_file(pid: int, port: int) -> None:
+    """Write PID, port, and start time to the PID file."""
+    pid_path = _pid_file_path()
+    data = {
+        'pid': pid,
+        'port': port,
+        'started': datetime.now().isoformat(),
+    }
+    with open(pid_path, 'w') as fh:
+        json.dump(data, fh)
+    try:
+        os.chmod(pid_path, 0o600)
+    except OSError:
+        pass  # Windows doesn't support chmod; not critical
+
+
+def _read_pid_file() -> dict:
+    """Read PID file. Returns {} if missing or corrupt."""
+    try:
+        with open(_pid_file_path()) as fh:
+            return json.load(fh)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {}
+
+
+def _remove_pid_file() -> None:
+    """Remove the PID file if it exists."""
+    try:
+        os.remove(_pid_file_path())
+    except FileNotFoundError:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Process identity helpers
+# ---------------------------------------------------------------------------
+
+def _is_our_server_process(pid: int) -> bool:
+    """Return True if *pid* is a live launch.py --serve process owned by us."""
+    try:
+        import psutil
+        proc = psutil.Process(pid)
+        if proc.status() == psutil.STATUS_ZOMBIE:
+            return False
+        cmdline_str = ' '.join(proc.cmdline())
+        return 'launch.py' in cmdline_str and '--serve' in cmdline_str
+    except Exception:
+        return False
+
+
+def _find_server_on_port(port: int) -> Optional[int]:
+    """
+    Fallback: scan listening sockets for *port* and return a matching
+    launch.py --serve PID, or None.
+    """
+    try:
+        import psutil
+        for conn in psutil.net_connections(kind='inet'):
+            if conn.laddr.port == port and conn.status == psutil.CONN_LISTEN and conn.pid:
+                if _is_our_server_process(conn.pid):
+                    return conn.pid
+    except Exception:
+        pass
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Public helpers
 # ---------------------------------------------------------------------------
 
-
 def kill_existing_server(port: int) -> None:
-    """Kill any existing server process running on *port*.
-
-    No-op if no process is found or if *port* is invalid.
-    Requires ``lsof`` (Linux / macOS); silently skips on Windows.
     """
-    import subprocess
-    import signal
+    Kill any existing ride-optimizer server process.
+
+    Strategy (cross-platform, no lsof/ps):
+    1. Read PID file; if the recorded process is our server → SIGTERM it.
+    2. Fall back to a port-scan via psutil to catch processes that started
+       without writing a PID file (e.g. older launcher versions).
+    3. Clean up the PID file afterwards.
+    """
+    import psutil
 
     if not isinstance(port, int) or port < 1024 or port > 65535:
         logger.error("Invalid port number: %s", port)
         return
 
-    try:
-        result = subprocess.run(
-            ['lsof', '-ti', f':{port}'],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if not result.stdout.strip():
-            return
+    killed_any = False
 
-        current_user: Optional[str] = os.getenv('USER') or os.getenv('USERNAME')
-        for pid_str in result.stdout.strip().split('\n'):
+    data = _read_pid_file()
+    if data:
+        pid = data.get('pid')
+        if pid and _is_our_server_process(pid):
             try:
-                pid_int = int(pid_str)
-                try:
-                    proc_info = subprocess.run(
-                        ['ps', '-p', str(pid_int), '-o', 'user='],
-                        capture_output=True,
-                        text=True,
-                        timeout=2,
-                    )
-                    proc_user = proc_info.stdout.strip()
-                    if proc_user == current_user:
-                        logger.info("Killing server process %s on port %s", pid_int, port)
-                        os.kill(pid_int, signal.SIGTERM)
-                        time.sleep(0.5)
-                    else:
-                        logger.warning(
-                            "Skipping process %s — owned by %s, not %s",
-                            pid_int, proc_user, current_user,
-                        )
-                except subprocess.TimeoutExpired:
-                    logger.warning("Timeout checking ownership of process %s", pid_int)
-                except Exception as exc:
-                    logger.debug("Could not verify process %s ownership: %s", pid_int, exc)
-            except (ValueError, ProcessLookupError, PermissionError) as exc:
-                logger.debug("Could not kill process %s: %s", pid_str, exc)
+                proc = psutil.Process(pid)
+                proc.terminate()
+                proc.wait(timeout=5)
+                logger.info(
+                    "Stopped existing server (PID %s, port %s, started %s)",
+                    pid, data.get('port', '?'), data.get('started', '?'),
+                )
+                killed_any = True
+            except psutil.TimeoutExpired:
+                proc.kill()
+                logger.warning("Server PID %s did not exit cleanly; force-killed.", pid)
+                killed_any = True
+            except psutil.NoSuchProcess:
+                logger.debug("PID %s from PID file no longer exists.", pid)
+        else:
+            logger.debug("PID file present but process is gone — cleaning up stale file.")
+        _remove_pid_file()
 
-    except subprocess.TimeoutExpired:
-        logger.error("Timeout checking for existing server")
-    except FileNotFoundError:
-        logger.debug("lsof not available; skipping process check")
-    except Exception as exc:
-        logger.warning("Error checking for existing server: %s", exc)
+    pid_via_port = _find_server_on_port(port)
+    if pid_via_port and not killed_any:
+        try:
+            proc = psutil.Process(pid_via_port)
+            proc.terminate()
+            proc.wait(timeout=5)
+            logger.info("Stopped stale server found on port %s (PID %s)", port, pid_via_port)
+        except psutil.TimeoutExpired:
+            proc.kill()
+            logger.warning("Stale server PID %s did not exit cleanly; force-killed.", pid_via_port)
+        except psutil.NoSuchProcess:
+            pass
+
+
+def server_status() -> dict:
+    """
+    Return a dict describing the current server state:
+      {'running': bool, 'pid': int|None, 'port': int|None,
+       'started': str|None, 'uptime_seconds': float|None}
+    """
+    import psutil
+
+    PORT = 8083
+    port = int(os.environ.get('RIDE_OPTIMIZER_PORT', PORT))
+
+    data = _read_pid_file()
+    if not data:
+        pid = _find_server_on_port(port)
+        if pid:
+            return {'running': True, 'pid': pid, 'port': port, 'started': None, 'uptime_seconds': None}
+        return {'running': False, 'pid': None, 'port': None, 'started': None, 'uptime_seconds': None}
+
+    pid = data.get('pid')
+    if pid and _is_our_server_process(pid):
+        uptime = None
+        try:
+            proc = psutil.Process(pid)
+            uptime = (datetime.now() - datetime.fromtimestamp(proc.create_time())).total_seconds()
+        except Exception:
+            pass
+        return {
+            'running': True,
+            'pid': pid,
+            'port': data.get('port'),
+            'started': data.get('started'),
+            'uptime_seconds': uptime,
+        }
+
+    _remove_pid_file()
+    return {'running': False, 'pid': None, 'port': None, 'started': None, 'uptime_seconds': None}
+
+
+def stop_server() -> bool:
+    """Stop the tracked server. Returns True if a process was stopped."""
+    import psutil
+
+    PORT = 8083
+    port = int(os.environ.get('RIDE_OPTIMIZER_PORT', PORT))
+
+    data = _read_pid_file()
+    pid = data.get('pid') if data else None
+
+    if not pid:
+        pid = _find_server_on_port(port)
+
+    if not pid:
+        logger.info("No running server found.")
+        return False
+
+    if not _is_our_server_process(pid):
+        logger.info("PID %s is no longer a ride-optimizer server process.", pid)
+        _remove_pid_file()
+        return False
+
+    try:
+        proc = psutil.Process(pid)
+        proc.terminate()
+        proc.wait(timeout=5)
+        logger.info("Server PID %s stopped.", pid)
+    except psutil.TimeoutExpired:
+        proc.kill()
+        logger.warning("Server PID %s force-killed after timeout.", pid)
+    except psutil.NoSuchProcess:
+        logger.debug("PID %s was already gone.", pid)
+
+    _remove_pid_file()
+    return True
 
 
 def open_browser(port: int) -> None:
@@ -91,7 +239,7 @@ def open_browser(port: int) -> None:
         logger.error("Invalid URL for browser: %s", url)
         return
 
-    time.sleep(1.5)  # Wait for server to start
+    time.sleep(1.5)
 
     try:
         system = platform.system()
@@ -113,3 +261,12 @@ def open_browser(port: int) -> None:
     except Exception as exc:
         logger.warning("Could not open browser automatically: %s", exc)
         logger.info("Please open your browser manually to: %s", url)
+
+
+def run_server(app, port: int) -> None:
+    """Write PID file and run the Flask server. Called from launch.py ``--serve`` mode."""
+    _write_pid_file(os.getpid(), port)
+    try:
+        app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+    finally:
+        _remove_pid_file()
