@@ -83,6 +83,7 @@ function initMap() {
     waypointMarkers = L.layerGroup().addTo(map);
 
     map.on('click', (e) => {
+        clearHighlight();
         setStart(e.latlng.lat, e.latlng.lng);
     });
 }
@@ -321,13 +322,63 @@ function renderNewTiles(newTilesByZoom) {
 
 // ── Route generation ────────────────────────────────────────────
 
-const ROUTE_COLORS = ['#0d6efd', '#fd7e14', '#6f42c1', '#20c997'];
+/**
+ * Tonal colour pairs per direction (#409).
+ * base  = Phase-2 road polyline + badge swatch.
+ * light = Phase-1 dashed preview (lower saturation).
+ */
+const ROUTE_PALETTE = {
+    NE: { base: '#0d6efd', light: '#7ab5fe' },
+    SE: { base: '#e8690e', light: '#f5ac71' },
+    SW: { base: '#6f42c1', light: '#b094dd' },
+    NW: { base: '#0f9e7a', light: '#6fd4bb' },
+};
+const _PALETTE_ORDER = ['NE', 'SE', 'SW', 'NW'];
+function _paletteFor(dirOrIndex) {
+    if (typeof dirOrIndex === 'string' && ROUTE_PALETTE[dirOrIndex]) return ROUTE_PALETTE[dirOrIndex];
+    return ROUTE_PALETTE[_PALETTE_ORDER[dirOrIndex % 4]];
+}
+
 const DIRECTION_LABELS = { NE: 'Northeast', SE: 'Southeast', SW: 'Southwest', NW: 'Northwest' };
 
 // Per-direction Phase-1 polyline references, keyed by direction ('NE', etc.)
 const _phase1Polylines = {};
 // Per-direction Phase-2 polyline references
 const _phase2Polylines = {};
+
+// ── Highlight / deselect state (#407 + #408) ─────────────────────
+
+let _selectedDirection = null;
+const _BASE_STYLE_P1 = { weight: 3, opacity: 0.8 };
+const _BASE_STYLE_P2 = { weight: 4, opacity: 1.0 };
+const _DIM_OPACITY    = 0.25;
+
+function highlightRoute(dir) {
+    if (_selectedDirection === dir) { clearHighlight(); return; }
+    _selectedDirection = dir;
+    Object.keys(_phase1Polylines).forEach(k => {
+        _phase1Polylines[k].setStyle(k === dir ? { weight: 5, opacity: 1.0 } : { opacity: _DIM_OPACITY });
+    });
+    Object.keys(_phase2Polylines).forEach(k => {
+        _phase2Polylines[k].setStyle(k === dir ? { weight: 6, opacity: 1.0 } : { opacity: _DIM_OPACITY });
+    });
+    document.querySelectorAll('.route-badge').forEach(el => {
+        el.classList.toggle('route-badge--selected', el.dataset.direction === dir);
+        el.classList.toggle('route-badge--dimmed',   el.dataset.direction !== dir);
+    });
+    const activeBadge = document.querySelector(`.route-badge[data-direction="${dir}"]`);
+    if (activeBadge) activeBadge.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    const active = _phase2Polylines[dir] || _phase1Polylines[dir];
+    if (active) { try { map.fitBounds(active.getBounds(), { padding: [32, 32] }); } catch (_) {} }
+}
+
+function clearHighlight() {
+    _selectedDirection = null;
+    Object.keys(_phase1Polylines).forEach(k => _phase1Polylines[k].setStyle(_BASE_STYLE_P1));
+    Object.keys(_phase2Polylines).forEach(k => _phase2Polylines[k].setStyle(_BASE_STYLE_P2));
+    document.querySelectorAll('.route-badge').forEach(el =>
+        el.classList.remove('route-badge--selected', 'route-badge--dimmed'));
+}
 
 /**
  * Draw small arrowhead triangles at the midpoint of each segment in `coords`.
@@ -393,6 +444,7 @@ async function generateRoute() {
     spinnerEl.classList.remove('d-none');
     statusEl.textContent = 'Computing exploration routes…';
 
+    clearHighlight();
     waypointMarkers.clearLayers();
     newTilesLayer.clearLayers();
     routeLayer.clearLayers();
@@ -475,7 +527,7 @@ async function generateRoute() {
 }
 
 function renderRoute(route, index) {
-    const color = ROUTE_COLORS[index % ROUTE_COLORS.length];
+    const palette = _paletteFor(route.direction);
     const startPos = startMarker.getLatLng();
     const coords = [[startPos.lat, startPos.lng]];
 
@@ -483,8 +535,8 @@ function renderRoute(route, index) {
         coords.push([wp.lat, wp.lon]);
         const marker = L.circleMarker([wp.lat, wp.lon], {
             radius: 6,
-            color,
-            fillColor: color,
+            color: palette.light,
+            fillColor: palette.light,
             fillOpacity: 0.8,
         }).bindPopup(`${DIRECTION_LABELS[route.direction]} · Waypoint ${i + 1}`);
         waypointMarkers.addLayer(marker);
@@ -494,13 +546,14 @@ function renderRoute(route, index) {
 
     const distanceLabel = window.formatDistance ? window.formatDistance(route.stats.distanceKm, 1) : `${route.stats.distanceKm.toFixed(1)} km`;
     const line = L.polyline(coords, {
-        color,
+        color: palette.light,
         weight: 3,
         dashArray: '8, 8',
         opacity: 0.8,
     }).bindPopup(`${DIRECTION_LABELS[route.direction]} — ${distanceLabel}, ${newTilesLabel(route.stats)}`);
+    line.on('click', (e) => { L.DomEvent.stopPropagation(e); highlightRoute(route.direction); });
     routeLayer.addLayer(line);
-    addArrows(coords, color);
+    addArrows(coords, palette.light);
     _phase1Polylines[route.direction] = line;
 }
 
@@ -512,7 +565,8 @@ function newTilesLabel(stats) {
 }
 
 function addRouteListItem(route, index, targetDistanceKm) {
-    const color = ROUTE_COLORS[index % ROUTE_COLORS.length];
+    const palette = _paletteFor(route.direction);
+    const color = palette.base;
     const distanceLabel = window.formatDistance ? window.formatDistance(route.stats.distanceKm, 1) : `${route.stats.distanceKm.toFixed(1)} km`;
     const dir = route.direction;
 
@@ -533,6 +587,10 @@ function addRouteListItem(route, index, targetDistanceKm) {
     `;
     document.getElementById('route-list').appendChild(badge);
 
+    badge.addEventListener('click', (e) => {
+        if (e.target.closest('.plot-road-btn')) return;
+        highlightRoute(dir);
+    });
     badge.querySelector('.plot-road-btn').addEventListener('click', () => {
         plotRoadRoute(dir, route, targetDistanceKm, color, badge);
     });
@@ -679,6 +737,7 @@ async function plotRoadRoute(direction, route, targetDistanceKm, color, badgeEl)
         const line = L.polyline(latlngs, { color, weight: 4, opacity });
         const distLabel = window.formatDistance ? window.formatDistance(result.distance_km, 1) : `${result.distance_km} km`;
         line.bindPopup(`${DIRECTION_LABELS[direction]} ${label} — ${distLabel}, ${result.duration_min} min`);
+        line.on('click', (e) => { L.DomEvent.stopPropagation(e); highlightRoute(direction); });
         routeLayer.addLayer(line);
         addArrows(latlngs, color);
         return { line, result, distLabel };
