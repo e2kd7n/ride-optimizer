@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-07-06 03:56:53 UTC / 2026-07-05 22:56:53 CDT
+**Last Updated:** 2026-07-06 12:47:27 UTC / 2026-07-06 07:47:27 CDT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -10,7 +10,7 @@ This file reflects the current state of GitHub issues organized by release miles
 
 - **Current Release:** none (deployed, milestone fully closed)
 - **Next Release:** v0.17.0 (in development)
-- **Future Releases:** 
+- **Future Releases:** v0.18.0
 
 ---
 
@@ -39,15 +39,19 @@ This file reflects the current state of GitHub issues organized by release miles
 - #416 - Phase 3: Parallel service initialisation via ServiceContainer
 - #415 - Phase 2: Extract infrastructure — credentials, env helpers, process management
 - #413 - Epic: launch.py Blueprint Refactor — Split 3,404-line monolith into 9 focused Blueprints
-- #402 - Explore: support round-trip vs. point-to-point route type with configurable endpoint
 
 ### 🟢 P3 - LOW
 - #443 - PR #431: bottom-nav-more drawer markup duplicated across 7 pages
-- #430 - Coverage tracker should include Garmin activities, not just Strava
-- #419 - Phase 6: Cleanup — remove dead code, update AGENTS.md architecture section
 
 ### 📋 P4 - FUTURE
 **No P4 issues** ✅
+
+---
+
+## 📅 v0.18.0 (Future Release)
+
+### 🟢 P3 - LOW
+- #430 - Coverage tracker should include Garmin activities, not just Strava
 
 ---
 

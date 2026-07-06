@@ -186,33 +186,41 @@ def mock_planner_service():
 def mock_services(monkeypatch, mock_config, mock_analysis_service, mock_weather_service,
                   mock_commute_service, mock_route_library_service, mock_planner_service):
     """
-    Patch all services in launch.py with mocked versions.
-    
+    Patch all services in the container with mocked versions.
+
     This fixture ensures the API can initialize without requiring Strava authentication.
     """
-    # Patch the config
-    monkeypatch.setattr('launch.config', mock_config)
-    
-    # Patch the initialize_services function to use mocked services
-    def mock_initialize_services():
-        import launch
-        launch._services_initialized = True
-        launch._analysis_service = mock_analysis_service
-        launch._weather_service = mock_weather_service
-        launch._commute_service = mock_commute_service
-        launch._route_library_service = mock_route_library_service
-        launch._planner_service = mock_planner_service
-    
-    # Apply the patch
-    monkeypatch.setattr('launch.initialize_services', mock_initialize_services)
-    
-    return {
+    from launch import app
+    from app.container import ServiceContainer
+    from src.config_manager import ConfigManager
+
+    # Patch ConfigManager so routes that call ConfigManager.get_instance() see mock data
+    monkeypatch.setattr(ConfigManager, 'get_instance', lambda: mock_config)
+
+    # Pre-populate the container with mocked services and mark as initialised
+    container = app.container
+    container.analysis_service = mock_analysis_service
+    container.weather_service = mock_weather_service
+    container.commute_service = mock_commute_service
+    container.route_library_service = mock_route_library_service
+    container.planner_service = mock_planner_service
+    container._initialised = True
+
+    yield {
         'analysis': mock_analysis_service,
         'weather': mock_weather_service,
         'commute': mock_commute_service,
         'route_library': mock_route_library_service,
         'planner': mock_planner_service
     }
+
+    # Reset container state after test so other tests start fresh
+    container._initialised = False
+    container.analysis_service = None
+    container.weather_service = None
+    container.commute_service = None
+    container.route_library_service = None
+    container.planner_service = None
 
 @pytest.fixture
 def client():

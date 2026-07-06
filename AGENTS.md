@@ -12,7 +12,7 @@ Please also refer to CLAUDE.md for direction. In the event of a conflict - expla
 
 **THE PRODUCT IS A WEB APPLICATION. Period.**
 
-- ✅ **Active System:** `launch.py` (port 8083) + `static/` files + `app/services/`
+- ✅ **Active System:** `launch.py` (CLI entry, port 8083) + `app/api/*_bp.py` + `static/` files + `app/services/`
 - ❌ **Deprecated System:** `main.py` + `templates/` (archived to `archive/deprecated_cli_system/`)
 
 ### Where to Make Changes
@@ -25,9 +25,10 @@ static/commute.html         # Commute recommendations
 static/planner.html         # Long ride planner
 static/css/main.css         # Styles
 static/js/*.js              # Client-side logic
-launch.py                   # API endpoints (migration in progress — see Epic #413)
-app/api/*_bp.py             # API Blueprints (target; stubs only until migration complete)
+app/api/*_bp.py             # API route handlers (9 Blueprints)
 app/services/*.py           # Business logic
+app/container.py            # ServiceContainer (wave-parallel init)
+launch.py                   # CLI entry point only (~155 lines)
 ```
 
 #### ❌ NEVER EDIT THESE FOR UI/UX (WRONG):
@@ -58,14 +59,9 @@ main.py                                     # CLI tool - not for UI work
 
 **If implementing a UI/UX feature:**
 1. Is it for the web app? → Edit `static/` files
-2. Is it for API endpoints? → Edit `app/api/*_bp.py` (or `launch.py` during migration — see note below)
+2. Is it for API endpoints? → Edit the relevant `app/api/*_bp.py` Blueprint
 3. Is it for business logic? → Edit `app/services/`
 4. Is it for CLI data analysis? → Edit `main.py` (but NOT templates)
-
-**⚠️ Blueprint migration in progress (Epic #413):**
-- Routes are being extracted from `launch.py` into `app/api/*_bp.py` Blueprints (Phases 2–5 still open)
-- Until a route has been extracted, it still lives in `launch.py`
-- Check the relevant `app/api/*_bp.py` stub; if it only contains `bp = Blueprint(...)` with no handlers, the route is still in `launch.py`
 
 **If you see "templates/" in an issue:**
 - STOP and ask for clarification
@@ -74,19 +70,18 @@ main.py                                     # CLI tool - not for UI work
 
 ### Web App Architecture (ACTIVE)
 
-> **Note:** Blueprint migration (Epic #413) is in progress. The target structure below is partially scaffolded. Until Phase 5 (#418) completes, all route handlers live in `launch.py`.
+> **Blueprint refactor complete (Epic #413).** All route handlers live in `app/api/` Blueprints.
 
-**Target structure (scaffolded, migration in progress):**
 ```
 User Browser
     ↓
-launch.py (CLI entry, ~120 lines — target once migration complete)
+launch.py (~155 lines — CLI entry point only)
     ↓
 app/factory.py (create_app)
     ↓
 app/container.py (ServiceContainer, wave-parallel init)
     ↓
-app/api/*_bp.py (9 Blueprints)
+app/api/*_bp.py (9 Blueprints — all routes)
     weather_bp.py      /api/weather/*
     commute_bp.py      /api/commute, /api/recommendation, /api/workout-options
     routes_bp.py       /api/routes/*

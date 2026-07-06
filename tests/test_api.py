@@ -356,11 +356,11 @@ class TestDeleteUserData:
         assert response.status_code == 400
 
     def test_delete_succeeds_with_confirmation(self, client, tmp_path, monkeypatch):
-        import launch
         from src.json_storage import JSONStorage
+        import app.api.core_bp as core_bp
         test_storage = JSONStorage(str(tmp_path))
         test_storage.write('test_data.json', {'key': 'value'})
-        monkeypatch.setattr(launch, 'storage', test_storage)
+        monkeypatch.setattr(core_bp, '_storage', test_storage)
         response = client.delete('/api/user/data', json={'confirm': True})
         assert response.status_code == 200
         data = response.get_json()
@@ -430,10 +430,11 @@ class TestSettingsAPI:
 class TestGracefulDegradation:
     """Test that endpoints return 503 when their service is unavailable."""
 
-    def _mock_init_with_null_service(self, monkeypatch, service_attr):
-        monkeypatch.setattr('launch.initialize_services', lambda: None)
-        monkeypatch.setattr('launch._services_initialized', True)
-        monkeypatch.setattr(f'launch.{service_attr}', None)
+    def _set_null_service(self, client, attr):
+        """Set a service to None on the app container and keep _initialised=True."""
+        container = client.application.container
+        setattr(container, attr, None)
+        container._initialised = True
 
     def test_status_reports_service_health(self, client, mock_services):
         response = client.get('/api/status')
@@ -451,40 +452,40 @@ class TestGracefulDegradation:
         assert data['services']['weather'] == 'available'
         assert data['services']['commute'] == 'available'
 
-    def test_weather_503_when_service_unavailable(self, client, mock_services, monkeypatch):
-        self._mock_init_with_null_service(monkeypatch, '_weather_service')
+    def test_weather_503_when_service_unavailable(self, client, mock_services):
+        self._set_null_service(client, 'weather_service')
         response = client.get('/api/weather?lat=40.7&lon=-74.0')
         assert response.status_code == 503
         data = response.get_json()
         assert data['status'] == 'error'
         assert 'Weather' in data['message']
 
-    def test_recommendation_503_when_service_unavailable(self, client, mock_services, monkeypatch):
-        self._mock_init_with_null_service(monkeypatch, '_commute_service')
+    def test_recommendation_503_when_service_unavailable(self, client, mock_services):
+        self._set_null_service(client, 'commute_service')
         response = client.get('/api/recommendation')
         assert response.status_code == 503
         data = response.get_json()
         assert data['status'] == 'error'
         assert 'Commute' in data['message']
 
-    def test_routes_503_when_service_unavailable(self, client, mock_services, monkeypatch):
-        self._mock_init_with_null_service(monkeypatch, '_route_library_service')
+    def test_routes_503_when_service_unavailable(self, client, mock_services):
+        self._set_null_service(client, 'route_library_service')
         response = client.get('/api/routes')
         assert response.status_code == 503
         data = response.get_json()
         assert data['status'] == 'error'
         assert 'Route Library' in data['message']
 
-    def test_trainerroad_503_when_service_unavailable(self, client, mock_services, monkeypatch):
-        self._mock_init_with_null_service(monkeypatch, '_trainerroad_service')
+    def test_trainerroad_503_when_service_unavailable(self, client, mock_services):
+        self._set_null_service(client, 'trainerroad_service')
         response = client.get('/api/trainerroad/status')
         assert response.status_code == 503
         data = response.get_json()
         assert data['status'] == 'error'
         assert 'TrainerRoad' in data['message']
 
-    def test_analysis_503_when_unavailable(self, client, mock_services, monkeypatch):
-        self._mock_init_with_null_service(monkeypatch, '_analysis_service')
+    def test_analysis_503_when_unavailable(self, client, mock_services):
+        self._set_null_service(client, 'analysis_service')
         response = client.get('/api/status')
         assert response.status_code == 503
         data = response.get_json()
@@ -494,11 +495,13 @@ class TestGracefulDegradation:
 
 @pytest.mark.integration
 class TestLaunchInitialization:
-    """Light integration coverage for launch service initialization."""
+    """Light integration coverage for service initialization."""
 
-    def test_initialize_services_uses_existing_flag(self, monkeypatch):
-        """Test initialize_services returns early when already initialized."""
-        monkeypatch.setattr(launch, '_services_initialized', True)
-        launch.initialize_services()
-        assert launch._services_initialized is True
+    def test_initialize_services_uses_existing_flag(self):
+        """Test container.initialise() is idempotent when already initialized."""
+        from launch import app
+        container = app.container
+        container._initialised = True
+        container.initialise()  # should not re-run init
+        assert container._initialised is True
 

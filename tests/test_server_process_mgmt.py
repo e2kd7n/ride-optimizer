@@ -41,6 +41,10 @@ def tmp_pid_path(tmp_path, monkeypatch):
     """Redirect _pid_file_path() to a temp directory for isolation."""
     pid_file = str(tmp_path / 'ride-optimizer-server.pid')
 
+    # Patch at the canonical module so all callers in server_control see the patch
+    import app.process.server_control as sc
+    monkeypatch.setattr(sc, '_pid_file_path', lambda: pid_file)
+    # Also patch on launch for backward compatibility with any direct references
     import launch
     monkeypatch.setattr(launch, '_pid_file_path', lambda: pid_file)
     return pid_file
@@ -130,6 +134,7 @@ class TestIsOurServerProcess:
 class TestKillExistingServer:
     def test_kills_process_from_pid_file(self, tmp_pid_path):
         import launch
+        import app.process.server_control as sc
         import psutil
 
         launch._write_pid_file(pid=11111, port=8083)
@@ -139,7 +144,7 @@ class TestKillExistingServer:
         mock_proc.cmdline.return_value = ['python', 'launch.py', '--serve', '8083']
 
         with patch('psutil.Process', return_value=mock_proc):
-            with patch.object(launch, '_find_server_on_port', return_value=None):
+            with patch.object(sc, '_find_server_on_port', return_value=None):
                 launch.kill_existing_server(8083)
 
         mock_proc.terminate.assert_called_once()
@@ -148,32 +153,35 @@ class TestKillExistingServer:
 
     def test_cleans_up_stale_pid_file(self, tmp_pid_path):
         import launch
+        import app.process.server_control as sc
         import psutil
 
         launch._write_pid_file(pid=22222, port=8083)
 
         with patch('psutil.Process', side_effect=psutil.NoSuchProcess(pid=22222)):
-            with patch.object(launch, '_find_server_on_port', return_value=None):
+            with patch.object(sc, '_find_server_on_port', return_value=None):
                 launch.kill_existing_server(8083)
 
         assert not os.path.exists(tmp_pid_path)
 
     def test_port_scan_fallback_when_no_pid_file(self, tmp_pid_path):
         import launch
+        import app.process.server_control as sc
 
         mock_proc = MagicMock()
         mock_proc.status.return_value = 'running'
         mock_proc.cmdline.return_value = ['python', 'launch.py', '--serve', '8083']
 
         with patch('psutil.Process', return_value=mock_proc):
-            with patch.object(launch, '_find_server_on_port', return_value=33333):
+            with patch.object(sc, '_find_server_on_port', return_value=33333):
                 launch.kill_existing_server(8083)
 
         mock_proc.terminate.assert_called_once()
 
     def test_invalid_port_returns_early(self, tmp_pid_path):
         import launch
-        with patch.object(launch, '_read_pid_file') as mock_read:
+        import app.process.server_control as sc
+        with patch.object(sc, '_read_pid_file') as mock_read:
             launch.kill_existing_server(80)  # below 1024 — invalid
             mock_read.assert_not_called()
 
