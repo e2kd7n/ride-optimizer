@@ -880,7 +880,6 @@ async function loadConditionsCard() {
                 const expanded = toggle.getAttribute('aria-expanded') === 'true';
                 toggle.setAttribute('aria-expanded', String(!expanded));
                 fullRows.classList.toggle('conditions-rows-open', !expanded);
-                toggle.querySelector('.conditions-chevron').style.transform = expanded ? '' : 'rotate(180deg)';
             });
             toggle.addEventListener('keydown', e => {
                 if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle.click(); }
@@ -955,7 +954,6 @@ async function loadRouteStatus() {
                 const expanded = toggle.getAttribute('aria-expanded') === 'true';
                 toggle.setAttribute('aria-expanded', String(!expanded));
                 fullRows.classList.toggle('route-status-rows-open', !expanded);
-                toggle.querySelector('.route-status-chevron').style.transform = expanded ? '' : 'rotate(180deg)';
                 toggle.querySelector('span').textContent = expanded
                     ? `Show all route conditions (${count})`
                     : 'Hide route conditions';
