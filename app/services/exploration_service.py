@@ -158,7 +158,7 @@ class ExplorationService:
                 "status": "error",
                 "message": "Road routing rate limit reached — try again shortly",
             }
-        if raw.get("_ors_unroutable"):
+        if raw.get("_ors_unroutable") is not None:
             return {"status": "error", "message": "Road routing failed: no routable path near waypoints"}
 
         try:

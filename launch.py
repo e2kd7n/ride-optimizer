@@ -2877,9 +2877,16 @@ def _compute_summary(activities):
     }
 
 
+# Sport types treated as "cycling" for Personal Records (#376) — mirrors the
+# activity-type-filter dropdown options minus Run. Keep in sync with
+# CYCLING_TYPES in static/js/reports.js.
+_CYCLING_SPORT_TYPES = {'Ride', 'GravelRide', 'EBikeRide', 'VirtualRide'}
+
+
 def _compute_records(activities):
-    """Personal records across activities."""
-    if not activities:
+    """Personal records across cycling activities only (#376, #434)."""
+    cycling = [a for a in activities if (a.sport_type or a.type) in _CYCLING_SPORT_TYPES]
+    if not cycling:
         return {}
 
     def _fmt(a):
@@ -2892,10 +2899,10 @@ def _compute_records(activities):
             'time_h': round(_seconds_to_hours(a.moving_time), 1),
         }
 
-    longest = max(activities, key=lambda a: a.distance)
-    highest_elev = max(activities, key=lambda a: a.total_elevation_gain)
-    fastest = max(activities, key=lambda a: a.average_speed)
-    most_kj = max((a for a in activities if a.kilojoules), key=lambda a: a.kilojoules, default=None)
+    longest = max(cycling, key=lambda a: a.distance)
+    highest_elev = max(cycling, key=lambda a: a.total_elevation_gain)
+    fastest = max(cycling, key=lambda a: a.average_speed)
+    most_kj = max((a for a in cycling if a.kilojoules), key=lambda a: a.kilojoules, default=None)
     records = {
         'longest_ride': _fmt(longest),
         'most_elevation': _fmt(highest_elev),
