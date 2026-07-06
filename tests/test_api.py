@@ -357,10 +357,10 @@ class TestDeleteUserData:
 
     def test_delete_succeeds_with_confirmation(self, client, tmp_path, monkeypatch):
         from src.json_storage import JSONStorage
-        import app.api.core_bp as core_bp
+        from launch import app
         test_storage = JSONStorage(str(tmp_path))
         test_storage.write('test_data.json', {'key': 'value'})
-        monkeypatch.setattr(core_bp, '_storage', test_storage)
+        monkeypatch.setattr(app.container, 'storage', test_storage)
         response = client.delete('/api/user/data', json={'confirm': True})
         assert response.status_code == 200
         data = response.get_json()

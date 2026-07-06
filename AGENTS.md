@@ -28,7 +28,7 @@ static/js/*.js              # Client-side logic
 app/api/*_bp.py             # API route handlers (9 Blueprints)
 app/services/*.py           # Business logic
 app/container.py            # ServiceContainer (wave-parallel init)
-launch.py                   # CLI entry point only (~155 lines)
+launch.py                   # CLI entry point only (133 lines)
 ```
 
 #### ❌ NEVER EDIT THESE FOR UI/UX (WRONG):
@@ -75,7 +75,7 @@ main.py                                     # CLI tool - not for UI work
 ```
 User Browser
     ↓
-launch.py (~155 lines — CLI entry point only)
+launch.py (133 lines — CLI entry point only)
     ↓
 app/factory.py (create_app)
     ↓
