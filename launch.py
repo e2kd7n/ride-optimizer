@@ -112,10 +112,12 @@ def set_security_headers(response):
     # Content Security Policy
     response.headers['Content-Security-Policy'] = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
-        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com "
+        "https://code.jquery.com https://cdnjs.cloudflare.com; "
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com "
+        "https://cdnjs.cloudflare.com https://netdna.bootstrapcdn.com; "
         "img-src 'self' data: https: blob:; "
-        "font-src 'self' https://cdn.jsdelivr.net; "
+        "font-src 'self' https://cdn.jsdelivr.net https://netdna.bootstrapcdn.com; "
         "connect-src 'self' https://cdn.jsdelivr.net https://unpkg.com; "
         "frame-src 'self' blob:; "
         "frame-ancestors 'none'"
