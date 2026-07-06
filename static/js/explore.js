@@ -16,6 +16,7 @@ let newTilesLayer = null;   // green highlight for tiles a route will claim
 let routeLayer = null;
 let waypointMarkers = null;
 let startMarker = null;
+let endMarker = null;
 let coverageData = null;
 let coverageDataSecondary = null;
 let explorationWorker = null;
@@ -36,10 +37,12 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('workout-combo-btn').addEventListener('click', generateWorkoutCombo);
     document.getElementById('location-search-btn').addEventListener('click', searchLocation);
     document.getElementById('location-search-input').addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            searchLocation();
-        }
+        if (e.key === 'Enter') { e.preventDefault(); searchLocation(); }
+    });
+    document.getElementById('route-type-select').addEventListener('change', onRouteTypeChange);
+    document.getElementById('end-search-btn').addEventListener('click', searchEndLocation);
+    document.getElementById('end-search-input').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); searchEndLocation(); }
     });
     initDistanceSlider();
     initTooltips();
@@ -85,7 +88,13 @@ function initMap() {
 
     map.on('click', (e) => {
         clearHighlight();
-        setStart(e.latlng.lat, e.latlng.lng);
+        const routeType = document.getElementById('route-type-select').value;
+        // In point-to-point mode: first click sets end if unset, else update start.
+        if (routeType === 'point_to_point' && !endMarker) {
+            setEnd(e.latlng.lat, e.latlng.lng);
+        } else {
+            setStart(e.latlng.lat, e.latlng.lng);
+        }
     });
 }
 
@@ -99,6 +108,43 @@ function setStart(lat, lon, label = null) {
     updateWorkflowState();
 }
 
+function setEnd(lat, lon, label = null) {
+    if (endMarker) map.removeLayer(endMarker);
+    // Coral/red end marker to distinguish from the default blue start marker.
+    endMarker = L.marker([lat, lon], {
+        title: 'End',
+        alt: 'Route end point',
+        icon: L.divIcon({
+            className: '',
+            html: '<svg xmlns="http://www.w3.org/2000/svg" width="25" height="41" viewBox="0 0 25 41">' +
+                  '<path d="M12.5 0C5.6 0 0 5.6 0 12.5c0 9.4 12.5 28.5 12.5 28.5S25 21.9 25 12.5C25 5.6 19.4 0 12.5 0z" fill="#C4483A"/>' +
+                  '<circle cx="12.5" cy="12.5" r="5" fill="#fff"/>' +
+                  '</svg>',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34],
+        }),
+    }).addTo(map).bindPopup('End').openPopup();
+    document.getElementById('end-display').textContent = label || `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+    updateWorkflowState();
+}
+
+function clearEnd() {
+    if (endMarker) { map.removeLayer(endMarker); endMarker = null; }
+    document.getElementById('end-display').textContent = 'Click map or search to set';
+    document.getElementById('end-search-input').value = '';
+    updateWorkflowState();
+}
+
+// ── Route type toggle ───────────────────────────────────────────
+
+function onRouteTypeChange() {
+    const isPtp = document.getElementById('route-type-select').value === 'point_to_point';
+    document.getElementById('end-location-group').classList.toggle('d-none', !isPtp);
+    if (!isPtp) clearEnd();
+    updateWorkflowState();
+}
+
 // ── Workflow step tracking (#361) ──────────────────────────────
 
 function isCoverageReady() {
@@ -109,7 +155,8 @@ function isCoverageReady() {
 function updateWorkflowState() {
     const coverageReady = isCoverageReady();
     const startReady = !!startMarker;
-    const ready = coverageReady && startReady;
+    const isPtp = document.getElementById('route-type-select').value === 'point_to_point';
+    const ready = coverageReady && startReady && (!isPtp || !!endMarker);
 
     document.getElementById('workflow-step-1').classList.toggle('workflow-step-done', coverageReady);
     document.getElementById('workflow-step-2').classList.toggle('workflow-step-done', startReady);
@@ -132,6 +179,7 @@ function updateWorkflowState() {
         const missing = [];
         if (!coverageReady) missing.push('load your coverage');
         if (!startReady) missing.push('set a start point');
+        if (isPtp && !endMarker) missing.push('set an end point');
         statusEl.textContent = `Next: ${missing.join(' and ')} to generate routes.`;
     } else {
         statusEl.textContent = 'Ready to generate routes.';
@@ -158,8 +206,35 @@ async function searchLocation() {
             if (typeof showToast === 'function') showToast(result.message || 'Location not found', 'warning');
             return;
         }
-
         setStart(result.lat, result.lon, result.display_name);
+        map.setView([result.lat, result.lon], 12);
+    } catch (e) {
+        statusEl.textContent = previousText;
+        if (typeof showToast === 'function') showToast(e.message || 'Location search failed', 'error');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function searchEndLocation() {
+    const input = document.getElementById('end-search-input');
+    const btn = document.getElementById('end-search-btn');
+    const query = input.value.trim();
+    if (!query) return;
+
+    btn.disabled = true;
+    const statusEl = document.getElementById('end-display');
+    const previousText = statusEl.textContent;
+    statusEl.textContent = 'Searching…';
+
+    try {
+        const result = await api.geocodeLocation(query);
+        if (result.status !== 'success') {
+            statusEl.textContent = previousText;
+            if (typeof showToast === 'function') showToast(result.message || 'Location not found', 'warning');
+            return;
+        }
+        setEnd(result.lat, result.lon, result.display_name);
         map.setView([result.lat, result.lon], 12);
     } catch (e) {
         statusEl.textContent = previousText;
@@ -519,12 +594,15 @@ async function generateRoute() {
         statusEl.textContent = 'Worker error: ' + err.message;
     };
 
+    const routeType = document.getElementById('route-type-select').value;
+    const endPos = (routeType === 'point_to_point' && endMarker) ? endMarker.getLatLng() : null;
+
     explorationWorker.postMessage({
         start: { lat: startPos.lat, lon: startPos.lng },
-        end: null,
+        end: endPos ? { lat: endPos.lat, lon: endPos.lng } : null,
         distanceKm,
         mode: 'tiles',
-        routeType: 'round_trip',
+        routeType,
         coverageData,
         coverageDataSecondary: mode === 'both' ? coverageDataSecondary : null,
         optimizeFor,
@@ -645,6 +723,7 @@ async function generateWorkoutCombo() {
 function renderRoute(route, index) {
     const palette = _paletteFor(route.direction);
     const startPos = startMarker.getLatLng();
+    const routeType = document.getElementById('route-type-select').value;
     const coords = [[startPos.lat, startPos.lng]];
 
     route.waypoints.forEach((wp, i) => {
@@ -658,7 +737,13 @@ function renderRoute(route, index) {
         waypointMarkers.addLayer(marker);
     });
 
-    coords.push([startPos.lat, startPos.lng]);
+    // For point-to-point close the preview at the end marker, not back to start.
+    if (routeType === 'point_to_point' && endMarker) {
+        const endPos = endMarker.getLatLng();
+        coords.push([endPos.lat, endPos.lng]);
+    } else {
+        coords.push([startPos.lat, startPos.lng]);
+    }
 
     const distanceLabel = window.formatDistance ? window.formatDistance(route.stats.distanceKm, 1) : `${route.stats.distanceKm.toFixed(1)} km`;
     const line = L.polyline(coords, {

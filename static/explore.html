@@ -219,6 +219,27 @@
                         </span>
                         <div class="control-step">
                             <div class="mb-2">
+                                <label class="form-label small mb-0" for="route-type-select">Route type</label>
+                                <select class="form-select form-select-sm" id="route-type-select" aria-label="Route type — round trip or point to point">
+                                    <option value="round_trip" selected>Round trip</option>
+                                    <option value="point_to_point">Point to point</option>
+                                </select>
+                            </div>
+                            <!-- End location (shown only in point-to-point mode) -->
+                            <div class="mb-2 d-none" id="end-location-group">
+                                <label class="form-label small mb-0" for="end-search-input">End location</label>
+                                <div class="input-group input-group-sm">
+                                    <input type="text" class="form-control" id="end-search-input"
+                                           placeholder="City, State or ZIP" aria-label="Search for an end location"
+                                           autocomplete="off">
+                                    <button class="btn btn-outline-secondary" type="button" id="end-search-btn"
+                                            aria-label="Search end location">
+                                        <i class="bi bi-search" aria-hidden="true"></i>
+                                    </button>
+                                </div>
+                                <div class="small text-muted mt-1" id="end-display">Click map or search to set</div>
+                            </div>
+                            <div class="mb-2">
                                 <label class="form-label small mb-0" for="distance-slider">Distance (<span id="distance-unit-label"></span>)</label>
                                 <div class="d-flex align-items-center gap-2">
                                     <input type="range" class="form-range" id="distance-slider" min="10" max="150" value="40" step="5"
@@ -344,7 +365,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="/js/common.js"></script>
     <script src="/js/api-client.js?v=6"></script>
-    <script src="/js/explore.js?v=4"></script>
+    <script src="/js/explore.js?v=5"></script>
 
     <div id="bottom-nav-more" class="bottom-nav-drawer collapse d-md-none" aria-label="More pages">
         <a class="bottom-nav-drawer-item active" href="/explore.html" aria-current="page">
