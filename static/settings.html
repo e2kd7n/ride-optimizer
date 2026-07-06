@@ -2,6 +2,17 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <script>
+    (function () {
+        try {
+            var t = localStorage.getItem('fairWeatherTheme');
+            if (t !== 'day' && t !== 'night') {
+                t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'night' : 'day';
+            }
+            document.documentElement.setAttribute('data-theme', t);
+        } catch (e) {}
+    })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Settings - Ride Optimizer</title>
 
@@ -178,6 +189,17 @@
                                     </select>
                                     <div id="default-view-help" class="form-text">
                                         <i class="bi bi-info-circle"></i> Page to show when you open the app
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="theme-preference" class="form-label fw-bold">Appearance</label>
+                                    <select class="form-select" id="theme-preference" aria-describedby="theme-preference-help">
+                                        <option value="day">Day</option>
+                                        <option value="night">Night</option>
+                                    </select>
+                                    <div id="theme-preference-help" class="form-text">
+                                        <i class="bi bi-info-circle"></i> Switches the app between Fair Weather's Day and Night color modes
                                     </div>
                                 </div>
 
@@ -829,6 +851,7 @@
 
             // Load saved preferences
             loadUserPreferences();
+            initThemeControl();
 
             // Setup event listeners
             setupEventListeners();
@@ -936,6 +959,17 @@
             });
             bodyEl.addEventListener('hidden.bs.collapse', () => {
                 if (label) label.textContent = 'Show Danger Zone';
+            });
+        }
+
+        // Appearance select mirrors the current data-theme (set on every page load via the
+        // inline head script) and applies changes immediately — it's not gated on auto-save.
+        function initThemeControl() {
+            const select = document.getElementById('theme-preference');
+            if (!select || !window.getFairWeatherTheme) return;
+            select.value = window.getFairWeatherTheme();
+            select.addEventListener('change', function() {
+                window.setFairWeatherTheme(this.value);
             });
         }
 
@@ -1109,6 +1143,11 @@
                 _outdoorMinTempF = 40;
                 setOutdoorTempSliderUnit(false);
                 document.getElementById('outdoor-allow-rain').checked = false;
+
+                localStorage.removeItem('fairWeatherTheme');
+                const systemTheme = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'night' : 'day';
+                window.setFairWeatherTheme(systemTheme);
+                document.getElementById('theme-preference').value = systemTheme;
 
                 clearUnsavedChanges();
 

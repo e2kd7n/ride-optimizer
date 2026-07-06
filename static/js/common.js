@@ -548,6 +548,31 @@ window.unfavoriteRouteWithUndo = function(routeId) {
     }
 };
 
+// Fair Weather Day/Night theme
+/**
+ * Get the currently active Fair Weather theme.
+ * The `data-theme` attribute is set as early as possible (inline in <head>,
+ * before this script loads) to avoid a flash of the wrong theme.
+ * @returns {string} 'day' or 'night'
+ */
+window.getFairWeatherTheme = function() {
+    return document.documentElement.getAttribute('data-theme') === 'night' ? 'night' : 'day';
+};
+
+/**
+ * Set and persist the Fair Weather theme.
+ * @param {string} theme - 'day' or 'night'
+ */
+window.setFairWeatherTheme = function(theme) {
+    const resolved = theme === 'night' ? 'night' : 'day';
+    document.documentElement.setAttribute('data-theme', resolved);
+    try {
+        localStorage.setItem('fairWeatherTheme', resolved);
+    } catch (_) {
+        // localStorage unavailable (private browsing, etc.) — theme still applies for this load
+    }
+};
+
 // Unit conversion utilities
 /**
  * Get user's preferred unit system from settings

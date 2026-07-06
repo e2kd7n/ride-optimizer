@@ -38,6 +38,11 @@
 
     /* Bootstrap utility hooks (drives .bg-primary tints, focus rings, etc.) */
     --bs-primary-rgb: 11, 111, 166;
+    /* Info is retired — cobalt carries it (brand book) */
+    --bs-info-rgb: 11, 111, 166;
+    --bs-success-rgb: 62, 142, 99;
+    --bs-warning-rgb: 201, 138, 29;
+    --bs-danger-rgb: 196, 72, 58;
 
     /* Spacing scale (#280) */
     --space-1: 4px;
@@ -100,6 +105,10 @@ html[data-theme="night"] {
     --danger: #E2695C;
     --accent-rgb: 79, 179, 232;
     --bs-primary-rgb: 79, 179, 232;
+    --bs-info-rgb: 79, 179, 232;
+    --bs-success-rgb: 87, 179, 132;
+    --bs-warning-rgb: 224, 166, 62;
+    --bs-danger-rgb: 226, 105, 92;
 }
 
 body {
