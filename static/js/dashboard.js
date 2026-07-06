@@ -625,8 +625,12 @@ function getHeroHeading(contextDir) {
 
 /**
  * Render hero decision card (#286) from a recommendation object.
+ * @param {object} rec - the recommendation to render (primary when isHero, secondary otherwise)
+ * @param {boolean} isHero - true for the primary hero card
+ * @param {object} [secondaryRec] - the other direction's recommendation, used only when isHero
+ *        to build the "Compare routes" teaser text (#370a)
  */
-function renderHeroCard(rec, isHero) {
+function renderHeroCard(rec, isHero, secondaryRec) {
     if (!rec || rec.status !== 'success') return '';
 
     const esc = window.escapeHtml;
@@ -647,6 +651,15 @@ function renderHeroCard(rec, isHero) {
     const timeLabel = rec.time_impact && rec.time_impact.label ? esc(rec.time_impact.label) : null;
     const estMins = rec.time_impact && rec.time_impact.estimated_minutes;
     const departureTime = rec.departure_time ? esc(rec.departure_time) : null;
+
+    // Teaser text for the "Compare routes" collapse trigger (#370a): once the return
+    // direction's score is known, name it explicitly instead of a bare "Compare routes".
+    const secondaryScore = (isHero && secondaryRec && secondaryRec.status === 'success' && typeof secondaryRec.score !== 'undefined')
+        ? (typeof secondaryRec.score === 'number' && secondaryRec.score <= 1 ? Math.round(secondaryRec.score * 100) : Math.round(secondaryRec.score || 0))
+        : null;
+    const compareLabel = secondaryScore !== null
+        ? `Compare both directions — return score: ${secondaryScore}`
+        : 'Compare both directions';
 
     const borderColor = score >= 70 ? '#28a745' : score >= 50 ? '#ffc107' : '#dc3545';
     const windImpact = rec.wind_impact;
@@ -703,13 +716,13 @@ function renderHeroCard(rec, isHero) {
                 ${transitBanner}
                 <div class="mt-3 d-flex gap-2 flex-wrap">
                     ${route.id ? `
-                    <a href="route-detail.html?id=${encodeURIComponent(route.id)}" class="btn btn-primary btn-sm">
+                    <a href="route-detail.html?id=${encodeURIComponent(route.id)}" class="btn btn-cta btn-sm">
                         <i class="bi bi-map me-1"></i>View route
                     </a>` : ''}
-                    <button type="button" class="btn btn-outline-secondary btn-sm"
+                    <button type="button" class="btn btn-outline-secondary btn-sm commute-compare-toggle"
                             data-bs-toggle="collapse" data-bs-target="#commute-detail"
                             aria-expanded="false" aria-controls="commute-detail">
-                        <i class="bi bi-list-ul"></i> Compare routes
+                        <i class="bi bi-list-ul"></i> ${compareLabel}
                         <i class="bi bi-chevron-down ms-1 commute-chevron"></i>
                     </button>
                 </div>
@@ -770,7 +783,7 @@ async function loadRecommendation() {
                 ${heading.sub ? `<span class="ms-1">· ${heading.sub}</span>` : ''}
             </div>`;
 
-        html += renderHeroCard(primary, true);
+        html += renderHeroCard(primary, true, secondary);
 
         if (secondary && secondary.status === 'success') {
             html += `
@@ -917,12 +930,38 @@ async function loadRouteStatus() {
         }
 
         const rows = data.routes.map(routeStatusRow).join('');
+        const count = data.routes.length;
+        // Mobile: collapsed behind a labeled summary toggle with a count, expanded on tap (#370b).
+        // Teaser-before-collapse per DESIGN_PRINCIPLES.md §2 — never a bare chevron.
         const html = `
-            ${rows}
-            <div class="mt-2">
-                <a href="/routes.html" class="small text-muted">All Routes →</a>
+            <button type="button" class="route-status-summary-toggle btn btn-link text-decoration-none d-flex d-md-none w-100 align-items-center gap-2 px-0"
+                    aria-expanded="false" aria-controls="route-status-rows">
+                <i class="bi bi-map" aria-hidden="true"></i>
+                <span class="small fw-semibold text-body">Show all route conditions (${count})</span>
+                <i class="bi bi-chevron-down ms-auto route-status-chevron" aria-hidden="true"></i>
+            </button>
+            <div id="route-status-rows" class="route-status-rows">
+                ${rows}
+                <div class="mt-2">
+                    <a href="/routes.html" class="small text-muted">All Routes →</a>
+                </div>
             </div>`;
         container.innerHTML = html;
+
+        const toggle = container.querySelector('.route-status-summary-toggle');
+        const fullRows = container.querySelector('.route-status-rows');
+        if (toggle && fullRows) {
+            toggle.addEventListener('click', () => {
+                const expanded = toggle.getAttribute('aria-expanded') === 'true';
+                toggle.setAttribute('aria-expanded', String(!expanded));
+                fullRows.classList.toggle('route-status-rows-open', !expanded);
+                toggle.querySelector('.route-status-chevron').style.transform = expanded ? '' : 'rotate(180deg)';
+                toggle.querySelector('span').textContent = expanded
+                    ? `Show all route conditions (${count})`
+                    : 'Hide route conditions';
+            });
+        }
+
         const mobile = document.getElementById('route-status-panel-mobile');
         if (mobile) mobile.innerHTML = html;
     } catch (error) {
