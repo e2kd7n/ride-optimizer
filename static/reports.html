@@ -2,6 +2,17 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <script>
+    (function () {
+        try {
+            var t = localStorage.getItem('fairWeatherTheme');
+            if (t !== 'day' && t !== 'night') {
+                t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'night' : 'day';
+            }
+            document.documentElement.setAttribute('data-theme', t);
+        } catch (e) {}
+    })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Reports - Ride Optimizer</title>
     <link rel="icon" type="image/svg+xml" href="/img/favicon.svg">
