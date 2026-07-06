@@ -1681,7 +1681,8 @@ def strava_connect():
     # Remember if the user came from the setup wizard
     if request.args.get('setup_redirect') == '1':
         session['setup_redirect'] = True
-    client_id = os.getenv('STRAVA_CLIENT_ID')
+    _env = _read_env()
+    client_id = _env.get('STRAVA_CLIENT_ID') or os.getenv('STRAVA_CLIENT_ID')
     redirect_uri = url_for('strava_callback', _external=True)
     auth_url = (
         'https://www.strava.com/oauth/authorize'
@@ -1715,8 +1716,8 @@ def strava_callback():
         import requests as http_req
         _env = _read_env()
         resp = http_req.post('https://www.strava.com/oauth/token', data={
-            'client_id': os.getenv('STRAVA_CLIENT_ID') or _env.get('STRAVA_CLIENT_ID'),
-            'client_secret': os.getenv('STRAVA_CLIENT_SECRET') or _env.get('STRAVA_CLIENT_SECRET'),
+            'client_id': _env.get('STRAVA_CLIENT_ID') or os.getenv('STRAVA_CLIENT_ID'),
+            'client_secret': _env.get('STRAVA_CLIENT_SECRET') or os.getenv('STRAVA_CLIENT_SECRET'),
             'code': code,
             'grant_type': 'authorization_code',
         }, timeout=15)
