@@ -48,6 +48,12 @@
         .danger-zone-toggle {
             min-height: 44px;
         }
+        .danger-zone-toggle .chevron {
+            transition: transform 0.2s;
+        }
+        .danger-zone-toggle[aria-expanded="true"] .chevron {
+            transform: rotate(180deg);
+        }
         .danger-zone-body {
             border: 1px solid var(--danger);
             border-radius: 10px;
@@ -235,7 +241,8 @@
                                 <button type="button" class="btn btn-outline-danger btn-sm danger-zone-toggle" id="danger-zone-toggle"
                                         data-bs-toggle="collapse" data-bs-target="#danger-zone-body"
                                         aria-expanded="false" aria-controls="danger-zone-body">
-                                    <i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Show Danger Zone
+                                    <i class="bi bi-exclamation-triangle" aria-hidden="true"></i> <span class="danger-zone-toggle-label">Show Danger Zone</span>
+                                    <i class="bi bi-chevron-down ms-1 chevron" aria-hidden="true"></i>
                                 </button>
                                 <div class="collapse danger-zone-body" id="danger-zone-body">
                                     <label class="form-label fw-bold d-block mb-2 text-danger">
@@ -923,11 +930,12 @@
             const toggleBtn = document.getElementById('danger-zone-toggle');
             const bodyEl = document.getElementById('danger-zone-body');
             if (!toggleBtn || !bodyEl) return;
+            const label = toggleBtn.querySelector('.danger-zone-toggle-label');
             bodyEl.addEventListener('shown.bs.collapse', () => {
-                toggleBtn.innerHTML = '<i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Hide Danger Zone';
+                if (label) label.textContent = 'Hide Danger Zone';
             });
             bodyEl.addEventListener('hidden.bs.collapse', () => {
-                toggleBtn.innerHTML = '<i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Show Danger Zone';
+                if (label) label.textContent = 'Show Danger Zone';
             });
         }
 
