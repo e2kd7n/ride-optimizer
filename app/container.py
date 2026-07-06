@@ -41,6 +41,13 @@ class ServiceContainer:
         from app.services.settings_service import SettingsService
         self.settings_service: SettingsService = SettingsService()
 
+        # Shared credential/storage singletons (eager — cheap to construct,
+        # used by blueprints on nearly every request)
+        from src.json_storage import JSONStorage
+        from app.credentials.intervals_creds import IntervalsCredStore
+        self.storage: JSONStorage = JSONStorage()
+        self.intervals_creds: IntervalsCredStore = IntervalsCredStore()
+
         # --- job state ---
         self.jobs: JobRegistry = JobRegistry()
 

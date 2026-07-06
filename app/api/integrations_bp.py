@@ -24,7 +24,6 @@ from datetime import datetime
 
 from flask import Blueprint, current_app, jsonify, request
 
-from app.credentials.intervals_creds import IntervalsCredStore
 from app.credentials.env_helpers import read_env, write_env
 from src.config_manager import ConfigManager
 from src.secure_logger import SecureLogger
@@ -32,9 +31,6 @@ from src.secure_logger import SecureLogger
 logger = SecureLogger(__name__)
 
 bp = Blueprint('integrations', __name__, url_prefix='/api')
-
-# Module-level credential store (shared across requests)
-_intervals_creds = IntervalsCredStore()
 
 
 # ---------------------------------------------------------------------------
@@ -44,7 +40,7 @@ _intervals_creds = IntervalsCredStore()
 @bp.route('/intervals/status')
 def intervals_status():
     """Return whether intervals.icu credentials are configured and valid."""
-    creds = _intervals_creds.load()
+    creds = current_app.container.intervals_creds.load()
     if not creds:
         return jsonify({'connected': False})
     return jsonify({'connected': True, 'athlete_id': creds['athlete_id']})
@@ -85,7 +81,7 @@ def intervals_connect():
         return jsonify({'success': False, 'error': 'Could not reach intervals.icu'}), 503
 
     try:
-        _intervals_creds.save(athlete_id, api_key)
+        current_app.container.intervals_creds.save(athlete_id, api_key)
         logger.info("intervals.icu credentials saved for athlete %s (%s)", athlete_id, athlete_name)
         return jsonify({'success': True, 'athlete_id': athlete_id, 'athlete_name': athlete_name})
     except Exception as exc:
@@ -97,7 +93,7 @@ def intervals_connect():
 def intervals_disconnect():
     """Remove saved intervals.icu credentials."""
     try:
-        _intervals_creds.delete()
+        current_app.container.intervals_creds.delete()
         logger.info("intervals.icu credentials removed")
         return jsonify({'success': True})
     except Exception as exc:
