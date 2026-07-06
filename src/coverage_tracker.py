@@ -250,14 +250,9 @@ class CoverageTracker:
 
         path = Path("data/cache/activities.json")
         if not path.exists():
-            fallback = Path("data/cache/activities_test.json")
-            if fallback.exists():
-                logger.warning("No activities cache found at %s — falling back to test data at %s", path, fallback)
-                path = fallback
-            else:
-                logger.warning("No activities cache found at %s", path)
-                self._activities_cache = []
-                return self._activities_cache
+            logger.warning("No activities cache found at %s", path)
+            self._activities_cache = []
+            return self._activities_cache
 
         try:
             with open(path, "r", encoding="utf-8") as f:
