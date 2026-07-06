@@ -68,7 +68,7 @@ function renderHeadlineStats(s) {
     // preference (#375b) — the value must convert too, or a metric user sees a
     // "Kilometers" label on a number that's still in miles.
     const distUnit = typeof window.getDistanceUnit === 'function' ? window.getDistanceUnit() : 'mi';
-    const toDisplayDistance = (mi) => (mi == null ? null : (distUnit === 'km' ? mi * 1.60934 : mi));
+    const toDisplayDistance = (mi) => (mi == null ? null : (distUnit === 'km' ? window.milesToKm(mi) : mi));
     setText('stat-distance', fmt(toDisplayDistance(s.total_distance_mi)));
     setText('stat-distance-label', distUnit === 'km' ? 'Kilometers' : 'Miles');
     setText('stat-time', fmt(s.total_time_h));
