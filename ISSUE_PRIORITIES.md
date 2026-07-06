@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-07-05 19:42:35 UTC / 2026-07-05 14:42:35 CDT
+**Last Updated:** 2026-07-06 02:54:26 UTC / 2026-07-05 21:54:26 CDT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -8,7 +8,7 @@ This file reflects the current state of GitHub issues organized by release miles
 
 ## 📍 Release Context
 
-- **Current Release:** v0.16.0 (deployed, milestone fully closed)
+- **Current Release:** none (deployed, milestone fully closed)
 - **Next Release:** v0.17.0 (in development)
 - **Future Releases:** 
 
@@ -22,37 +22,49 @@ This file reflects the current state of GitHub issues organized by release miles
 **No P0 issues** ✅
 
 ### 🔴 P1 - HIGH
-- #361 - [Design Review] Explore: add numbered workflow steps and progressive button enablement
-- #360 - [Design Review] Explore: add tile/Squadrats concept explainer and coverage legend
-- #359 - [Design Review] Route Detail: replace raw JSON weather dump with formatted card
-- #358 - [Design Review] Dashboard: fix mobile column stacking and widen decision panel
-- #357 - [Design Review] Weather: swap 7-day forecast and same-day commute windows order
+- #436 - PR #431: CoverageTracker silently falls back to test fixture data when activities cache is missing
+- #432 - PR #431: kill_existing_server dropped process-ownership check (security regression)
 - #352 - Epic: Design Review — Information Density, Discoverability & Card Placement
 
 ### 🟡 P2 - MEDIUM
+- #435 - PR #431: static/js/mobile.js is dead code — new nav/swipe logic never executes
+- #434 - PR #431: Reports Personal Records silently truncate at 1000 activities for all-time period
+- #433 - PR #431: ORS empty-list response bypasses unroutable-waypoint error handling
+- #428 - Phase 4i: Extract strava_bp Blueprint (/api/strava/*, /api/setup/*)
+- #427 - Phase 4h: Extract integrations_bp Blueprint (/api/intervals/*, /api/ors/*, /api/garmin/*, /api/trainerroad/*)
+- #426 - Phase 4g: Extract data_bp Blueprint (/api/analyze/*, /api/fetch/*, /api/cache-info, /api/activities)
+- #425 - Phase 4f: Extract commute_bp Blueprint (/api/commute, /api/recommendation, /api/workout-options)
+- #424 - Phase 4e: Extract core_bp Blueprint (/api/status, /api/settings/*, /api/plans/*, /api/user/*)
+- #423 - Phase 4d: Extract planner_bp Blueprint (/api/planner/*, /api/exploration/*, /api/geocode)
+- #422 - Phase 4c: Extract weather_bp Blueprint (/api/weather/*)
+- #421 - Phase 4b: Extract routes_bp Blueprint (/api/routes/*)
+- #420 - Phase 4a: Extract stats_bp Blueprint (/api/stats/*)
+- #418 - Phase 5: Thin launch.py — wire create_app(), reduce to ~120 lines
+- #416 - Phase 3: Parallel service initialisation via ServiceContainer
+- #415 - Phase 2: Extract infrastructure — credentials, env helpers, process management
+- #413 - Epic: launch.py Blueprint Refactor — Split 3,404-line monolith into 9 focused Blueprints
+- #412 - Epic: Explore Tab Enhancements — v0.17.0
+- #411 - Explore: allow exclusion of major highways, unpaved roads, and high-traffic roads
 - #408 - Explore: clicking a map polyline highlights the corresponding route in the list
 - #407 - Explore: clicking a route list item highlights the polyline on the map
 - #406 - Explore: suggest adjacent-tile routes for future yard(inho) expansion in low-coverage areas
 - #405 - Explore: generate a tile-acquisition overlay for today's workout route
 - #404 - Explore: add yard(inho) optimization mode — max new tiles vs. infill
-- #403 - Explore: support round-trip vs. point-to-point route type with configurable endpoint
 - #402 - Explore: support round-trip vs. point-to-point route type with configurable endpoint
 - #375 - [Design Review] Apply unit system preference to temperature slider, Reports distance label, and Explore distance slider
 - #374 - [Design Review] Ship or gracefully degrade help modal tutorial assets
 - #373 - [Design Review] Weather: add comfort score legend; fix hardcoded commute window time labels
-- #372 - [Design Review] Routes Library: label compare checkbox; add entry-point for Saved Plans
-- #370 - [Design Review] Dashboard: add affordance labels and count badges to collapse toggles
 - #371 - [Design Review] Route Detail: demote Uses metric; surface performance charts above history tables
-- #369 - [Design Review] Reports: hide empty secondary stats; move admin gear buttons to Settings
 - #368 - [Design Review] Settings: split Connections card; nest Outdoor Prefs; move Save above About
-- #366 - [Design Review] Reports: reorder cards — Activities before Gear; consolidate chart cards
-- #367 - [Design Review] Explore: move coverage stats below map; merge controls into route generation card
-- #365 - [Design Review] Routes Library: invert column ratio to give route list more space than map
-- #363 - [Design Review] Dashboard: relocate 'How It Works' button out of above-the-fold content
-- #364 - [Design Review] Routes Library: collapse advanced filters behind 'More Filters' toggle
-- #362 - [Design Review] Navigation: add Reports and Explore to mobile bottom nav
+- #369 - [Design Review] Reports: hide empty secondary stats; move admin gear buttons to Settings
 
 ### 🟢 P3 - LOW
+- #440 - PR #431: Route Detail stat grid col-4 layout has no responsive breakpoint
+- #439 - PR #431: Night-mode token gaps — hardcoded divider color and .text-muted vs --ink-soft drift
+- #438 - PR #431: three inconsistent disclosure/chevron toggle patterns shipped in one PR
+- #437 - PR #431: Weather comfort pills use hardcoded hex colors instead of brand tokens
+- #430 - Coverage tracker should include Garmin activities, not just Strava
+- #419 - Phase 6: Cleanup — remove dead code, update AGENTS.md architecture section
 - #410 - Explore: minimize route overlap with already-visited tiles where possible
 - #409 - Explore: differentiate Phase-1 and Phase-2 polylines for the same direction with tonal color variants
 - #376 - [Design Review] P3 polish bundle: stale versions, missing H1s, a11y minor, UX polish items
@@ -66,23 +78,7 @@ This file reflects the current state of GitHub issues organized by release miles
 
 These issues need to be assigned to a release milestone and prioritized.
 
-### 🔴 P0 - CRITICAL
-None
-
-### 🔴 P1 - HIGH
-None
-
-### 🟡 P2 - MEDIUM
-None
-
-### 🟢 P3 - LOW
-None
-
-### 📋 P4 - FUTURE
-None
-
-### ⚠️ Unprioritized (No P-label)
-- #345 - [FEATURE] Manage and monitor python launch.py dev server processes (no PID tracking, kill_existing_server is a no-op on Windows)
+**All issues are assigned to releases** ✅
 
 ---
 
