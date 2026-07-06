@@ -2267,6 +2267,13 @@ h5.card-title {
 [aria-expanded="true"] .tr-chevron { transform: rotate(90deg); }
 .tr-chevron { transition: transform 0.2s; display: inline-block; }
 
+/* Dashboard mobile disclosure chevrons (Conditions summary, Route Status) —
+   CSS-driven off aria-expanded so rotation can't desync from the ARIA state. */
+.conditions-chevron,
+.route-status-chevron { transition: transform 0.2s; }
+[aria-expanded="true"] .conditions-chevron,
+[aria-expanded="true"] .route-status-chevron { transform: rotate(180deg); }
+
 @media (max-width: 767.98px) {
     .workout-strip {
         padding: var(--space-2);
