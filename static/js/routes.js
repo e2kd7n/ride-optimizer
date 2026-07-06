@@ -65,7 +65,9 @@
         if (!legendEl) return;
 
         const mode = getColorBy();
-        if (mode === 'default' || state.displayedRoutes.size === 0) {
+        // Show the legend as soon as a non-default color mode is chosen, even before
+        // any routes are plotted on the map (Issue #376) — it previews what the colors mean.
+        if (mode === 'default') {
             legendEl.style.display = 'none';
             return;
         }
@@ -688,10 +690,13 @@
         card.innerHTML = `
             <div class="card-body py-2 px-3">
                 <div class="d-flex align-items-center gap-2">
-                    <input class="form-check-input compare-checkbox flex-shrink-0 mt-0" type="checkbox"
-                           id="compare-${route.id}" data-route-id="${route.id}"
-                           ${isSelected ? 'checked' : ''}
-                           onclick="event.stopPropagation()" title="Compare">
+                    <div class="form-check compare-toggle flex-shrink-0" onclick="event.stopPropagation()">
+                        <input class="form-check-input compare-checkbox mt-0" type="checkbox"
+                               id="compare-${route.id}" data-route-id="${route.id}"
+                               ${isSelected ? 'checked' : ''}
+                               title="Compare">
+                        <label class="form-check-label small text-muted" for="compare-${route.id}">Compare</label>
+                    </div>
                     <span class="fw-semibold text-truncate flex-grow-1" style="font-size:.875rem;cursor:pointer" title="${route.name}" data-route-link>
                         ${favIcon}${plusBadge}${route.name}
                     </span>
@@ -714,7 +719,7 @@
 
         card.style.cursor = 'pointer';
         function handleCardActivation(e) {
-            if (e.target.closest('.compare-checkbox') || e.target.closest('[data-route-link]') || e.target.closest('[data-route-uses]')) {
+            if (e.target.closest('.compare-toggle') || e.target.closest('[data-route-link]') || e.target.closest('[data-route-uses]')) {
                 return;
             }
             toggleRouteOnMap(route);
@@ -907,10 +912,10 @@
         const summary = byId('results-summary');
         if (!summary) return;
 
-        summary.className = count > 0 ? 'alert alert-info' : 'alert alert-warning';
+        summary.className = count > 0 ? 'text-muted small mb-2' : 'text-warning small mb-2';
         summary.innerHTML = count > 0
-            ? `<i class="bi bi-info-circle"></i> Showing ${count} route${count === 1 ? '' : 's'}`
-            : '<i class="bi bi-exclamation-triangle"></i> No routes match the current filters';
+            ? `<i class="bi bi-info-circle" aria-hidden="true"></i> Showing ${count} route${count === 1 ? '' : 's'}`
+            : '<i class="bi bi-exclamation-triangle" aria-hidden="true"></i> No routes match the current filters';
     }
 
     function displayRoutesTimestamp(timestamp) {
@@ -1058,12 +1063,36 @@
         // Apply filters immediately
         state.filteredRoutes = applyClientFilters(state.routes, getFilters());
         renderRoutes(state.filteredRoutes);
+        updateMoreFiltersBadge();
         announce(`Applied ${preset} distance filter`);
+    }
+
+    // Count how many of the "More Filters" collapsible controls are set to a
+    // non-default value, so the toggle button can show "More Filters (N)" (Issue #364).
+    function countActiveFilters() {
+        const f = getFilters();
+        let count = 0;
+        if (f.favorite) count++;
+        if (f.commute) count++;
+        if (f.sport_type) count++;
+        if (f.difficulty) count++;
+        if (f.min_distance) count++;
+        if (f.max_distance) count++;
+        if (f.date_range) count++;
+        return count;
+    }
+
+    function updateMoreFiltersBadge() {
+        const countEl = byId('more-filters-count');
+        if (!countEl) return;
+        const n = countActiveFilters();
+        countEl.textContent = n > 0 ? ` (${n})` : '';
     }
 
     function applyFilters() {
         state.filteredRoutes = applyClientFilters(state.routes, getFilters());
         renderRoutes(state.filteredRoutes);
+        updateMoreFiltersBadge();
     }
 
     function bindEvents() {
@@ -1129,17 +1158,35 @@
     async function loadSavedPlans() {
         const section = byId('saved-plans-section');
         const list = byId('saved-plans-list');
+        const titleEl = byId('saved-plans-title');
+        const toggleBtn = byId('toggle-plans-btn');
+        const card = byId('saved-plans-card');
         if (!section || !list) return;
 
         try {
             const response = await window.apiClient.getPlans();
             const plans = Array.isArray(response.plans) ? response.plans : [];
+
+            if (titleEl) titleEl.textContent = `Saved Plans (${plans.length})`;
+
             if (!plans.length) {
-                section.style.display = 'none';
+                // Persistent stub entry point: always visible, muted, disabled toggle
+                // when there is nothing to expand yet (Issue #372b).
+                if (card) card.classList.remove('saved-plans-active');
+                if (toggleBtn) {
+                    toggleBtn.disabled = true;
+                    toggleBtn.setAttribute('aria-disabled', 'true');
+                }
+                list.innerHTML = '';
                 return;
             }
 
-            section.style.display = '';
+            if (card) card.classList.add('saved-plans-active');
+            if (toggleBtn) {
+                toggleBtn.disabled = false;
+                toggleBtn.removeAttribute('aria-disabled');
+            }
+
             list.innerHTML = plans.map(plan => {
                 const date = plan.created_at
                     ? new Date(plan.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -1176,17 +1223,6 @@
                     }
                 });
             });
-
-            const toggleBtn = byId('toggle-plans-btn');
-            const body = byId('saved-plans-body');
-            if (toggleBtn && body) {
-                toggleBtn.onclick = () => {
-                    const collapsed = body.style.display === 'none';
-                    body.style.display = collapsed ? '' : 'none';
-                    toggleBtn.innerHTML = collapsed ? '<i class="bi bi-chevron-up"></i>' : '<i class="bi bi-chevron-down"></i>';
-                    toggleBtn.setAttribute('aria-expanded', collapsed);
-                };
-            }
         } catch (err) {
             console.error('Failed to load saved plans:', err);
         }
