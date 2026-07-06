@@ -3328,6 +3328,8 @@ def _is_our_server_process(pid: int) -> bool:
         # Must be alive and belong to current user
         if proc.status() == psutil.STATUS_ZOMBIE:
             return False
+        if proc.username() != psutil.Process().username():
+            return False
         cmdline = proc.cmdline()
         # Expect: [...python..., ...launch.py..., '--serve', ...]
         cmdline_str = ' '.join(cmdline)
