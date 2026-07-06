@@ -4,10 +4,6 @@
 
 const api = new APIClient('/api');
 
-// Sport types treated as "cycling" for Personal Records filtering (#376) — matches the
-// activity-type-filter dropdown options minus Run.
-const CYCLING_TYPES = ['Ride', 'GravelRide', 'EBikeRide', 'VirtualRide'];
-
 let currentPeriod = 'this_year';
 let currentGearId = null;   // null = all gear
 let statsData = null;       // last /api/stats response
@@ -54,7 +50,7 @@ async function loadStats() {
         if (resp.status !== 'success') throw new Error(resp.message || 'Unknown error');
         statsData = resp.data;
         renderHeadlineStats(statsData.summary);
-        loadRecords();
+        renderRecords(statsData.records);
         renderTypeBreakdown(statsData.by_type);
         renderMonthlyChart(statsData.by_month);
         renderDistributionChart(statsData.speed_distribution, 'speed-chart', 'speed-chart-label', 'mph');
@@ -105,51 +101,12 @@ function renderHeadlineStats(s) {
     if (row) row.style.display = visible.length ? '' : 'none';
 }
 
-// Personal Records are computed server-side from ALL cached activity types (including
-// WeightTraining etc.), so "Fastest Speed" can surface a non-cycling session (#376). Re-derive
-// the record-worthy metrics from the already-available /api/activities feed, filtered to cycling
-// sport types, so the qualifier we display is actually true.
-async function loadRecords() {
+// Personal Records are computed server-side, filtered to cycling sport types only (#376, #434) —
+// so "Fastest Speed" can't surface a non-cycling session, and the record search isn't capped at
+// the 1000-activity page-size limit /api/activities used to impose.
+function renderRecords(r) {
     const qualifierEl = document.getElementById('records-qualifier');
-    try {
-        const resp = await api.get(`/activities?period=${currentPeriod}&sort=date_desc&limit=1000`);
-        if (resp.status !== 'success') {
-            renderRecords((statsData && statsData.records) || {}, false);
-            return;
-        }
-        const activities = resp.data.activities || [];
-        const cycling = activities.filter(a => CYCLING_TYPES.includes(a.sport_type));
-        if (!cycling.length) {
-            renderRecords((statsData && statsData.records) || {}, false);
-            return;
-        }
-
-        const longest = cycling.reduce((a, b) => (b.distance_mi > a.distance_mi ? b : a));
-        const mostElev = cycling.reduce((a, b) => (b.elevation_ft > a.elevation_ft ? b : a));
-        const fastest = cycling.reduce((a, b) => (b.speed_mph > a.speed_mph ? b : a));
-        const cyclingIds = new Set(cycling.map(a => a.id));
-
-        const records = {
-            longest_ride: { distance_mi: longest.distance_mi, name: longest.name, date: longest.date },
-            most_elevation: { elevation_ft: mostElev.elevation_ft, name: mostElev.name, date: mostElev.date },
-            fastest_speed: { speed_mph: fastest.speed_mph, name: fastest.name, date: fastest.date },
-        };
-
-        // Kilojoules isn't exposed per-activity by /api/activities, so we can't recompute this
-        // one client-side — only show it if the server's record activity happens to be a cycling
-        // activity (verifiable via id); otherwise omit rather than mislabel it.
-        const kj = statsData && statsData.records && statsData.records.most_kilojoules;
-        if (kj && cyclingIds.has(kj.id)) records.most_kilojoules = kj;
-
-        renderRecords(records, true);
-    } catch (e) {
-        renderRecords((statsData && statsData.records) || {}, false);
-    }
-}
-
-function renderRecords(r, cyclingOnly) {
-    const qualifierEl = document.getElementById('records-qualifier');
-    if (qualifierEl) qualifierEl.textContent = cyclingOnly ? '(cycling only)' : '';
+    if (qualifierEl) qualifierEl.textContent = (r && Object.keys(r).length) ? '(cycling only)' : '';
 
     if (!r || !Object.keys(r).length) return;
 
