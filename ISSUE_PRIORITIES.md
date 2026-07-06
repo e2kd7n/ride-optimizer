@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-07-06 12:47:27 UTC / 2026-07-06 07:47:27 CDT
+**Last Updated:** 2026-07-06 13:08:59 UTC / 2026-07-06 08:08:59 CDT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -26,19 +26,6 @@ This file reflects the current state of GitHub issues organized by release miles
 
 ### 🟡 P2 - MEDIUM
 - #444 - Wire static/js/mobile.js into all 7 pages (bottom nav keyboard/swipe/touch support)
-- #428 - Phase 4i: Extract strava_bp Blueprint (/api/strava/*, /api/setup/*)
-- #427 - Phase 4h: Extract integrations_bp Blueprint (/api/intervals/*, /api/ors/*, /api/garmin/*, /api/trainerroad/*)
-- #426 - Phase 4g: Extract data_bp Blueprint (/api/analyze/*, /api/fetch/*, /api/cache-info, /api/activities)
-- #425 - Phase 4f: Extract commute_bp Blueprint (/api/commute, /api/recommendation, /api/workout-options)
-- #424 - Phase 4e: Extract core_bp Blueprint (/api/status, /api/settings/*, /api/plans/*, /api/user/*)
-- #423 - Phase 4d: Extract planner_bp Blueprint (/api/planner/*, /api/exploration/*, /api/geocode)
-- #422 - Phase 4c: Extract weather_bp Blueprint (/api/weather/*)
-- #421 - Phase 4b: Extract routes_bp Blueprint (/api/routes/*)
-- #420 - Phase 4a: Extract stats_bp Blueprint (/api/stats/*)
-- #418 - Phase 5: Thin launch.py — wire create_app(), reduce to ~120 lines
-- #416 - Phase 3: Parallel service initialisation via ServiceContainer
-- #415 - Phase 2: Extract infrastructure — credentials, env helpers, process management
-- #413 - Epic: launch.py Blueprint Refactor — Split 3,404-line monolith into 9 focused Blueprints
 
 ### 🟢 P3 - LOW
 - #443 - PR #431: bottom-nav-more drawer markup duplicated across 7 pages
