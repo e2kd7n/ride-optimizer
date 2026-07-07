@@ -776,7 +776,7 @@ class LongRideAnalyzer:
                                         current_weather.get('wind_speed', 0))
         
         # Analyze wind for multiple segments to get detailed picture
-        num_segments = min(8, len(ride.coordinates) // 10)  # 8 segments or fewer
+        num_segments = max(1, min(8, len(ride.coordinates) // 10))  # 8 segments or fewer
         segment_size = len(ride.coordinates) // num_segments
         
         segment_analyses = []

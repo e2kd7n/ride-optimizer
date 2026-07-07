@@ -1202,9 +1202,7 @@ class RouteAnalyzer:
         groups.sort(key=lambda g: g.frequency, reverse=True)
         
         return groups
-    
-        return groups
-    
+
     def _select_representative_route(self, routes: List[Route]) -> Route:
         """
         Select representative route from group (median by duration).
@@ -1587,7 +1585,7 @@ end tell
         Args:
             groups: List of RouteGroup objects to geocode
         """
-        from datetime import datetime
+        from datetime import datetime, timedelta
         progress_file = self.cache_dir / 'geocoding_progress.txt'
         
         def timestamp():
@@ -1684,7 +1682,7 @@ end tell
                         
                         with open(progress_file, 'a') as f:
                             if is_rate_limit:
-                                resume_time = datetime.now() + datetime.timedelta(hours=4)
+                                resume_time = datetime.now() + timedelta(hours=4)
                                 resume_time_formatted = f"{resume_time.strftime('%Y-%m-%d %H:%M:%S')} {tz_name}"
                                 
                                 f.write(f"\n{'='*70}\n")
