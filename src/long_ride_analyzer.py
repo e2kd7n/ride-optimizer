@@ -22,12 +22,8 @@ from scipy.spatial.distance import directed_hausdorff
 
 from .data_fetcher import Activity
 from .route_namer import RouteNamer
-from .route_comparison import (
-    coords_to_km, extent_point, passes_prefilter,
-    combined_distance_km, LONG_RIDE_THRESHOLDS,
-)
+from .route_comparison import coords_to_km, extent_point
 from .weather_fetcher import WeatherFetcher
-from .units import UnitConverter
 
 logger = logging.getLogger(__name__)
 

@@ -14,7 +14,7 @@ import json
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any
 # Use standard library for XML generation (safe for creating XML)
 # defusedxml is only needed for parsing untrusted XML input
 from xml.etree import ElementTree as ET

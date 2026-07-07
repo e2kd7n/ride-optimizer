@@ -5,7 +5,6 @@ Fetches weather data from Open-Meteo API (free, no API key required)
 to analyze wind conditions and their impact on cycling routes.
 """
 
-import logging
 import requests
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime, timedelta
@@ -15,7 +14,6 @@ import calendar
 import json
 from pathlib import Path
 import hashlib
-from functools import lru_cache
 
 from src.secure_logger import SecureLogger
 

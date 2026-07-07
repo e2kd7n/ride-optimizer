@@ -8,7 +8,7 @@ Licensed under the MIT License - see LICENSE file for details.
 """
 
 import logging
-from typing import List, Tuple, Dict, Any, Optional
+from typing import List, Tuple, Dict, Any
 
 import numpy as np
 
@@ -67,8 +67,6 @@ class RouteOptimizer:
     
     def _calculate_all_metrics(self):
         """Calculate metrics for all route groups."""
-        from .route_analyzer import RouteAnalyzer
-        
         for group in self.route_groups:
             # Calculate metrics inline
             routes = group.routes

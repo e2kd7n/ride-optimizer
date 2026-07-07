@@ -8,11 +8,10 @@ Licensed under the MIT License - see LICENSE file for details.
 """
 
 import logging
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Optional
 
 import folium
 from folium import plugins
-from geopy.distance import geodesic
 
 from .route_analyzer import RouteGroup
 from .location_finder import Location

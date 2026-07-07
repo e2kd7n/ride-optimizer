@@ -16,10 +16,9 @@ import sys
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import List, Tuple, Dict, Any, Optional
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 
 import numpy as np
-from scipy.spatial.distance import directed_hausdorff
 from geopy.distance import geodesic
 import polyline
 from tqdm import tqdm
@@ -27,11 +26,6 @@ from tqdm import tqdm
 from .data_fetcher import Activity
 from .location_finder import Location
 from .route_namer import RouteNamer
-from .route_comparison import (
-    coords_to_km, extent_point, passes_prefilter,
-    similarity_score as shared_similarity_score,
-    COMMUTE_THRESHOLDS,
-)
 
 logger = logging.getLogger(__name__)
 

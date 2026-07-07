@@ -4,7 +4,6 @@ Location identification module.
 Uses clustering algorithms to identify home and work locations from activity data.
 """
 
-import logging
 from datetime import time, datetime, timedelta
 from typing import List, Tuple, Optional, Dict
 from dataclasses import dataclass

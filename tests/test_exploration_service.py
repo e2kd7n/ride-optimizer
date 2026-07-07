@@ -84,7 +84,7 @@ class TestSurfaceProfileMapping:
 
 
 class TestOrsClient:
-    """Tests for src/ors_client.get_route using mocked requests.post."""
+    """Tests for src/ors_client.get_route using a mocked shared session's post."""
 
     def _sample_ors_response(self):
         return {
@@ -111,7 +111,7 @@ class TestOrsClient:
         mock_response.json.return_value = self._sample_ors_response()
         mock_response.raise_for_status = MagicMock()
 
-        with patch("src.ors_client.requests.post", return_value=mock_response) as mock_post:
+        with patch("src.ors_client._session.post", return_value=mock_response) as mock_post:
             result = ors_client.get_route([[41.98, -87.65], [41.99, -87.64]], "cycling-regular", api_key="k")
         assert result is not None
         assert "features" in result
@@ -120,7 +120,7 @@ class TestOrsClient:
     def test_no_api_key_returns_none(self):
         from src import ors_client
 
-        with patch("src.ors_client.requests.post") as mock_post:
+        with patch("src.ors_client._session.post") as mock_post:
             result = ors_client.get_route([[0, 0], [1, 1]], "cycling-regular", api_key="")
         assert result is None
         mock_post.assert_not_called()
@@ -128,14 +128,14 @@ class TestOrsClient:
     def test_timeout_returns_none(self):
         from src import ors_client
 
-        with patch("src.ors_client.requests.post", side_effect=requests.exceptions.Timeout()):
+        with patch("src.ors_client._session.post", side_effect=requests.exceptions.Timeout()):
             result = ors_client.get_route([[0, 0], [1, 1]], "cycling-regular", api_key="k")
         assert result is None
 
     def test_network_error_returns_none(self):
         from src import ors_client
 
-        with patch("src.ors_client.requests.post", side_effect=requests.exceptions.ConnectionError("refused")):
+        with patch("src.ors_client._session.post", side_effect=requests.exceptions.ConnectionError("refused")):
             result = ors_client.get_route([[0, 0], [1, 1]], "cycling-regular", api_key="k")
         assert result is None
 
@@ -145,7 +145,7 @@ class TestOrsClient:
         mock_response = MagicMock()
         mock_response.status_code = 429
 
-        with patch("src.ors_client.requests.post", return_value=mock_response):
+        with patch("src.ors_client._session.post", return_value=mock_response):
             result = ors_client.get_route([[0, 0], [1, 1]], "cycling-regular", api_key="k")
         assert result is not None
         assert result.get("_ors_rate_limited") is True
@@ -166,7 +166,7 @@ class TestOrsClient:
             }
         }
 
-        with patch("src.ors_client.requests.post", return_value=mock_response):
+        with patch("src.ors_client._session.post", return_value=mock_response):
             result = ors_client.get_route([[0, 0], [1, 1]], "cycling-regular", api_key="k")
 
         assert result is not None
@@ -194,7 +194,7 @@ class TestOrsClient:
             }
         }
 
-        with patch("src.ors_client.requests.post", return_value=mock_response):
+        with patch("src.ors_client._session.post", return_value=mock_response):
             result = ors_client.get_route([[0, 0], [1, 1]], "cycling-regular", api_key="k")
 
         assert result is not None

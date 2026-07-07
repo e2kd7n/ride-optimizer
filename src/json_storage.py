@@ -16,7 +16,7 @@ import logging
 if sys.platform != 'win32':
     import fcntl
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 from datetime import datetime
 
 logger = logging.getLogger(__name__)

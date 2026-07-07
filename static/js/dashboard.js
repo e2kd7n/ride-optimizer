@@ -3,14 +3,7 @@
  * Loads and displays system status, weather, recommendations, and routes
  */
 
-// Initialize dashboard on page load
 // NOTE: Initialization is handled by inline script in index.html
-// document.addEventListener('DOMContentLoaded', async () => {
-//     await loadDashboard();
-//
-//     // Refresh data every 5 minutes
-//     setInterval(loadDashboard, 5 * 60 * 1000);
-// });
 
 /**
  * Load all dashboard data

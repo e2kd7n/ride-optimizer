@@ -4,118 +4,16 @@
 # NOTE: For cross-platform compatibility, use the Python wrapper:
 #   python scripts/run_tests.py [all|unit|integration|coverage|quick|watch]
 #
-# This shell script is maintained for Unix environments but will
-# automatically use the Python wrapper if available.
+# This shell script delegates to the Python wrapper, which is maintained
+# as the single source of truth for the test-runner logic.
 
 set -e
 
-# Check if Python wrapper exists and use it (cross-platform)
-if [ -f "scripts/run_tests.py" ]; then
+if command -v python3 &> /dev/null; then
     python3 scripts/run_tests.py "$@"
     exit $?
 fi
 
-echo "🧪 Running Strava Commute Analyzer Tests"
-echo "========================================"
-echo ""
-
-# Check if pytest is installed
-if ! command -v pytest &> /dev/null; then
-    echo "❌ pytest not found. Installing test dependencies..."
-    pip install -r requirements.txt
-fi
-
-# Temporary file for test results
-TEMP_RESULTS=$(mktemp)
-
-# Run tests based on argument
-case "${1:-all}" in
-    "all")
-        echo "📋 Running all tests..."
-        pytest -v > "$TEMP_RESULTS" 2>&1 || true
-        ;;
-    "unit")
-        echo "📋 Running unit tests only..."
-        pytest -v -m unit > "$TEMP_RESULTS" 2>&1 || true
-        ;;
-    "integration")
-        echo "📋 Running integration tests only..."
-        pytest -v -m integration > "$TEMP_RESULTS" 2>&1 || true
-        ;;
-    "coverage")
-        echo "📋 Running tests with coverage report..."
-        pytest --cov=src --cov-report=html --cov-report=term > "$TEMP_RESULTS" 2>&1 || true
-        cat "$TEMP_RESULTS"
-        echo ""
-        echo "📊 Coverage report generated in htmlcov/index.html"
-        ;;
-    "quick")
-        echo "📋 Running quick tests (excluding slow tests)..."
-        pytest -v -m "not slow" > "$TEMP_RESULTS" 2>&1 || true
-        ;;
-    "watch")
-        echo "👀 Running tests in watch mode..."
-        pytest-watch
-        rm -f "$TEMP_RESULTS"
-        exit 0
-        ;;
-    *)
-        echo "Usage: ./run-tests.sh [all|unit|integration|coverage|quick|watch]"
-        echo ""
-        echo "Options:"
-        echo "  all         - Run all tests (default)"
-        echo "  unit        - Run only unit tests"
-        echo "  integration - Run only integration tests"
-        echo "  coverage    - Run tests with coverage report"
-        echo "  quick       - Run tests excluding slow tests"
-        echo "  watch       - Run tests in watch mode"
-        rm -f "$TEMP_RESULTS"
-        exit 1
-        ;;
-esac
-
-# Parse results and create summary
-echo ""
-echo "=========================================="
-echo "📊 TEST SUMMARY"
-echo "=========================================="
-
-# Extract test counts
-PASSED=$(grep -o "[0-9]* passed" "$TEMP_RESULTS" | grep -o "[0-9]*" || echo "0")
-FAILED=$(grep -o "[0-9]* failed" "$TEMP_RESULTS" | grep -o "[0-9]*" || echo "0")
-TOTAL=$((PASSED + FAILED))
-
-echo "✅ Passed: $PASSED/$TOTAL"
-echo "❌ Failed: $FAILED/$TOTAL"
-
-if [ "$FAILED" -gt 0 ]; then
-    echo ""
-    echo "=========================================="
-    echo "❌ FAILED TESTS DETAILS"
-    echo "=========================================="
-    grep "FAILED" "$TEMP_RESULTS" | sed 's/FAILED /  • /' || echo "  (See full output above)"
-    echo ""
-    echo "=========================================="
-    echo "🔧 REMEDIATION NEEDED"
-    echo "=========================================="
-    echo "Run with -v flag for detailed error messages:"
-    echo "  pytest -v tests/test_<module>.py::TestClass::test_method"
-    echo ""
-    echo "Common issues:"
-    echo "  • Type mismatches (datetime vs str, tuple vs Location)"
-    echo "  • Missing attributes (commute, cache_dir)"
-    echo "  • Mock object configuration"
-    echo ""
-fi
-
-# Cleanup
-rm -f "$TEMP_RESULTS"
-
-if [ "$FAILED" -gt 0 ]; then
-    exit 1
-else
-    echo ""
-    echo "✅ All tests passed!"
-    exit 0
-fi
-
+echo "Error: python3 not found on PATH." >&2
+echo "Install Python 3, then run: python3 scripts/run_tests.py [all|unit|integration|coverage|quick|watch]" >&2
+exit 1

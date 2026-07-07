@@ -14,6 +14,11 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+# Shared connection-pooled session for all ORS requests (mirrors the pattern in
+# src/weather_fetcher.py, which sets up self.session = requests.Session() once
+# and reuses it for every call instead of issuing a bare requests.post per call).
+_session = requests.Session()
+
 # api.openrouteservice.org is deprecated for new accounts (moved to heigit.org).
 # api.heigit.org/openrouteservice works for both old and new API keys.
 _ORS_DIRECTIONS_URL = "https://api.heigit.org/openrouteservice/v2/directions/{profile}/geojson"
@@ -65,7 +70,7 @@ def get_route(
     }
 
     try:
-        response = requests.post(url, json=body, headers=headers, timeout=timeout)
+        response = _session.post(url, json=body, headers=headers, timeout=timeout)
         if response.status_code == 429:
             logger.warning("ORS rate limit hit (429)")
             return {"_ors_rate_limited": True}

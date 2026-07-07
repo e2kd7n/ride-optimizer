@@ -16,7 +16,7 @@ import requests
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +57,7 @@ class NtfyNotifier:
         Args:
             config: Configuration dictionary (if None, loads from environment)
         """
+        self.session = requests.Session()
         self.enabled = self._get_config_value(config, 'enabled', 'NTFY_ENABLED', 'false').lower() == 'true'
         self.server = self._get_config_value(config, 'server', 'NTFY_SERVER', 'https://ntfy.sh')
         self.topic = self._get_config_value(config, 'topic', 'NTFY_TOPIC', None)
@@ -209,7 +210,7 @@ class NtfyNotifier:
             }
             
             # Send notification
-            response = requests.post(url, data=message.encode('utf-8'), headers=headers, timeout=10)
+            response = self.session.post(url, data=message.encode('utf-8'), headers=headers, timeout=10)
             
             if response.status_code == 200:
                 logger.info(f"Notification sent: {title}")

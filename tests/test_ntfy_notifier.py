@@ -9,6 +9,7 @@ and configuration validation.
 import pytest
 import json
 import tempfile
+import requests
 from pathlib import Path
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch, MagicMock
@@ -67,6 +68,7 @@ def notifier(notifier_config, temp_throttle_file, monkeypatch):
         notifier.throttle_hours = 6
         notifier.alert_types = notifier_config['alert_types']
         notifier.throttle_file = temp_throttle_file
+        notifier.session = requests.Session()
     return notifier
 
 
@@ -153,7 +155,7 @@ class TestThrottling:
 class TestSendAlert:
     """Test sending alerts."""
     
-    @patch('requests.post')
+    @patch.object(requests.Session, 'post')
     def test_send_alert_success(self, mock_post, notifier):
         """Test successful alert sending."""
         mock_response = Mock()
@@ -178,7 +180,7 @@ class TestSendAlert:
         assert call_args[1]['headers']['Priority'] == 'urgent'
         assert call_args[1]['headers']['Tags'] == 'test'
     
-    @patch('requests.post')
+    @patch.object(requests.Session, 'post')
     def test_send_alert_failure(self, mock_post, notifier):
         """Test alert sending failure."""
         mock_response = Mock()
@@ -194,7 +196,7 @@ class TestSendAlert:
         
         assert result is False
     
-    @patch('requests.post')
+    @patch.object(requests.Session, 'post')
     def test_send_alert_exception(self, mock_post, notifier):
         """Test alert sending with network exception."""
         mock_post.side_effect = Exception('Network error')
@@ -221,7 +223,7 @@ class TestSendAlert:
         
         assert result is False
     
-    @patch('requests.post')
+    @patch.object(requests.Session, 'post')
     def test_send_alert_throttled(self, mock_post, notifier):
         """Test that throttled alerts are not sent."""
         alert_key = 'test_alert'
@@ -242,7 +244,7 @@ class TestSendAlert:
 class TestConvenienceMethods:
     """Test convenience methods for different alert types."""
     
-    @patch('requests.post')
+    @patch.object(requests.Session, 'post')
     def test_send_critical(self, mock_post, notifier):
         """Test send_critical method."""
         mock_response = Mock()
@@ -256,7 +258,7 @@ class TestConvenienceMethods:
         assert call_args[1]['headers']['Priority'] == 'urgent'
         assert 'critical' in call_args[1]['headers']['Tags']
     
-    @patch('requests.post')
+    @patch.object(requests.Session, 'post')
     def test_send_warning(self, mock_post, notifier):
         """Test send_warning method."""
         mock_response = Mock()
@@ -270,7 +272,7 @@ class TestConvenienceMethods:
         assert call_args[1]['headers']['Priority'] == 'high'
         assert 'warning' in call_args[1]['headers']['Tags']
     
-    @patch('requests.post')
+    @patch.object(requests.Session, 'post')
     def test_send_info(self, mock_post, notifier):
         """Test send_info method."""
         mock_response = Mock()
@@ -288,7 +290,7 @@ class TestConvenienceMethods:
 class TestSpecificAlerts:
     """Test specific alert methods."""
     
-    @patch('requests.post')
+    @patch.object(requests.Session, 'post')
     def test_send_disk_space_critical(self, mock_post, notifier):
         """Test disk space critical alert."""
         mock_response = Mock()
@@ -306,7 +308,7 @@ class TestSpecificAlerts:
         assert '92.5%' in message
         assert '8.2 GB' in message
     
-    @patch('requests.post')
+    @patch.object(requests.Session, 'post')
     def test_send_stale_data_alert(self, mock_post, notifier):
         """Test stale data alert."""
         mock_response = Mock()
@@ -320,7 +322,7 @@ class TestSpecificAlerts:
         message = call_args[1]['data'].decode('utf-8')
         assert '38 hours' in message
     
-    @patch('requests.post')
+    @patch.object(requests.Session, 'post')
     def test_send_cron_failure_alert(self, mock_post, notifier):
         """Test cron failure alert."""
         mock_response = Mock()
@@ -335,7 +337,7 @@ class TestSpecificAlerts:
         assert 'daily_analysis' in message
         assert 'Connection timeout' in message
     
-    @patch('requests.post')
+    @patch.object(requests.Session, 'post')
     def test_send_maintenance_summary(self, mock_post, notifier):
         """Test maintenance summary alert."""
         # Enable maintenance summary alerts
