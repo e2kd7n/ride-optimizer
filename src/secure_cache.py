@@ -78,8 +78,7 @@ class SecureCacheStorage:
             logger.warning("GENERATED NEW CACHE ENCRYPTION KEY")
             logger.warning("=" * 70)
             logger.warning(f"Key saved to: {key_file}")
-            logger.warning("To use across systems, add to .env:")
-            logger.warning(f"CACHE_ENCRYPTION_KEY={key.decode()}")
+            logger.warning("To use across systems, copy CACHE_ENCRYPTION_KEY from that file into .env")
             logger.warning("=" * 70)
         except Exception as e:
             logger.error(f"Failed to save encryption key: {e}")

@@ -184,8 +184,7 @@ class SecureTokenStorage:
             logger.warning("GENERATED NEW TOKEN ENCRYPTION KEY")
             logger.warning("=" * 70)
             logger.warning(f"Key saved to: {self.key_file}")
-            logger.warning("For portability across systems, add to your .env file:")
-            logger.warning(f"TOKEN_ENCRYPTION_KEY={key.decode()}")
+            logger.warning("For portability across systems, copy TOKEN_ENCRYPTION_KEY from that file into .env")
             logger.warning("=" * 70)
             log_security_event('ENCRYPTION_KEY_GENERATED', {
                 'key_file': str(self.key_file),
