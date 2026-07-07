@@ -142,7 +142,8 @@ class NextCommuteRecommender:
         self.min_distance = min(distances) if distances else 0
         self.max_distance = max(distances) if distances else 1
         self.max_frequency = max(frequencies) if frequencies else 1
-        self.max_elevation = max(elevations) if max(elevations) > 0 else 1
+        max_elev = max(elevations) if elevations else 0
+        self.max_elevation = max_elev if max_elev > 0 else 1
     
     def determine_next_commutes(self, current_time: Optional[datetime] = None) -> Tuple[str, str]:
         """
