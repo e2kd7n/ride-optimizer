@@ -8,7 +8,6 @@ Licensed under the MIT License - see LICENSE file for details.
 """
 
 import json
-import logging
 import os
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -18,7 +17,9 @@ from dataclasses import dataclass, asdict
 from stravalib.client import Client
 import polyline
 
-logger = logging.getLogger(__name__)
+from src.secure_logger import SecureLogger
+
+logger = SecureLogger(__name__)
 
 
 @dataclass
@@ -323,7 +324,7 @@ class StravaDataFetcher:
                                 pass
                                 
                     except Exception as e:
-                        logger.warning(f"Failed to process activity {activity.id}: {e}")
+                        logger.warning(f"Failed to process activity_id={activity.id}: {e}")
                         continue
             
             # Print fetch results
@@ -387,7 +388,7 @@ class StravaDataFetcher:
                     logger.info(f"Enriched {i + 1}/{len(activities)} activities")
                     
             except Exception as e:
-                logger.warning(f"Failed to enrich activity {activity.id}: {e}")
+                logger.warning(f"Failed to enrich activity_id={activity.id}: {e}")
                 # Keep original activity if enrichment fails
                 enriched_activities.append(activity)
                 continue

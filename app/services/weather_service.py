@@ -8,15 +8,15 @@ Provides:
 - Weather summary formatting for UI
 """
 
-import logging
 from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime, timedelta
 
 from src.weather_fetcher import WeatherFetcher, WindImpactCalculator
 from src.config_manager import ConfigManager
 from src.json_storage import JSONStorage
+from src.secure_logger import SecureLogger
 
-logger = logging.getLogger(__name__)
+logger = SecureLogger(__name__)
 
 
 class WeatherService:
