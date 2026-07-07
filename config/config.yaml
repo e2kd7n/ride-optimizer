@@ -14,11 +14,11 @@ exploration:
 
 location:
   home:
-    latitude: REDACTED_LAT  # Update with your actual home coordinates
-    longitude: REDACTED_LON
+    latitude: ${HOME_LATITUDE}  # Set in .env - do not hardcode real coordinates here (this file is committed)
+    longitude: ${HOME_LONGITUDE}
   work:
-    latitude: REDACTED_LAT  # Update with your actual work coordinates
-    longitude: REDACTED_LON
+    latitude: ${WORK_LATITUDE}  # Set in .env - do not hardcode real coordinates here (this file is committed)
+    longitude: ${WORK_LONGITUDE}
 
 data_fetching:
   cache_enabled: true

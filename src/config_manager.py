@@ -112,8 +112,23 @@ class ConfigManager:
         elif isinstance(config, list):
             return [self._replace_env_vars(item) for item in config]
         elif isinstance(config, str) and config.startswith('${') and config.endswith('}'):
-            return os.getenv(config[2:-1])
+            return self._coerce_numeric(os.getenv(config[2:-1]))
         return config
+
+    @staticmethod
+    def _coerce_numeric(value: Optional[str]) -> Any:
+        """Convert numeric-looking env var strings (e.g. coordinates) back to int/float."""
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except ValueError:
+            pass
+        try:
+            return float(value)
+        except ValueError:
+            pass
+        return value
     
     def get(self, key: str, default: Any = None) -> Any:
         """
