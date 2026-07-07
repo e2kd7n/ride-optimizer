@@ -29,10 +29,6 @@ bp = Blueprint('core', __name__, url_prefix='/api')
 @bp.route('/csrf-token')
 def get_csrf_token():
     """Return a CSRF token for clients making state-changing requests."""
-    csrf = current_app.extensions.get('csrf')
-    if csrf:
-        # Mark as exempt so we don't need a token to get a token
-        pass
     return jsonify({'csrf_token': generate_csrf()})
 
 
