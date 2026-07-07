@@ -39,6 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('location-search-input').addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); searchLocation(); }
     });
+    document.getElementById('use-my-location-btn').addEventListener('click', useMyLocation);
     document.getElementById('route-type-select').addEventListener('change', onRouteTypeChange);
     document.getElementById('end-search-btn').addEventListener('click', searchEndLocation);
     document.getElementById('end-search-input').addEventListener('keydown', (e) => {
@@ -244,6 +245,34 @@ async function searchEndLocation() {
     }
 }
 
+async function useMyLocation() {
+    const btn = document.getElementById('use-my-location-btn');
+    if (!navigator.geolocation) {
+        if (typeof showToast === 'function') showToast('Geolocation is not supported by this browser', 'warning');
+        return;
+    }
+
+    btn.disabled = true;
+    const statusEl = document.getElementById('start-display');
+    const previousText = statusEl.textContent;
+    statusEl.textContent = 'Locating…';
+
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            const { latitude, longitude } = position.coords;
+            setStart(latitude, longitude);
+            map.setView([latitude, longitude], 13);
+            btn.disabled = false;
+        },
+        (err) => {
+            statusEl.textContent = previousText;
+            if (typeof showToast === 'function') showToast(err.message || 'Unable to determine your location', 'error');
+            btn.disabled = false;
+        },
+        { enableHighAccuracy: false, timeout: 10000 },
+    );
+}
+
 // ── Web Worker ──────────────────────────────────────────────────
 
 function initWorker() {
@@ -305,8 +334,69 @@ async function loadCoverage() {
     }
 }
 
+/**
+ * Riders' visited tiles can span disconnected regions (home turf plus the
+ * occasional trip elsewhere). Fitting to the bounds of ALL of them zooms out
+ * to a near-world view. Instead, bucket tiles into coarse cells, find the
+ * cell with the most tiles, and fit to that cluster (plus its neighbors so a
+ * cluster split across a cell boundary isn't cropped).
+ */
+function findDensityCluster(visited, zoom) {
+    if (!visited || typeof visited !== 'object') return null;
+    const n = Math.pow(2, zoom || 14);
+    const points = Object.keys(visited).map((key) => {
+        const [x, y] = key.split(',').map(Number);
+        const lon = (x + 0.5) / n * 360 - 180;
+        const lat = Math.atan(Math.sinh(Math.PI * (1 - 2 * (y + 0.5) / n))) * 180 / Math.PI;
+        return { lat, lon };
+    });
+    if (points.length === 0) return null;
+
+    const BUCKET_DEG = 0.5; // ~55km cells
+    const buckets = new Map();
+    for (const p of points) {
+        const bx = Math.floor(p.lon / BUCKET_DEG);
+        const by = Math.floor(p.lat / BUCKET_DEG);
+        const key = `${bx},${by}`;
+        buckets.set(key, (buckets.get(key) || 0) + 1);
+    }
+
+    let best = null;
+    for (const [key, count] of buckets) {
+        if (!best || count > best.count) {
+            const [bx, by] = key.split(',').map(Number);
+            best = { bx, by, count };
+        }
+    }
+    if (!best) return null;
+
+    const minLat = (best.by - 1) * BUCKET_DEG;
+    const maxLat = (best.by + 2) * BUCKET_DEG;
+    const minLon = (best.bx - 1) * BUCKET_DEG;
+    const maxLon = (best.bx + 2) * BUCKET_DEG;
+
+    let south = Infinity, west = Infinity, north = -Infinity, east = -Infinity;
+    for (const p of points) {
+        if (p.lat >= minLat && p.lat <= maxLat && p.lon >= minLon && p.lon <= maxLon) {
+            south = Math.min(south, p.lat);
+            west = Math.min(west, p.lon);
+            north = Math.max(north, p.lat);
+            east = Math.max(east, p.lon);
+        }
+    }
+    if (!isFinite(south)) return null;
+    return [[south, west], [north, east]];
+}
+
 function fitToCoverage(data) {
-    if (!data.bounds || map.getZoom() >= 10) return;
+    if (map.getZoom() >= 10) return; // user already navigated (search, click, or "Use location") — don't override
+
+    const cluster = findDensityCluster(data.visited, data.zoom);
+    if (cluster) {
+        map.fitBounds(cluster, { padding: [20, 20], maxZoom: 13 });
+        return;
+    }
+    if (!data.bounds) return;
     const [south, west, north, east] = data.bounds;
     map.fitBounds([[south, west], [north, east]], { padding: [20, 20], maxZoom: 13 });
 }
