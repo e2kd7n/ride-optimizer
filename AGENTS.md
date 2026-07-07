@@ -113,6 +113,28 @@ Outputs: output/report.html (static file)
 **The CLI tool is ONLY for data analysis, NOT for UI/UX work.**
 
 
+## ⚠️ SECURITY & PRIVACY GUARDRAILS (MANDATORY) ⚠️
+
+### The Coordinate Leak Incident (2026-07-07)
+
+**What happened:** The maintainer's real home/work GPS coordinates were hardcoded in `config/config.yaml` (a tracked file) since commit `3ea7ec8` (#77) and sat in plaintext on the **public** repo for months, alongside full-resolution GPS route traces from a debug script (`archive/debug_scripts/test_route_*_coords.json`) and old cache snapshots with real geocoded addresses. Separately, an audit found the codebase's own privacy tooling (`SecureLogger`/`pii_sanitizer.py`, `SecureCacheStorage`) was applied to only ~8 of 30+ modules that log or cache location/PII data — the rest used plain `logging.getLogger`/raw `json.dump`, silently bypassing the protection that exists.
+
+**Cost:** Full git history rewrite (`git filter-repo`) across every branch/tag, force-push, and a since-invalidated set of commit hashes for anyone with an existing clone or fork.
+
+**Root cause:** Sensitive values were hardcoded directly into a tracked file instead of using the `${VAR}` env-substitution pattern that already existed in the same file for other secrets (`STRAVA_CLIENT_ID`, etc.). Debug output containing real data was committed instead of being written to a gitignored path. Security/privacy helper classes were built once and never enforced as the required pattern for new code.
+
+**Prevention — these rules are not optional:**
+
+1. **Never hardcode a real coordinate, address, name, token, or key into a file that's tracked by git** — not even in a comment, example, or "temporary" debug script. `config/config.yaml` is tracked; secrets and PII-adjacent values (home/work lat/lon, API keys, tokens) go in `.env` (gitignored) and are referenced via `${VAR_NAME}` — the pattern already used for `STRAVA_CLIENT_ID`/`STRAVA_CLIENT_SECRET`. Before committing any change to `config/config.yaml` or any other tracked config file, re-read the diff specifically looking for float literals that could be real coordinates, or any value that looks like a real credential.
+2. **Debug/analysis scripts that touch real user data (activities, routes, coordinates) must write output to a gitignored path** (e.g. under `data/` or a scratch dir already covered by `.gitignore`) — never to a path that will be `git add`ed, even under `archive/` or `docs/`. If a debug artifact with real data was already committed by mistake, it needs a history purge, not just a follow-up commit that deletes it — deleting in a new commit leaves the data recoverable from history.
+3. **All new logging must use `SecureLogger`, never plain `logging.getLogger`.** Any module that could conceivably touch GPS coordinates, addresses, activity/athlete IDs, tokens, or credentials must do `from src.secure_logger import SecureLogger; logger = SecureLogger(__name__)`. When formatting a Strava ID into a log message, use the `activity_id=<id>`/`athlete_id=<id>` shape (with `=` or `:`) so `pii_sanitizer.sanitize_strava_id`'s regex actually matches it — `f"activity {id}"` (no separator) silently does NOT get sanitized even through `SecureLogger`.
+4. **If you add a new cache file that stores GPS coordinates, addresses, or route data, decide explicitly whether it needs `SecureCacheStorage` encryption** (`src/secure_cache.py`) and say so in the PR/commit — don't silently `json.dump` it in plaintext and assume "someone already handled this." As of this writing `SecureCacheStorage` is unused dead code even though several caches contain exactly the data it was built to protect — don't repeat that gap for new caches.
+5. **Security scaffolding must be verified as actually enforced, not just present.** If you wire up `CSRFProtect`, an encryption key generator, a validator, etc., write or run a quick check that it actually fires on the code path you think it protects (e.g. does the route actually reject a request without a valid token?) — don't assume presence of the class/decorator/import means the protection is active.
+6. **Never log a generated secret/key value itself.** When a key-generation code path logs "generated a new key," log the file path to retrieve it from, never the key material in the log message.
+7. **Any server-side fetch of a user-supplied URL needs SSRF hardening** — restrict scheme to `http`/`https`, and reject hostnames that resolve to private/loopback/link-local ranges, checked at fetch time (not just when the URL is first saved, since DNS can rebind between save and use).
+8. **Before marking any task complete that touched config files, logging, caching, or URL-fetching code, ask: "would this diff be safe if the repo is public?"** — because this one is.
+
+
 ## Workflow Orchestration
 
 ### Parallel Operation
@@ -131,6 +153,7 @@ Outputs: output/report.html (static file)
 After marking any task complete:
 - [ ] All tests passing
 - [ ] Code reviewed (if applicable)
+- [ ] **No real secrets/PII in the diff** (see SECURITY & PRIVACY GUARDRAILS) — check any touched config file, debug/test fixture, or log statement
 - [ ] **GitHub issues closed with detailed comments**
 - [ ] **ISSUE_PRIORITIES.md updated**
 - [ ] **Epic child issues verified closed (if applicable)**
@@ -145,10 +168,11 @@ After marking any task complete:
 ## Critical Non-Obvious Patterns
 
 ### Security & Authentication
+- **See "SECURITY & PRIVACY GUARDRAILS" above first** — mandatory rules, not just background info.
 - **Credential validation is mandatory**: App exits immediately if `STRAVA_CLIENT_ID` or `STRAVA_CLIENT_SECRET` are missing/invalid in `.env`
-- **Encrypted storage**: Tokens stored in `config/credentials.json` and cache in `cache/` are encrypted using Fernet (keys auto-generated in `config/.token_encryption_key` and `config/.cache_encryption_key`)
+- **Encrypted storage**: Tokens stored in `config/credentials.json` are encrypted using Fernet (key auto-generated in `config/.token_encryption_key`). Cache encryption via `SecureCacheStorage`/`config/.cache_encryption_key` exists but is **not currently wired into any cache write path** — don't assume files under `cache/`/`data/` are encrypted just because this class exists; verify before relying on it.
 - **Security audit logging**: All auth events logged to `logs/security_audit.log` (separate from main logs)
-- **File permissions**: Cache and credential files automatically set to 0600 (owner read/write only)
+- **File permissions**: Cache and credential files automatically set to 0600 (owner read/write only) — on Linux/the Pi; Windows dev checkouts can't enforce this, so don't treat a passing local permissions check as proof it works in production.
 
 ### Cache Behavior (Non-Standard)
 - **Cache merging by default**: `--fetch` merges with existing cache, NOT replaces (use `--replace-cache` to clear)
