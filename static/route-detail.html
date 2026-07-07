@@ -452,7 +452,7 @@
                             : '';
                         const label = r.isPrimary ? ' ★' : '';
                         return `<tr>
-                            <td><a href="https://www.strava.com/activities/${r.aid}" target="_blank" rel="noopener">${r.name}${label}</a></td>
+                            <td><a href="https://www.strava.com/activities/${r.aid}" target="_blank" rel="noopener">${escapeHtml(r.name)}${label}</a></td>
                             <td>${dateStr}</td>
                         </tr>`;
                     }).join('')}</tbody>
@@ -499,8 +499,8 @@
                             ? new Date(r.rawDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
                             : '';
                         const actCell = r.aid
-                            ? `<a href="https://www.strava.com/activities/${r.aid}" target="_blank" rel="noopener">${r.name}</a>`
-                            : r.name;
+                            ? `<a href="https://www.strava.com/activities/${r.aid}" target="_blank" rel="noopener">${escapeHtml(r.name)}</a>`
+                            : escapeHtml(r.name);
                         return `<tr>
                             <td>${actCell}</td>
                             <td>${dateStr}</td>
@@ -608,7 +608,7 @@
                     <section aria-labelledby="route-title">
                         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3 mb-3">
                             <div>
-                                <h1 id="route-title" class="mb-2">${route.name}</h1>
+                                <h1 id="route-title" class="mb-2">${escapeHtml(route.name)}</h1>
                                 <div>
                                     <span class="detail-chip"><i class="bi bi-signpost-split"></i> ${route.type || 'route'}</span>
                                     ${route.direction ? `<span class="detail-chip"><i class="bi bi-arrow-left-right"></i> ${route.direction}</span>` : ''}

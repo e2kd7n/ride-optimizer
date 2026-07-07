@@ -170,8 +170,6 @@
     <script src="/js/api-client.js"></script>
     <script>
         (function() {
-            let mapInstances = [];
-
             function byId(id) {
                 return document.getElementById(id);
             }
@@ -198,11 +196,12 @@
 
             function getDifficultyBadge(difficulty) {
                 const colors = {
-                    'easy': 'success',
-                    'moderate': 'warning',
-                    'hard': 'danger'
+                    'Easy': 'success',
+                    'Moderate': 'warning',
+                    'Hard': 'danger',
+                    'Very hard': 'danger'
                 };
-                return `<span class="badge bg-${colors[difficulty] || 'secondary'}">${difficulty || 'N/A'}</span>`;
+                return `<span class="badge bg-${colors[difficulty] || 'secondary'}">${escapeHtml(difficulty || 'N/A')}</span>`;
             }
 
             function renderMap(containerId, coordinates) {
@@ -229,7 +228,6 @@
                     animate: true,
                     duration: 0.5
                 });
-                mapInstances.push(map);
             }
 
             function findBestValue(routes, key, preferLower = true) {
@@ -259,7 +257,7 @@
                             <div class="col-12 col-md-${routes.length === 2 ? '6' : '4'}">
                                 <div class="card h-100">
                                     <div class="card-body">
-                                        <h3 class="h5 mb-3">${route.name}</h3>
+                                        <h3 class="h5 mb-3">${escapeHtml(route.name)}</h3>
                                         <div id="map-${index}" class="route-map-small"></div>
                                         
                                         <div class="row g-2 mb-3">
@@ -320,7 +318,7 @@
                                     <thead>
                                         <tr>
                                             <th>Metric</th>
-                                            ${routes.map(r => `<th>${r.name}</th>`).join('')}
+                                            ${routes.map(r => `<th>${escapeHtml(r.name)}</th>`).join('')}
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -361,14 +359,12 @@
 
                 byId('comparison-content').innerHTML = content;
 
-                // Render maps after DOM is updated
-                setTimeout(() => {
-                    routes.forEach((route, index) => {
-                        if (route.coordinates) {
-                            renderMap(`map-${index}`, route.coordinates);
-                        }
-                    });
-                }, 100);
+                // innerHTML assignment above is synchronous, so map containers already exist
+                routes.forEach((route, index) => {
+                    if (route.coordinates) {
+                        renderMap(`map-${index}`, route.coordinates);
+                    }
+                });
 
                 announce(`Comparing ${routes.length} routes`);
             }
