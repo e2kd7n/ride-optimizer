@@ -8,7 +8,6 @@ This service provides intelligent commute route recommendations based on:
 - Workout fit (TrainerRoad integration)
 """
 
-import logging
 from html import escape
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, time, date
