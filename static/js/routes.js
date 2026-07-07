@@ -269,7 +269,7 @@
             }).addTo(state.mapInstance);
 
             // Bind popup
-            polyline.bindPopup(`<strong>${route.name}</strong><br>${window.formatDistance(route.distance)}`);
+            polyline.bindPopup(`<strong>${escapeHtml(route.name)}</strong><br>${window.formatDistance(route.distance)}`);
             
             // Bind tooltip with custom class for z-index control
             polyline.bindTooltip(route.name, {
@@ -427,7 +427,7 @@
                     const coords = response.route.coordinates;
 
                     const polyline = L.polyline(coords, { color, weight: 5, opacity: 0.8 }).addTo(state.mapInstance);
-                    polyline.bindPopup(`<strong>${route.name}</strong><br>${window.formatDistance(route.distance)}`);
+                    polyline.bindPopup(`<strong>${escapeHtml(route.name)}</strong><br>${window.formatDistance(route.distance)}`);
 
                     const mkIcon = c => L.divIcon({
                         className: 'custom-marker',
@@ -626,9 +626,9 @@
             row.innerHTML = `
                 <div class="d-flex justify-content-between align-items-start">
                     <div class="flex-grow-1 me-2" style="min-width: 0;">
-                        <h6 class="mb-1 text-truncate" title="${route.name}">
+                        <h6 class="mb-1 text-truncate" title="${escapeHtml(route.name)}">
                             ${route.is_favorite ? '<i class="bi bi-star-fill text-warning"></i> ' : ''}
-                            ${route.name}
+                            ${escapeHtml(route.name)}
                         </h6>
                         <small class="text-muted">
                             ${window.formatDistance(route.distance)} • ${window.formatElevation(route.elevation_gain || route.elevation || 0)} • ${route.uses || 0} uses
@@ -697,8 +697,8 @@
                                title="Compare">
                         <label class="form-check-label small text-muted" for="compare-${route.id}">Compare</label>
                     </div>
-                    <span class="fw-semibold text-truncate flex-grow-1" style="font-size:.875rem;cursor:pointer" title="${route.name}" data-route-link>
-                        ${favIcon}${plusBadge}${route.name}
+                    <span class="fw-semibold text-truncate flex-grow-1" style="font-size:.875rem;cursor:pointer" title="${escapeHtml(route.name)}" data-route-link>
+                        ${favIcon}${plusBadge}${escapeHtml(route.name)}
                     </span>
                     ${diffBadge}${dirBadge}
                 </div>
