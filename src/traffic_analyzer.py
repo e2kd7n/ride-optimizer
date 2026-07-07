@@ -16,7 +16,6 @@ from collections import defaultdict
 
 import numpy as np
 
-from .data_fetcher import Activity
 from .route_analyzer import RouteGroup
 
 logger = logging.getLogger(__name__)

@@ -852,5 +852,3 @@ window.renderEmptyState = function(message, suggestion = '', icon = 'bi-inbox') 
 };
 
 console.log('✓ common.js loaded - Toast, auto-save, undo, unit conversion, and timestamp utilities ready');
-
-// Made with Bob

@@ -24,9 +24,6 @@ class GeocodingService:
         user_agent = self.config.get('route_naming.geocoder_user_agent', 'strava_commute_analyzer')
         self._geolocator = Nominatim(user_agent=user_agent, timeout=timeout)
 
-    def initialize(self):
-        pass
-
     def geocode(self, query: str) -> Dict[str, Any]:
         """Resolve a free-text location (city/state, postal code, address) to coordinates."""
         try:

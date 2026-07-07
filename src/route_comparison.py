@@ -7,8 +7,8 @@ converge on the same logic with per-use-case thresholds.
 """
 
 import math
-from dataclasses import dataclass, field
-from typing import Optional, Tuple
+from dataclasses import dataclass
+from typing import Tuple
 
 import numpy as np
 from scipy.spatial.distance import directed_hausdorff, cdist

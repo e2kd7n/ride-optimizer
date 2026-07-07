@@ -337,17 +337,7 @@ function handleResponsiveResize() {
         
         resizeTimeout = setTimeout(function() {
             const width = window.innerWidth;
-            
-            // Show/hide bottom nav based on screen size
-            const bottomNav = document.getElementById('bottom-nav');
-            if (bottomNav) {
-                if (width < 768) {
-                    bottomNav.style.display = 'flex';
-                } else {
-                    bottomNav.style.display = 'none';
-                }
-            }
-            
+
             // Adjust touch target sizes
             if (width < 768) {
                 document.body.classList.add('mobile-view');
@@ -508,5 +498,3 @@ window.mobileUtils = {
 };
 
 console.log('✓ mobile.js loaded - Bottom nav, swipe gestures, and touch enhancements ready');
-
-// Made with Bob

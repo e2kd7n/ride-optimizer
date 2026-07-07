@@ -7,7 +7,7 @@ optimal departure times, and transit suggestions for bad weather.
 
 import logging
 from typing import Dict, List, Optional, Tuple
-from datetime import datetime, timedelta, time
+from datetime import datetime, time
 from dataclasses import dataclass
 
 from .weather_fetcher import WindImpactCalculator

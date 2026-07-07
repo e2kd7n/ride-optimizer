@@ -331,5 +331,3 @@ async function renderMap(containerId, pageType, options = {}) {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = { MapRenderer, renderMap };
 }
-
-// Made with Bob

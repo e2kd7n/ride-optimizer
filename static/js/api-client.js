@@ -422,5 +422,3 @@ window.apiClient = new APIClient();
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = APIClient;
 }
-
-// Made with Bob

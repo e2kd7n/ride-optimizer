@@ -399,5 +399,3 @@ handleReducedMotion(prefersReducedMotion);
 prefersReducedMotion.addEventListener('change', handleReducedMotion);
 
 console.log('✓ accessibility.js loaded - ARIA, focus management, and keyboard navigation ready');
-
-// Made with Bob
