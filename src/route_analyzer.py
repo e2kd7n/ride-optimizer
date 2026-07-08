@@ -1401,6 +1401,12 @@ class RouteAnalyzer:
         Args:
             total_routes: Total number of routes being geocoded
         """
+        if sys.platform != 'darwin':
+            # osascript/Terminal.app is macOS-only; geocoding still proceeds
+            # in the background, just without a monitor window.
+            logger.debug("Skipping geocoding terminal window: not on macOS")
+            return
+
         try:
             # Create progress file with absolute path
             progress_file = self.cache_dir / 'geocoding_progress.txt'

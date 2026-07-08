@@ -187,13 +187,6 @@
                 return ids ? ids.split(',') : [];
             }
 
-            function formatDuration(durationMinutes) {
-                const totalMinutes = Math.round(Number(durationMinutes || 0));
-                const hours = Math.floor(totalMinutes / 60);
-                const minutes = totalMinutes % 60;
-                return hours > 0 ? `${hours}h ${minutes}m` : `${totalMinutes} min`;
-            }
-
             function getDifficultyBadge(difficulty) {
                 const colors = {
                     'Easy': 'success',

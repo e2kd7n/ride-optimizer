@@ -696,6 +696,18 @@ window.getElevationUnit = function() {
 };
 
 /**
+ * Format a duration in minutes as "Xh Ym" (or "Xm" under an hour)
+ * @param {number} durationMinutes - Duration in minutes
+ * @returns {string} Formatted duration
+ */
+window.formatDuration = function(durationMinutes) {
+    const totalMinutes = Math.round(Number(durationMinutes || 0));
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return hours > 0 ? `${hours}h ${minutes}m` : `${totalMinutes} min`;
+};
+
+/**
  * Format timestamp as relative time (e.g., "5 minutes ago")
  * @param {string|Date} timestamp - ISO 8601 timestamp or Date object
  * @returns {string} Formatted relative time

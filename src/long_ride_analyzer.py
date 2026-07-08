@@ -989,10 +989,14 @@ class LongRideAnalyzer:
         recommendations = []
         
         for ride in nearby_rides:
-            # Calculate distance from clicked location to ride
+            # Calculate distance from clicked location to ride. Sample every
+            # 5th point on long routes since we only need this for display/sorting,
+            # not exact precision -- avoids rescanning thousands of GPS points here
+            # on top of the scan find_rides_near_location already did.
+            sampled_coords = ride.coordinates[::5] if len(ride.coordinates) > 100 else ride.coordinates
             min_distance = min(
                 geodesic((clicked_lat, clicked_lon), coord).meters
-                for coord in ride.coordinates
+                for coord in sampled_coords
             )
             
             # Calculate wind score and detailed analysis

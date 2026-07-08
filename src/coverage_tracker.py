@@ -465,13 +465,9 @@ class CoverageTracker:
         snap_tolerance = self.config.get("exploration.snap_tolerance_meters", 30)
         snap_deg = snap_tolerance / 111_000
 
-        edge_geoms = []
-        edge_keys = []
-        for idx, row in edges.iterrows():
-            geom = row.get("geometry")
-            if geom is not None:
-                edge_geoms.append(geom)
-                edge_keys.append(idx)
+        valid_geoms = edges["geometry"].dropna()
+        edge_geoms = list(valid_geoms)
+        edge_keys = list(valid_geoms.index)
 
         tree = STRtree(edge_geoms)
         ridden_set: Set[int] = set()
