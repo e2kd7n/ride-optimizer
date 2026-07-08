@@ -6,6 +6,12 @@
 /* ===== Global Styles ===== */
 /* Fair Weather brand tokens — see docs/designs/FAIR_WEATHER_BRAND_BOOK.md */
 :root {
+    /* Tell the browser this page manages its own dark theme, so it doesn't
+       apply its own auto-dark heuristics (e.g. Edge/Chrome "force dark",
+       Android WebView) on top of ours — that double-processing is what
+       made form labels/help text unreadable in Night mode. */
+    color-scheme: light;
+
     /* Day ground (default) */
     --bg: #F3F6F7;
     --surface: #FFFFFF;
@@ -43,6 +49,22 @@
     --bs-success-rgb: 62, 142, 99;
     --bs-warning-rgb: 201, 138, 29;
     --bs-danger-rgb: 196, 72, 58;
+
+    /* Bootstrap components (.card, .form-text, .dropdown-menu, etc.) read
+       these core variables directly instead of inheriting body color — left
+       unmapped, they keep Bootstrap's hardcoded light-mode defaults (#212529
+       text, rgba(33,37,41,.75) secondary text) no matter what theme is
+       active. Map them to the brand tokens so Night mode actually applies. */
+    --bs-body-color: var(--ink);
+    --bs-body-color-rgb: 15, 34, 51;
+    --bs-body-bg: var(--bg);
+    --bs-body-bg-rgb: 243, 246, 247;
+    --bs-secondary-color: var(--ink-soft);
+    --bs-secondary-color-rgb: 91, 118, 134;
+    --bs-tertiary-color: var(--ink-soft);
+    --bs-border-color: var(--line);
+    --bs-border-color-translucent: var(--line);
+    --bs-emphasis-color: var(--ink);
 
     /* Spacing scale (#280) */
     --space-1: 4px;
@@ -92,6 +114,7 @@
 /* Fair Weather Night ground — token set only; no toggle UI ships yet.
    Day is the default; setting data-theme="night" on <html> flips the system. */
 html[data-theme="night"] {
+    color-scheme: dark;
     --bg: #0B1620;
     --surface: #122232;
     --surface-2: #16283A;
@@ -109,6 +132,9 @@ html[data-theme="night"] {
     --bs-success-rgb: 87, 179, 132;
     --bs-warning-rgb: 224, 166, 62;
     --bs-danger-rgb: 226, 105, 92;
+    --bs-body-color-rgb: 234, 240, 243;
+    --bs-body-bg-rgb: 11, 22, 32;
+    --bs-secondary-color-rgb: 143, 166, 180;
 }
 
 body {
