@@ -79,9 +79,8 @@ function initializeBottomNav() {
     
     /**
      * Handle navigation item activation.
-     * Bottom-nav items already carry onclick handlers that navigate via
-     * window.location.href, so this only manages visual state and
-     * screen-reader announcements.
+     * Sets visual/ARIA state, announces to screen readers, then navigates
+     * via the item's `data-page` attribute (a PAGE_ROUTES key).
      *
      * @param {HTMLElement} item - The navigation item to activate
      * @param {NodeList} allItems - All navigation items
@@ -101,6 +100,11 @@ function initializeBottomNav() {
         const label = item.getAttribute('aria-label');
         if (label && window.announceToScreenReader) {
             announceToScreenReader(`Navigated to ${label}`);
+        }
+
+        const pageId = item.dataset.page;
+        if (pageId) {
+            navigateToTab(pageId);
         }
     }
     
@@ -130,6 +134,37 @@ function navigateToTab(pageId) {
     if (href) {
         window.location.href = href;
     }
+}
+
+/**
+ * Pages listed in the "More" overflow drawer, in display order.
+ * `id` must be a PAGE_ROUTES key.
+ */
+const DRAWER_ITEMS = [
+    { id: 'explore', icon: 'bi-compass', label: 'Explore' },
+    { id: 'settings', icon: 'bi-gear', label: 'Settings' }
+];
+
+/**
+ * Populate the #bottom-nav-more drawer from DRAWER_ITEMS/PAGE_ROUTES so the
+ * markup isn't hand-duplicated across every page (Issue #443).
+ */
+function renderBottomNavDrawer() {
+    const drawer = document.getElementById('bottom-nav-more');
+    if (!drawer) {
+        return;
+    }
+
+    const currentIndex = getCurrentPageIndex();
+    const currentPageId = currentIndex >= 0 ? PAGE_ORDER[currentIndex] : null;
+
+    drawer.innerHTML = DRAWER_ITEMS.map(({ id, icon, label }) => {
+        const isActive = id === currentPageId;
+        return `<a class="bottom-nav-drawer-item${isActive ? ' active' : ''}" href="${PAGE_ROUTES[id]}"${isActive ? ' aria-current="page"' : ''}>
+            <i class="bi ${icon}" aria-hidden="true"></i>
+            <span>${label}</span>
+        </a>`;
+    }).join('');
 }
 
 /**
@@ -466,6 +501,7 @@ function initializeMobileFeatures() {
     }
     
     // Initialize features
+    renderBottomNavDrawer();
     initializeBottomNav();
     initializeSwipeGestures();
     initializeTouchFeedback();
