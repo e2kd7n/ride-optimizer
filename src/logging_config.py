@@ -34,6 +34,42 @@ import os
 from pathlib import Path
 from typing import Optional
 
+from src.pii_sanitizer import sanitize_log_message
+
+
+class PIISanitizingFilter(logging.Filter):
+    """
+    Logging filter that sanitizes PII from every record before it's emitted,
+    regardless of which logger produced it.
+
+    ``SecureLogger`` only protects call sites that explicitly opt in to it;
+    most of ``app/services/*.py`` and several ``src/*.py`` modules still use
+    plain ``logging.getLogger(__name__)`` and can log raw GPS coordinates,
+    addresses, or third-party exception strings verbatim. Attaching this
+    filter to each handler (rather than to individual loggers) closes that
+    gap for every current and future logger in the process, including
+    third-party libraries, without requiring every module to be migrated.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.msg = sanitize_log_message(record.msg)
+
+        if record.args:
+            if isinstance(record.args, dict):
+                record.args = {
+                    key: sanitize_log_message(value) if isinstance(value, str) else value
+                    for key, value in record.args.items()
+                }
+            else:
+                # Only sanitize string args in-place; leave numeric/bool args
+                # untouched so %d/%f-style third-party log calls don't break.
+                record.args = tuple(
+                    sanitize_log_message(arg) if isinstance(arg, str) else arg
+                    for arg in record.args
+                )
+
+        return True
+
 
 def setup_logging(
     log_dir: str = 'logs',
@@ -89,6 +125,7 @@ def setup_logging(
         )
         main_handler.setLevel(log_level)
         main_handler.setFormatter(formatter)
+        main_handler.addFilter(PIISanitizingFilter())
         root_logger.addHandler(main_handler)
         _set_secure_permissions(main_log_file)
     except PermissionError:
@@ -100,6 +137,7 @@ def setup_logging(
         console_handler = logging.StreamHandler()
         console_handler.setLevel(log_level)
         console_handler.setFormatter(formatter)
+        console_handler.addFilter(PIISanitizingFilter())
         root_logger.addHandler(console_handler)
 
     # Security audit log (separate file with rotation)
@@ -117,6 +155,7 @@ def setup_logging(
         )
         security_handler.setLevel(logging.INFO)
         security_handler.setFormatter(formatter)
+        security_handler.addFilter(PIISanitizingFilter())
         security_logger.addHandler(security_handler)
         _set_secure_permissions(security_log_file)
     except PermissionError:
@@ -231,6 +270,7 @@ def reconfigure_logging(
                 datefmt='%Y-%m-%d %H:%M:%S'
             )
             console_handler.setFormatter(formatter)
+            console_handler.addFilter(PIISanitizingFilter())
             root_logger.addHandler(console_handler)
         elif not console_output and console_handler:
             # Remove console handler

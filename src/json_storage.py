@@ -22,6 +22,23 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 
+def secure_chmod(path) -> None:
+    """
+    Best-effort chmod to 0o600 (owner read/write only).
+
+    Several cache writers under src/ bypass JSONStorage and write JSON
+    directly with plain `open()`, leaving files at the process umask's
+    default permissions. Call this right after writing to bring them to the
+    same owner-only baseline JSONStorage already provides. No-op on
+    platforms/filesystems that don't support POSIX permission bits (e.g.
+    Windows, FAT32).
+    """
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+
+
 class JSONStorage:
     """
     Thread-safe JSON file storage with atomic writes.

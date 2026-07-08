@@ -394,3 +394,67 @@ class TestEdgeCases:
         assert len(log_files) == 1
 
 
+@pytest.mark.unit
+class TestGlobalPIISanitization:
+    """
+    Regression tests for GHSA-pwgc-f93g-m5fq: SecureLogger was applied
+    inconsistently, so plain `logging.getLogger(__name__)` call sites (most of
+    app/services/*.py, several src/*.py modules) logged raw PII. setup_logging()
+    now attaches a sanitizing filter directly to each handler, so every logger
+    in the process is protected regardless of whether it opted into SecureLogger.
+    """
+
+    def test_plain_logger_coordinates_are_masked_in_main_log(self, temp_log_dir):
+        setup_logging(log_dir=temp_log_dir, console_output=False)
+
+        # A module that never adopted SecureLogger, e.g. src/visualizer.py style.
+        plain_logger = logging.getLogger('src.visualizer')
+        plain_logger.info("Created base map centered at (41.8781136, -87.6297982)")
+
+        content = (Path(temp_log_dir) / 'ride_optimizer.log').read_text()
+        assert '41.8781136' not in content
+        assert '87.6297982' not in content
+        assert '41.87xx' in content
+
+    def test_plain_logger_strava_id_is_hashed_in_main_log(self, temp_log_dir):
+        setup_logging(log_dir=temp_log_dir, console_output=False)
+
+        plain_logger = logging.getLogger('app.services.garmin_service')
+        plain_logger.info("activity_id: 9876543210")
+
+        content = (Path(temp_log_dir) / 'ride_optimizer.log').read_text()
+        assert '9876543210' not in content
+        assert '[STRAVA:' in content
+
+    def test_sanitization_applies_to_security_audit_log_too(self, temp_log_dir):
+        setup_logging(log_dir=temp_log_dir)
+
+        security_logger = get_security_logger()
+        security_logger.info("Auth event at (41.8781136, -87.6297982)")
+
+        content = (Path(temp_log_dir) / 'security_audit.log').read_text()
+        assert '41.8781136' not in content
+        assert '41.87xx' in content
+
+    def test_percent_style_string_args_are_sanitized(self, temp_log_dir):
+        setup_logging(log_dir=temp_log_dir, console_output=False)
+
+        plain_logger = logging.getLogger('test.percent_style')
+        plain_logger.info("Coordinates: %s", "41.8781136, -87.6297982")
+
+        content = (Path(temp_log_dir) / 'ride_optimizer.log').read_text()
+        assert '41.8781136' not in content
+        assert '41.87xx' in content
+
+    def test_numeric_percent_style_args_do_not_break_formatting(self, temp_log_dir):
+        """Non-string args must be left alone so %d/%f-style calls (common in
+        third-party libraries) don't raise during formatting."""
+        setup_logging(log_dir=temp_log_dir, console_output=False)
+
+        plain_logger = logging.getLogger('test.numeric_args')
+        plain_logger.info("Retry %d of %d", 1, 3)
+
+        content = (Path(temp_log_dir) / 'ride_optimizer.log').read_text()
+        assert 'Retry 1 of 3' in content
+
+

@@ -24,6 +24,7 @@ from .data_fetcher import Activity
 from .route_namer import RouteNamer
 from .route_comparison import coords_to_km, extent_point
 from .weather_fetcher import WeatherFetcher
+from .json_storage import secure_chmod
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +118,7 @@ class LongRideAnalyzer:
             p = Path(self._SIMILARITY_CACHE_PATH)
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(json.dumps(self._similarity_cache))
+            secure_chmod(p)
             logger.debug(f"Saved {len(self._similarity_cache)} long-ride similarity values to cache")
         except Exception as e:
             logger.warning(f"Could not save long-ride similarity cache: {e}")

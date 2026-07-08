@@ -9,16 +9,18 @@ Provides:
 - Secure storage of ICS feed URL
 """
 
+import ipaddress
 import logging
 import requests
 import json
 import os
 import re
+import socket
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta, date
 from icalendar import Calendar, Event
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 from cryptography.fernet import Fernet
 
 from src.config_manager import ConfigManager
@@ -26,6 +28,62 @@ from src.config_manager import ConfigManager
 logger = logging.getLogger(__name__)
 
 WORKOUTS_CACHE = Path('data/cache/trainerroad_workouts.json')
+
+# Only these schemes are ever fetched server-side.
+_ALLOWED_FEED_SCHEMES = {'http', 'https'}
+# Bound on redirect hops when fetching the feed, to prevent open-ended chains.
+_MAX_FEED_REDIRECTS = 5
+
+
+def _is_safe_feed_host(hostname: Optional[str]) -> bool:
+    """
+    Return True only if *hostname* resolves exclusively to public,
+    non-internal addresses. Blocks loopback/private/link-local/reserved/
+    multicast ranges (including cloud metadata endpoints like
+    169.254.169.254) to prevent SSRF via a user-supplied feed URL.
+    """
+    if not hostname:
+        return False
+
+    try:
+        addr_infos = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        return False
+
+    if not addr_infos:
+        return False
+
+    for info in addr_infos:
+        raw_ip = info[4][0].split('%')[0]  # strip IPv6 zone id, if any
+        try:
+            ip = ipaddress.ip_address(raw_ip)
+        except ValueError:
+            return False
+
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+            or ip.is_unspecified
+        ):
+            return False
+
+    return True
+
+
+def _is_safe_feed_url(url: str) -> bool:
+    """Validate scheme + resolved host safety for a feed URL/redirect target."""
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+
+    if parsed.scheme not in _ALLOWED_FEED_SCHEMES:
+        return False
+
+    return _is_safe_feed_host(parsed.hostname)
 
 
 class TrainerRoadService:
@@ -121,6 +179,13 @@ class TrainerRoadService:
                 logger.error(f"Invalid feed URL: {feed_url}")
                 return False
 
+            if not _is_safe_feed_url(feed_url):
+                logger.error(
+                    "Rejected feed URL: scheme must be http/https and host must not "
+                    "resolve to a private/internal/loopback address"
+                )
+                return False
+
             if not self._save_feed_url(feed_url):
                 return False
 
@@ -153,14 +218,37 @@ class TrainerRoadService:
             logger.warning("No feed URL configured")
             return None
 
-        try:
-            logger.info(f"Fetching ICS feed from {self.feed_url}")
-            response = requests.get(self.feed_url, timeout=timeout)
-            response.raise_for_status()
+        if not _is_safe_feed_url(self.feed_url):
+            logger.error("Stored ICS feed URL failed safety validation; refusing to fetch")
+            return None
 
-            content = response.text
-            logger.info(f"Successfully fetched ICS feed ({len(content)} bytes)")
-            return content
+        url = self.feed_url
+        try:
+            for _ in range(_MAX_FEED_REDIRECTS):
+                logger.info(f"Fetching ICS feed from {url}")
+                response = requests.get(url, timeout=timeout, allow_redirects=False)
+
+                if response.is_redirect or response.is_permanent_redirect:
+                    location = response.headers.get('Location')
+                    if not location:
+                        logger.error("Redirect response missing Location header")
+                        return None
+
+                    next_url = urljoin(url, location)
+                    if not _is_safe_feed_url(next_url):
+                        logger.error("Refusing to follow ICS feed redirect to an unsafe URL")
+                        return None
+
+                    url = next_url
+                    continue
+
+                response.raise_for_status()
+                content = response.text
+                logger.info(f"Successfully fetched ICS feed ({len(content)} bytes)")
+                return content
+
+            logger.error(f"Too many redirects (>{_MAX_FEED_REDIRECTS}) fetching ICS feed")
+            return None
 
         except requests.exceptions.Timeout:
             logger.error(f"Timeout fetching ICS feed after {timeout}s")
