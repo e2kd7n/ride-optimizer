@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-07-06 15:56:50 UTC / 2026-07-06 10:56:50 CDT
+**Last Updated:** 2026-07-08 11:38:46 UTC / 2026-07-08 11:38:46 GMT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -37,12 +37,25 @@ This file reflects the current state of GitHub issues organized by release miles
 
 ## 📅 v0.18.0 (Future Release)
 
+### 🔴 P1 - HIGH
+- #468 - settings.html polling loops swallow errors forever — stuck-button UX bug
+- #458 - Job-state race condition in data_bp.py — JobRegistry fix exists but isn't wired up
+
 ### 🟡 P2 - MEDIUM
+- #472 - Setup UI: let user select home/work location instead of hand-editing .env lat/longs
+- #470 - Duplicated navbar/bottom-nav/theme-init markup across 8-9 pages, no Jinja partial
+- #469 - Extract 2,100+ lines of inline <script> in settings/route-detail/compare to JS modules
+- #465 - json_storage.py has no file locking on Windows (only atomic rename)
+- #463 - route_analyzer.py/long_ride_analyzer.py duplicate similarity logic instead of shared route_comparison.py
+- #461 - Duplicate uncached JSON cache reads + full service re-init after routine actions
+- #460 - Two divergent create_app() factories + dead scheduler/config infra
+- #459 - Lost-update races in read-modify-write JSON flows (plan storage, TrainerRoad cache)
 - #454 - Epic: Exploration route generator — maximize new-tile coverage instead of shortest-path out-and-back
 - #451 - Exploration route generator: extend overlap penalty to tiles claimed within the in-progress tour
 - #450 - Exploration route generator: replace top-N zone selection + TSP with cheapest-insertion construction
 
 ### 🟢 P3 - LOW
+- #467 - Legacy report_generator.py/main.py — decide relocation vs keeping in src/
 - #453 - Exploration route generator: wind-aware outbound/return orientation (headwind out, tailwind back)
 - #452 - Exploration route generator: detect and label unavoidable out-and-back routes
 - #430 - Coverage tracker should include Garmin activities, not just Strava
@@ -60,10 +73,17 @@ None
 None
 
 ### 🟡 P2 - MEDIUM
-None
+- #474 - app/schemas.py validation schemas (RoutesQuerySchema, MapQuerySchema) defined but never wired up
+- #473 - maps_api.py::load_route_groups() reads a cache path that looks stale — verify /api/maps/* isn't silently empty
+- #464 - get_prevailing_wind_direction ignores lat/lon, always returns Chicago-specific data
+- #462 - Duplicate backup scripts (backup-env.sh vs backup_env.sh) — consolidate
 
 ### 🟢 P3 - LOW
-None
+- #477 - route_analyzer.py::_open_geocoding_terminal is macOS-only, silently no-ops on Windows/Linux
+- #476 - Ad-hoc time.sleep(2) rate-limit workaround embedded in data_bp.py progress callback
+- #475 - CSP allows 'unsafe-inline' for script-src and style-src
+- #471 - Frontend cleanup backlog: dead JS/CSS, triplicated formatDuration, no 5xx retry
+- #466 - Performance backlog: weather cache growth/rewrites, map simplification, redundant geodesic scans
 
 ### 📋 P4 - FUTURE
 None
@@ -79,7 +99,7 @@ Code comments and inline tasks found in the workspace that may need attention.
 Found **2** code comments requiring attention:
 
 - `app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
-- `static/js/dashboard.js` - 7:// NOTE: Initialization is handled by inline script in index.html
+- `static/js/dashboard.js` - 6:// NOTE: Initialization is handled by inline script in index.html
 
 ## 📖 Priority System (Release-Aware)
 
