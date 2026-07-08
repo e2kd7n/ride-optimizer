@@ -9,6 +9,7 @@ Licensed under the MIT License - see LICENSE file for details.
 
 import json
 import os
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Optional, Dict, Any
@@ -311,6 +312,10 @@ class StravaDataFetcher:
                         # Show progress every 100 activities
                         if processed_count % 100 == 0:
                             print(f"  Fetched {processed_count} activities so far...")
+
+                        # Throttle to stay well under Strava's rate limits
+                        if processed_count % 30 == 0:
+                            time.sleep(2)
                         
                         # Track date range
                         if act.start_date:

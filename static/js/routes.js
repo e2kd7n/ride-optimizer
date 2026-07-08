@@ -603,18 +603,6 @@
         window.location.href = `/route-detail.html?${params.toString()}`;
     }
 
-    function formatDuration(durationMinutes) {
-        const totalMinutes = Math.round(Number(durationMinutes || 0));
-        const hours = Math.floor(totalMinutes / 60);
-        const minutes = totalMinutes % 60;
-
-        if (hours > 0) {
-            return `${hours}h ${minutes}m`;
-        }
-
-        return `${totalMinutes} min`;
-    }
-
     function createRouteCard(route, mode = 'full') {
         // Simple mode for dashboard list view
         if (mode === 'simple') {

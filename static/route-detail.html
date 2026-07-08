@@ -180,13 +180,6 @@
                 };
             }
 
-            function formatDuration(durationMinutes) {
-                const totalMinutes = Math.round(Number(durationMinutes || 0));
-                const hours = Math.floor(totalMinutes / 60);
-                const minutes = totalMinutes % 60;
-                return hours > 0 ? `${hours}h ${minutes}m` : `${totalMinutes} min`;
-            }
-
             function renderError(message, variant = 'danger') {
                 byId('route-details').innerHTML = `
                     <h1 class="mb-3">Route Details</h1>

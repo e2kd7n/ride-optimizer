@@ -10,22 +10,21 @@ Frontend Integration:
 from flask import Blueprint, request, jsonify
 from typing import List, Dict, Optional
 import logging
-import json
-from pathlib import Path
+
+from app.schemas import MapQuerySchema, validate_request_args
+from src.json_storage import JSONStorage
 
 logger = logging.getLogger(__name__)
 
 bp = Blueprint('maps_api', __name__, url_prefix='/api/maps')
 
+_storage = JSONStorage()
+
 
 def load_route_groups() -> Dict:
-    """Load route groups from cache."""
-    cache_file = Path('cache/route_groups_cache.json')
-    if not cache_file.exists():
-        return {'groups': []}
-    
-    with open(cache_file, 'r') as f:
-        return json.load(f)
+    """Load route groups from data/route_groups.json (the data actually kept current by AnalysisService)."""
+    data = _storage.read('route_groups.json', default={})
+    return {'groups': data.get('route_groups', [])}
 
 
 def get_default_center() -> List[float]:
@@ -34,6 +33,7 @@ def get_default_center() -> List[float]:
 
 
 @bp.route('/<page_type>')
+@validate_request_args(MapQuerySchema)
 def get_map_data(page_type: str):
     """
     Get map data for a specific page type.
@@ -138,7 +138,7 @@ def get_dashboard_map_data() -> Dict:
                     <strong>{group.get('name', 'Route')}</strong><br>
                     Distance: {rep_route.get('distance', 0) / 1000:.1f} km<br>
                     Elevation: {rep_route.get('elevation_gain', 0):.0f} m<br>
-                    Uses: {group.get('count', 0)}
+                    Uses: {group.get('frequency', 0)}
                 """,
                 'tooltip': group.get('name', 'Route')
             }],
@@ -228,7 +228,7 @@ def get_commute_map_data() -> Dict:
                     {'<span class="badge bg-success">Recommended</span><br>' if is_recommended else ''}
                     Distance: {rep_route.get('distance', 0) / 1000:.1f} km<br>
                     Elevation: {rep_route.get('elevation_gain', 0):.0f} m<br>
-                    Uses: {group.get('count', 0)}
+                    Uses: {group.get('frequency', 0)}
                 """,
                 'tooltip': group.get('name', 'Route')
             }],
@@ -301,7 +301,7 @@ def get_route_detail_map_data(route_id: str) -> Dict:
             <strong>{route_group.get('name', 'Route')}</strong><br>
             Distance: {rep_route.get('distance', 0) / 1000:.1f} km<br>
             Elevation: {rep_route.get('elevation_gain', 0):.0f} m<br>
-            Uses: {route_group.get('count', 0)}
+            Uses: {route_group.get('frequency', 0)}
         """,
         'tooltip': route_group.get('name', 'Route')
     }

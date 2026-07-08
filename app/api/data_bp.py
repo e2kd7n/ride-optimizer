@@ -199,7 +199,6 @@ def trigger_fetch():
     def _run():
         global _fetch_job
         try:
-            import time as _time
             import json as _json
             from pathlib import Path as _Path
 
@@ -214,8 +213,6 @@ def trigger_fetch():
                     pass
 
             def _progress(count):
-                if count % 30 == 0 and count > 0:
-                    _time.sleep(2)
                 _fetch_job['fetched'] = count
                 _fetch_job['label'] = f'Fetching from Strava… {count:,} activities'
 

@@ -11,6 +11,7 @@ from datetime import datetime
 
 from flask import Blueprint, current_app, jsonify, request
 
+from app.schemas import RoutesQuerySchema, validate_request_args
 from src.config_manager import ConfigManager
 from src.secure_logger import SecureLogger
 
@@ -20,6 +21,7 @@ bp = Blueprint('routes', __name__, url_prefix='/api')
 
 
 @bp.route('/routes')
+@validate_request_args(RoutesQuerySchema)
 def get_routes():
     """
     Get all routes for library.
