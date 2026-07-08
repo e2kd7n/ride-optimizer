@@ -16,6 +16,7 @@ from pathlib import Path
 import hashlib
 
 from src.secure_logger import SecureLogger
+from src.json_storage import secure_chmod
 
 logger = SecureLogger(__name__)
 
@@ -97,7 +98,8 @@ class WeatherFetcher:
             
             with open(self.cache_file, 'w') as f:
                 json.dump(cache_data, f, indent=2)
-            
+            secure_chmod(self.cache_file)
+
             logger.debug(f"Saved {len(cache_data)} entries to cache file")
             
         except Exception as e:

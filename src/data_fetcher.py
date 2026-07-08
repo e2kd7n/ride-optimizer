@@ -18,6 +18,7 @@ from stravalib.client import Client
 import polyline
 
 from src.secure_logger import SecureLogger
+from src.json_storage import secure_chmod
 
 logger = SecureLogger(__name__)
 
@@ -481,7 +482,8 @@ class StravaDataFetcher:
         
         with open(self.cache_path, 'w') as f:
             json.dump(cache_data, f, indent=2)
-        
+        secure_chmod(self.cache_path)
+
         logger.info(f"Cached {len(activities)} activities to {self.cache_path}")
         
         return stats
@@ -659,6 +661,7 @@ class StravaDataFetcher:
             self._gear_cache_path.parent.mkdir(parents=True, exist_ok=True)
             with open(self._gear_cache_path, 'w') as f:
                 json.dump(data, f, indent=2)
+            secure_chmod(self._gear_cache_path)
             logger.info(f"Cached {len(bikes)} bikes and {len(shoes)} shoes")
             return data
         except Exception as e:
@@ -734,6 +737,7 @@ class StravaDataFetcher:
         cache_data['timestamp'] = datetime.now().isoformat()
         with open(self.cache_path, 'w') as f:
             json.dump(cache_data, f, indent=2)
+        secure_chmod(self.cache_path)
 
         logger.info(f"Backfill complete: {updated} updated, {fetched} fetched from Strava")
         return {'updated': updated, 'skipped': len(by_id) - updated, 'total_cached': len(by_id)}

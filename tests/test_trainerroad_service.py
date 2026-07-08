@@ -15,6 +15,7 @@ Tests cover:
 """
 
 import pytest
+import socket
 from unittest.mock import Mock, MagicMock, patch, mock_open
 from datetime import datetime, date, timedelta
 from pathlib import Path
@@ -169,33 +170,85 @@ class TestEncryptionSetup:
             mock_fernet.generate_key.assert_called()
 
 
+def _mock_public_addrinfo(hostname, port):
+    """Simulate DNS resolution to a public IP, for SSRF-safety tests."""
+    return [(2, 1, 6, '', ('93.184.216.34', 0))]
+
+
+def _mock_private_addrinfo(hostname, port):
+    """Simulate DNS resolution to a private/internal IP, for SSRF-safety tests."""
+    return [(2, 1, 6, '', ('10.0.0.5', 0))]
+
+
 class TestFeedURLManagement:
     """Test feed URL management."""
-    
+
     def test_set_feed_url_valid(self, trainerroad_service):
         """Test setting a valid feed URL."""
         trainerroad_service._save_feed_url = Mock(return_value=True)
-        
-        result = trainerroad_service.set_feed_url('https://trainerroad.com/feed.ics')
-        
+
+        with patch('app.services.trainerroad_service.socket.getaddrinfo', side_effect=_mock_public_addrinfo):
+            result = trainerroad_service.set_feed_url('https://trainerroad.com/feed.ics')
+
         assert result is True
         assert trainerroad_service.feed_url == 'https://trainerroad.com/feed.ics'
         trainerroad_service._save_feed_url.assert_called_once()
-    
+
     def test_set_feed_url_invalid(self, trainerroad_service):
         """Test rejecting invalid feed URL."""
         result = trainerroad_service.set_feed_url('not-a-valid-url')
-        
+
         assert result is False
         assert trainerroad_service.feed_url is None
-    
+
     def test_set_feed_url_save_failure(self, trainerroad_service):
         """Test handling save failure."""
         trainerroad_service._save_feed_url = Mock(return_value=False)
-        
-        result = trainerroad_service.set_feed_url('https://trainerroad.com/feed.ics')
-        
+
+        with patch('app.services.trainerroad_service.socket.getaddrinfo', side_effect=_mock_public_addrinfo):
+            result = trainerroad_service.set_feed_url('https://trainerroad.com/feed.ics')
+
         assert result is False
+
+    def test_set_feed_url_rejects_non_http_scheme(self, trainerroad_service):
+        """Test rejecting schemes other than http/https (SSRF hardening)."""
+        result = trainerroad_service.set_feed_url('file:///etc/passwd')
+
+        assert result is False
+        assert trainerroad_service.feed_url is None
+
+    def test_set_feed_url_rejects_private_ip(self, trainerroad_service):
+        """Test rejecting a feed URL whose host resolves to a private/internal address (SSRF)."""
+        with patch('app.services.trainerroad_service.socket.getaddrinfo', side_effect=_mock_private_addrinfo):
+            result = trainerroad_service.set_feed_url('https://internal.example.com/feed.ics')
+
+        assert result is False
+        assert trainerroad_service.feed_url is None
+
+    def test_set_feed_url_rejects_loopback_literal(self, trainerroad_service):
+        """Test rejecting a feed URL that is a loopback IP literal (SSRF)."""
+        result = trainerroad_service.set_feed_url('http://127.0.0.1:8080/feed.ics')
+
+        assert result is False
+        assert trainerroad_service.feed_url is None
+
+    def test_set_feed_url_rejects_link_local_metadata_ip(self, trainerroad_service):
+        """Test rejecting the cloud-metadata link-local address (SSRF)."""
+        result = trainerroad_service.set_feed_url('http://169.254.169.254/latest/meta-data/')
+
+        assert result is False
+        assert trainerroad_service.feed_url is None
+
+    def test_set_feed_url_rejects_unresolvable_host(self, trainerroad_service):
+        """Test rejecting a feed URL whose host cannot be resolved at all."""
+        with patch(
+            'app.services.trainerroad_service.socket.getaddrinfo',
+            side_effect=socket.gaierror,
+        ):
+            result = trainerroad_service.set_feed_url('https://does-not-resolve.invalid/feed.ics')
+
+        assert result is False
+        assert trainerroad_service.feed_url is None
     
     def test_get_feed_url(self, trainerroad_service):
         """Test getting configured feed URL."""
@@ -237,65 +290,108 @@ class TestFeedURLManagement:
 
 class TestFetchICSFeed:
     """Test ICS feed fetching."""
-    
+
     def test_fetch_success(self, trainerroad_service, sample_ics_content):
         """Test successful feed fetch."""
         trainerroad_service.feed_url = 'https://example.com/feed.ics'
-        
-        with patch('app.services.trainerroad_service.requests.get') as mock_get:
+
+        with patch('app.services.trainerroad_service.socket.getaddrinfo', side_effect=_mock_public_addrinfo), \
+             patch('app.services.trainerroad_service.requests.get') as mock_get:
             mock_response = Mock()
             mock_response.text = sample_ics_content
+            mock_response.is_redirect = False
+            mock_response.is_permanent_redirect = False
             mock_get.return_value = mock_response
-            
+
             result = trainerroad_service.fetch_ics_feed()
-            
+
             assert result == sample_ics_content
-            mock_get.assert_called_once_with('https://example.com/feed.ics', timeout=10)
-    
+            mock_get.assert_called_once_with('https://example.com/feed.ics', timeout=10, allow_redirects=False)
+
     def test_fetch_no_url_configured(self, trainerroad_service):
         """Test fetch when no URL configured."""
         trainerroad_service.feed_url = None
-        
+
         result = trainerroad_service.fetch_ics_feed()
-        
+
         assert result is None
-    
+
+    def test_fetch_rejects_unsafe_stored_url(self, trainerroad_service):
+        """Test fetch refuses to run if the stored feed URL now resolves to a private address."""
+        trainerroad_service.feed_url = 'https://internal.example.com/feed.ics'
+
+        with patch('app.services.trainerroad_service.socket.getaddrinfo', side_effect=_mock_private_addrinfo), \
+             patch('app.services.trainerroad_service.requests.get') as mock_get:
+            result = trainerroad_service.fetch_ics_feed()
+
+            assert result is None
+            mock_get.assert_not_called()
+
+    def test_fetch_refuses_redirect_to_unsafe_url(self, trainerroad_service):
+        """Test fetch does not follow a redirect into a private/internal address (SSRF)."""
+        trainerroad_service.feed_url = 'https://example.com/feed.ics'
+
+        def addrinfo_side_effect(hostname, port):
+            if hostname == 'example.com':
+                return _mock_public_addrinfo(hostname, port)
+            return _mock_private_addrinfo(hostname, port)
+
+        with patch('app.services.trainerroad_service.socket.getaddrinfo', side_effect=addrinfo_side_effect), \
+             patch('app.services.trainerroad_service.requests.get') as mock_get:
+            redirect_response = Mock()
+            redirect_response.is_redirect = True
+            redirect_response.is_permanent_redirect = False
+            redirect_response.headers = {'Location': 'http://169.254.169.254/latest/meta-data/'}
+            mock_get.return_value = redirect_response
+
+            result = trainerroad_service.fetch_ics_feed()
+
+            assert result is None
+            mock_get.assert_called_once()
+
     def test_fetch_timeout(self, trainerroad_service):
         """Test handling request timeout."""
         trainerroad_service.feed_url = 'https://example.com/feed.ics'
-        
-        with patch('app.services.trainerroad_service.requests.get') as mock_get:
+
+        with patch('app.services.trainerroad_service.socket.getaddrinfo', side_effect=_mock_public_addrinfo), \
+             patch('app.services.trainerroad_service.requests.get') as mock_get:
             mock_get.side_effect = Exception('Timeout')
-            
+
             result = trainerroad_service.fetch_ics_feed()
-            
+
             assert result is None
-    
+
     def test_fetch_http_error(self, trainerroad_service):
         """Test handling HTTP error."""
         trainerroad_service.feed_url = 'https://example.com/feed.ics'
-        
-        with patch('app.services.trainerroad_service.requests.get') as mock_get:
+
+        with patch('app.services.trainerroad_service.socket.getaddrinfo', side_effect=_mock_public_addrinfo), \
+             patch('app.services.trainerroad_service.requests.get') as mock_get:
             mock_response = Mock()
+            mock_response.is_redirect = False
+            mock_response.is_permanent_redirect = False
             mock_response.raise_for_status.side_effect = Exception('404 Not Found')
             mock_get.return_value = mock_response
-            
+
             result = trainerroad_service.fetch_ics_feed()
-            
+
             assert result is None
-    
+
     def test_fetch_custom_timeout(self, trainerroad_service):
         """Test fetch with custom timeout."""
         trainerroad_service.feed_url = 'https://example.com/feed.ics'
-        
-        with patch('app.services.trainerroad_service.requests.get') as mock_get:
+
+        with patch('app.services.trainerroad_service.socket.getaddrinfo', side_effect=_mock_public_addrinfo), \
+             patch('app.services.trainerroad_service.requests.get') as mock_get:
             mock_response = Mock()
             mock_response.text = 'content'
+            mock_response.is_redirect = False
+            mock_response.is_permanent_redirect = False
             mock_get.return_value = mock_response
-            
+
             trainerroad_service.fetch_ics_feed(timeout=30)
-            
-            mock_get.assert_called_once_with('https://example.com/feed.ics', timeout=30)
+
+            mock_get.assert_called_once_with('https://example.com/feed.ics', timeout=30, allow_redirects=False)
 
 
 class TestParseICSFeed:

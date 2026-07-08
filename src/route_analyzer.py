@@ -26,6 +26,7 @@ from tqdm import tqdm
 from .data_fetcher import Activity
 from .location_finder import Location
 from .route_namer import RouteNamer
+from .json_storage import secure_chmod
 
 logger = logging.getLogger(__name__)
 
@@ -213,6 +214,7 @@ class RouteAnalyzer:
         try:
             with open(self.cache_file, 'w') as f:
                 json.dump(self.similarity_cache, f)
+            secure_chmod(self.cache_file)
             logger.info(f"Saved {len(self.similarity_cache)} similarity calculations to cache")
         except Exception as e:
             logger.warning(f"Failed to save similarity cache: {e}")
@@ -296,6 +298,7 @@ class RouteAnalyzer:
             
             with open(self.groups_cache_file, 'w') as f:
                 json.dump(cache_data, f)
+            secure_chmod(self.groups_cache_file)
             logger.info(f"Saved {len(groups)} route groups to cache ({len(activity_ids)} activities)")
         except Exception as e:
             logger.warning(f"Failed to save groups cache: {e}")

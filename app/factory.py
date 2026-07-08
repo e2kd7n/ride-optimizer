@@ -65,12 +65,19 @@ def create_app(config_overrides: dict | None = None) -> Flask:
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE='Lax',
         PERMANENT_SESSION_LIFETIME=timedelta(hours=24),
-        WTF_CSRF_CHECK_DEFAULT=False,
     )
     if config_overrides:
         app.config.update(config_overrides)
 
     # --- extensions ---
+
+    @app.before_request
+    def _sync_csrf_enabled_with_testing():
+        # Test fixtures toggle app.config['TESTING'] on the shared app
+        # singleton after creation, so keep CSRF enforcement in sync with it
+        # dynamically instead of baking a static value in at app-creation time.
+        app.config['WTF_CSRF_ENABLED'] = not app.testing
+
     csrf = CSRFProtect(app)
     limiter = Limiter(
         app=app,
