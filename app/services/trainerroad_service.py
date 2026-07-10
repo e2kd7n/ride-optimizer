@@ -21,6 +21,9 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta, date
 from icalendar import Calendar, Event
 from urllib.parse import urlparse, urljoin
+from requests.adapters import HTTPAdapter
+from urllib3.poolmanager import PoolManager
+from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
 from cryptography.fernet import Fernet
 
 from src.config_manager import ConfigManager
@@ -35,30 +38,37 @@ _ALLOWED_FEED_SCHEMES = {'http', 'https'}
 _MAX_FEED_REDIRECTS = 5
 
 
-def _is_safe_feed_host(hostname: Optional[str]) -> bool:
+def _resolve_validated_ips(hostname: Optional[str]) -> Optional[List[str]]:
     """
-    Return True only if *hostname* resolves exclusively to public,
-    non-internal addresses. Blocks loopback/private/link-local/reserved/
-    multicast ranges (including cloud metadata endpoints like
-    169.254.169.254) to prevent SSRF via a user-supplied feed URL.
+    Resolve *hostname* and return its IPs **only if every one of them is a
+    public, non-internal address**; otherwise return ``None``. Blocks
+    loopback/private/link-local/reserved/multicast ranges (including cloud
+    metadata endpoints like 169.254.169.254) to prevent SSRF via a
+    user-supplied feed URL.
+
+    Returning the concrete IPs (rather than a bool) lets the caller connect to
+    the exact address that was validated, closing the DNS-rebinding TOCTOU where
+    a hostname resolves to a public IP at check time and a private one at
+    connect time.
     """
     if not hostname:
-        return False
+        return None
 
     try:
         addr_infos = socket.getaddrinfo(hostname, None)
     except socket.gaierror:
-        return False
+        return None
 
     if not addr_infos:
-        return False
+        return None
 
+    ips: List[str] = []
     for info in addr_infos:
         raw_ip = info[4][0].split('%')[0]  # strip IPv6 zone id, if any
         try:
             ip = ipaddress.ip_address(raw_ip)
         except ValueError:
-            return False
+            return None
 
         if (
             ip.is_private
@@ -68,9 +78,16 @@ def _is_safe_feed_host(hostname: Optional[str]) -> bool:
             or ip.is_multicast
             or ip.is_unspecified
         ):
-            return False
+            return None
 
-    return True
+        ips.append(raw_ip)
+
+    return ips or None
+
+
+def _is_safe_feed_host(hostname: Optional[str]) -> bool:
+    """Return True only if *hostname* resolves exclusively to public addresses."""
+    return _resolve_validated_ips(hostname) is not None
 
 
 def _is_safe_feed_url(url: str) -> bool:
@@ -84,6 +101,93 @@ def _is_safe_feed_url(url: str) -> bool:
         return False
 
     return _is_safe_feed_host(parsed.hostname)
+
+
+def _validated_ip_for_url(url: str) -> Optional[str]:
+    """
+    Validate *url*'s scheme and resolve its host, returning a single validated
+    public IP to pin the connection to — or ``None`` if the scheme is disallowed
+    or the host resolves to any internal address. This is the fetch-time gate;
+    the returned IP is what the connection actually uses (see ``_PinnedIPAdapter``).
+    """
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return None
+
+    if parsed.scheme not in _ALLOWED_FEED_SCHEMES:
+        return None
+
+    ips = _resolve_validated_ips(parsed.hostname)
+    if not ips:
+        return None
+    return ips[0]
+
+
+def _pinned_pool_manager(pinned_ip: str, **kwargs):
+    """
+    Build a urllib3 PoolManager whose connections dial *pinned_ip* at the socket
+    layer while keeping the request's real hostname for the ``Host`` header, TLS
+    SNI, and certificate verification. The URL/hostname is left untouched (so SNI
+    and cert checks stay correct automatically); only the DNS host used for the
+    socket connect is overridden — the piece that makes the SSRF check
+    TOCTOU-free.
+    """
+    class _PinnedHTTPConnectionPool(HTTPConnectionPool):
+        def _new_conn(self):
+            conn = super()._new_conn()
+            conn._dns_host = pinned_ip
+            return conn
+
+    class _PinnedHTTPSConnectionPool(HTTPSConnectionPool):
+        def _new_conn(self):
+            conn = super()._new_conn()
+            hostname = self.host  # the real hostname the pool was created for
+            conn._dns_host = pinned_ip          # socket connects here
+            conn.server_hostname = hostname     # SNI stays the hostname
+            conn.assert_hostname = hostname     # cert verified against hostname
+            return conn
+
+    pm = PoolManager(**kwargs)
+    pm.pool_classes_by_scheme = {
+        'http': _PinnedHTTPConnectionPool,
+        'https': _PinnedHTTPSConnectionPool,
+    }
+    return pm
+
+
+class _PinnedIPAdapter(HTTPAdapter):
+    """
+    Requests adapter that pins every connection to a specific, pre-validated IP.
+    The exact IP ``_validated_ip_for_url`` approved is the one the socket
+    connects to, so DNS can't be rebound to an internal address between
+    validation and connect.
+    """
+
+    def __init__(self, pinned_ip: str, **kwargs):
+        self._pinned_ip = pinned_ip
+        super().__init__(**kwargs)
+
+    def init_poolmanager(self, connections, maxsize, block=False, **pool_kwargs):
+        self.poolmanager = _pinned_pool_manager(
+            self._pinned_ip,
+            num_pools=connections,
+            maxsize=maxsize,
+            block=block,
+            **pool_kwargs,
+        )
+
+
+def _pinned_get(url: str, pinned_ip: str, timeout: int):
+    """GET *url* with the connection pinned to *pinned_ip* (no redirects)."""
+    parsed = urlparse(url)
+    session = requests.Session()
+    adapter = _PinnedIPAdapter(pinned_ip)
+    session.mount(f'{parsed.scheme}://', adapter)
+    try:
+        return session.get(url, timeout=timeout, allow_redirects=False)
+    finally:
+        session.close()
 
 
 class TrainerRoadService:
@@ -176,7 +280,8 @@ class TrainerRoadService:
         try:
             parsed = urlparse(feed_url)
             if not all([parsed.scheme, parsed.netloc]):
-                logger.error(f"Invalid feed URL: {feed_url}")
+                # Don't echo the URL — it can embed a secret token in its path.
+                logger.error("Invalid feed URL: missing scheme or host")
                 return False
 
             if not _is_safe_feed_url(feed_url):
@@ -218,15 +323,19 @@ class TrainerRoadService:
             logger.warning("No feed URL configured")
             return None
 
-        if not _is_safe_feed_url(self.feed_url):
-            logger.error("Stored ICS feed URL failed safety validation; refusing to fetch")
-            return None
-
         url = self.feed_url
         try:
             for _ in range(_MAX_FEED_REDIRECTS):
-                logger.info(f"Fetching ICS feed from {url}")
-                response = requests.get(url, timeout=timeout, allow_redirects=False)
+                # Validate scheme + resolve host, and pin the connection to the
+                # exact IP we validated (TOCTOU-free — see _validated_ip_for_url).
+                pinned_ip = _validated_ip_for_url(url)
+                if pinned_ip is None:
+                    logger.error("ICS feed URL failed safety validation; refusing to fetch")
+                    return None
+
+                # Log only the host — the feed URL path can contain a secret token.
+                logger.info("Fetching ICS feed from %s", urlparse(url).netloc)
+                response = _pinned_get(url, pinned_ip, timeout)
 
                 if response.is_redirect or response.is_permanent_redirect:
                     location = response.headers.get('Location')
@@ -234,12 +343,8 @@ class TrainerRoadService:
                         logger.error("Redirect response missing Location header")
                         return None
 
-                    next_url = urljoin(url, location)
-                    if not _is_safe_feed_url(next_url):
-                        logger.error("Refusing to follow ICS feed redirect to an unsafe URL")
-                        return None
-
-                    url = next_url
+                    # Next hop is re-validated and re-pinned at the top of the loop.
+                    url = urljoin(url, location)
                     continue
 
                 response.raise_for_status()
