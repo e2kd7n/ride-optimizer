@@ -1,0 +1,186 @@
+# Ride Optimizer — Full Codebase Engineering Audit
+
+**Date:** 2026-07-07
+**Scope:** Entire repository — backend (Flask + `app/`), core analysis engine (`src/`), frontend (`static/`), and a dedicated security/privacy pass.
+**Status of this document:** Not committed to git (per instruction). Local reading copy only.
+
+This document consolidates four parallel audits. Each finding is tagged `QUICK_FIX` (small, safe, low risk — either already fixed or safe to fix immediately) or `NEEDS_ISSUE` (requires design discussion or broader refactor — filed as a GitHub issue). Severity is low/med/high/critical.
+
+**Tracker status (2026-07-07, evening):** every remaining `NEEDS_ISSUE`/still-open finding now has a filed tracker reference inline (`[#nnn]` = public GitHub issue, `[GHSA-xxxx]` = private draft security advisory, visible only to repo admins, not published). See [`gh issue list`](https://github.com/e2kd7n/ride-optimizer/issues) and the repo's [Security → Advisories](https://github.com/e2kd7n/ride-optimizer/security/advisories) tab.
+
+---
+
+## Session progress log (2026-07-07, afternoon)
+
+Six commits landed same-day, working through the `QUICK_FIX` backlog roughly in audit order. Full test suite verified passing (1207 passed, 15 skipped, same 6 pre-existing Windows chmod failures as baseline) after the final cleanup commit. Not pushed yet — `main` is 5 commits ahead of `origin/main`.
+
+| Commit | Time | Summary |
+|---|---|---|
+| `9d7308c` | 13:48 | Read home/work coordinates from env vars instead of hardcoding (§0 fix-forward) |
+| `5e7ad01` | 14:33 | Fix real crash/correctness bugs in ride analysis engine (§2 Bugs) |
+| `331f5ca` | 14:34 | Fix PII/secret leakage into logs (§1 & §2 Security) |
+| `9b1b518` | 14:34 | Fix stored XSS via unescaped route/activity names (§3 Security) |
+| `5999a41` | 14:34 | Remove dead code: no-op CSRF block, unused import (§1 Dead code) |
+| `25a25c8` | 15:59 | Mechanical cleanup: dead code, unused imports, duplicate logic (§1–§3 Dead code) |
+
+Every item marked **✅ FIXED** below is annotated with its commit hash inline. Everything else in this document — including the CRITICAL GPS item in §0, all `NEEDS_ISSUE` items, and the `QUICK_FIX` items with no ✅ — is still open exactly as originally audited.
+
+---
+
+## 0. CRITICAL — Real GPS coordinates committed to a public repo
+
+**This was the single most important finding and is being handled as its own workstream, separate from the rest of this document.**
+
+- `config/config.yaml` contained the maintainer's real home and work latitude/longitude in plaintext, committed since `3ea7ec8` (#77) and present in current `HEAD` and dozens of subsequent commits.
+- The repo (`github.com/e2kd7n/ride-optimizer`) is **public**.
+- Broader scope than initially assessed: real full-resolution GPS route traces (`archive/debug_scripts/test_route_9458631701_coords.json`, `test_route_11551867398_coords.json` — 374+ point rides) and an analysis doc with multiple real route start/end points (`docs/archive/issue_73_route_matching_analysis.md`) are also currently tracked in `HEAD`. Old cache/data snapshots with real geocoded addresses (`cache/geocoding_cache.json`, `weather_cache.json`, `route_similarity_cache.json`, `route_groups_cache.json`, `data/favorite_routes.json`, `data/route_groups.json(.backup)`, `data/weather_cache.json`) exist in older history (already untracked from current HEAD, but still recoverable from any full clone).
+- Test fixtures under `tests/fixtures/` were checked and confirmed **synthetic** (round-number coordinates, fake sequential IDs) — no action needed there.
+
+**Remediation in progress:**
+1. Fix-forward (done): `config/config.yaml` now reads `${HOME_LATITUDE}` / `${HOME_LONGITUDE}` / `${WORK_LATITUDE}` / `${WORK_LONGITUDE}` from `.env` (gitignored) instead of hardcoded values. `src/config_manager.py` was updated to auto-coerce numeric-looking env-substituted strings back to `int`/`float` so downstream consumers get the same types as before. Verified working via a manual load test.
+2. Full history purge (approved by you, "Full purge" option): remove the debug route-trace files and analysis doc from the working tree, then purge all the paths above from every commit/branch/tag in git history, plus text-replace the config.yaml coordinate literals. **This step is paused pending explicit confirmation of the force-push**, since it rewrites all commit hashes on `main` (and every other branch/tag) and will break any existing clones or forks. Local branches found: `main`, `backup/local-main-jul3`. Remote branches found: `design-review-epic-352`, `explore-enhancements-412`, `fix/pi-stability-log-audit`, `refactor/launch-py-blueprints`. No open PRs (checked via `gh pr list`).
+3. **Outstanding manual step:** the production Pi (`pi4`) needs `HOME_LATITUDE`/`HOME_LONGITUDE`/`WORK_LATITUDE`/`WORK_LONGITUDE` added to its `.env` before the next deploy, or the app will fail to start (`ValueError: Missing location coordinates in config`). I did not SSH into `pi4` — that action was blocked by the auto-mode safety classifier as an unauthorized production-host action this session, and I did not attempt to work around it.
+
+---
+
+## 1. Backend (Flask + `app/`)
+
+### Dead code
+- `app/models/`, `app/routes/`, `app/scheduler/` contain **zero source files** — only stale `.pyc` cache artifacts. `apscheduler` in `requirements.txt` is never imported anywhere. **QUICK_FIX** — ✅ **PARTIALLY FIXED (`25a25c8`)**: `apscheduler` dependency removed from `requirements.txt`. The stale `__pycache__` dirs under `app/models/`, `app/routes/`, `app/scheduler/` are untracked/gitignored and were left in place — harmless, not cleaned up.
+- `app/jobs/job_state.py` (`JobRegistry`/`JobState`) — built specifically to replace unsynchronized module-level globals in `launch.py`/`app/api/data_bp.py`, but is **never actually used**; the real code still uses the unsynchronized globals it was meant to replace (see Bug B1 below — the exact race it was designed to prevent still exists, right next to the fix). **NEEDS_ISSUE.** *(still open — [#458](https://github.com/e2kd7n/ride-optimizer/issues/458))*
+- `app/config.py` (115 lines, `Config`/`DevelopmentConfig`/`ProductionConfig`/`TestingConfig`) is unused by the real app; only a secondary, parallel `app/__init__.py::create_app()` (used solely by one test file) wires it in. The real production factory is `app/factory.py`, which never imports `app/config.py`. Two divergent `create_app` implementations is confusing. **NEEDS_ISSUE.** *(still open — [#460](https://github.com/e2kd7n/ride-optimizer/issues/460))*
+- `launch.py` imports `open_browser` from `app/process/server_control.py` (which has proper URL/scheme validation, a fix for a previously-flagged security issue) but never calls it — the actual inline browser-launch code in `launch.py:113-124` is an *unvalidated* `os.system(...)` reimplementation. The "fixed" version is dead code; the vulnerable version is what runs. **NEEDS_ISSUE** (low exploitability today since the port is `int()`-cast from env, but worth fixing properly). *(still open — [#460](https://github.com/e2kd7n/ride-optimizer/issues/460))*
+- `GeocodingService.initialize()` is a no-op `pass`, never called. `app/schemas.py` defines `RoutesQuerySchema`/`MapQuerySchema` that are never imported anywhere — `/api/routes` and `/api/maps/*` accept unvalidated query params despite schemas existing. **QUICK_FIX** (wire up or delete) — ✅ **PARTIALLY FIXED (`25a25c8`)**: the no-op `GeocodingService.initialize()` was deleted. The unused `app/schemas.py` validation schemas are still unwired — `NEEDS_ISSUE` for that half ([#474](https://github.com/e2kd7n/ride-optimizer/issues/474)).
+- Unused `import logging` in `app/services/commute_service.py:11` (file uses `SecureLogger` instead). **QUICK_FIX.** — ✅ **FIXED (`5999a41`)**.
+- `scripts/backup_env.sh` is a stale, inferior duplicate of `scripts/backup-env.sh` (older, hardcoded path, misses credential-file backups the newer script added). Both are referenced in docs. **NEEDS_ISSUE** (consolidate, confirm which to keep before deleting). *(still open — [#462](https://github.com/e2kd7n/ride-optimizer/issues/462))*
+- `run-tests.sh`/`run-integration-tests.sh` fall through to ~100 lines of unmaintained duplicate bash logic if `python3` is unavailable — the Python wrapper is the documented standard. **QUICK_FIX** (delete the dead fallback). — ✅ **FIXED (`25a25c8`)**: dead bash fallback stripped from both scripts.
+- `app/api/core_bp.py`'s `/api/csrf-token` handler has a no-op `if csrf: # comment; pass` block that does nothing despite the comment implying an exemption is applied. **QUICK_FIX** (delete). — ✅ **FIXED (`5999a41`)**.
+
+### Performance
+- `app/api/stats_bp.py::_load_activities_for_stats()` re-reads and re-parses the entire `data/cache/activities.json` from disk on every `/api/stats` call, with no caching layer. **NEEDS_ISSUE.** *([#461](https://github.com/e2kd7n/ride-optimizer/issues/461))*
+- Four independent implementations of "open a JSON cache file and parse it" across `data_bp.py`, `stats_bp.py`, `maps_api.py` — none share a cache, none go through a common accessor. **NEEDS_ISSUE** (consolidate). *([#461](https://github.com/e2kd7n/ride-optimizer/issues/461))*
+- `data_bp.py`'s progress callback calls `time.sleep(2)` every 30 fetched activities as an ad-hoc rate-limit workaround embedded in what should be pure progress reporting — fragile coupling. **NEEDS_ISSUE** (move throttling into the fetcher). *([#476](https://github.com/e2kd7n/ride-optimizer/issues/476))*
+- `ServiceContainer.reset_initialisation()` fully re-constructs all six services after routine actions (analysis complete, new activities fetched, Strava connect/disconnect), which is a heavier-than-necessary blocking cost on the next request's thread. **NEEDS_ISSUE** (consider incremental refresh). *([#461](https://github.com/e2kd7n/ride-optimizer/issues/461))*
+
+### Bugs
+- **B1 (high): race condition on job-state globals.** `_analysis_job`/`_fetch_job` module globals in `data_bp.py` are mutated from both the request thread and a background `threading.Thread` with no lock — two concurrent requests can interleave partial updates. The `JobRegistry` built to fix this (see Dead code above) sits unused right next to the bug. *(still open — [#458](https://github.com/e2kd7n/ride-optimizer/issues/458))*
+- **B2 (med): lost-update race in plan storage.** `core_bp.py`'s `save_plan`/`delete_plan` do read-modify-write across two separate `JSONStorage` calls that are each individually locked but not atomic as a pair — concurrent saves/deletes can silently clobber each other. *(still open — [#459](https://github.com/e2kd7n/ride-optimizer/issues/459))*
+- **B3 (med): `TrainerRoadService._save_workouts_cache()` writes JSON directly**, bypassing `JSONStorage`'s locking/atomic-rename — a concurrent read or crash mid-write can see/produce a corrupt file. *(still open — [#459](https://github.com/e2kd7n/ride-optimizer/issues/459))*
+- **B4:** `maps_api.py::load_route_groups()` reads `cache/route_groups_cache.json`, a path that looks stale versus the `data/`-rooted cache convention used elsewhere — worth verifying `/api/maps/*` isn't silently always returning empty groups in production. *(still open — [#473](https://github.com/e2kd7n/ride-optimizer/issues/473))*
+
+### Security/privacy
+- **PII sanitizer gap in the entire service layer (high).** Every file in `app/services/*.py` uses plain `logging.getLogger(__name__)` instead of `src.secure_logger.SecureLogger`. Concretely, `GarminService.connect()` logs raw exception strings from a third-party auth library with no sanitization — a real vector for credential/PII leakage. **NEEDS_ISSUE** (standardize on `SecureLogger`, or override `logging.getLogger` globally at startup to always sanitize). — 🟡 **PARTIALLY FIXED (`331f5ca`)**: `app/services/weather_service.py` switched to `SecureLogger`. `GarminService` and the rest of `app/services/*.py` are untouched — the broader standardization gap is filed as a **private security advisory** (exploitable info-disclosure risk, kept off the public tracker): [GHSA-pwgc-f93g-m5fq](https://github.com/e2kd7n/ride-optimizer/security/advisories/GHSA-pwgc-f93g-m5fq).
+- **SSRF (med):** `TrainerRoadService.set_feed_url()` only checks that a user-supplied ICS feed URL has a scheme and netloc — no allowlist of `http`/`https`, no block on private/link-local IP ranges. The server then fetches this URL on every periodic sync. *(still open — filed as a **private security advisory**: [GHSA-835w-xjr4-p6cx](https://github.com/e2kd7n/ride-optimizer/security/advisories/GHSA-835w-xjr4-p6cx))*
+- **CSRF (med):** `WTF_CSRF_CHECK_DEFAULT=False` globally; no route anywhere actually calls `csrf.protect()`/`validate_csrf`, despite a `/api/csrf-token` endpoint implying protection is wired up. All ~20 state-changing POST endpoints are effectively unprotected (mitigated somewhat by `SameSite=Lax` cookies). *(still open — the misleading no-op block in `core_bp.py` was deleted in `5999a41`, but that only removes the false implication of protection; CSRF is still not actually enforced anywhere. Filed as a **private security advisory**: [GHSA-x9vc-vwqr-c33q](https://github.com/e2kd7n/ride-optimizer/security/advisories/GHSA-x9vc-vwqr-c33q))*
+- **CSP (low):** `'unsafe-inline'` allowed for both `script-src` and `style-src`, weakening XSS mitigation value. *(still open — [#475](https://github.com/e2kd7n/ride-optimizer/issues/475), public since it's a hardening gap rather than an independently exploitable bug)*
+
+---
+
+## 2. Core analysis engine (`src/`)
+
+### Dead code
+- `route_analyzer.py::_group_routes_by_similarity_static` (~105 lines) duplicates the real grouping path with a weaker cache-key scheme; only referenced by its own tests. **NEEDS_ISSUE.** *(still open — [#463](https://github.com/e2kd7n/ride-optimizer/issues/463))*
+- `route_analyzer.py` imports several helpers from the shared `route_comparison.py` module but never calls them, while reimplementing the same Fréchet/Hausdorff/prefilter logic locally — a partial migration that was never finished, and the two copies have already drifted (different thresholds). **NEEDS_ISSUE** (unify on `route_comparison.py`, as `long_ride_analyzer.py` partially already does). *(still open — only unused imports were touched today, see below; the duplicated logic itself is untouched. [#463](https://github.com/e2kd7n/ride-optimizer/issues/463))*
+- `secure_cache.py::SecureCacheStorage` (263 lines, Fernet + HMAC, correctly implemented) is **never imported or instantiated anywhere in the codebase.** This is the module whose docstring says it protects cached GPS data — see Security section, this is a live gap not just dead code. *(still unused for its actual purpose — see the Security/privacy note below on what was fixed here today. Filed as a **private security advisory**: [GHSA-ffw6-3927-gq93](https://github.com/e2kd7n/ride-optimizer/security/advisories/GHSA-ffw6-3927-gq93))*
+- `route_analyzer.py::_open_geocoding_terminal` uses `osascript`/`Terminal.app` — macOS-only, silently no-ops on Windows/Linux (the actual dev/deploy environment) inside a broad `except Exception: pass`. *(still open — [#477](https://github.com/e2kd7n/ride-optimizer/issues/477))*
+- `report_generator.py` (628 lines) is reachable only from the deprecated `main.py` CLI tool, not the Flask app, and points at `archive/deprecated_cli_system/templates` (which has a `DO_NOT_USE_README.md`). Carries two optional heavy deps (`weasyprint`, `qrcode`) purely for this dead path. **NEEDS_ISSUE** (relocate to an explicit legacy package or confirm it should be kept). *(still open — only an unused import was removed today. [#467](https://github.com/e2kd7n/ride-optimizer/issues/467))*
+- Numerous unused imports across `route_analyzer.py`, `optimizer.py`, `traffic_analyzer.py`, `forecast_generator.py`, `weather_fetcher.py`, `visualizer.py`, `ntfy_notifier.py`, `json_storage.py`, `location_finder.py`, `coverage_tracker.py`, `report_generator.py`, `route_comparison.py`. **QUICK_FIX** (bulk `ruff --select F401` pass). — ✅ **FIXED (`25a25c8`)** for all listed files except `coverage_tracker.py`, which was not touched. Also folded in as part of the same commit: `ntfy_notifier.py` and `ors_client.py` now share one `requests.Session()` instead of opening a fresh connection per call, matching `weather_fetcher.py`'s existing pattern.
+
+### Performance
+- The core Fréchet-distance grouping algorithm is actually well-designed: bounding-box/centroid/path-length prefiltering before expensive Fréchet calc, coordinate-hash-based caching of pairwise similarity, and `ProcessPoolExecutor` parallelization gated by a minimum batch size. No changes needed there.
+- `long_ride_analyzer.py::get_ride_recommendations` recomputes a full `min(geodesic(...))` scan over every GPS point of every nearby ride on every recommendation request, duplicating work `find_rides_near_location` already did with an early-exit — a synchronous O(rides × points) recompute on a user-facing click handler. **QUICK_FIX** (reuse the already-computed distance, or sample every Nth point). *([#466](https://github.com/e2kd7n/ride-optimizer/issues/466))*
+- `coverage_tracker.py:470` uses `.iterrows()` over a geopandas `GeoDataFrame` — classic pandas anti-pattern for what can be thousands of rows. **QUICK_FIX** (vectorize). *([#466](https://github.com/e2kd7n/ride-optimizer/issues/466))*
+- `weather_fetcher.py::get_current_conditions` does a full cache-file rewrite after *every single fetch*; `get_route_weather` calls it three times per route (start/mid/end), rewriting the whole cache file three times back-to-back. **QUICK_FIX** (batch the save). *([#466](https://github.com/e2kd7n/ride-optimizer/issues/466))*
+- `weather_fetcher.py::_find_cached_weather` does a linear geodesic scan of the whole cache on every lookup, with only lazy pruning — cache can grow unbounded over a long-running deployment. **NEEDS_ISSUE** (TTL sweep / max-size eviction — not urgent at current scale). *([#466](https://github.com/e2kd7n/ride-optimizer/issues/466))*
+- `visualizer.py` embeds full-resolution route coordinate arrays into Folium maps with no simplification/decimation — bloats generated HTML for long/high-frequency rides. **NEEDS_ISSUE** (Douglas-Peucker simplify before rendering). *([#466](https://github.com/e2kd7n/ride-optimizer/issues/466))*
+
+### Bugs
+- **(High) `long_ride_analyzer.py::calculate_wind_score` — real `ZeroDivisionError` on realistic data.** `num_segments = min(8, len(ride.coordinates) // 10)` can be `0` for any ride with 4-39 coordinates (common for simplified Strava polylines), and the guard only requires `>= 4` coordinates. This crashes the ride-recommendation request path with no surrounding try/except. **QUICK_FIX**: `max(1, min(8, len(ride.coordinates) // 10))`. — ✅ **FIXED (`5e7ad01`)**.
+- **(Med) `route_analyzer.py:1687` — `datetime.timedelta(hours=4)` is invalid** because the local import only brought in the `datetime` class, not the module. This only runs on the rate-limit-detected path, and the resulting `AttributeError` is silently swallowed by the enclosing broad except — so the "resume at X" user-facing message silently never gets written, exactly when it's needed most. **QUICK_FIX**: import `timedelta` too. — ✅ **FIXED (`5e7ad01`)**. Same commit also removed an unreachable duplicated `return groups` line further down in `route_analyzer.py`, found while fixing this.
+- **(Low) `weather_fetcher.py::get_prevailing_wind_direction`** takes `lat`/`lon` parameters that are never used — always returns hardcoded Chicago-area seasonal wind directions regardless of actual location passed. Silently wrong for any user not in Chicago. **NEEDS_ISSUE.** *(still open — [#464](https://github.com/e2kd7n/ride-optimizer/issues/464))*
+- **(Low) `json_storage.py`** only applies file locking (`fcntl.flock`) on non-Windows platforms — on Windows (the actual dev/deploy environment here) there is no locking at all, only atomic rename-on-write, so concurrent read-modify-write cycles can still lose updates. **NEEDS_ISSUE.** *(still open — an unused import was removed from this file in `25a25c8`, unrelated to the locking gap. [#465](https://github.com/e2kd7n/ride-optimizer/issues/465))*
+- Minor: `next_commute_recommender.py:145` calls `max(elevations)` twice unnecessarily (harmless today, latent `ValueError` if the earlier guard is ever relaxed). **QUICK_FIX.** — ✅ **FIXED (`5e7ad01`)**.
+
+### Security/privacy
+- **(Critical, confirmed on disk) Cache "encryption" is dead code — all caches are plaintext.** `secure_cache.py` is unused (see Dead code above). Confirmed: `data/cache/activities.json` (raw home/work `start_latlng`/`end_latlng`), `cache/weather_cache.json`, `cache/route_similarity_cache.json`, `cache/route_groups_cache.json`, `cache/long_ride_similarity_cache.json` are all written via plain `json.dump`, unencrypted, with only default filesystem permissions. **NEEDS_ISSUE** (decide: adopt `SecureCacheStorage` for GPS-bearing files, or remove the module and stop implying protection that isn't there — for a single-user Pi deployment, 0o600 perms via `JSONStorage` may be an acceptable baseline, but that's a judgment call, not a given). *(NEEDS_ISSUE decision still open, but a concrete leak inside this dead module was fixed today: `331f5ca` stopped `secure_cache.py`/`auth_secure.py` from logging the actual generated Fernet encryption key value in plaintext to `logs/*.log` on first run — it now logs only the file path to retrieve it from. Caches themselves are still unencrypted. Filed as a **private security advisory**: [GHSA-ffw6-3927-gq93](https://github.com/e2kd7n/ride-optimizer/security/advisories/GHSA-ffw6-3927-gq93))*
+- **(High) Inconsistent `SecureLogger` usage in `src/`.** Only `weather_fetcher.py` and `location_finder.py` route logging through the sanitizing wrapper. `visualizer.py:108` logs raw home/work map-center coordinates at INFO level, unsanitized, as one concrete example. **NEEDS_ISSUE** (standardize, or add a root-logger filter so sanitization isn't opt-in per module). — 🟡 **PARTIALLY FIXED (`331f5ca`)**: `data_fetcher.py` switched to `SecureLogger` and its activity-ID log messages were reformatted to `activity_id=<id>` so the sanitizer's Strava-ID regex actually matches and hashes it (previously `"activity <id>"` phrasing didn't match, so the ID leaked unredacted despite `SecureLogger` being in use). `visualizer.py:108` and the rest of the un-standardized `src/` modules are untouched — the broader gap is filed alongside the `app/services/*.py` half as the same **private security advisory**: [GHSA-pwgc-f93g-m5fq](https://github.com/e2kd7n/ride-optimizer/security/advisories/GHSA-pwgc-f93g-m5fq).
+- Positive finding: `json_storage.py::_validate_filename` has solid path-traversal defenses (rejects `..`, path separators, hidden files, double-checks resolved path stays inside `data_dir`).
+
+---
+
+## 3. Frontend (`static/`)
+
+### Security / XSS (highest priority here)
+- **(High) Stored XSS via unescaped `route.name` in multiple places.** Route names originate from user-editable Strava activity titles but are interpolated raw into `innerHTML` in `js/routes.js` (lines ~272, 430, 629-631, 700-701), `route-detail.html` (455, 502-503, 611), and `compare.html` (262, 323). This is inconsistent, not a missing utility — `window.escapeHtml` is already loaded on every affected page and used correctly in `dashboard.js`/`reports.js`. **QUICK_FIX** (wrap all listed call sites with `window.escapeHtml`). — ✅ **FIXED (`9b1b518`)**: all listed call sites in `routes.js`, `route-detail.html`, and `compare.html` now go through `window.escapeHtml`.
+- Duplicate/diverging `escapeHtml` reimplementation in `js/commute.js:374-378` even though the shared `window.escapeHtml` (from `common.js`) is already loaded first. **QUICK_FIX** (consolidate). — ✅ **FIXED (`25a25c8`)**: local reimplementation removed, falls through to the shared `window.escapeHtml`.
+- No `eval`/`Function()`/hardcoded keys found anywhere in `static/`. `api-client.js` error logging doesn't leak sensitive data. *(no action needed)*
+
+### Bugs
+- Three separate `setInterval` polling loops in `settings.html` (analysis poll, fetch-status poll, gear-repair poll) all swallow errors indefinitely with empty/near-empty `catch` blocks and never cap attempts or back off — if the status endpoint fails persistently, the UI polls forever with the action button stuck in "Running.../Stopping..." with zero user feedback. **NEEDS_ISSUE** (extract one shared `pollJob()` helper with max-attempts/backoff and a UI-reset-on-failure path). *(still open — [#468](https://github.com/e2kd7n/ride-optimizer/issues/468))*
+- `compare.html` difficulty-badge color map uses lowercase keys (`'easy'`) while `routes.js` uses capitalized keys (`'Easy'`) for the same field — whichever casing the API actually returns, one of the two renderers always falls through to a gray default badge. **QUICK_FIX** (make both match the actual API casing). — ✅ **FIXED (`9b1b518`)**: `compare.html` badge map now matches the actual `'Easy'`/`'Moderate'`/`'Hard'`/`'Very hard'` casing.
+- `compare.html` renders comparison maps after a guessed `setTimeout(..., 100)` following a synchronous `innerHTML` assignment — the delay is unnecessary (the DOM is already updated) and causes a visible flash of empty map placeholders on slower devices. **QUICK_FIX** (remove the timeout, render immediately after the synchronous assignment). — ✅ **FIXED (`9b1b518`)**.
+- `js/dashboard.js` has ~110 lines of fully-implemented but never-invoked functions (`loadConditionsCard`, `loadRouteStats`) targeting DOM containers that don't exist in `index.html`. **NEEDS_ISSUE** (finish wiring or delete). *(still open — [#471](https://github.com/e2kd7n/ride-optimizer/issues/471))*
+- Mojibake in two `console.log` calls in `index.html` (corrupted UTF-8 checkmark characters) — cosmetic, but worth checking whether other files were saved with the same encoding mismatch. **QUICK_FIX.** — ✅ **FIXED (`25a25c8`)**.
+- Dead, fully-commented-out `DOMContentLoaded` handler with its own conflicting `setInterval` left in `js/dashboard.js` — invites someone to accidentally uncomment it later and double the interval. **QUICK_FIX** (delete). — ✅ **FIXED (`25a25c8`)**.
+
+### Dead code
+- ~130 lines of unused "legacy" mobile-bottom-nav CSS (`.mobile-bottom-nav*` classes) explicitly marked as legacy in a comment, superseded by `.bottom-nav*` everywhere in markup. Plus another ~150-200 lines of other confirmed-unused CSS selectors (workout-pill, workout-strip-note, swipe-indicator, refresh-indicator, filters-section, etc.). **QUICK_FIX** (mechanical deletion, verify each with a search first). *(still open — not touched by today's cleanup; only a stray comment was removed from `main.css`. [#471](https://github.com/e2kd7n/ride-optimizer/issues/471))*
+- `formatDuration` is independently reimplemented byte-for-byte in three places (`routes.js`, `route-detail.html`, `compare.html`) instead of living in the shared `common.js` alongside the other shared formatters. **NEEDS_ISSUE** (consolidate). *(still open — [#471](https://github.com/e2kd7n/ride-optimizer/issues/471))*
+- Three pages (`settings.html` — 1,272 lines, `route-detail.html` — 621 lines, `compare.html` — 245 lines) inline their entire page logic in `<script>` blocks instead of following the one-JS-module-per-page pattern every other page uses — blocks browser caching of this logic and makes these three files the largest/least testable in the app. **NEEDS_ISSUE** (extract to `settings.js`/`route-detail.js`/`compare.js`). *(still open — [#469](https://github.com/e2kd7n/ride-optimizer/issues/469))*
+- Identical 10-line dark/light theme-init IIFE copy-pasted inline in the `<head>` of 8+ pages instead of a shared cached `<script src="/js/theme-init.js">`. **QUICK_FIX.** *(still open — [#470](https://github.com/e2kd7n/ride-optimizer/issues/470))*
+- Byte-for-byte identical navbar/bottom-nav markup copy-pasted across 8 pages with no shared Jinja partial, only the "active" class differs — already showing drift. **NEEDS_ISSUE** (extract to a Jinja include). *(still open — [#470](https://github.com/e2kd7n/ride-optimizer/issues/470))*
+- Leftover "Made with Bob" watermark comments in 7 of 10 JS files + CSS. **QUICK_FIX** (remove). — ✅ **FIXED (`25a25c8`)**.
+
+### Performance
+- `js/mobile.js` manually toggles `#bottom-nav` visibility on a debounced resize listener, duplicating a CSS media query that already handles the same breakpoint — redundant work on every resize with drift risk. **QUICK_FIX** (delete the JS toggle, rely on CSS). — ✅ **FIXED (`25a25c8`)**.
+- `compare.html` pushes Leaflet map instances into an array that's never read anywhere (dead cleanup bookkeeping — not currently leaking since the page only renders once, but looks like it should power `.remove()` calls and doesn't). **QUICK_FIX.** — ✅ **FIXED (`9b1b518`)**: removed as part of the same commit that fixed the `setTimeout` race above.
+
+---
+
+## Summary — highest-priority items across all four audits
+
+1. **[CRITICAL]** Real home/work GPS coordinates + full ride GPS traces committed to a public GitHub repo. Fix-forward done (`9d7308c`); **history purge and force-push completed** (verified 2026-07-10: `origin/main` carries the rewritten history — old commits show `REDACTED_LAT`/`REDACTED_LON`, `data/cache` blobs are gone from history entirely, and newer work has landed on top). Remaining loose ends: (a) confirm Pi `.env` has the new `HOME_*`/`WORK_*` variables (unverifiable from the repo); (b) `data/ride_optimizer.db` blobs from the abandoned May SQLite experiment survive in history — likely status/job data only, but worth a one-time check that it never stored location data.
+2. ✅ **FIXED (`5e7ad01`)** — `ZeroDivisionError` in `long_ride_analyzer.calculate_wind_score` crashed real user requests on short rides.
+3. **[HIGH]** `secure_cache.py`'s encryption module is still dead code — all GPS/location caches remain plaintext on disk. One concrete leak *from* this dead module (the Fernet key itself being logged in plaintext on first run) was fixed in `331f5ca`, but the underlying decision (adopt it for caches, or remove it) is still open — private security advisory [GHSA-ffw6-3927-gq93](https://github.com/e2kd7n/ride-optimizer/security/advisories/GHSA-ffw6-3927-gq93).
+4. **[HIGH]** PII sanitizer (`SecureLogger`) is still applied inconsistently. Today's `331f5ca` moved `weather_service.py` and `data_fetcher.py` onto `SecureLogger` (and fixed a regex-format mismatch that let Strava activity IDs slip through unredacted) — but most of `app/services/*.py` (including `GarminService`) and most of `src/*.py` (including `visualizer.py`'s raw coordinate logging) are untouched. Private security advisory [GHSA-pwgc-f93g-m5fq](https://github.com/e2kd7n/ride-optimizer/security/advisories/GHSA-pwgc-f93g-m5fq).
+5. **[HIGH]** Job-state race condition in `app/api/data_bp.py` — the fix (`JobRegistry`) already exists in the codebase but isn't wired up. **Still open, untouched today** — [#458](https://github.com/e2kd7n/ride-optimizer/issues/458).
+6. ✅ **FIXED (`9b1b518`)** — Stored XSS via unescaped `route.name` in several frontend render paths, inconsistent with the `escapeHtml` pattern already used elsewhere in the same codebase.
+7. **[MED]** SSRF in TrainerRoad ICS feed URL handling (weak validation, server-side fetch, periodic re-fetch). **Still open, untouched today** — private security advisory [GHSA-835w-xjr4-p6cx](https://github.com/e2kd7n/ride-optimizer/security/advisories/GHSA-835w-xjr4-p6cx).
+8. **[MED]** CSRF scaffolding exists (`/api/csrf-token`, `CSRFProtect(app)`) but isn't actually enforced on any state-changing endpoint. The misleading no-op block that implied an exemption was being applied was deleted in `5999a41`, but that's cosmetic — actual CSRF enforcement is still not wired up anywhere. Private security advisory [GHSA-x9vc-vwqr-c33q](https://github.com/e2kd7n/ride-optimizer/security/advisories/GHSA-x9vc-vwqr-c33q).
+
+### Remaining backlog after today's session — now fully tracked
+
+Everything above not marked ✅ FIXED has a filed tracker entry. Public GitHub issues:
+
+| # | Title |
+|---|---|
+| [#458](https://github.com/e2kd7n/ride-optimizer/issues/458) | Job-state race condition in data_bp.py — JobRegistry fix exists but isn't wired up |
+| [#459](https://github.com/e2kd7n/ride-optimizer/issues/459) | Lost-update races in read-modify-write JSON flows (plan storage, TrainerRoad cache) |
+| [#460](https://github.com/e2kd7n/ride-optimizer/issues/460) | Two divergent create_app() factories + dead scheduler/config infra + dead open_browser() |
+| [#461](https://github.com/e2kd7n/ride-optimizer/issues/461) | Duplicate uncached JSON cache reads + full service re-init after routine actions |
+| [#462](https://github.com/e2kd7n/ride-optimizer/issues/462) | Duplicate backup scripts (backup-env.sh vs backup_env.sh) |
+| [#463](https://github.com/e2kd7n/ride-optimizer/issues/463) | route_analyzer.py/long_ride_analyzer.py duplicate similarity logic instead of shared route_comparison.py |
+| [#464](https://github.com/e2kd7n/ride-optimizer/issues/464) | get_prevailing_wind_direction ignores lat/lon, always returns Chicago-specific data |
+| [#465](https://github.com/e2kd7n/ride-optimizer/issues/465) | json_storage.py has no file locking on Windows (only atomic rename) |
+| [#466](https://github.com/e2kd7n/ride-optimizer/issues/466) | Performance backlog: weather cache growth/rewrites, map simplification, redundant geodesic scans, coverage_tracker iterrows |
+| [#467](https://github.com/e2kd7n/ride-optimizer/issues/467) | Legacy report_generator.py/main.py — decide relocation vs keeping in src/ |
+| [#468](https://github.com/e2kd7n/ride-optimizer/issues/468) | settings.html polling loops swallow errors forever — stuck-button UX bug |
+| [#469](https://github.com/e2kd7n/ride-optimizer/issues/469) | Extract 2,100+ lines of inline `<script>` in settings/route-detail/compare to JS modules |
+| [#470](https://github.com/e2kd7n/ride-optimizer/issues/470) | Duplicated navbar/bottom-nav/theme-init markup across 8-9 pages, no Jinja partial |
+| [#471](https://github.com/e2kd7n/ride-optimizer/issues/471) | Frontend cleanup backlog: dead JS/CSS, triplicated formatDuration |
+| [#473](https://github.com/e2kd7n/ride-optimizer/issues/473) | maps_api.py::load_route_groups() reads a cache path that looks stale — verify /api/maps/* isn't silently empty |
+| [#474](https://github.com/e2kd7n/ride-optimizer/issues/474) | app/schemas.py validation schemas (RoutesQuerySchema, MapQuerySchema) defined but never wired up |
+| [#475](https://github.com/e2kd7n/ride-optimizer/issues/475) | CSP allows 'unsafe-inline' for script-src and style-src |
+| [#476](https://github.com/e2kd7n/ride-optimizer/issues/476) | Ad-hoc time.sleep(2) rate-limit workaround embedded in data_bp.py progress callback |
+| [#477](https://github.com/e2kd7n/ride-optimizer/issues/477) | route_analyzer.py::_open_geocoding_terminal is macOS-only, silently no-ops on Windows/Linux |
+
+Private draft security advisories (visible only to repo admins, not published — kept off the public tracker since the repo is public and these describe exploitable weaknesses):
+
+| Advisory | Finding |
+|---|---|
+| [GHSA-835w-xjr4-p6cx](https://github.com/e2kd7n/ride-optimizer/security/advisories/GHSA-835w-xjr4-p6cx) | SSRF via TrainerRoad ICS feed URL |
+| [GHSA-x9vc-vwqr-c33q](https://github.com/e2kd7n/ride-optimizer/security/advisories/GHSA-x9vc-vwqr-c33q) | CSRF scaffolding not enforced |
+| [GHSA-pwgc-f93g-m5fq](https://github.com/e2kd7n/ride-optimizer/security/advisories/GHSA-pwgc-f93g-m5fq) | PII/secret leakage via inconsistent SecureLogger adoption |
+| [GHSA-ffw6-3927-gq93](https://github.com/e2kd7n/ride-optimizer/security/advisories/GHSA-ffw6-3927-gq93) | Plaintext GPS/location caches (SecureCacheStorage unused) |
+
+Not filed as a new issue: the §0 CRITICAL GPS-coordinate history purge, which remains its own separate, already-tracked workstream (paused before the force-push step). Also unrelated to this audit's bug list: the unwired `PlannerService`/`/api/routes/search` capabilities noted elsewhere in this repo's `CLAUDE.md` are pre-existing product-scope notes, not bugs.
