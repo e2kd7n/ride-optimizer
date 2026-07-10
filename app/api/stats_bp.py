@@ -12,7 +12,7 @@ import json
 import threading
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict
 
 from flask import Blueprint, current_app, jsonify, request
 
@@ -22,9 +22,6 @@ from src.secure_logger import SecureLogger
 logger = SecureLogger(__name__)
 
 bp = Blueprint('stats', __name__, url_prefix='/api')
-
-# Module-level job state (mirrors _backfill_job in launch.py)
-_backfill_job: Dict[str, Any] = {'status': 'idle'}
 
 
 # ---------------------------------------------------------------------------
@@ -362,8 +359,9 @@ def backfill_gear_ids():
     Patch gear_id on cached activities that are missing it.
     Runs as a background job; poll /api/stats/backfill-gear-ids/status for progress.
     """
-    global _backfill_job
-    if _backfill_job.get('status') == 'running':
+    jobs = current_app.container.jobs
+    if not jobs.backfill.try_start({'status': 'running', 'fetched': 0, 'updated': 0,
+                                    'label': 'Connecting to Strava…'}):
         return jsonify({'status': 'already_running'}), 409
 
     container = current_app.container
@@ -371,27 +369,25 @@ def backfill_gear_ids():
 
     analysis_service = container.analysis_service
     if analysis_service is None:
+        jobs.backfill.reset({'status': 'idle'})
         return jsonify({'status': 'error', 'message': 'Analysis is currently unavailable'}), 503
 
-    _backfill_job = {'status': 'running', 'fetched': 0, 'updated': 0, 'label': 'Connecting to Strava…'}
-
     def _run():
-        global _backfill_job
         try:
             def _progress(fetched, updated):
-                _backfill_job['fetched'] = fetched
-                _backfill_job['updated'] = updated
-                _backfill_job['label'] = f'Scanned {fetched:,} activities, patched {updated:,} gear IDs…'
+                jobs.backfill.update(
+                    fetched=fetched, updated=updated,
+                    label=f'Scanned {fetched:,} activities, patched {updated:,} gear IDs…')
 
             result = analysis_service.data_fetcher.backfill_gear_ids(progress_callback=_progress)
-            _backfill_job.update({
-                'status': 'done',
-                'label': f"Done — {result['updated']} activities updated, {result['skipped']} already had gear ID",
+            jobs.backfill.update(
+                status='done',
+                label=f"Done — {result['updated']} activities updated, {result['skipped']} already had gear ID",
                 **result,
-            })
+            )
         except Exception as e:
             logger.error(f"Gear backfill failed: {e}", exc_info=True)
-            _backfill_job.update({'status': 'error', 'label': f'Error: {e}'})
+            jobs.backfill.update(status='error', label=f'Error: {e}')
 
     threading.Thread(target=_run, daemon=True).start()
     return jsonify({'status': 'started'})
@@ -399,4 +395,4 @@ def backfill_gear_ids():
 
 @bp.route('/stats/backfill-gear-ids/status')
 def backfill_gear_ids_status():
-    return jsonify(_backfill_job)
+    return jsonify(current_app.container.jobs.backfill.snapshot())

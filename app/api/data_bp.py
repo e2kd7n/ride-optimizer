@@ -14,7 +14,7 @@ import json
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict
 
 from flask import Blueprint, current_app, jsonify, request
 
@@ -23,11 +23,6 @@ from src.secure_logger import SecureLogger
 logger = SecureLogger(__name__)
 
 bp = Blueprint('data', __name__, url_prefix='/api')
-
-# Module-level job state — mirrors launch.py module globals
-_analysis_job: Dict[str, Any] = {'status': 'idle', 'started_at': None, 'result': None}
-_analysis_stop_requested: bool = False
-_fetch_job: Dict[str, Any] = {'status': 'idle', 'fetched': 0, 'label': '', 'started_at': None}
 
 
 # ---------------------------------------------------------------------------
@@ -57,8 +52,20 @@ def _seconds_to_hours(s):
 
 @bp.route('/analyze', methods=['POST'])
 def trigger_analysis():
-    global _analysis_job
-    if _analysis_job.get('status') == 'running':
+    jobs = current_app.container.jobs
+    if not jobs.analysis.try_start({
+        'status': 'running',
+        'phase': 'starting',
+        'fetched': 0,
+        'preview_ready': False,
+        'preview_count': 0,
+        'label': 'Starting…',
+        'started_at': datetime.now().isoformat(),
+        'result': None,
+        'routes_done': 0,
+        'routes_total': 0,
+        'eta_secs': None,
+    }):
         return jsonify({'status': 'already_running', 'message': 'Analysis is already in progress'}), 409
 
     container = current_app.container
@@ -66,6 +73,7 @@ def trigger_analysis():
 
     analysis_service = container.analysis_service
     if analysis_service is None:
+        jobs.analysis.reset({'status': 'idle', 'started_at': None, 'result': None})
         return jsonify({'status': 'error', 'message': 'Analysis is currently unavailable'}), 503
 
     data = request.get_json(silent=True) or {}
@@ -87,56 +95,32 @@ def trigger_analysis():
                 except (ValueError, TypeError):
                     pass
 
-    _analysis_job = {
-        'status': 'running',
-        'phase': 'starting',
-        'fetched': 0,
-        'preview_ready': False,
-        'preview_count': 0,
-        'label': 'Starting…',
-        'started_at': datetime.now().isoformat(),
-        'result': None,
-        'routes_done': 0,
-        'routes_total': 0,
-        'eta_secs': None,
-    }
-
-    def _update_job(**kwargs):
-        global _analysis_job
-        for k, v in kwargs.items():
-            _analysis_job[k] = v
-
-    global _analysis_stop_requested
-    _analysis_stop_requested = False
-
-    def _stop_check():
-        return _analysis_stop_requested
+    jobs.analysis_stop.clear()
 
     def _run():
-        global _analysis_job, _analysis_stop_requested
         try:
             result = analysis_service.run_full_analysis(
                 force_refresh=force_refresh,
                 skip_strava_fetch=not fetch_new,
                 after=after_date,
                 before=before_date,
-                on_progress=_update_job,
-                stop_check=_stop_check,
+                on_progress=jobs.analysis.update,
+                stop_check=jobs.analysis_stop.is_set,
             )
-            if _analysis_stop_requested:
-                _update_job(status='stopped', phase='stopped',
-                            label='Analysis stopped by user')
+            if jobs.analysis_stop.is_set():
+                jobs.analysis.update(status='stopped', phase='stopped',
+                                     label='Analysis stopped by user')
             else:
-                _update_job(status='done', phase='done', result=result,
-                            label=f"Done — {result.get('activities_count', 0):,} activities")
+                jobs.analysis.update(status='done', phase='done', result=result,
+                                     label=f"Done — {result.get('activities_count', 0):,} activities")
             container.reset_initialisation()
         except Exception as e:
             logger.error(f"Background analysis failed: {e}", exc_info=True)
-            _update_job(status='error', phase='error',
-                        result={'status': 'error', 'message': str(e)},
-                        label=f'Error: {e}')
+            jobs.analysis.update(status='error', phase='error',
+                                 result={'status': 'error', 'message': str(e)},
+                                 label=f'Error: {e}')
         finally:
-            _analysis_stop_requested = False
+            jobs.analysis_stop.clear()
 
     threading.Thread(target=_run, daemon=True).start()
     return jsonify({'status': 'started', 'fetch_new': fetch_new})
@@ -144,23 +128,29 @@ def trigger_analysis():
 
 @bp.route('/analyze/status')
 def get_analyze_status():
-    return jsonify(_analysis_job)
+    return jsonify(current_app.container.jobs.analysis.snapshot())
 
 
 @bp.route('/analyze/stop', methods=['POST'])
 def stop_analysis():
-    global _analysis_stop_requested, _analysis_job
-    if _analysis_job.get('status') != 'running':
+    jobs = current_app.container.jobs
+    if jobs.analysis.get('status') != 'running':
         return jsonify({'status': 'not_running'}), 400
-    _analysis_stop_requested = True
-    _analysis_job['label'] = 'Stopping…'
+    jobs.analysis_stop.set()
+    jobs.analysis.update(label='Stopping…')
     return jsonify({'status': 'stopping'})
 
 
 @bp.route('/fetch', methods=['POST'])
 def trigger_fetch():
-    global _fetch_job
-    if _fetch_job.get('status') == 'running':
+    jobs = current_app.container.jobs
+    if not jobs.fetch.try_start({
+        'status': 'running',
+        'fetched': 0,
+        'label': 'Connecting to Strava…',
+        'started_at': datetime.now().isoformat(),
+        'total_in_cache': 0,
+    }):
         return jsonify({'status': 'already_running'}), 409
 
     container = current_app.container
@@ -168,6 +158,7 @@ def trigger_fetch():
 
     analysis_service = container.analysis_service
     if analysis_service is None:
+        jobs.fetch.reset({'status': 'idle', 'fetched': 0, 'label': '', 'started_at': None})
         return jsonify({'status': 'error', 'message': 'Analysis is currently unavailable'}), 503
 
     data = request.get_json(silent=True) or {}
@@ -188,16 +179,7 @@ def trigger_fetch():
 
     limit = int(data.get('limit', 1000))
 
-    _fetch_job = {
-        'status': 'running',
-        'fetched': 0,
-        'label': 'Connecting to Strava…',
-        'started_at': datetime.now().isoformat(),
-        'total_in_cache': 0,
-    }
-
     def _run():
-        global _fetch_job
         try:
             import json as _json
             from pathlib import Path as _Path
@@ -213,8 +195,8 @@ def trigger_fetch():
                     pass
 
             def _progress(count):
-                _fetch_job['fetched'] = count
-                _fetch_job['label'] = f'Fetching from Strava… {count:,} activities'
+                jobs.fetch.update(fetched=count,
+                                  label=f'Fetching from Strava… {count:,} activities')
 
             analysis_service.data_fetcher.fetch_activities(
                 limit=limit,
@@ -225,7 +207,7 @@ def trigger_fetch():
                 merge_cache=True,
             )
 
-            total = _fetch_job['fetched']
+            total = jobs.fetch.get('fetched', 0)
             if cache_path.exists():
                 with open(cache_path) as f:
                     raw = _json.load(f)
@@ -233,30 +215,30 @@ def trigger_fetch():
 
             new_count = total - pre_fetch_count
             if new_count > 0:
-                _fetch_job.update({
-                    'label': f'Fetch done — {new_count:,} new activities. Running incremental analysis…',
-                    'total_in_cache': total,
-                })
+                jobs.fetch.update(
+                    label=f'Fetch done — {new_count:,} new activities. Running incremental analysis…',
+                    total_in_cache=total,
+                )
                 logger.info(f"Fetch added {new_count} new activities, triggering incremental analysis")
                 analysis_service.run_full_analysis(
                     force_refresh=False,
                     skip_strava_fetch=True,
                 )
                 container.reset_initialisation()
-                _fetch_job.update({
-                    'status': 'done',
-                    'label': f'Done — {total:,} activities, {new_count:,} new (analysis updated)',
-                    'total_in_cache': total,
-                })
+                jobs.fetch.update(
+                    status='done',
+                    label=f'Done — {total:,} activities, {new_count:,} new (analysis updated)',
+                    total_in_cache=total,
+                )
             else:
-                _fetch_job.update({
-                    'status': 'done',
-                    'label': f'Done — {total:,} activities in cache (no new activities)',
-                    'total_in_cache': total,
-                })
+                jobs.fetch.update(
+                    status='done',
+                    label=f'Done — {total:,} activities in cache (no new activities)',
+                    total_in_cache=total,
+                )
         except Exception as e:
             logger.error(f"Background fetch failed: {e}", exc_info=True)
-            _fetch_job.update({'status': 'error', 'label': f'Error: {e}'})
+            jobs.fetch.update(status='error', label=f'Error: {e}')
 
     threading.Thread(target=_run, daemon=True).start()
     return jsonify({'status': 'started'})
@@ -264,7 +246,7 @@ def trigger_fetch():
 
 @bp.route('/fetch/status')
 def get_fetch_status():
-    return jsonify(_fetch_job)
+    return jsonify(current_app.container.jobs.fetch.snapshot())
 
 
 @bp.route('/cache-info')
