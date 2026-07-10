@@ -1,8 +1,9 @@
 """Thread-safe job state for background analysis and fetch tasks.
 
-Replaces the bare module-level dict globals in launch.py (_analysis_job,
-_fetch_job, _analysis_stop_requested).  Owned by ServiceContainer and
-accessed from blueprints via ``current_app.container.jobs``.
+Replaces the bare module-level dict globals in the API blueprints
+(_analysis_job, _fetch_job, _analysis_stop_requested, _backfill_job).
+Owned by ServiceContainer and accessed from blueprints via
+``current_app.container.jobs``.
 """
 
 import threading
@@ -37,6 +38,15 @@ class JobState:
         with self._lock:
             self._data = dict(initial)
 
+    def try_start(self, initial: dict) -> bool:
+        """Atomically claim the job: replace state with *initial* and return
+        True, unless the job is already running (return False, no change)."""
+        with self._lock:
+            if self._data.get('status') == 'running':
+                return False
+            self._data = dict(initial)
+            return True
+
 
 class JobRegistry:
     """Holds named job states; accessible from any blueprint via the app container.
@@ -50,6 +60,10 @@ class JobRegistry:
 
     def __init__(self) -> None:
         self.analysis: JobState = JobState()
+        self.analysis.reset({'status': 'idle', 'started_at': None, 'result': None})
         self.fetch: JobState = JobState()
+        self.fetch.reset({'status': 'idle', 'fetched': 0, 'label': '', 'started_at': None})
+        self.backfill: JobState = JobState()
+        self.backfill.reset({'status': 'idle'})
         # threading.Event replaces the bare bool _analysis_stop_requested
         self.analysis_stop: threading.Event = threading.Event()
