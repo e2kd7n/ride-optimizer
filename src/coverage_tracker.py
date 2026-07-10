@@ -7,7 +7,7 @@ based on cached Strava activity GPS tracks.
 
 import json
 import hashlib
-import logging
+from src.secure_logger import SecureLogger
 import math
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -17,7 +17,9 @@ from typing import Dict, List, Optional, Set, Tuple
 import numpy as np
 import polyline as polyline_codec
 
-logger = logging.getLogger(__name__)
+from src.json_storage import secure_chmod
+
+logger = SecureLogger(__name__)
 
 TILE_ZOOM = 14              # "squadrat" granularity (squadrat.at / squadrat.com default)
 SQUADRATINHO_ZOOM = 17      # "squadratinho" granularity — each squadrat = 8x8 squadratinhos
@@ -540,6 +542,7 @@ class CoverageTracker:
         try:
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(coverage.to_dict(), f)
+            secure_chmod(path)
         except OSError as exc:
             logger.warning("Failed to write tile cache: %s", exc)
 

@@ -56,7 +56,7 @@ Flask dev config lives in `.flaskenv`. Encrypted OAuth tokens are auto-generated
 
 **Core analysis** (`src/`): The heavy lifting for route analysis. `src/route_analyzer.py` (~73KB) is the central engine using Fréchet distance (via `similaritymeasures`) for route similarity matching. `src/data_fetcher.py` handles Strava API calls with rate-limit retry. `src/json_storage.py` is the current persistence layer (SQLite migration planned — Issue #131). Activity data is cached under `data/cache/`.
 
-**Privacy:** `src/pii_sanitizer.py` redacts GPS coordinates, addresses, user IDs, and tokens from all logs. `src/secure_cache.py` encrypts cached data.
+**Privacy:** `src/pii_sanitizer.py` redacts GPS coordinates, addresses, user IDs, and tokens from all logs. Cached GPS/location data (activity, weather, and route-similarity caches) is protected via OS file permissions rather than at-rest encryption — every cache writer must set 0o600 (owner read/write only), either automatically via `JSONStorage` or explicitly via `json_storage.secure_chmod()` for the few callers that still bypass it with a bare `json.dump()`. This was a deliberate choice over encrypting caches (`src/secure_cache.py`, removed as dead code) — see `GHSA-ffw6-3927-gq93`.
 
 **Config:** `config/config.yaml` controls optimization weights, feature flags, and location detection thresholds.
 
