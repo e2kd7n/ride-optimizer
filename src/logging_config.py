@@ -52,22 +52,16 @@ class PIISanitizingFilter(logging.Filter):
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
-        record.msg = sanitize_log_message(record.msg)
-
-        if record.args:
-            if isinstance(record.args, dict):
-                record.args = {
-                    key: sanitize_log_message(value) if isinstance(value, str) else value
-                    for key, value in record.args.items()
-                }
-            else:
-                # Only sanitize string args in-place; leave numeric/bool args
-                # untouched so %d/%f-style third-party log calls don't break.
-                record.args = tuple(
-                    sanitize_log_message(arg) if isinstance(arg, str) else arg
-                    for arg in record.args
-                )
-
+        # Sanitize the *fully formatted* message, then drop the args. Formatting
+        # (`%s`/`%d`/...) is applied first via getMessage(), so non-string args —
+        # coordinate tuples/lists, floats — are stringified and then masked. An
+        # earlier version sanitized only string args and left everything else for
+        # the handler to format afterwards, which let e.g. `logger.info("bounds
+        # %s", (lat, lon, ...))` reach the log at full precision (see the road
+        # coverage viewport-bounds log). Clearing args prevents a second, now
+        # arg-less, format pass from raising.
+        record.msg = sanitize_log_message(record.getMessage())
+        record.args = None
         return True
 
 

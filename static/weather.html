@@ -69,11 +69,11 @@
             font-size: var(--font-size-sm);
             font-weight: 600;
         }
-        .forecast-temps .hi { color: #212529; }
-        .forecast-temps .lo { color: #6c757d; }
+        .forecast-temps .hi { color: var(--ink); }
+        .forecast-temps .lo { color: var(--ink-soft); }
         .forecast-detail {
             font-size: var(--font-size-xs);
-            color: #6c757d;
+            color: var(--ink-soft);
             margin-top: var(--space-1);
         }
         .comfort-pill {
@@ -105,16 +105,16 @@
             font-size: var(--font-size-sm);
             margin-bottom: var(--space-1);
         }
-        .window-metric i { width: 16px; color: #6c757d; }
+        .window-metric i { width: 16px; color: var(--ink-soft); }
 
         .transit-alert {
-            border-left: 4px solid #dc3545;
-            background: #fff5f5;
+            border-left: 4px solid var(--danger);
+            background: color-mix(in srgb, var(--danger) 12%, var(--surface));
         }
 
         .skeleton-forecast {
             height: 144px;
-            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background: linear-gradient(90deg, var(--surface-2) 25%, var(--line) 50%, var(--surface-2) 75%);
             background-size: 200% 100%;
             animation: loading 1.5s infinite;
             border-radius: 8px;
