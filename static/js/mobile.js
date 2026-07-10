@@ -157,6 +157,7 @@ function renderBottomNavDrawer() {
 
     const currentIndex = getCurrentPageIndex();
     const currentPageId = currentIndex >= 0 ? PAGE_ORDER[currentIndex] : null;
+    const isDrawerPageActive = DRAWER_ITEMS.some(({ id }) => id === currentPageId);
 
     drawer.innerHTML = DRAWER_ITEMS.map(({ id, icon, label }) => {
         const isActive = id === currentPageId;
@@ -165,6 +166,14 @@ function renderBottomNavDrawer() {
             <span>${label}</span>
         </a>`;
     }).join('');
+
+    // Keep the "More" toggle's active state derived from the same source as
+    // the drawer contents, instead of a second hand-set copy in each page's
+    // static HTML that can drift when DRAWER_ITEMS changes (Issue #443 follow-up).
+    const moreToggle = document.querySelector('#bottom-nav [data-bs-toggle="collapse"][data-bs-target="#bottom-nav-more"]');
+    if (moreToggle) {
+        moreToggle.classList.toggle('active', isDrawerPageActive);
+    }
 }
 
 /**
