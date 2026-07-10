@@ -15,6 +15,8 @@ Licensed under the MIT License - see LICENSE file for details.
 
 import json
 import logging
+from src.logging_config import PIISanitizingFilter
+from src.secure_logger import SecureLogger
 import webbrowser
 import sys
 import os
@@ -31,7 +33,7 @@ from time import time as current_time
 from stravalib.client import Client
 from cryptography.fernet import Fernet
 
-logger = logging.getLogger(__name__)
+logger = SecureLogger(__name__)
 
 _AUTH_EXPIRY_SECS = 180 * 86400   # preferred: 180 days
 _AUTH_MIGRATION_SECS = 90 * 86400  # minimum for existing tokens without the field
@@ -52,6 +54,10 @@ def setup_security_logging():
         security_handler.setFormatter(
             logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
         )
+        # This handler is built outside setup_logging(), so it must attach the
+        # PII filter itself — other modules log to 'security_audit' too, and
+        # without the filter their records would reach the file unsanitized.
+        security_handler.addFilter(PIISanitizingFilter())
         security_logger.addHandler(security_handler)
         security_logger.setLevel(logging.INFO)
         # Prevent security logs from propagating to console

@@ -7,7 +7,7 @@ Copyright (c) 2024-2026 e2kd7n
 Licensed under the MIT License - see LICENSE file for details.
 """
 
-import logging
+from .secure_logger import SecureLogger
 from typing import List, Dict, Optional
 
 import folium
@@ -18,7 +18,7 @@ from .location_finder import Location
 from .route_namer import RouteNamer
 from .units import UnitConverter
 
-logger = logging.getLogger(__name__)
+logger = SecureLogger(__name__)
 
 
 class RouteVisualizer:

@@ -6,11 +6,11 @@ silently destroy the connection.
 """
 
 import json
-import logging
+from src.secure_logger import SecureLogger
 import os
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
+logger = SecureLogger(__name__)
 
 
 class IntervalsCredStore:

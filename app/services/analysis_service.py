@@ -9,7 +9,7 @@ This service orchestrates the main analysis workflow:
 """
 
 import json
-import logging
+from src.secure_logger import SecureLogger
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
@@ -21,7 +21,7 @@ from src.location_finder import LocationFinder, Location
 from src.config_manager import ConfigManager
 from app.services.weather_service import WeatherService
 
-logger = logging.getLogger(__name__)
+logger = SecureLogger(__name__)
 
 
 class AnalysisService:

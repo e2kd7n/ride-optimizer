@@ -11,14 +11,14 @@ Licensed under the MIT License - see LICENSE file for details.
 
 import os
 import json
-import logging
+from src.secure_logger import SecureLogger
 import requests
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 
-logger = logging.getLogger(__name__)
+logger = SecureLogger(__name__)
 
 
 @dataclass

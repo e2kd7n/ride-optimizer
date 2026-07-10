@@ -23,14 +23,14 @@ Copyright (c) 2024-2026 e2kd7n
 Licensed under the MIT License - see LICENSE file for details.
 """
 
-import logging
+from src.secure_logger import SecureLogger
 import os
 from pathlib import Path
 from typing import Any, Optional, Dict
 import yaml
 from dotenv import load_dotenv
 
-logger = logging.getLogger(__name__)
+logger = SecureLogger(__name__)
 
 
 class ConfigManager:

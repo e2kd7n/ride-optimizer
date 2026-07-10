@@ -636,6 +636,11 @@ class TestMetricsExtraction:
         assert if_val == 0.75
 
 
+def _run_mutator_without_writing(filename, mutator, default=None):
+    """Stand-in for JSONStorage.update: runs the mutator, skips disk I/O."""
+    return True, mutator({} if default is None else default)
+
+
 class TestSyncWorkouts:
     """Test workout syncing."""
 
@@ -643,8 +648,8 @@ class TestSyncWorkouts:
         """Test successful workout sync."""
         trainerroad_service.fetch_ics_feed = Mock(return_value=sample_ics_content)
 
-        with patch.object(trainerroad_service, '_load_workouts_cache', return_value={}), \
-             patch.object(trainerroad_service, '_save_workouts_cache'):
+        with patch.object(trainerroad_service._cache_storage, 'update',
+                          side_effect=_run_mutator_without_writing):
 
             result = trainerroad_service.sync_workouts(days_ahead=14)
 
@@ -683,8 +688,8 @@ class TestSyncWorkouts:
         """Test that sync filters workouts by date range."""
         trainerroad_service.fetch_ics_feed = Mock(return_value=sample_ics_content)
 
-        with patch.object(trainerroad_service, '_load_workouts_cache', return_value={}), \
-             patch.object(trainerroad_service, '_save_workouts_cache'):
+        with patch.object(trainerroad_service._cache_storage, 'update',
+                          side_effect=_run_mutator_without_writing):
 
             result = trainerroad_service.sync_workouts(days_ahead=7)
 

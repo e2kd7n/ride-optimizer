@@ -5,7 +5,7 @@ Reuses the same Nominatim settings as route_naming (reverse geocoding) since bot
 hit the same OSM service and are subject to the same usage policy.
 """
 
-import logging
+from src.secure_logger import SecureLogger
 from typing import Any, Dict
 
 from geopy.geocoders import Nominatim
@@ -13,7 +13,7 @@ from geopy.exc import GeocoderServiceError, GeocoderTimedOut, GeocoderUnavailabl
 
 from src.config_manager import ConfigManager
 
-logger = logging.getLogger(__name__)
+logger = SecureLogger(__name__)
 
 
 class GeocodingService:

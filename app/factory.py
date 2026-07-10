@@ -6,7 +6,7 @@ Usage::
     app = create_app()
 """
 
-import logging
+from src.secure_logger import SecureLogger
 import os
 import secrets
 from datetime import timedelta
@@ -17,7 +17,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
 
-logger = logging.getLogger(__name__)
+logger = SecureLogger(__name__)
 
 
 # ---------------------------------------------------------------------------

@@ -5,14 +5,14 @@ Authenticates via the ``garth`` library and fetches cycling activities
 into the same Activity format the rest of the pipeline uses.
 """
 
-import logging
+from src.secure_logger import SecureLogger
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from src.data_fetcher import Activity
 
-logger = logging.getLogger(__name__)
+logger = SecureLogger(__name__)
 
 GARMIN_TOKEN_DIR = Path(__file__).resolve().parent.parent.parent / 'config' / '.garmin_tokens'
 

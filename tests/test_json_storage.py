@@ -183,6 +183,45 @@ class TestJSONStorage:
         
         assert result == default
     
+    def test_update_creates_file_from_default(self, storage):
+        """Test update on a missing file passes default to the mutator."""
+        success, result = storage.update(
+            'plans.json', lambda plans: plans + [{'id': 'a'}], default=[]
+        )
+        assert success is True
+        assert result == [{'id': 'a'}]
+        assert storage.read('plans.json') == [{'id': 'a'}]
+
+    def test_update_mutates_existing_data(self, storage):
+        """Test update reads current contents and persists mutator result."""
+        storage.write('counter.json', {'count': 1})
+
+        def increment(data):
+            data['count'] += 1
+            return data
+
+        success, result = storage.update('counter.json', increment)
+        assert success is True
+        assert result == {'count': 2}
+        assert storage.read('counter.json') == {'count': 2}
+
+    def test_update_mutator_exception_leaves_file_untouched(self, storage):
+        """Test a raising mutator propagates and writes nothing."""
+        storage.write('safe.json', {'v': 1})
+
+        def boom(data):
+            raise RuntimeError('mutator failed')
+
+        with pytest.raises(RuntimeError):
+            storage.update('safe.json', boom)
+
+        assert storage.read('safe.json') == {'v': 1}
+
+    def test_update_invalid_filename(self, storage):
+        """Test update validates filenames like read/write."""
+        with pytest.raises(ValueError):
+            storage.update('../evil.json', lambda d: d, default={})
+
     def test_get_storage_singleton(self, temp_dir):
         """Test get_storage returns singleton instance."""
         storage1 = get_storage(temp_dir)
@@ -220,5 +259,32 @@ class TestJSONStorageConcurrency:
         final_data = storage.read('concurrent.json')
         assert final_data is not None
         assert 'iteration' in final_data
+
+    def test_concurrent_updates_lose_no_increments(self, storage):
+        """Test racing read-modify-write updates don't drop each other's writes.
+
+        This is the lost-update scenario from issue #459: with separate
+        read()+write() calls, concurrent threads read the same state and the
+        last write wins. update() must serialize the whole sequence.
+        """
+        import threading
+
+        storage.write('shared.json', {'count': 0})
+        n_threads, n_iterations = 8, 25
+
+        def worker():
+            for _ in range(n_iterations):
+                def increment(data):
+                    data['count'] += 1
+                    return data
+                storage.update('shared.json', increment)
+
+        threads = [threading.Thread(target=worker) for _ in range(n_threads)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert storage.read('shared.json') == {'count': n_threads * n_iterations}
 
 

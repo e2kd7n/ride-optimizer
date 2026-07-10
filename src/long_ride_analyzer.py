@@ -5,7 +5,7 @@ Analyzes non-commute cycling activities for recreational ride recommendations.
 """
 
 import json
-import logging
+from .secure_logger import SecureLogger
 import math
 from pathlib import Path
 from typing import List, Tuple, Dict, Any, Optional
@@ -26,7 +26,7 @@ from .route_comparison import coords_to_km, extent_point
 from .weather_fetcher import WeatherFetcher
 from .json_storage import secure_chmod
 
-logger = logging.getLogger(__name__)
+logger = SecureLogger(__name__)
 
 
 @dataclass

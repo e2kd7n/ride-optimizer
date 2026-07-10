@@ -5,14 +5,14 @@ Generates 7-day commute forecasts with weather-aware route recommendations,
 optimal departure times, and transit suggestions for bad weather.
 """
 
-import logging
+from .secure_logger import SecureLogger
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime, time
 from dataclasses import dataclass
 
 from .weather_fetcher import WindImpactCalculator
 
-logger = logging.getLogger(__name__)
+logger = SecureLogger(__name__)
 
 
 @dataclass

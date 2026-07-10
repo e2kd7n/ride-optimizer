@@ -7,7 +7,7 @@ Copyright (c) 2024-2026 e2kd7n
 Licensed under the MIT License - see LICENSE file for details.
 """
 
-import logging
+from .secure_logger import SecureLogger
 from typing import List, Tuple, Dict, Any
 
 import numpy as np
@@ -16,7 +16,7 @@ from .route_analyzer import RouteGroup, RouteMetrics
 from .weather_fetcher import WeatherFetcher, WindImpactCalculator
 from .units import UnitConverter
 
-logger = logging.getLogger(__name__)
+logger = SecureLogger(__name__)
 
 
 class RouteOptimizer:

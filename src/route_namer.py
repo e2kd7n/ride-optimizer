@@ -5,7 +5,7 @@ Generates human-readable route names based on streets, neighborhoods, landmarks,
 and geographic features to clearly indicate where routes actually go.
 """
 
-import logging
+from src.secure_logger import SecureLogger
 from typing import List, Tuple, Optional, Dict, Set
 from collections import Counter
 from geopy.geocoders import Nominatim
@@ -15,7 +15,7 @@ import json
 import os
 from datetime import datetime, timedelta
 
-logger = logging.getLogger(__name__)
+logger = SecureLogger(__name__)
 
 
 class RouteNamer:

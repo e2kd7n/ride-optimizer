@@ -11,15 +11,22 @@ Provides thread-safe JSON file operations with:
 import json
 import os
 import sys
-import logging
+from src.secure_logger import SecureLogger
+import threading
+from contextlib import contextmanager
 
 if sys.platform != 'win32':
     import fcntl
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from datetime import datetime
 
-logger = logging.getLogger(__name__)
+logger = SecureLogger(__name__)
+# Per-file in-process locks, keyed by resolved file path. Module-level (not
+# per-instance) because several services construct their own JSONStorage over
+# the same data dir — instance-level locks would not exclude each other.
+_THREAD_LOCKS: dict[str, threading.Lock] = {}
+_THREAD_LOCKS_GUARD = threading.Lock()
 
 
 def secure_chmod(path) -> None:
@@ -103,7 +110,32 @@ class JSONStorage:
             raise ValueError(f"Invalid path: {e}")
         
         return filepath
-    
+
+    @contextmanager
+    def _locked(self, filepath: Path):
+        """
+        Exclusive per-file lock: a threading.Lock within the process plus
+        flock on a sidecar ``<name>.lock`` file across processes (POSIX only;
+        cron jobs and gunicorn workers are separate processes).
+
+        The flock goes on a sidecar file rather than the data file because
+        atomic writes replace the data file's inode on rename — a lock held
+        on the old inode would not exclude writers that open the new one.
+        """
+        with _THREAD_LOCKS_GUARD:
+            tlock = _THREAD_LOCKS.setdefault(str(filepath), threading.Lock())
+        with tlock:
+            lock_path = filepath.parent / (filepath.name + '.lock')
+            with open(lock_path, 'a') as lf:
+                secure_chmod(lock_path)
+                if sys.platform != 'win32':
+                    fcntl.flock(lf.fileno(), fcntl.LOCK_EX)
+                try:
+                    yield
+                finally:
+                    if sys.platform != 'win32':
+                        fcntl.flock(lf.fileno(), fcntl.LOCK_UN)
+
     def read(self, filename: str, default: Any = None) -> Any:
         """
         Read JSON file with file locking and path validation.
@@ -156,33 +188,31 @@ class JSONStorage:
         """
         # Validate filename - raises ValueError on security violations
         filepath = self._validate_filename(filename)
-        
+
+        with self._locked(filepath):
+            return self._write_locked(filepath, data)
+
+    def _write_locked(self, filepath: Path, data: Any) -> bool:
+        """Atomic temp-file + rename write. Caller must hold ``_locked``."""
         temp_path = filepath.with_suffix('.tmp')
-        
+
         try:
-            # Write to temp file
             with open(temp_path, 'w') as f:
-                if sys.platform != 'win32':
-                    fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-                try:
-                    json.dump(data, f, indent=2, default=str)
-                    f.flush()
-                    os.fsync(f.fileno())
-                finally:
-                    if sys.platform != 'win32':
-                        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-            
+                json.dump(data, f, indent=2, default=str)
+                f.flush()
+                os.fsync(f.fileno())
+
             # Set secure permissions (owner read/write only)
             os.chmod(temp_path, 0o600)
-            
+
             # Atomic rename (replaces old file)
             temp_path.replace(filepath)
-            
-            logger.debug(f"Successfully wrote {filename}")
+
+            logger.debug(f"Successfully wrote {filepath.name}")
             return True
-            
+
         except Exception as e:
-            logger.error(f"Error writing {filename}: {e}", exc_info=True)
+            logger.error(f"Error writing {filepath.name}: {e}", exc_info=True)
             # Clean up temp file if it exists
             if temp_path.exists():
                 try:
@@ -190,7 +220,45 @@ class JSONStorage:
                 except Exception:
                     pass
             return False
-    
+
+    def update(self, filename: str, mutator: Callable[[Any], Any],
+               default: Any = None) -> tuple[bool, Any]:
+        """
+        Atomic read-modify-write under a single exclusive lock.
+
+        Separate read()/write() calls are each safe individually, but two
+        concurrent read-modify-write sequences can both read the same state
+        and the second write silently discards the first's change. This
+        method holds the lock across the whole sequence.
+
+        Args:
+            filename: Name of JSON file (e.g., 'saved_plans.json')
+            mutator: Called with the current contents (or ``default`` if the
+                file is missing/unreadable); returns the new contents to
+                persist. Exceptions from the mutator propagate and nothing
+                is written.
+            default: Value passed to the mutator when there is no readable
+                current state
+
+        Returns:
+            Tuple of (write succeeded, data returned by the mutator)
+        """
+        filepath = self._validate_filename(filename)
+
+        with self._locked(filepath):
+            data = default
+            if filepath.exists():
+                try:
+                    with open(filepath, 'r') as f:
+                        data = json.load(f)
+                except (json.JSONDecodeError, OSError) as e:
+                    logger.error(f"Error reading {filename} during update: {e}")
+
+            new_data = mutator(data)
+            success = self._write_locked(filepath, new_data)
+
+        return success, new_data
+
     def exists(self, filename: str) -> bool:
         """
         Check if JSON file exists with path validation.

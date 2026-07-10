@@ -5,14 +5,14 @@ Provides tile coverage, road coverage, route computation via ORS, and cache
 management following the existing service patterns (constructor + initialize).
 """
 
-import logging
+from src.secure_logger import SecureLogger
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.config_manager import ConfigManager
 from src.coverage_tracker import CoverageTracker
 
-logger = logging.getLogger(__name__)
+logger = SecureLogger(__name__)
 
 # Maps the frontend surface_preference value to an ORS cycling profile.
 _SURFACE_TO_PROFILE = {

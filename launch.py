@@ -14,6 +14,7 @@ Usage:
 """
 
 import logging
+from src.secure_logger import SecureLogger
 import os
 import sys
 import time
@@ -28,7 +29,7 @@ setup_logging(
     backup_count=5,
     console_output=True,
 )
-logger = logging.getLogger(__name__)
+logger = SecureLogger(__name__)
 
 PORT = 8083
 

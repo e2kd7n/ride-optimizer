@@ -8,7 +8,7 @@ This service provides access to the route library:
 - Manage favorites
 """
 
-import logging
+from src.secure_logger import SecureLogger
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
@@ -17,7 +17,7 @@ from src.long_ride_analyzer import LongRide
 from src.config_manager import ConfigManager
 from src.json_storage import JSONStorage
 
-logger = logging.getLogger(__name__)
+logger = SecureLogger(__name__)
 
 
 class RouteLibraryService:
