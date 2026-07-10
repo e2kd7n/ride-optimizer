@@ -8,7 +8,7 @@ Copyright (c) 2024-2026 e2kd7n
 Licensed under the MIT License - see LICENSE file for details.
 """
 
-import logging
+from .secure_logger import SecureLogger
 from typing import List, Dict, Any, Tuple, Optional
 from dataclasses import dataclass
 from datetime import datetime, time
@@ -18,7 +18,7 @@ import numpy as np
 
 from .route_analyzer import RouteGroup
 
-logger = logging.getLogger(__name__)
+logger = SecureLogger(__name__)
 
 
 @dataclass

@@ -18,7 +18,9 @@ sys.path.insert(0, str(project_root))
 
 from src.json_storage import JSONStorage
 from src.config_manager import ConfigManager
+from src.logging_config import PIISanitizingFilter
 from src.ntfy_notifier import NtfyNotifier
+from src.secure_logger import SecureLogger
 
 # Configure logging
 log_dir = project_root / 'logs'
@@ -32,7 +34,10 @@ logging.basicConfig(
         logging.StreamHandler()
     ]
 )
-logger = logging.getLogger(__name__)
+# basicConfig handlers bypass setup_logging(), so sanitize at the handler here
+for _handler in logging.getLogger().handlers:
+    _handler.addFilter(PIISanitizingFilter())
+logger = SecureLogger(__name__)
 
 
 def check_disk_space():

@@ -188,7 +188,6 @@ def save_plan():
     if len(str(note)) > 500:
         return jsonify({'status': 'error', 'message': 'Note must be 500 characters or less'}), 400
 
-    plans = current_app.container.storage.read('saved_plans.json', default=[])
     plan = {
         'id': secrets.token_hex(8),
         'route_id': str(route_id),
@@ -200,8 +199,14 @@ def save_plan():
         'elevation': elevation,
         'created_at': datetime.now().isoformat(),
     }
-    plans.insert(0, plan)
-    current_app.container.storage.write('saved_plans.json', plans)
+
+    def _add(plans):
+        plans.insert(0, plan)
+        return plans
+
+    saved, _ = current_app.container.storage.update('saved_plans.json', _add, default=[])
+    if not saved:
+        return jsonify({'status': 'error', 'message': 'Failed to save plan'}), 500
     return jsonify({'status': 'success', 'plan': plan}), 201
 
 
@@ -211,12 +216,18 @@ def delete_plan(plan_id):
     if not plan_id or not plan_id.replace('-', '').replace('_', '').isalnum():
         return jsonify({'status': 'error', 'message': 'Invalid plan ID'}), 400
 
-    plans = current_app.container.storage.read('saved_plans.json', default=[])
-    original_len = len(plans)
-    plans = [p for p in plans if p.get('id') != plan_id]
+    found = False
 
-    if len(plans) == original_len:
+    def _remove(plans):
+        nonlocal found
+        remaining = [p for p in plans if p.get('id') != plan_id]
+        found = len(remaining) != len(plans)
+        return remaining
+
+    saved, _ = current_app.container.storage.update('saved_plans.json', _remove, default=[])
+
+    if not found:
         return jsonify({'status': 'error', 'message': 'Plan not found'}), 404
-
-    current_app.container.storage.write('saved_plans.json', plans)
+    if not saved:
+        return jsonify({'status': 'error', 'message': 'Failed to delete plan'}), 500
     return jsonify({'status': 'success'})

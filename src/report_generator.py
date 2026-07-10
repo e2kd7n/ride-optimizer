@@ -7,7 +7,7 @@ Copyright (c) 2024-2026 e2kd7n
 Licensed under the MIT License - see LICENSE file for details.
 """
 
-import logging
+from .secure_logger import SecureLogger
 import base64
 import csv
 import json
@@ -36,14 +36,14 @@ try:
     WEASYPRINT_AVAILABLE = True
 except (ImportError, OSError) as e:
     WEASYPRINT_AVAILABLE = False
-    logger = logging.getLogger(__name__)
+    logger = SecureLogger(__name__)
     logger.warning(f"WeasyPrint not available: {e}. PDF export will be disabled.")
     HTML = None
 
 from .route_analyzer import Route
 from .units import UnitConverter
 
-logger = logging.getLogger(__name__)
+logger = SecureLogger(__name__)
 
 
 class ReportGenerator:

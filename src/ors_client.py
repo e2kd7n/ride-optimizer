@@ -6,13 +6,13 @@ explicit timeout, requests.exceptions.RequestException -> log + return None.
 Distinguishes HTTP 429 so callers can surface a rate-limit message.
 """
 
-import logging
+from src.secure_logger import SecureLogger
 import re
 from typing import List, Optional, Tuple
 
 import requests
 
-logger = logging.getLogger(__name__)
+logger = SecureLogger(__name__)
 
 # Shared connection-pooled session for all ORS requests (mirrors the pattern in
 # src/weather_fetcher.py, which sets up self.session = requests.Session() once

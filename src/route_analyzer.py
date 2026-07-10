@@ -7,7 +7,7 @@ Copyright (c) 2024-2026 e2kd7n
 Licensed under the MIT License - see LICENSE file for details.
 """
 
-import logging
+from .secure_logger import SecureLogger
 import json
 import hashlib
 import threading
@@ -28,7 +28,7 @@ from .location_finder import Location
 from .route_namer import RouteNamer
 from .json_storage import secure_chmod
 
-logger = logging.getLogger(__name__)
+logger = SecureLogger(__name__)
 
 try:
     import similaritymeasures
@@ -969,7 +969,7 @@ class RouteAnalyzer:
             executor:  ProcessPoolExecutor to use for parallel comparisons, or None
                        to run sequentially.
         """
-        debug_logger = logging.getLogger('debug')
+        debug_logger = SecureLogger('debug')
 
         if not routes:
             return []

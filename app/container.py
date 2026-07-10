@@ -11,12 +11,12 @@ Wave initialisation (parallel where dependencies allow):
   Wave 3 (parallel): CommuteService, PlannerService
 """
 
-import logging
+from src.secure_logger import SecureLogger
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from app.jobs.job_state import JobRegistry
 
-logger = logging.getLogger(__name__)
+logger = SecureLogger(__name__)
 
 
 class ServiceContainer:

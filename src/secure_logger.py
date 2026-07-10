@@ -17,6 +17,7 @@ Usage:
 """
 
 import logging
+from collections.abc import Mapping
 from typing import Any, Optional
 from src.pii_sanitizer import sanitize_log_message
 
@@ -43,28 +44,41 @@ class SecureLogger:
         self.logger = logging.getLogger(name)
         self.name = name
     
+    def _render(self, message: Any, args: tuple) -> str:
+        """
+        Format %-style args into the message, then sanitize the whole string.
+
+        Args must be formatted before sanitization: sanitizing them
+        individually stringifies every value, which makes numeric format
+        specifiers (%d, %.1f, ...) raise TypeError at emit time. Mirrors
+        logging's own formatting, including the single-mapping special case
+        for %(key)s-style messages.
+        """
+        if args:
+            if len(args) == 1 and isinstance(args[0], Mapping):
+                format_args: Any = args[0]
+            else:
+                format_args = args
+            try:
+                message = str(message) % format_args
+            except (TypeError, ValueError, KeyError):
+                # Malformed format call — keep the data rather than raising,
+                # matching logging's never-crash-the-caller contract.
+                message = f"{message} {args}"
+        return sanitize_log_message(message)
+
     def _sanitize_and_log(self, level: str, message: Any, *args, **kwargs):
         """
         Sanitize message and log at specified level.
-        
+
         Args:
             level: Log level method name ('debug', 'info', 'warning', 'error', 'critical')
             message: Log message (will be sanitized)
             *args: Additional positional arguments for logger
             **kwargs: Additional keyword arguments for logger
         """
-        # Sanitize the main message
-        sanitized_message = sanitize_log_message(message)
-        
-        # Sanitize any additional arguments
-        if args:
-            sanitized_args = tuple(sanitize_log_message(arg) for arg in args)
-        else:
-            sanitized_args = args
-        
-        # Get the logging method and call it
         log_method = getattr(self.logger, level)
-        log_method(sanitized_message, *sanitized_args, **kwargs)
+        log_method(self._render(message, args), **kwargs)
     
     def debug(self, message: Any, *args, **kwargs):
         """
@@ -131,14 +145,7 @@ class SecureLogger:
             exc_info: Include exception info (default: True)
             **kwargs: Additional keyword arguments
         """
-        sanitized_message = sanitize_log_message(message)
-        
-        if args:
-            sanitized_args = tuple(sanitize_log_message(arg) for arg in args)
-        else:
-            sanitized_args = args
-        
-        self.logger.exception(sanitized_message, *sanitized_args, exc_info=exc_info, **kwargs)
+        self.logger.exception(self._render(message, args), exc_info=exc_info, **kwargs)
     
     def log(self, level: int, message: Any, *args, **kwargs):
         """
@@ -150,14 +157,7 @@ class SecureLogger:
             *args: Additional positional arguments
             **kwargs: Additional keyword arguments
         """
-        sanitized_message = sanitize_log_message(message)
-        
-        if args:
-            sanitized_args = tuple(sanitize_log_message(arg) for arg in args)
-        else:
-            sanitized_args = args
-        
-        self.logger.log(level, sanitized_message, *sanitized_args, **kwargs)
+        self.logger.log(level, self._render(message, args), **kwargs)
     
     # Delegate property access to underlying logger
     def setLevel(self, level):

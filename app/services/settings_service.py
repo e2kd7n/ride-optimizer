@@ -7,13 +7,13 @@ Provides:
 - Reset to defaults
 """
 
-import logging
+from src.secure_logger import SecureLogger
 from typing import Dict, Any
 from copy import deepcopy
 
 from src.json_storage import JSONStorage
 
-logger = logging.getLogger(__name__)
+logger = SecureLogger(__name__)
 
 SETTINGS_FILENAME = 'user_settings.json'
 

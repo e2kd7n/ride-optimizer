@@ -9,12 +9,11 @@ Frontend Integration:
 
 from flask import Blueprint, request, jsonify
 from typing import List, Dict, Optional
-import logging
-
+from src.secure_logger import SecureLogger
 from app.schemas import MapQuerySchema, validate_request_args
 from src.json_storage import JSONStorage
 
-logger = logging.getLogger(__name__)
+logger = SecureLogger(__name__)
 
 bp = Blueprint('maps_api', __name__, url_prefix='/api/maps')
 

@@ -383,9 +383,34 @@ class TestSecureLoggerIntegration:
         
         # Log message with PII
         logger.info("User at location: 41.8781136, -87.6297982")
-        
+
         # Check output is sanitized
         output = stream.getvalue()
+        assert "41.87xx" in output
+        assert "41.8781136" not in output
+
+    def test_secure_logger_percent_style_args(self):
+        """%-style args (including numeric %d) must format correctly and still be sanitized.
+
+        Regression for the SecureLogger-wide migration: sanitizing args
+        individually stringifies them, which made %d raise TypeError at emit.
+        """
+        from src.secure_logger import SecureLogger
+        import logging
+        from io import StringIO
+
+        logger = SecureLogger('test_logger_percent')
+        stream = StringIO()
+        handler = logging.StreamHandler(stream)
+        handler.setLevel(logging.INFO)
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+
+        logger.info("Loaded %d rides near %s", 17, "41.8781136, -87.6297982")
+        logger.warning("bounds %s", (41.8781136, -87.6297982))
+
+        output = stream.getvalue()
+        assert "Loaded 17 rides" in output
         assert "41.87xx" in output
         assert "41.8781136" not in output
 

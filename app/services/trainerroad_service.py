@@ -10,7 +10,7 @@ Provides:
 """
 
 import ipaddress
-import logging
+from src.secure_logger import SecureLogger
 import requests
 import json
 import os
@@ -27,8 +27,9 @@ from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
 from cryptography.fernet import Fernet
 
 from src.config_manager import ConfigManager
+from src.json_storage import JSONStorage
 
-logger = logging.getLogger(__name__)
+logger = SecureLogger(__name__)
 
 WORKOUTS_CACHE = Path('data/cache/trainerroad_workouts.json')
 
@@ -212,6 +213,9 @@ class TrainerRoadService:
 
         self.cipher = self._get_cipher()
         self.feed_url = self._load_feed_url()
+        # Locked, atomic JSON storage for the workouts cache (issue #459 —
+        # raw open()/json.dump could corrupt the file or lose updates).
+        self._cache_storage = JSONStorage(data_dir=str(WORKOUTS_CACHE.parent))
 
     def _get_cipher(self) -> Fernet:
         env_key = os.getenv('TRAINERROAD_ENCRYPTION_KEY')
@@ -539,22 +543,7 @@ class TrainerRoadService:
         }
 
     def _load_workouts_cache(self) -> Dict[str, Any]:
-        if not WORKOUTS_CACHE.exists():
-            return {}
-        try:
-            with open(WORKOUTS_CACHE) as f:
-                return json.load(f)
-        except (json.JSONDecodeError, OSError) as e:
-            logger.warning(f"Failed to load workouts cache: {e}")
-            return {}
-
-    def _save_workouts_cache(self, workouts_by_id: Dict[str, Any]) -> None:
-        try:
-            WORKOUTS_CACHE.parent.mkdir(parents=True, exist_ok=True)
-            with open(WORKOUTS_CACHE, 'w') as f:
-                json.dump(workouts_by_id, f, indent=2, default=str)
-        except OSError as e:
-            logger.error(f"Failed to save workouts cache: {e}")
+        return self._cache_storage.read(WORKOUTS_CACHE.name, default={})
 
     def sync_workouts(self, days_ahead: int = 14) -> Dict[str, Any]:
         try:
@@ -591,31 +580,33 @@ class TrainerRoadService:
                 if today <= w['workout_date'] <= end_date
             ]
 
-            cache = self._load_workouts_cache()
-            created = 0
-            updated = 0
             sync_time = datetime.utcnow().isoformat()
+            counts = {'created': 0, 'updated': 0}
 
-            for workout_data in upcoming_workouts:
-                wid = workout_data['workout_id']
-                entry = {
-                    'workout_id': wid,
-                    'workout_name': workout_data['workout_name'],
-                    'workout_date': workout_data['workout_date'].isoformat(),
-                    'workout_type': workout_data.get('workout_type'),
-                    'duration_minutes': workout_data.get('duration_minutes'),
-                    'tss': workout_data.get('tss'),
-                    'intensity_factor': workout_data.get('intensity_factor'),
-                    'status': workout_data.get('status', 'scheduled'),
-                    'synced_at': sync_time,
-                }
-                if wid in cache:
-                    updated += 1
-                else:
-                    created += 1
-                cache[wid] = entry
+            def _merge(cache):
+                for workout_data in upcoming_workouts:
+                    wid = workout_data['workout_id']
+                    entry = {
+                        'workout_id': wid,
+                        'workout_name': workout_data['workout_name'],
+                        'workout_date': workout_data['workout_date'].isoformat(),
+                        'workout_type': workout_data.get('workout_type'),
+                        'duration_minutes': workout_data.get('duration_minutes'),
+                        'tss': workout_data.get('tss'),
+                        'intensity_factor': workout_data.get('intensity_factor'),
+                        'status': workout_data.get('status', 'scheduled'),
+                        'synced_at': sync_time,
+                    }
+                    if wid in cache:
+                        counts['updated'] += 1
+                    else:
+                        counts['created'] += 1
+                    cache[wid] = entry
+                return cache
 
-            self._save_workouts_cache(cache)
+            self._cache_storage.update(WORKOUTS_CACHE.name, _merge, default={})
+            created = counts['created']
+            updated = counts['updated']
             self.last_sync = datetime.now()
 
             logger.info(f"Synced {len(upcoming_workouts)} workouts ({created} created, {updated} updated)")

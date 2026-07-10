@@ -8,7 +8,7 @@ This service provides intelligent long ride recommendations based on:
 - Historical performance
 """
 
-import logging
+from src.secure_logger import SecureLogger
 from html import escape
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
@@ -20,7 +20,7 @@ from src.config_manager import ConfigManager
 from src.location_finder import Location
 from app.services.weather_service import WeatherService
 
-logger = logging.getLogger(__name__)
+logger = SecureLogger(__name__)
 
 
 def _weather_data_to_dict(weather_data: Dict[str, Any],

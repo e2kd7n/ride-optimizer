@@ -5,7 +5,7 @@ not used inside any blueprint.
 """
 
 import json
-import logging
+from src.secure_logger import SecureLogger
 import os
 import tempfile
 import time
@@ -13,7 +13,7 @@ import webbrowser
 from datetime import datetime
 from typing import Optional
 
-logger = logging.getLogger(__name__)
+logger = SecureLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # PID file helpers
@@ -32,12 +32,16 @@ def _write_pid_file(pid: int, port: int) -> None:
         'port': port,
         'started': datetime.now().isoformat(),
     }
-    with open(pid_path, 'w') as fh:
+    # Atomic temp-file + rename so a concurrent reader never sees a
+    # partially written file (issue #459).
+    temp_path = pid_path + '.tmp'
+    with open(temp_path, 'w') as fh:
         json.dump(data, fh)
     try:
-        os.chmod(pid_path, 0o600)
+        os.chmod(temp_path, 0o600)
     except OSError:
         pass  # Windows doesn't support chmod; not critical
+    os.replace(temp_path, pid_path)
 
 
 def _read_pid_file() -> dict:
