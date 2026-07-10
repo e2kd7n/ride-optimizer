@@ -447,8 +447,8 @@ class TestGlobalPIISanitization:
         assert '41.87xx' in content
 
     def test_numeric_percent_style_args_do_not_break_formatting(self, temp_log_dir):
-        """Non-string args must be left alone so %d/%f-style calls (common in
-        third-party libraries) don't raise during formatting."""
+        """Non-string args must not break %d/%f-style calls (common in
+        third-party libraries) during formatting."""
         setup_logging(log_dir=temp_log_dir, console_output=False)
 
         plain_logger = logging.getLogger('test.numeric_args')
@@ -456,5 +456,21 @@ class TestGlobalPIISanitization:
 
         content = (Path(temp_log_dir) / 'ride_optimizer.log').read_text()
         assert 'Retry 1 of 3' in content
+
+    def test_non_string_arg_containing_coordinates_is_masked(self, temp_log_dir):
+        """Regression for #480: a coordinate tuple/list logged via %s must be
+        masked. The old filter only sanitized string args, so the tuple was
+        formatted by the handler *after* the filter ran and leaked at full
+        precision (e.g. coverage_tracker's 'bounds %s' viewport log)."""
+        setup_logging(log_dir=temp_log_dir, console_output=False)
+
+        plain_logger = logging.getLogger('src.coverage_tracker')
+        bounds = (41.8781136, -87.6297982, 41.9001234, -87.6001234)
+        plain_logger.info("Fetching road network from OSM for bounds %s", bounds)
+
+        content = (Path(temp_log_dir) / 'ride_optimizer.log').read_text()
+        assert '41.8781136' not in content
+        assert '87.6297982' not in content
+        assert '41.87xx' in content
 
 

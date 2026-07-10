@@ -21,6 +21,8 @@ from datetime import datetime, date, timedelta
 from pathlib import Path
 import json
 
+from requests.adapters import HTTPAdapter
+
 from app.services.trainerroad_service import TrainerRoadService
 from src.config_manager import ConfigManager
 
@@ -296,7 +298,7 @@ class TestFetchICSFeed:
         trainerroad_service.feed_url = 'https://example.com/feed.ics'
 
         with patch('app.services.trainerroad_service.socket.getaddrinfo', side_effect=_mock_public_addrinfo), \
-             patch('app.services.trainerroad_service.requests.get') as mock_get:
+             patch('app.services.trainerroad_service._pinned_get') as mock_get:
             mock_response = Mock()
             mock_response.text = sample_ics_content
             mock_response.is_redirect = False
@@ -306,7 +308,8 @@ class TestFetchICSFeed:
             result = trainerroad_service.fetch_ics_feed()
 
             assert result == sample_ics_content
-            mock_get.assert_called_once_with('https://example.com/feed.ics', timeout=10, allow_redirects=False)
+            # Connection is pinned to the validated public IP, not re-resolved.
+            mock_get.assert_called_once_with('https://example.com/feed.ics', '93.184.216.34', 10)
 
     def test_fetch_no_url_configured(self, trainerroad_service):
         """Test fetch when no URL configured."""
@@ -321,7 +324,7 @@ class TestFetchICSFeed:
         trainerroad_service.feed_url = 'https://internal.example.com/feed.ics'
 
         with patch('app.services.trainerroad_service.socket.getaddrinfo', side_effect=_mock_private_addrinfo), \
-             patch('app.services.trainerroad_service.requests.get') as mock_get:
+             patch('app.services.trainerroad_service._pinned_get') as mock_get:
             result = trainerroad_service.fetch_ics_feed()
 
             assert result is None
@@ -337,7 +340,7 @@ class TestFetchICSFeed:
             return _mock_private_addrinfo(hostname, port)
 
         with patch('app.services.trainerroad_service.socket.getaddrinfo', side_effect=addrinfo_side_effect), \
-             patch('app.services.trainerroad_service.requests.get') as mock_get:
+             patch('app.services.trainerroad_service._pinned_get') as mock_get:
             redirect_response = Mock()
             redirect_response.is_redirect = True
             redirect_response.is_permanent_redirect = False
@@ -354,7 +357,7 @@ class TestFetchICSFeed:
         trainerroad_service.feed_url = 'https://example.com/feed.ics'
 
         with patch('app.services.trainerroad_service.socket.getaddrinfo', side_effect=_mock_public_addrinfo), \
-             patch('app.services.trainerroad_service.requests.get') as mock_get:
+             patch('app.services.trainerroad_service._pinned_get') as mock_get:
             mock_get.side_effect = Exception('Timeout')
 
             result = trainerroad_service.fetch_ics_feed()
@@ -366,7 +369,7 @@ class TestFetchICSFeed:
         trainerroad_service.feed_url = 'https://example.com/feed.ics'
 
         with patch('app.services.trainerroad_service.socket.getaddrinfo', side_effect=_mock_public_addrinfo), \
-             patch('app.services.trainerroad_service.requests.get') as mock_get:
+             patch('app.services.trainerroad_service._pinned_get') as mock_get:
             mock_response = Mock()
             mock_response.is_redirect = False
             mock_response.is_permanent_redirect = False
@@ -382,7 +385,7 @@ class TestFetchICSFeed:
         trainerroad_service.feed_url = 'https://example.com/feed.ics'
 
         with patch('app.services.trainerroad_service.socket.getaddrinfo', side_effect=_mock_public_addrinfo), \
-             patch('app.services.trainerroad_service.requests.get') as mock_get:
+             patch('app.services.trainerroad_service._pinned_get') as mock_get:
             mock_response = Mock()
             mock_response.text = 'content'
             mock_response.is_redirect = False
@@ -391,7 +394,56 @@ class TestFetchICSFeed:
 
             trainerroad_service.fetch_ics_feed(timeout=30)
 
-            mock_get.assert_called_once_with('https://example.com/feed.ics', timeout=30, allow_redirects=False)
+            mock_get.assert_called_once_with('https://example.com/feed.ics', '93.184.216.34', 30)
+
+    def test_fetch_does_not_log_secret_url_path(self, trainerroad_service, caplog):
+        """The feed URL path can embed a secret token — only the host is logged."""
+        trainerroad_service.feed_url = 'https://example.com/private-token-abc123/feed.ics'
+
+        with patch('app.services.trainerroad_service.socket.getaddrinfo', side_effect=_mock_public_addrinfo), \
+             patch('app.services.trainerroad_service._pinned_get') as mock_get:
+            mock_response = Mock()
+            mock_response.text = 'ok'
+            mock_response.is_redirect = False
+            mock_response.is_permanent_redirect = False
+            mock_get.return_value = mock_response
+
+            with caplog.at_level('INFO', logger='app.services.trainerroad_service'):
+                trainerroad_service.fetch_ics_feed()
+
+        assert 'private-token-abc123' not in caplog.text
+        assert 'example.com' in caplog.text
+
+
+class TestSSRFPinning:
+    """Tests for the TOCTOU-free resolve-and-pin SSRF defense."""
+
+    def test_validated_ip_returns_public_ip(self):
+        from app.services.trainerroad_service import _validated_ip_for_url
+        with patch('app.services.trainerroad_service.socket.getaddrinfo', side_effect=_mock_public_addrinfo):
+            assert _validated_ip_for_url('https://example.com/feed.ics') == '93.184.216.34'
+
+    def test_validated_ip_rejects_private(self):
+        from app.services.trainerroad_service import _validated_ip_for_url
+        with patch('app.services.trainerroad_service.socket.getaddrinfo', side_effect=_mock_private_addrinfo):
+            assert _validated_ip_for_url('https://internal.example.com/feed.ics') is None
+
+    def test_validated_ip_rejects_non_http_scheme(self):
+        from app.services.trainerroad_service import _validated_ip_for_url
+        assert _validated_ip_for_url('file:///etc/passwd') is None
+
+    def test_pinned_adapter_dials_ip_but_keeps_hostname_for_tls(self):
+        """New HTTPS connections must dial the pinned IP at the socket layer while
+        keeping the real hostname for SNI and certificate verification."""
+        from app.services.trainerroad_service import _PinnedIPAdapter
+
+        adapter = _PinnedIPAdapter('93.184.216.34')
+        pool = adapter.poolmanager.connection_from_url('https://example.com/feed.ics')
+        conn = pool._new_conn()
+
+        assert conn._dns_host == '93.184.216.34'      # socket target is the pinned IP
+        assert conn.server_hostname == 'example.com'  # SNI stays the hostname
+        assert conn.assert_hostname == 'example.com'  # cert verified against hostname
 
 
 class TestParseICSFeed:
