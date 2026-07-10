@@ -68,7 +68,6 @@ Three high-priority, low-coverage modules brought to excellent coverage:
 | visualizer.py | 0% | 60% | +1.9% | Medium |
 | traffic_analyzer.py | 0% | 60% | +1.4% | Medium |
 | carbon_calculator.py | 0% | 60% | +1.3% | Low |
-| secure_cache.py | 0% | 70% | +1.1% | Medium |
 | scheduler/health.py | 27% | 70% | +0.9% | Low |
 | routes/settings.py | 32% | 70% | +0.6% | Low |
 | api/long_rides_api.py | 0% | 70% | +1.0% | Medium |
