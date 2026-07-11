@@ -113,21 +113,6 @@ class UnitConverter:
             # Keep m/s for metric (common in weather)
             return f"{meters_per_second:.{precision}f} m/s"
     
-    def wind_speed_value(self, meters_per_second: float) -> float:
-        """
-        Convert wind speed to appropriate unit (value only).
-        
-        Args:
-            meters_per_second: Wind speed in m/s
-            
-        Returns:
-            Wind speed in target unit
-        """
-        if self.system == 'imperial':
-            return meters_per_second * 2.23694  # mph
-        else:
-            return meters_per_second  # m/s
-    
     def wind_speed_unit(self) -> str:
         """Get wind speed unit label."""
         return 'mph' if self.system == 'imperial' else 'm/s'
@@ -148,25 +133,6 @@ class UnitConverter:
             return f"{fahrenheit:.{precision}f}°F"
         else:
             return f"{celsius:.{precision}f}°C"
-    
-    def temperature_value(self, celsius: float) -> float:
-        """
-        Convert temperature to appropriate unit (value only).
-        
-        Args:
-            celsius: Temperature in Celsius
-            
-        Returns:
-            Temperature in target unit
-        """
-        if self.system == 'imperial':
-            return (celsius * 9/5) + 32  # Fahrenheit
-        else:
-            return celsius  # Celsius
-    
-    def temperature_unit(self) -> str:
-        """Get temperature unit label."""
-        return '°F' if self.system == 'imperial' else '°C'
     
     def elevation(self, meters: float, precision: int = 0) -> str:
         """

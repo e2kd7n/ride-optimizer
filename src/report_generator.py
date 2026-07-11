@@ -19,8 +19,8 @@ from typing import Dict, Any
 # defusedxml is only needed for parsing untrusted XML input
 from xml.etree import ElementTree as ET
 
-# QR code temporarily disabled - needs debugging before re-enabling
-# TODO (#45): Debug QR code generation and scanning functionality
+# qrcode is a hard dependency (requirements.txt); this import-fallback only
+# guards against it being missing from the environment, not a feature flag.
 try:
     import qrcode
     QRCODE_AVAILABLE = True

@@ -10,10 +10,12 @@ Licensed under the MIT License - see LICENSE file for details.
 from .secure_logger import SecureLogger
 import json
 import hashlib
+import os
 import threading
 import subprocess
 import sys
 from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
 from typing import List, Tuple, Dict, Any, Optional
 from dataclasses import dataclass
@@ -25,7 +27,7 @@ from tqdm import tqdm
 
 from .data_fetcher import Activity
 from .location_finder import Location
-from .route_namer import RouteNamer
+from .route_namer import RouteNamer, check_rate_limit_file
 from .json_storage import secure_chmod
 
 logger = SecureLogger(__name__)
@@ -208,6 +210,12 @@ class RouteAnalyzer:
         self._geocoding_thread = None
         self._geocoding_lock = threading.Lock()
         self._terminal_process = None
+
+        # Active ProcessPoolExecutor for route-similarity comparisons, set for the
+        # duration of group_similar_routes(). Held on the instance (rather than
+        # passed purely as a local) so a broken pool can be replaced mid-run and
+        # the replacement stays visible across both direction passes.
+        self._executor: Optional[ProcessPoolExecutor] = None
         
     def _load_similarity_cache(self) -> Dict[str, float]:
         """Load similarity cache from disk."""
@@ -244,16 +252,6 @@ class RouteAnalyzer:
                 logger.warning(f"Failed to load groups cache: {e}")
                 return {}
         return {}
-    
-    def _save_groups_cache(self, cache_key: str, groups: List[RouteGroup]):
-        """Save route groups cache to disk (legacy method)."""
-        # Extract activity IDs from groups
-        activity_ids = []
-        for group in groups:
-            for route in group.routes:
-                if route.activity_id not in activity_ids:
-                    activity_ids.append(route.activity_id)
-        self._save_groups_cache_with_ids(activity_ids, groups)
     
     def _save_groups_cache_with_ids(self, activity_ids: List[int], groups: List[RouteGroup]):
         """Save route groups cache to disk with activity ID tracking."""
@@ -767,13 +765,14 @@ class RouteAnalyzer:
         # Parallelise the inner comparison loop across n_workers processes.
         # The outer (pivot) loop remains sequential because each iteration
         # depends on which routes the previous one removed.
-        with ProcessPoolExecutor(max_workers=self.n_workers) as executor:
+        self._executor = ProcessPoolExecutor(max_workers=self.n_workers)
+        try:
             if home_to_work:
                 tqdm.write(f"   → Processing {len(home_to_work)} home→work routes "
                            f"({self.n_workers} workers)")
                 htw_groups = self._group_routes_by_similarity(
                     home_to_work, 'home_to_work',
-                    offset=0, total=grand_total, executor=executor)
+                    offset=0, total=grand_total, executor=self._executor)
                 groups.extend(htw_groups)
                 tqdm.write(f"   ✓ {len(htw_groups)} groups")
 
@@ -782,9 +781,12 @@ class RouteAnalyzer:
                            f"({self.n_workers} workers)")
                 wth_groups = self._group_routes_by_similarity(
                     work_to_home, 'work_to_home',
-                    offset=len(home_to_work), total=grand_total, executor=executor)
+                    offset=len(home_to_work), total=grand_total, executor=self._executor)
                 groups.extend(wth_groups)
                 tqdm.write(f"   ✓ {len(wth_groups)} groups")
+        finally:
+            self._executor.shutdown(wait=False, cancel_futures=True)
+            self._executor = None
 
         tqdm.write(f"   Total: {len(groups)} groups")
         logger.info(f"Created {len(groups)} route groups from {len(routes)} routes")
@@ -972,9 +974,20 @@ class RouteAnalyzer:
             if plus_count > 0:
                 tqdm.write(f"   ⭐ {plus_count} {direction_label} PLUS routes")
                 tqdm.write(f"      (>{median_distance/1000:.1f}km + 15%)")
-        
+
         return groups
-    
+
+    def _submit_similarity_tasks(self, task_args: List[Tuple]) -> List[Tuple[int, str, float]]:
+        """Submit a batch of _similarity_worker tasks to self._executor and collect results.
+
+        Raises BrokenProcessPool if a worker dies outright instead of returning normally.
+        """
+        futures = [self._executor.submit(_similarity_worker, args) for args in task_args]
+        results = []
+        for fut in futures:
+            results.extend(fut.result())
+        return results
+
     def _group_routes_by_similarity(self, routes: List[Route], direction: str,
                                     offset: int = 0, total: int = 0,
                                     executor: Optional[Any] = None) -> List[RouteGroup]:
@@ -1049,17 +1062,26 @@ class RouteAnalyzer:
                 chunks = [uncached[j:j + chunk_size]
                           for j in range(0, len(uncached), chunk_size)]
                 pivot_coords = list(current.coordinates)
-                futures = [
-                    executor.submit(
-                        _similarity_worker,
-                        (pivot_coords, chunk, FRECHET_AVAILABLE, hausdorff_percentile)
-                    )
+                task_args = [
+                    (pivot_coords, chunk, FRECHET_AVAILABLE, hausdorff_percentile)
                     for chunk in chunks
                 ]
-                for fut in futures:
-                    for (idx, ck, score) in fut.result():
-                        self.similarity_cache[ck] = score
-                        cached_similarities[idx] = score
+                try:
+                    results = self._submit_similarity_tasks(task_args)
+                except BrokenProcessPool:
+                    # A worker died outright (segfault/OOM/killed) rather than raising
+                    # a normal exception. Restart the pool once and retry this pivot's
+                    # comparisons — if it dies again, let the exception propagate.
+                    debug_logger.warning(
+                        "Worker process died mid-comparison; restarting the pool "
+                        "and retrying this pivot once."
+                    )
+                    self._executor.shutdown(wait=False, cancel_futures=True)
+                    self._executor = ProcessPoolExecutor(max_workers=self.n_workers)
+                    results = self._submit_similarity_tasks(task_args)
+                for (idx, ck, score) in results:
+                    self.similarity_cache[ck] = score
+                    cached_similarities[idx] = score
             else:
                 # Sequential fallback (small batches or no executor)
                 for (i, cache_key, _) in uncached:
@@ -1338,35 +1360,24 @@ class RouteAnalyzer:
             return
 
         # Check if we're currently rate limited
-        import os
         rate_limit_file = os.path.join(self.cache_dir, "geocoding_rate_limit.json")
-        if os.path.exists(rate_limit_file):
-            try:
-                import json
-                from datetime import datetime
-                with open(rate_limit_file, 'r') as f:
-                    rate_limit_data = json.load(f)
-                blocked_until_str = rate_limit_data.get('blocked_until')
-                if blocked_until_str:
-                    blocked_until = datetime.fromisoformat(blocked_until_str)
-                    if datetime.now() < blocked_until:
-                        import time as time_module
-                        tz_name = time_module.tzname[time_module.daylight]
-                        blocked_until_formatted = f"{blocked_until.strftime('%Y-%m-%d %H:%M:%S')} {tz_name}"
-                        
-                        logger.info(f"Geocoding is rate limited until {blocked_until_formatted}, skipping")
-                        tqdm.write("\n" + "="*60)
-                        tqdm.write("⚠️  GEOCODING RATE LIMITED")
-                        tqdm.write("="*60)
-                        tqdm.write("Background geocoding is currently paused due to rate limiting.")
-                        tqdm.write(f"Self-imposed block until: {blocked_until_formatted}")
-                        tqdm.write("\n💡 Geocoding will automatically resume after the block expires.")
-                        tqdm.write("   Re-run analysis after that time to geocode route names.")
-                        tqdm.write("="*60 + "\n")
-                        return
-            except Exception as e:
-                logger.warning(f"Failed to check rate limit file: {e}")
-        
+        blocked_until = check_rate_limit_file(rate_limit_file)
+        if blocked_until is not None:
+            import time as time_module
+            tz_name = time_module.tzname[time_module.daylight]
+            blocked_until_formatted = f"{blocked_until.strftime('%Y-%m-%d %H:%M:%S')} {tz_name}"
+
+            logger.info(f"Geocoding is rate limited until {blocked_until_formatted}, skipping")
+            tqdm.write("\n" + "="*60)
+            tqdm.write("⚠️  GEOCODING RATE LIMITED")
+            tqdm.write("="*60)
+            tqdm.write("Background geocoding is currently paused due to rate limiting.")
+            tqdm.write(f"Self-imposed block until: {blocked_until_formatted}")
+            tqdm.write("\n💡 Geocoding will automatically resume after the block expires.")
+            tqdm.write("   Re-run analysis after that time to geocode route names.")
+            tqdm.write("="*60 + "\n")
+            return
+
         # Don't start multiple threads
         if self._geocoding_thread and self._geocoding_thread.is_alive():
             logger.info("Background geocoding already in progress, skipping new geocoding request")
@@ -1499,21 +1510,6 @@ end tell
             logger.warning(f"Could not open geocoding terminal: {e}")
             # Not critical, continue anyway
     
-    def cleanup(self) -> None:
-        """
-        Clean up resources including background threads and subprocesses.
-        Should be called when the analyzer is no longer needed.
-        """
-        # Wait for geocoding thread to complete (with timeout)
-        if self._geocoding_thread and self._geocoding_thread.is_alive():
-            logger.info("Waiting for background geocoding to complete...")
-            self._geocoding_thread.join(timeout=5.0)
-            if self._geocoding_thread.is_alive():
-                logger.warning("Background geocoding still running after timeout")
-        
-        # Terminal process is detached and managed by the OS
-        # No subprocess reference stored, so nothing to clean up
-    
     @staticmethod
     def _dedupe_route_names(all_groups_for_direction: List[RouteGroup]) -> None:
         """
@@ -1578,53 +1574,6 @@ end tell
             for idx, g in enumerate(clashing[1:], start=2):
                 g.name = f"{name} #{idx}"
 
-    def _geocode_routes_synchronous(self, groups: List[RouteGroup]) -> None:
-        """
-        Geocode route names synchronously (blocking).
-        This ensures names are available before saving cache.
-        
-        Args:
-            groups: List of RouteGroup objects to geocode
-        """
-        from tqdm import tqdm
-        
-        # Filter groups that need geocoding (have temporary names)
-        groups_to_geocode = [g for g in groups if g.name and ("Route" in g.name and ("to Work" in g.name or "to Home" in g.name))]
-        
-        if not groups_to_geocode:
-            logger.info("All routes already have geocoded names")
-            return
-        
-        logger.info(f"Geocoding {len(groups_to_geocode)} route groups synchronously")
-        
-        # Geocode with progress bar
-        for group in tqdm(groups_to_geocode, desc="Geocoding routes", unit="route"):
-            try:
-                # Generate descriptive route name using RouteNamer
-                route_name = self.route_namer.name_route(
-                    group.representative_route.coordinates,
-                    group.id,
-                    group.direction,
-                    elevation_gain=group.representative_route.elevation_gain,
-                    distance=group.representative_route.distance,
-                )
-                
-                # Update the group name
-                group.name = route_name
-                
-            except Exception as e:
-                logger.warning(f"Failed to geocode route {group.id}: {e}")
-                # Keep the temporary name on failure
-
-        # Deduplicate names across all groups (including previously-named ones)
-        by_direction: Dict[str, List[RouteGroup]] = {}
-        for g in groups:
-            by_direction.setdefault(g.direction, []).append(g)
-        for direction_groups in by_direction.values():
-            self._dedupe_route_names(direction_groups)
-        
-        logger.info(f"Geocoding complete: {len(groups_to_geocode)} routes named")
-    
     def _geocode_routes_background(self, groups: List[RouteGroup]) -> None:
         """
         Background worker that geocodes route names and updates the cache.
@@ -1904,79 +1853,4 @@ end tell
                     f.flush()
             except Exception as write_error:
                 logger.error(f"Failed to write error to progress file: {write_error}")
-    def _check_geocoding_status(self, groups: List[RouteGroup]) -> None:
-        """
-        Check geocoding status and notify user if incomplete.
-        
-        Args:
-            groups: List of route groups to check
-        """
-        from tqdm import tqdm
-        
-        # Count routes with generic names
-        generic_names = sum(1 for g in groups if g.name and ("Route" in g.name and ("to Work" in g.name or "to Home" in g.name)))
-        total_routes = len(groups)
-        geocoded_routes = total_routes - generic_names
-        
-        # Only show status if there are routes with generic names
-        if generic_names > 0:
-            # Check if geocoding is actually running
-            geocoding_running = self._geocoding_thread and self._geocoding_thread.is_alive()
-            
-            tqdm.write("\n" + "="*60)
-            tqdm.write("📍 ROUTE NAMING STATUS")
-            tqdm.write("="*60)
-            tqdm.write(f"Routes with descriptive names: {geocoded_routes}/{total_routes}")
-            tqdm.write(f"Routes with generic names: {generic_names}/{total_routes}")
-            
-            if geocoding_running:
-                # Geocoding is actively running
-                if generic_names == total_routes:
-                    tqdm.write("\n⚠️  No routes have been geocoded yet.")
-                    tqdm.write("   Background geocoding is running in a separate terminal.")
-                else:
-                    tqdm.write(f"\n⚠️  Geocoding is incomplete ({geocoded_routes}/{total_routes} routes named).")
-                    tqdm.write("   Background geocoding is continuing in a separate terminal.")
-                
-                tqdm.write("\n💡 To see updated route names:")
-                tqdm.write("   1. Wait for geocoding to complete (check the geocoding terminal)")
-                tqdm.write("   2. Re-run the analysis")
-                tqdm.write("   3. The report will then show descriptive route names")
-            else:
-                # Geocoding is not running (blocked, disabled, or user declined)
-                tqdm.write(f"\n⚠️  {generic_names} routes still have generic names.")
-                tqdm.write("   Background geocoding was not started (rate limited, disabled, or declined).")
-                
-                tqdm.write("\n💡 To geocode route names:")
-                tqdm.write("   • If rate limited: wait for the block to expire, then re-run analysis")
-                tqdm.write("   • If disabled: enable geocoding in config and re-run analysis")
-                tqdm.write("   • If declined: re-run analysis and accept the geocoding prompt")
-            
-            tqdm.write("="*60 + "\n")
-    
-    
-    def wait_for_geocoding(self, timeout: float = None) -> bool:
-        """
-        Wait for background geocoding to complete.
-        
-        Args:
-            timeout: Maximum time to wait in seconds (None = wait forever)
-            
-        Returns:
-            True if geocoding completed, False if timeout
-        """
-        if not self._geocoding_thread:
-            return True
-        
-        self._geocoding_thread.join(timeout=timeout)
-        return not self._geocoding_thread.is_alive()
-    
-    def is_geocoding_complete(self) -> bool:
-        """
-        Check if background geocoding is complete.
-        
-        Returns:
-            True if no geocoding thread or thread has finished
-        """
-        return not self._geocoding_thread or not self._geocoding_thread.is_alive()
 

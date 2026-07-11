@@ -5,7 +5,8 @@ This service provides access to the route library:
 - Browse all routes (commute and long rides)
 - Search and filter routes
 - Get route details and statistics
-- Manage favorites
+- Annotate routes with favorite status (favorites.json is read-only here; there's
+  no server-side way to set it - the live favoriting UX is localStorage-based)
 """
 
 from src.secure_logger import SecureLogger
@@ -355,78 +356,6 @@ class RouteLibraryService:
 
         return stats
 
-    def toggle_favorite(self, route_id: str, is_favorite: bool) -> Dict[str, Any]:
-        """
-        Toggle favorite status for a route.
-
-        Args:
-            route_id: Route identifier
-            is_favorite: True to add to favorites, False to remove
-
-        Returns:
-            Dictionary with updated status
-        """
-        try:
-            if is_favorite:
-                # Add to favorites
-                self._favorites.add(route_id)
-                logger.info(f"Added favorite: {route_id}")
-            else:
-                # Remove from favorites
-                self._favorites.discard(route_id)
-                logger.info(f"Removed favorite: {route_id}")
-
-            # Save to JSON file
-            success = self.storage.write('favorites.json', {
-                'routes': list(self._favorites),
-                'updated_at': datetime.now().isoformat()
-            })
-
-            if not success:
-                raise Exception("Failed to write favorites to JSON storage")
-
-            return {
-                'status': 'success',
-                'route_id': route_id,
-                'is_favorite': is_favorite
-            }
-
-        except Exception as e:
-            logger.error(f"Error toggling favorite: {e}", exc_info=True)
-            return {
-                'status': 'error',
-                'message': str(e),
-                'route_id': route_id,
-                'is_favorite': is_favorite
-            }
-
-    def get_favorites(self) -> Dict[str, Any]:
-        """
-        Get all favorite routes.
-
-        Returns:
-            Dictionary with favorite routes
-        """
-        favorite_routes = []
-
-        # Get favorite commute routes
-        if self._route_groups:
-            for group in self._route_groups:
-                if group.id in self._favorites:
-                    favorite_routes.append(self._format_commute_route(group))
-
-        # Get favorite long rides
-        if self._long_rides:
-            for ride in self._long_rides:
-                if str(ride.activity_id) in self._favorites:
-                    favorite_routes.append(self._format_long_ride(ride))
-
-        return {
-            'status': 'success',
-            'favorites': favorite_routes,
-            'count': len(favorite_routes)
-        }
-
     def _format_commute_route(self, group) -> Dict[str, Any]:
         """
         Format a commute route group for API response.
@@ -509,7 +438,6 @@ class RouteLibraryService:
 
         # Generate fallback name
         try:
-            from datetime import datetime
             date_obj = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
             date_str = date_obj.strftime('%b %d, %Y')
         except (ValueError, TypeError):

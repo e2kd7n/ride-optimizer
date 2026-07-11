@@ -21,7 +21,6 @@ location:
     longitude: ${WORK_LONGITUDE}
 
 data_fetching:
-  cache_enabled: true
   cache_duration_days: 365  # Extended to 1 year - historical data doesn't change
   max_activities: 500
 
@@ -89,23 +88,7 @@ visualization:
     optimal: 5
     alternative: 3
 
-traffic:
-  enabled: true
-  morning_rush_start: 7  # Morning rush hour start (24-hour format)
-  morning_rush_end: 9    # Morning rush hour end
-  evening_rush_start: 15:30 # Evening rush hour start
-  evening_rush_end: 18   # Evening rush hour end
-  min_samples: 5         # Minimum rides needed for reliable traffic analysis
-
-carbon:
-  enabled: true
-  co2_per_km_car: 0.171  # kg CO2 per km for average car (EPA 2023)
-  liters_per_100km: 8.9  # Average car fuel consumption
-  usd_per_liter: 1.00    # Average gas price (adjust for your region)
-  calories_per_km: 32    # Approximate calories burned cycling per km
-
 long_rides:
-  enabled: true
   min_distance_km: 15  # Minimum distance to be considered a long ride
   similarity_threshold: 1.2  # Max combined Fréchet+Hausdorff distance (km) for route matching
   search_radius_km: 5  # Radius to search for rides near clicked location
