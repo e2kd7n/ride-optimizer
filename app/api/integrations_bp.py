@@ -7,6 +7,8 @@ Routes:
   GET  /api/ors/status
   POST /api/ors/connect
   POST /api/ors/disconnect
+  GET  /api/location/status
+  POST /api/location/save
   GET  /api/garmin/status
   POST /api/garmin/connect
   POST /api/garmin/disconnect
@@ -147,6 +149,94 @@ def ors_disconnect():
     except OSError as exc:
         logger.error("ORS: failed to clear .env: %s", exc)
         return jsonify({'success': False, 'error': 'Could not remove API key'}), 500
+
+
+# ---------------------------------------------------------------------------
+# Home & Work Location (#472)
+# ---------------------------------------------------------------------------
+
+def _read_location_coord(env: dict, key: str):
+    val = os.getenv(key)
+    if val is None:
+        val = env.get(key)
+    if val is None or val == '':
+        return None
+    try:
+        return float(val)
+    except ValueError:
+        return None
+
+
+def _validate_location_payload(payload, label: str):
+    """Validate a {"lat": ..., "lon": ...} payload. Returns ((lat, lon), None) or (None, error)."""
+    if not isinstance(payload, dict):
+        return None, f'{label} location is required'
+    try:
+        lat = float(payload.get('lat'))
+        lon = float(payload.get('lon'))
+    except (TypeError, ValueError):
+        return None, f'{label} latitude/longitude must be numbers'
+    if not (-90 <= lat <= 90):
+        return None, f'{label} latitude must be between -90 and 90'
+    if not (-180 <= lon <= 180):
+        return None, f'{label} longitude must be between -180 and 180'
+    return (lat, lon), None
+
+
+@bp.route('/location/status')
+def location_status():
+    """Return currently configured home/work coordinates, read from .env."""
+    env = read_env()
+    home_lat = _read_location_coord(env, 'HOME_LATITUDE')
+    home_lon = _read_location_coord(env, 'HOME_LONGITUDE')
+    work_lat = _read_location_coord(env, 'WORK_LATITUDE')
+    work_lon = _read_location_coord(env, 'WORK_LONGITUDE')
+
+    home = {'lat': home_lat, 'lon': home_lon} if home_lat is not None and home_lon is not None else None
+    work = {'lat': work_lat, 'lon': work_lon} if work_lat is not None and work_lon is not None else None
+
+    return jsonify({'configured': home is not None and work is not None, 'home': home, 'work': work})
+
+
+@bp.route('/location/save', methods=['POST'])
+@limiter.limit("10 per minute")
+def location_save():
+    """Validate and persist home/work coordinates to .env, then reload config."""
+    data = request.get_json(silent=True) or {}
+
+    home, home_err = _validate_location_payload(data.get('home'), 'Home')
+    if home_err:
+        return jsonify({'success': False, 'error': home_err}), 400
+    work, work_err = _validate_location_payload(data.get('work'), 'Work')
+    if work_err:
+        return jsonify({'success': False, 'error': work_err}), 400
+
+    env_updates = {
+        'HOME_LATITUDE': home[0],
+        'HOME_LONGITUDE': home[1],
+        'WORK_LATITUDE': work[0],
+        'WORK_LONGITUDE': work[1],
+    }
+    try:
+        write_env({k: str(v) for k, v in env_updates.items()})
+        for k, v in env_updates.items():
+            os.environ[k] = str(v)
+    except OSError as exc:
+        logger.error("Location: failed to write .env: %s", exc)
+        return jsonify({'success': False, 'error': 'Could not write location to .env — check file permissions'}), 500
+
+    logger.info("Home/work location saved via settings")
+
+    # .env is the source of truth and is now correct — a failure past this point (e.g. a
+    # concurrent edit leaving config.yaml briefly invalid) shouldn't be reported as a lost save.
+    try:
+        ConfigManager.get_instance().reload()
+        current_app.container.reset_initialisation()
+    except Exception as exc:
+        logger.error("Location saved but config reload failed: %s", exc, exc_info=True)
+        return jsonify({'success': True, 'warning': 'Saved, but the app may need a restart to pick up the change.'})
+
+    return jsonify({'success': True})
 
 
 # ---------------------------------------------------------------------------
