@@ -43,10 +43,15 @@ class ServiceContainer:
 
         # Shared credential/storage singletons (eager — cheap to construct,
         # used by blueprints on nearly every request)
+        from pathlib import Path
         from src.json_storage import JSONStorage
         from app.credentials.intervals_creds import IntervalsCredStore
         self.storage: JSONStorage = JSONStorage()
         self.intervals_creds: IntervalsCredStore = IntervalsCredStore()
+        # Exposed as container attributes (rather than hardcoded in blueprints)
+        # so tests can monkeypatch them to a tmp path instead of touching real
+        # user data/credentials on disk.
+        self.credentials_path: Path = Path('config/credentials.json')
 
         # --- job state ---
         self.jobs: JobRegistry = JobRegistry()

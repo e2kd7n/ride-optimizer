@@ -135,12 +135,15 @@ def delete_user_data():
 
     deleted = []
 
-    storage = current_app.container.storage
+    container = current_app.container
+    storage = container.storage
     for filename in storage.list_files():
         if storage.delete(filename):
             deleted.append(f'data/{filename}')
 
-    cache_path = Path('data/cache/activities.json')
+    # Derived from storage.data_dir (not hardcoded) so tests that monkeypatch
+    # container.storage to a tmp_path don't fall through to the real cache file.
+    cache_path = storage.data_dir / 'cache' / 'activities.json'
     if cache_path.exists():
         try:
             cache_path.unlink()
@@ -148,7 +151,7 @@ def delete_user_data():
         except Exception as e:
             logger.error(f"Failed to delete activity cache: {e}")
 
-    credentials_path = Path('config/credentials.json')
+    credentials_path = container.credentials_path
     if credentials_path.exists():
         try:
             credentials_path.unlink()

@@ -149,7 +149,7 @@ class RouteAnalyzer:
     
     def __init__(self, activities: List[Activity], home: Location,
                  work: Location, config, n_workers=2, force_reanalysis=False,
-                 progress_callback=None, stop_check=None):
+                 progress_callback=None, stop_check=None, cache_dir=None):
         """
         Initialize route analyzer.
 
@@ -157,6 +157,8 @@ class RouteAnalyzer:
             activities: List of Activity objects
             home: Home location
             work: Work location
+            cache_dir: Directory for cache files (default: 'cache'). Overridable
+                so tests with force_reanalysis=True don't unlink the real cache.
             config: Configuration object
             n_workers: Number of parallel workers for route grouping (1-8)
             force_reanalysis: If True, clear cache and reprocess all routes
@@ -175,7 +177,7 @@ class RouteAnalyzer:
         self.force_reanalysis = force_reanalysis
         
         # Initialize caches
-        self.cache_dir = Path('cache')
+        self.cache_dir = Path(cache_dir) if cache_dir is not None else Path('cache')
         self.cache_dir.mkdir(exist_ok=True)
         self.cache_file = self.cache_dir / 'route_similarity_cache.json'
         self.similarity_cache = self._load_similarity_cache()
@@ -723,6 +725,20 @@ class RouteAnalyzer:
             else:
                 # Routes removed or config changed - full reanalysis needed
                 if removed_activity_ids:
+                    removed_pct = (len(removed_activity_ids) / len(cached_activity_ids) * 100
+                                   if cached_activity_ids else 0)
+                    msg = (f"Full reanalysis: {len(removed_activity_ids)} of "
+                           f"{len(cached_activity_ids)} previously-cached activities are "
+                           f"no longer present ({removed_pct:.0f}%) — route groups cache "
+                           f"will be rebuilt from the smaller activity set.")
+                    if removed_pct >= 10:
+                        logger.warning(
+                            msg + " This is a large drop — verify activities.json wasn't "
+                            "unexpectedly truncated (e.g. by a failed merge) rather than "
+                            "genuinely pruned before trusting the rebuilt cache."
+                        )
+                    else:
+                        logger.info(msg)
                     tqdm.write(f"   🔄 Full reanalysis: {len(removed_activity_ids)} routes removed")
                 else:
                     tqdm.write("   🔄 Full reanalysis: configuration changed")

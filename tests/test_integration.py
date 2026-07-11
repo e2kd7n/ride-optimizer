@@ -107,22 +107,23 @@ units:
         assert work.lon is not None
     
     @patch('polyline.decode')
-    def test_route_extraction_and_grouping(self, mock_decode, sample_activities, mock_config):
+    def test_route_extraction_and_grouping(self, mock_decode, sample_activities, mock_config, temp_dir):
         """Test route extraction and grouping."""
         from src.location_finder import Location
-        
+
         # Mock polyline decode to return valid coordinates
         mock_decode.return_value = [
             (41.8781, -87.6298),
             (41.8800, -87.6288),
             (41.8819, -87.6278)
         ]
-        
+
         home = Location(lat=41.8781, lon=-87.6298, name="Home", activity_count=6)
         work = Location(lat=41.8819, lon=-87.6278, name="Work", activity_count=6)
-        
+
         analyzer = RouteAnalyzer(
-            sample_activities, home, work, mock_config, n_workers=1
+            sample_activities, home, work, mock_config, n_workers=1,
+            cache_dir=str(Path(temp_dir) / "cache")
         )
         
         # Extract routes
@@ -143,15 +144,16 @@ units:
             assert all(hasattr(g, 'id') for g in groups)
             assert all(hasattr(g, 'routes') for g in groups)
     
-    def test_route_optimization(self, sample_activities, mock_config):
+    def test_route_optimization(self, sample_activities, mock_config, temp_dir):
         """Test route optimization and ranking."""
         from src.location_finder import Location
-        
+
         home = Location(lat=41.8781, lon=-87.6298, name="Home", activity_count=2)
         work = Location(lat=41.8819, lon=-87.6278, name="Work", activity_count=2)
-        
+
         analyzer = RouteAnalyzer(
-            sample_activities, home, work, mock_config, n_workers=1
+            sample_activities, home, work, mock_config, n_workers=1,
+            cache_dir=str(Path(temp_dir) / "cache")
         )
         
         all_routes = (
@@ -273,7 +275,8 @@ units:
             home,
             work,
             mock_config,
-            n_workers=1
+            n_workers=1,
+            cache_dir=str(Path(temp_dir) / "cache")
         )
         
         all_routes = (

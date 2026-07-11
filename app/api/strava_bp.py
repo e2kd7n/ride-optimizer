@@ -144,8 +144,7 @@ def strava_callback():
 def strava_disconnect():
     """Remove saved Strava credentials, severing the connection."""
     try:
-        from pathlib import Path
-        creds_path = Path('config/credentials.json')
+        creds_path = current_app.container.credentials_path
         if creds_path.exists():
             creds_path.unlink()
         current_app.container.reset_initialisation()
