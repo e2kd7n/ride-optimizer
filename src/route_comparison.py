@@ -8,7 +8,6 @@ converge on the same logic with per-use-case thresholds.
 
 import math
 from dataclasses import dataclass
-from typing import Tuple
 
 import numpy as np
 from scipy.spatial.distance import directed_hausdorff, cdist
@@ -140,26 +139,6 @@ def combined_distance_km(coords1_km: np.ndarray,
         f_dist = frechet_dist(coords1_km, coords2_km)
         return (f_dist + h_dist) / 2
     return h_dist
-
-
-def are_routes_similar(coords1: np.ndarray,
-                       coords2: np.ndarray,
-                       thresholds: ComparisonThresholds,
-                       already_km: bool = False) -> Tuple[bool, float]:
-    """
-    Full comparison pipeline: convert to km, prefilter, then compute distance.
-
-    Returns (is_similar, distance_km). When prefilter rejects, distance is inf.
-    """
-    if not already_km:
-        coords1 = coords_to_km(coords1)
-        coords2 = coords_to_km(coords2)
-
-    if not passes_prefilter(coords1, coords2, thresholds):
-        return False, float('inf')
-
-    dist = combined_distance_km(coords1, coords2)
-    return dist < thresholds.similarity_km, dist
 
 
 def similarity_score(coords1: np.ndarray,

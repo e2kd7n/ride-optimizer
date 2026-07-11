@@ -6,6 +6,7 @@ and geographic features to clearly indicate where routes actually go.
 """
 
 from src.secure_logger import SecureLogger
+from src.json_storage import secure_chmod
 from typing import List, Tuple, Optional, Dict, Set
 from collections import Counter
 from geopy.geocoders import Nominatim
@@ -16,6 +17,40 @@ import os
 from datetime import datetime, timedelta
 
 logger = SecureLogger(__name__)
+
+
+def check_rate_limit_file(rate_limit_file: str) -> Optional[datetime]:
+    """
+    Return the active self-imposed rate-limit block's `blocked_until` time, or None
+    if not currently blocked. Cleans up the rate-limit file once its block has expired.
+
+    Takes an explicit path (rather than being a RouteNamer method) so RouteAnalyzer can
+    check its own configurable cache_dir's copy of the file — RouteNamer always writes to
+    the real "cache" dir, but RouteAnalyzer's cache_dir is overridable (tests use this to
+    avoid touching the real cache), and the two can legitimately point at different files.
+    """
+    if not os.path.exists(rate_limit_file):
+        return None
+
+    try:
+        with open(rate_limit_file, 'r') as f:
+            rate_limit_data = json.load(f)
+
+        blocked_until_str = rate_limit_data.get('blocked_until')
+        if not blocked_until_str:
+            return None
+
+        blocked_until = datetime.fromisoformat(blocked_until_str)
+        if datetime.now() < blocked_until:
+            return blocked_until
+
+        # Rate limit has expired, remove the file
+        logger.info("Rate limit period has expired, removing block file")
+        os.remove(rate_limit_file)
+        return None
+    except Exception as e:
+        logger.warning(f"Failed to check rate limit status: {e}")
+        return None
 
 
 class RouteNamer:
@@ -85,50 +120,33 @@ class RouteNamer:
         try:
             with open(self.cache_file, 'w') as f:
                 json.dump(self.cache, f, indent=2)
+            secure_chmod(self.cache_file)
         except Exception as e:
             logger.warning(f"Failed to save geocoding cache: {e}")
     
     def _check_rate_limit_status(self):
         """
         Check if we're currently rate limited.
-        
+
         Note: This method does NOT wait - it just logs the status.
-        The route_analyzer checks the rate limit file before starting geocoding.
         This method is only called when RouteNamer is instantiated for actual geocoding work.
         """
-        if not os.path.exists(self.rate_limit_file):
+        blocked_until = check_rate_limit_file(self.rate_limit_file)
+        if blocked_until is None:
             return
-        
-        try:
-            with open(self.rate_limit_file, 'r') as f:
-                rate_limit_data = json.load(f)
-            
-            blocked_until_str = rate_limit_data.get('blocked_until')
-            if not blocked_until_str:
-                return
-            
-            blocked_until = datetime.fromisoformat(blocked_until_str)
-            now = datetime.now()
-            
-            if now < blocked_until:
-                wait_hours = (blocked_until - now).total_seconds() / 3600
-                
-                # Format with timezone info
-                blocked_until_formatted = blocked_until.strftime('%Y-%m-%d %H:%M:%S %Z').strip()
-                if not blocked_until_formatted.endswith('Z') and not any(tz in blocked_until_formatted for tz in ['EST', 'EDT', 'CST', 'CDT', 'MST', 'MDT', 'PST', 'PDT']):
-                    # Add local timezone indicator if not present
-                    import time as time_module
-                    tz_name = time_module.tzname[time_module.daylight]
-                    blocked_until_formatted = f"{blocked_until.strftime('%Y-%m-%d %H:%M:%S')} {tz_name}"
-                
-                logger.warning(f"Geocoding rate limit detected. Self-imposed 4-hour block until {blocked_until_formatted}")
-                logger.info(f"Rate limit will expire in {wait_hours:.1f} hours")
-            else:
-                # Rate limit has expired, remove the file
-                logger.info("Rate limit period has expired, removing block file")
-                os.remove(self.rate_limit_file)
-        except Exception as e:
-            logger.warning(f"Failed to check rate limit status: {e}")
+
+        wait_hours = (blocked_until - datetime.now()).total_seconds() / 3600
+
+        # Format with timezone info
+        blocked_until_formatted = blocked_until.strftime('%Y-%m-%d %H:%M:%S %Z').strip()
+        if not blocked_until_formatted.endswith('Z') and not any(tz in blocked_until_formatted for tz in ['EST', 'EDT', 'CST', 'CDT', 'MST', 'MDT', 'PST', 'PDT']):
+            # Add local timezone indicator if not present
+            import time as time_module
+            tz_name = time_module.tzname[time_module.daylight]
+            blocked_until_formatted = f"{blocked_until.strftime('%Y-%m-%d %H:%M:%S')} {tz_name}"
+
+        logger.warning(f"Geocoding rate limit detected. Self-imposed 4-hour block until {blocked_until_formatted}")
+        logger.info(f"Rate limit will expire in {wait_hours:.1f} hours")
     
     def _record_rate_limit(self):
         """Record that we've been rate limited and set a 4-hour self-imposed block."""
@@ -149,6 +167,7 @@ class RouteNamer:
             }
             with open(self.rate_limit_file, 'w') as f:
                 json.dump(rate_limit_data, f, indent=2)
+            secure_chmod(self.rate_limit_file)
             logger.error(f"Rate limit detected. Self-imposing 4-hour block until {blocked_until_formatted}")
         except Exception as e:
             logger.error(f"Failed to record rate limit: {e}")

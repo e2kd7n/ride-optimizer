@@ -231,15 +231,6 @@ class APIClient {
     }
 
     /**
-     * Toggle route favorite status
-     */
-    async toggleFavorite(routeId) {
-        return this.fetch(`/routes/${routeId}/favorite`, {
-            method: 'POST'
-        });
-    }
-
-    /**
      * Get Strava OAuth connection status
      */
     async getStravaStatus() {

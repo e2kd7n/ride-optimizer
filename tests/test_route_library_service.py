@@ -329,63 +329,7 @@ class TestGetRouteStatistics:
 
 class TestFavoriteManagement:
     """Test favorite route management."""
-    
-    def test_toggle_favorite_add(self, initialized_service):
-        """Test adding route to favorites."""
-        # Mock the storage write method
-        initialized_service.storage.write = Mock(return_value=True)
-        
-        result = initialized_service.toggle_favorite("route_group_1", True)
-        assert result['status'] == 'success'
-        assert result['route_id'] == "route_group_1"
-        assert result['is_favorite'] is True
-        assert "route_group_1" in initialized_service._favorites
-        
-        # Verify storage write was called
-        initialized_service.storage.write.assert_called_once()
-        call_args = initialized_service.storage.write.call_args
-        assert call_args[0][0] == 'favorites.json'
-        assert 'route_group_1' in call_args[0][1]['routes']
-    
-    def test_toggle_favorite_remove(self, initialized_service):
-        """Test removing route from favorites."""
-        # Mock the storage write method
-        initialized_service.storage.write = Mock(return_value=True)
-        
-        # First add it
-        initialized_service._favorites.add("route_group_1")
-        
-        # Then remove it
-        result = initialized_service.toggle_favorite("route_group_1", False)
-        assert result['status'] == 'success'
-        assert result['route_id'] == "route_group_1"
-        assert result['is_favorite'] is False
-        assert "route_group_1" not in initialized_service._favorites
-        
-        # Verify storage write was called
-        initialized_service.storage.write.assert_called_once()
-        call_args = initialized_service.storage.write.call_args
-        assert call_args[0][0] == 'favorites.json'
-        assert 'route_group_1' not in call_args[0][1]['routes']
-    
-    def test_get_favorites_empty(self, initialized_service):
-        """Test getting favorites when none exist."""
-        result = initialized_service.get_favorites()
-        assert result['status'] == 'success'
-        assert result['count'] == 0
-        assert result['favorites'] == []
-    
-    def test_get_favorites_with_routes(self, initialized_service):
-        """Test getting favorite routes."""
-        # Add favorites (just to in-memory set, skip database)
-        initialized_service._favorites.add("route_group_1")
-        initialized_service._favorites.add("67890")
-        
-        result = initialized_service.get_favorites()
-        assert result['status'] == 'success'
-        assert result['count'] == 2
-        assert len(result['favorites']) == 2
-    
+
     def test_favorite_status_in_route_list(self, initialized_service):
         """Test that favorite status appears in route listings."""
         # Add a favorite (just to in-memory set, skip database)

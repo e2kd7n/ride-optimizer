@@ -1098,16 +1098,6 @@ function formatTimestamp(isoString) {
 }
 
 /**
- * Utility: Get Bootstrap class for comfort score
- */
-function getComfortClass(score) {
-    if (score >= 80) return 'bg-success';
-    if (score >= 60) return 'bg-info';
-    if (score >= 40) return 'bg-warning';
-    return 'bg-danger';
-}
-
-/**
  * Utility: Get Bootstrap class for recommendation score
  */
 function getScoreClass(score) {

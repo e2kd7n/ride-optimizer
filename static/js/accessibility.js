@@ -77,60 +77,6 @@ function initializeSkipLinks() {
 }
 
 /**
- * Manage focus trap for modals and dialogs
- * @param {HTMLElement} container - Container element to trap focus within
- * @returns {Function} Function to release the focus trap
- */
-window.trapFocus = function(container) {
-    if (!container) return () => {};
-    
-    const focusableElements = container.querySelectorAll(
-        'a[href], button:not([disabled]), textarea:not([disabled]), ' +
-        'input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
-    );
-    
-    const firstFocusable = focusableElements[0];
-    const lastFocusable = focusableElements[focusableElements.length - 1];
-    
-    // Store the element that had focus before trap
-    const previouslyFocused = document.activeElement;
-    
-    // Focus first element
-    if (firstFocusable) {
-        firstFocusable.focus();
-    }
-    
-    // Handle Tab key
-    function handleTab(e) {
-        if (e.key !== 'Tab') return;
-        
-        if (e.shiftKey) {
-            // Shift + Tab
-            if (document.activeElement === firstFocusable) {
-                e.preventDefault();
-                lastFocusable.focus();
-            }
-        } else {
-            // Tab
-            if (document.activeElement === lastFocusable) {
-                e.preventDefault();
-                firstFocusable.focus();
-            }
-        }
-    }
-    
-    container.addEventListener('keydown', handleTab);
-    
-    // Return function to release trap
-    return function releaseTrap() {
-        container.removeEventListener('keydown', handleTab);
-        if (previouslyFocused) {
-            previouslyFocused.focus();
-        }
-    };
-};
-
-/**
  * Enhance focus indicators for keyboard navigation
  */
 function enhanceFocusIndicators() {

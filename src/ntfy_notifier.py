@@ -12,6 +12,7 @@ Licensed under the MIT License - see LICENSE file for details.
 import os
 import json
 from src.secure_logger import SecureLogger
+from src.json_storage import secure_chmod
 import requests
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -137,6 +138,7 @@ class NtfyNotifier:
         try:
             with open(self.throttle_file, 'w') as f:
                 json.dump(state, f, indent=2)
+            secure_chmod(self.throttle_file)
         except Exception as e:
             logger.error(f"Failed to save throttle state: {e}")
     

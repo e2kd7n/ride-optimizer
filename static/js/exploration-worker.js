@@ -89,18 +89,6 @@ function countVisitedNeighbours(t, visitedSet) {
     ].filter(k => visitedSet.has(k)).length;
 }
 
-/** Count visited tiles in the 5×5 neighbourhood around tile `t`. */
-function visitedDensity5x5(t, visitedSet) {
-    let count = 0;
-    for (let dx = -2; dx <= 2; dx++) {
-        for (let dy = -2; dy <= 2; dy++) {
-            if (dx === 0 && dy === 0) continue;
-            if (visitedSet.has(`${t.x + dx},${t.y + dy}`)) count++;
-        }
-    }
-    return count;
-}
-
 function optimize({ start, end, distanceKm, mode, routeType, coverageData, coverageDataSecondary, optimizeFor, corridorConstraint }) {
     const isRoundTrip = routeType === 'round_trip' || !end;
     const reachRadius = distanceKm / (isRoundTrip ? 4 : 3);
@@ -320,18 +308,6 @@ function tileCenterLat(y, zoom) {
 function tileCenterLon(x, zoom) {
     const n = Math.pow(2, zoom);
     return (x + 0.5) / n * 360 - 180;
-}
-
-/**
- * Return the actual lat/lng edges of a tile (not center).
- */
-function tileBounds(x, y, zoom) {
-    const n = Math.pow(2, zoom);
-    const west  = x / n * 360 - 180;
-    const east  = (x + 1) / n * 360 - 180;
-    const north = Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n)))       * 180 / Math.PI;
-    const south = Math.atan(Math.sinh(Math.PI * (1 - 2 * (y + 1) / n))) * 180 / Math.PI;
-    return { north, south, east, west };
 }
 
 const INSET_M = 5;
