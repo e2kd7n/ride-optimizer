@@ -18,6 +18,7 @@ from typing import Dict
 
 from flask import Blueprint, current_app, jsonify, request
 
+from app.extensions import limiter
 from src.secure_logger import SecureLogger
 
 logger = SecureLogger(__name__)
@@ -51,6 +52,7 @@ def _seconds_to_hours(s):
 # ---------------------------------------------------------------------------
 
 @bp.route('/analyze', methods=['POST'])
+@limiter.limit("10 per minute")
 def trigger_analysis():
     jobs = current_app.container.jobs
     if not jobs.analysis.try_start({
@@ -142,6 +144,7 @@ def stop_analysis():
 
 
 @bp.route('/fetch', methods=['POST'])
+@limiter.limit("10 per minute")
 def trigger_fetch():
     jobs = current_app.container.jobs
     if not jobs.fetch.try_start({

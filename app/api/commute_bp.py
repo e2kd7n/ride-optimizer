@@ -14,6 +14,7 @@ from flask import Blueprint, current_app, jsonify, request
 
 from src.secure_logger import SecureLogger
 from src.weather_fetcher import WindImpactCalculator
+from app.extensions import limiter
 from app.schemas import RecommendationQuerySchema, validate_request_args
 
 logger = SecureLogger(__name__)
@@ -200,6 +201,7 @@ def _get_transit_recommendation(weather: Dict[str, Any]) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 @bp.route('/recommendation')
+@limiter.limit("30 per minute")
 @validate_request_args(RecommendationQuerySchema)
 def get_recommendation():
     """Get next commute recommendation."""
@@ -259,6 +261,7 @@ def get_recommendation():
 
 
 @bp.route('/commute')
+@limiter.limit("30 per minute")
 def get_commute():
     """Get both commute directions (to_work and to_home) for the commute view."""
     container = current_app.container
@@ -328,6 +331,7 @@ def get_commute():
 
 
 @bp.route('/workout-options')
+@limiter.limit("30 per minute")
 def get_workout_options():
     """Unified workout options for today's dashboard."""
     container = current_app.container
@@ -451,6 +455,7 @@ def get_workout_options():
 
 
 @bp.route('/commute/map')
+@limiter.limit("30 per minute")
 def get_commute_map():
     """Get interactive map HTML showing both commute routes."""
     container = current_app.container

@@ -13,6 +13,7 @@ from flask import Blueprint, current_app, jsonify, request
 
 from src.config_manager import ConfigManager
 from src.secure_logger import SecureLogger
+from app.extensions import limiter
 from app.schemas import WeatherQuerySchema, validate_request_args
 
 logger = SecureLogger(__name__)
@@ -27,6 +28,7 @@ def _degrees_to_cardinal(deg: float) -> str:
 
 
 @bp.route('/weather')
+@limiter.limit("30 per minute")
 @validate_request_args(WeatherQuerySchema)
 def get_weather():
     """
@@ -94,6 +96,7 @@ def get_weather():
 
 
 @bp.route('/weather/commute-windows')
+@limiter.limit("30 per minute")
 def get_commute_windows():
     """
     Get hourly weather forecast sliced into morning and evening commute windows.
@@ -177,6 +180,7 @@ def get_commute_windows():
 
 
 @bp.route('/weather/hourly')
+@limiter.limit("30 per minute")
 def get_hourly_forecast():
     """Get 12-hour hourly weather forecast with commute hours highlighted."""
     container = current_app.container
@@ -237,6 +241,7 @@ def get_hourly_forecast():
 
 
 @bp.route('/weather/forecast')
+@limiter.limit("30 per minute")
 def get_weather_forecast():
     """Get 7-day daily weather forecast."""
     container = current_app.container

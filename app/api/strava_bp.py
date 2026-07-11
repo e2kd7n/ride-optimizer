@@ -16,6 +16,7 @@ import time
 from flask import Blueprint, current_app, jsonify, redirect, request, session, url_for
 
 from app.credentials.env_helpers import read_env, write_env
+from app.extensions import limiter
 from src.auth_secure import SecureTokenStorage
 from src.secure_logger import SecureLogger
 
@@ -66,6 +67,7 @@ def strava_status():
 
 
 @bp.route('/strava/connect')
+@limiter.limit("10 per minute")
 def strava_connect():
     import secrets as _secrets
     state = _secrets.token_hex(16)
@@ -86,6 +88,7 @@ def strava_connect():
 
 
 @bp.route('/strava/callback')
+@limiter.limit("10 per minute")
 def strava_callback():
     error = request.args.get('error')
     if error:
@@ -137,6 +140,7 @@ def strava_callback():
 
 
 @bp.route('/strava/disconnect', methods=['POST'])
+@limiter.limit("10 per minute")
 def strava_disconnect():
     """Remove saved Strava credentials, severing the connection."""
     try:
@@ -198,6 +202,7 @@ def setup_credentials():
 
 
 @bp.route('/setup/verify', methods=['POST'])
+@limiter.limit("10 per minute")
 def setup_verify():
     """Test Strava credentials by exchanging a short-lived auth code or hitting /athlete."""
     client_id = os.getenv('STRAVA_CLIENT_ID') or read_env().get('STRAVA_CLIENT_ID', '')

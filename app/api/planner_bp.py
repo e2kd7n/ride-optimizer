@@ -16,6 +16,7 @@ from datetime import datetime
 
 from flask import Blueprint, current_app, jsonify, request
 
+from app.extensions import limiter
 from src.secure_logger import SecureLogger
 
 logger = SecureLogger(__name__)
@@ -152,6 +153,7 @@ def exploration_tiles():
 
 
 @bp.route('/exploration/roads')
+@limiter.limit("20 per minute")
 def exploration_roads():
     """Road coverage within a bounding box (requires osmnx)."""
     svc = current_app.container.get_exploration_service()
@@ -178,6 +180,7 @@ def exploration_invalidate():
 
 
 @bp.route('/exploration/route', methods=['POST'])
+@limiter.limit("20 per minute")
 def exploration_route():
     """Compute a road-following route via ORS for a given waypoint list."""
     svc = current_app.container.get_exploration_service()
@@ -198,6 +201,7 @@ def exploration_route():
 # ---------------------------------------------------------------------------
 
 @bp.route('/geocode')
+@limiter.limit("1 per second")
 def geocode_location():
     """Forward-geocode a city/state or postal code to coordinates."""
     query = (request.args.get('query') or '').strip()
