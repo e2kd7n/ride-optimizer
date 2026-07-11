@@ -779,7 +779,7 @@ class CommuteService:
             home = self._recommender.home_location if self._recommender else None
             if home:
                 weather = self.weather_service.get_current_weather(
-                    home.lat, home.lon, location_name='Home')
+                    home[0], home[1], location_name='Home')
             else:
                 weather = None
         except Exception as e:
