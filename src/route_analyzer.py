@@ -149,7 +149,8 @@ class RouteAnalyzer:
     
     def __init__(self, activities: List[Activity], home: Location,
                  work: Location, config, n_workers=2, force_reanalysis=False,
-                 progress_callback=None, stop_check=None, cache_dir=None):
+                 progress_callback=None, stop_check=None, cache_dir=None,
+                 interactive=False, enable_geocoding=None):
         """
         Initialize route analyzer.
 
@@ -164,6 +165,14 @@ class RouteAnalyzer:
             force_reanalysis: If True, clear cache and reprocess all routes
             progress_callback: Optional callable(routes_done, routes_total, direction, ...)
             stop_check: Optional callable() → bool; returns True when caller wants early exit
+            interactive: If True, background geocoding prompts for approval on stdin and
+                opens a Terminal.app window (macOS) to show progress. Only appropriate for
+                the CLI entry point (main.py) running attached to a real terminal — the web
+                service always constructs with the default False so a server-side analysis
+                run never pops up desktop windows or blocks on stdin.
+            enable_geocoding: Overrides the `route_analysis.enable_geocoding` config value
+                for this instance when not None. Used to force-disable geocoding for
+                throwaway analyzer instances (e.g. the preview pass) regardless of config.
         """
         self.activities = activities
         self.home = home
@@ -172,6 +181,8 @@ class RouteAnalyzer:
         self.n_workers = max(1, min(8, n_workers))  # Clamp between 1 and 8
         self.progress_callback = progress_callback
         self.stop_check = stop_check
+        self.interactive = interactive
+        self._enable_geocoding_override = enable_geocoding
         self.similarity_threshold = config.get('route_analysis.similarity_threshold', 0.85)
         self.route_namer = RouteNamer(config)
         self.force_reanalysis = force_reanalysis
@@ -788,8 +799,8 @@ class RouteAnalyzer:
         
         # Start background geocoding (non-blocking)
         # This will update the cache and regenerate the report when complete
-        if self.config and self.config.get('route_analysis.enable_geocoding', True):
-            self._start_background_geocoding(groups, auto_approve=False)
+        if self._geocoding_enabled():
+            self._start_background_geocoding(groups, auto_approve=not self.interactive)
         
         # Save similarity cache after grouping
         self._save_similarity_cache()
@@ -1298,21 +1309,34 @@ class RouteAnalyzer:
             'consistency_score': metrics.consistency_score
         }
     
+    def _geocoding_enabled(self) -> bool:
+        """Whether background geocoding should run for this instance.
+
+        The per-instance override (set via the `enable_geocoding` constructor arg) takes
+        precedence over the `route_analysis.enable_geocoding` config value, so throwaway
+        analyzer instances (e.g. the preview pass) can force geocoding off regardless of
+        what the user has configured.
+        """
+        if self._enable_geocoding_override is not None:
+            return self._enable_geocoding_override
+        return bool(self.config) and self.config.get('route_analysis.enable_geocoding', True)
+
     def _start_background_geocoding(self, groups: List[RouteGroup], auto_approve: bool = False) -> None:
         """
         Start background thread to geocode route names.
         This allows route grouping to complete quickly while geocoding happens in parallel.
-        Opens a new terminal window to show geocoding progress.
-        
+        Opens a new terminal window to show geocoding progress, but only when
+        self.interactive is True (CLI usage) — see __init__.
+
         Args:
             groups: List of RouteGroup objects to geocode
             auto_approve: If True, skip user prompt (for automated runs)
         """
         # Don't start if geocoding is disabled
-        if self.config and not self.config.get('route_analysis.enable_geocoding', True):
-            logger.info("Geocoding disabled in config, skipping background geocoding")
+        if not self._geocoding_enabled():
+            logger.info("Geocoding disabled, skipping background geocoding")
             return
-        
+
         # Check if we're currently rate limited
         import os
         rate_limit_file = os.path.join(self.cache_dir, "geocoding_rate_limit.json")
@@ -1396,8 +1420,11 @@ class RouteAnalyzer:
                 tqdm.write("\n✓ Non-interactive mode: auto-approving background geocoding\n")
         
         tqdm.write("\n✓ Starting background geocoding...")
-        tqdm.write("  A new terminal window will open to show progress.\n")
-        
+        if self.interactive:
+            tqdm.write("  A new terminal window will open to show progress.\n")
+        else:
+            tqdm.write("  Running quietly in the background (non-interactive mode).\n")
+
         self._geocoding_thread = threading.Thread(
             target=self._geocode_routes_background,
             args=(groups,),
@@ -1405,9 +1432,12 @@ class RouteAnalyzer:
             name="RouteGeocoding"
         )
         self._geocoding_thread.start()
-        
-        # Open a new terminal window to show progress
-        self._open_geocoding_terminal(routes_needing_geocoding)
+
+        # Only pop open a desktop terminal window for the interactive CLI (main.py).
+        # The web service constructs RouteAnalyzer with interactive=False so a server-side
+        # analysis run never spawns Terminal.app windows on the host running it.
+        if self.interactive:
+            self._open_geocoding_terminal(routes_needing_geocoding)
     
     def _open_geocoding_terminal(self, total_routes: int) -> None:
         """

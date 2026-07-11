@@ -420,7 +420,8 @@ class AnalysisService:
                     lf = LocationFinder(preview_acts, self.config)
                     h, w = lf.identify_home_work()
                     ra = RouteAnalyzer(activities=preview_acts, home=h, work=w,
-                                       config=self.config, force_reanalysis=True)
+                                       config=self.config, force_reanalysis=True,
+                                       enable_geocoding=False)
                     ra.group_similar_routes()
                     logger.info(f"Preview analysis complete on {preview_n} activities")
                 except Exception as exc:
