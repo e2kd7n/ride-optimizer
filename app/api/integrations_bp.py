@@ -25,6 +25,7 @@ from datetime import datetime
 from flask import Blueprint, current_app, jsonify, request
 
 from app.credentials.env_helpers import read_env, write_env
+from app.extensions import limiter
 from src.config_manager import ConfigManager
 from src.secure_logger import SecureLogger
 
@@ -47,6 +48,7 @@ def intervals_status():
 
 
 @bp.route('/intervals/connect', methods=['POST'])
+@limiter.limit("10 per minute")
 def intervals_connect():
     """Save intervals.icu credentials and verify them against the API."""
     data = request.get_json(silent=True) or {}
@@ -159,6 +161,7 @@ def garmin_status():
 
 
 @bp.route('/garmin/connect', methods=['POST'])
+@limiter.limit("10 per minute")
 def garmin_connect():
     """Authenticate with Garmin Connect via email + password."""
     data = request.get_json(silent=True) or {}
@@ -184,6 +187,7 @@ def garmin_disconnect():
 
 
 @bp.route('/garmin/sync', methods=['POST'])
+@limiter.limit("10 per minute")
 def garmin_sync():
     """Fetch activities from Garmin Connect and merge into local cache."""
     container = current_app.container
@@ -236,6 +240,7 @@ def trainerroad_status():
 
 
 @bp.route('/trainerroad/connect', methods=['POST'])
+@limiter.limit("10 per minute")
 def trainerroad_connect():
     """Set ICS feed URL, validate, and trigger initial sync."""
     container = current_app.container
@@ -263,6 +268,7 @@ def trainerroad_connect():
 
 
 @bp.route('/trainerroad/sync', methods=['POST'])
+@limiter.limit("10 per minute")
 def trainerroad_sync():
     """Force a workout sync."""
     container = current_app.container

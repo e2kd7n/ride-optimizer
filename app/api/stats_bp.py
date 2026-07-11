@@ -16,6 +16,7 @@ from typing import Dict
 
 from flask import Blueprint, current_app, jsonify, request
 
+from app.extensions import limiter
 from src.logging_config import setup_logging
 from src.secure_logger import SecureLogger
 
@@ -204,6 +205,7 @@ def _compute_records(activities):
 # ---------------------------------------------------------------------------
 
 @bp.route('/stats')
+@limiter.limit("30 per minute")
 def get_stats():
     """
     Aggregate ride statistics.
@@ -211,10 +213,6 @@ def get_stats():
     Query params:
     - period: all_time | this_year | last_year | this_month | this_week | last_30d (default: all_time)
     """
-    limiter = current_app.extensions.get('limiter')
-    if limiter:
-        limiter.limit("30 per minute")(get_stats)
-
     period = request.args.get('period', 'all_time')
     valid_periods = {'all_time', 'this_year', 'last_year', 'this_month', 'this_week', 'last_30d'}
     if period not in valid_periods:

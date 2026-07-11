@@ -13,9 +13,9 @@ from datetime import timedelta
 from pathlib import Path
 
 from flask import Flask
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
+
+from app.extensions import limiter
 
 logger = SecureLogger(__name__)
 
@@ -79,15 +79,8 @@ def create_app(config_overrides: dict | None = None) -> Flask:
         app.config['WTF_CSRF_ENABLED'] = not app.testing
 
     csrf = CSRFProtect(app)
-    limiter = Limiter(
-        app=app,
-        key_func=get_remote_address,
-        default_limits=["200 per day", "50 per hour"],
-        storage_uri="memory://",
-        strategy="fixed-window",
-    )
+    limiter.init_app(app)
     app.extensions['csrf'] = csrf
-    app.extensions['limiter'] = limiter
 
     # --- service container ---
     from app.container import ServiceContainer
