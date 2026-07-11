@@ -15,6 +15,44 @@ from src.config_manager import ConfigManager
 
 logger = SecureLogger(__name__)
 
+# Nominatim returns full US state names; abbreviate them for the short display label.
+_US_STATE_ABBREVIATIONS = {
+    'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR', 'California': 'CA',
+    'Colorado': 'CO', 'Connecticut': 'CT', 'Delaware': 'DE', 'Florida': 'FL', 'Georgia': 'GA',
+    'Hawaii': 'HI', 'Idaho': 'ID', 'Illinois': 'IL', 'Indiana': 'IN', 'Iowa': 'IA',
+    'Kansas': 'KS', 'Kentucky': 'KY', 'Louisiana': 'LA', 'Maine': 'ME', 'Maryland': 'MD',
+    'Massachusetts': 'MA', 'Michigan': 'MI', 'Minnesota': 'MN', 'Mississippi': 'MS', 'Missouri': 'MO',
+    'Montana': 'MT', 'Nebraska': 'NE', 'Nevada': 'NV', 'New Hampshire': 'NH', 'New Jersey': 'NJ',
+    'New Mexico': 'NM', 'New York': 'NY', 'North Carolina': 'NC', 'North Dakota': 'ND', 'Ohio': 'OH',
+    'Oklahoma': 'OK', 'Oregon': 'OR', 'Pennsylvania': 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC',
+    'South Dakota': 'SD', 'Tennessee': 'TN', 'Texas': 'TX', 'Utah': 'UT', 'Vermont': 'VT',
+    'Virginia': 'VA', 'Washington': 'WA', 'West Virginia': 'WV', 'Wisconsin': 'WI', 'Wyoming': 'WY',
+    'District of Columbia': 'DC',
+}
+
+
+def _build_short_name(address: Dict[str, str]) -> str:
+    """Condense a Nominatim ``addressdetails`` dict into 'street, city, ST'."""
+    if not address:
+        return None
+    road = address.get('road') or address.get('pedestrian') or address.get('footway')
+    house_number = address.get('house_number')
+    city = (address.get('city') or address.get('town') or address.get('village')
+            or address.get('hamlet') or address.get('suburb'))
+    state = address.get('state')
+    state = _US_STATE_ABBREVIATIONS.get(state, state)
+
+    parts = []
+    if house_number and road:
+        parts.append(f'{house_number} {road}')
+    elif road:
+        parts.append(road)
+    if city:
+        parts.append(city)
+    if state:
+        parts.append(state)
+    return ', '.join(parts) or None
+
 
 class GeocodingService:
 
@@ -27,7 +65,7 @@ class GeocodingService:
     def geocode(self, query: str) -> Dict[str, Any]:
         """Resolve a free-text location (city/state, postal code, address) to coordinates."""
         try:
-            location = self._geolocator.geocode(query, exactly_one=True)
+            location = self._geolocator.geocode(query, exactly_one=True, addressdetails=True)
         except (GeocoderTimedOut, GeocoderUnavailable, GeocoderServiceError) as exc:
             logger.warning("Geocoding service unavailable: %s", exc)
             return {"status": "error", "message": "Geocoding service unavailable, try again shortly"}
@@ -38,9 +76,12 @@ class GeocodingService:
         if location is None:
             return {"status": "error", "message": f"No location found for '{query}'"}
 
+        short_name = _build_short_name(location.raw.get('address', {}))
+
         return {
             "status": "success",
             "lat": location.latitude,
             "lon": location.longitude,
             "display_name": location.address,
+            "short_name": short_name or location.address,
         }
