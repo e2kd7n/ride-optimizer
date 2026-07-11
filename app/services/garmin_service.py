@@ -20,9 +20,12 @@ GARMIN_TOKEN_DIR = Path(__file__).resolve().parent.parent.parent / 'config' / '.
 class GarminService:
     """Thin wrapper around garth for Garmin Connect authentication and activity fetching."""
 
-    def __init__(self):
+    def __init__(self, token_dir: Optional[Path] = None):
         self._client = None
         self._display_name: Optional[str] = None
+        # Overridable so tests can point at a tmp dir instead of the real
+        # config/.garmin_tokens directory (disconnect() rmtree's this).
+        self.token_dir: Path = token_dir if token_dir is not None else GARMIN_TOKEN_DIR
 
     def is_connected(self) -> bool:
         if self._client is not None:
@@ -30,11 +33,11 @@ class GarminService:
         return self._try_resume()
 
     def _try_resume(self) -> bool:
-        if not GARMIN_TOKEN_DIR.exists():
+        if not self.token_dir.exists():
             return False
         try:
             import garth
-            garth.resume(str(GARMIN_TOKEN_DIR))
+            garth.resume(str(self.token_dir))
             # Just check that both token files loaded — don't touch .username,
             # .profile, or .user_profile; all three hit connectapi over the
             # network and can trigger an SSO refresh.
@@ -50,8 +53,8 @@ class GarminService:
         try:
             import garth
             garth.login(email, password)
-            GARMIN_TOKEN_DIR.mkdir(parents=True, exist_ok=True)
-            garth.save(str(GARMIN_TOKEN_DIR))
+            self.token_dir.mkdir(parents=True, exist_ok=True)
+            garth.save(str(self.token_dir))
             self._client = garth
             try:
                 display_name = garth.client.username or email.split('@')[0]
@@ -74,8 +77,8 @@ class GarminService:
 
     def disconnect(self):
         import shutil
-        if GARMIN_TOKEN_DIR.exists():
-            shutil.rmtree(GARMIN_TOKEN_DIR, ignore_errors=True)
+        if self.token_dir.exists():
+            shutil.rmtree(self.token_dir, ignore_errors=True)
         self._client = None
 
     def get_status(self) -> Dict[str, Any]:

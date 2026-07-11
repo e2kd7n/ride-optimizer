@@ -2,6 +2,7 @@
 Unit tests for route_analyzer module.
 """
 import hashlib
+import logging
 import numpy as np
 import pytest
 from datetime import datetime, timezone
@@ -802,17 +803,17 @@ class TestGroupSimilarRoutes:
         result = analyzer.group_similar_routes([])
         assert result == []
 
-    def test_groups_similar_routes(self, no_cache):
+    def test_groups_similar_routes(self, no_cache, tmp_path):
         home = _make_location(*self.HOME, "Home")
         work = _make_location(*self.WORK, "Work")
         acts = [self._make_commute_activity(i, "home_to_work") for i in range(1, 4)]
         analyzer = RouteAnalyzer(acts, home, work, _make_config(), n_workers=1,
-                                 force_reanalysis=True)
+                                 force_reanalysis=True, cache_dir=str(tmp_path))
         result = analyzer.group_similar_routes()
         assert len(result) >= 1
         assert all(isinstance(g, RouteGroup) for g in result)
 
-    def test_both_directions_grouped_separately(self, no_cache):
+    def test_both_directions_grouped_separately(self, no_cache, tmp_path):
         home = _make_location(*self.HOME, "Home")
         work = _make_location(*self.WORK, "Work")
         acts = [
@@ -820,18 +821,18 @@ class TestGroupSimilarRoutes:
             self._make_commute_activity(2, "work_to_home"),
         ]
         analyzer = RouteAnalyzer(acts, home, work, _make_config(), n_workers=1,
-                                 force_reanalysis=True)
+                                 force_reanalysis=True, cache_dir=str(tmp_path))
         result = analyzer.group_similar_routes()
         directions = {g.direction for g in result}
         assert "home_to_work" in directions
         assert "work_to_home" in directions
 
-    def test_returns_routes_with_frequency(self, no_cache):
+    def test_returns_routes_with_frequency(self, no_cache, tmp_path):
         home = _make_location(*self.HOME, "Home")
         work = _make_location(*self.WORK, "Work")
         acts = [self._make_commute_activity(i, "home_to_work") for i in range(1, 6)]
         analyzer = RouteAnalyzer(acts, home, work, _make_config(), n_workers=1,
-                                 force_reanalysis=True)
+                                 force_reanalysis=True, cache_dir=str(tmp_path))
         result = analyzer.group_similar_routes()
         assert all(g.frequency >= 1 for g in result)
 
@@ -872,6 +873,38 @@ class TestGroupSimilarRoutes:
         result = analyzer.group_similar_routes()
         assert len(result) == 1
         assert result[0].id == 'home_to_work_0'
+
+    def test_large_activity_drop_logs_warning(self, no_cache, caplog, tmp_path):
+        """A big drop in cached activity IDs (e.g. a truncated activities.json)
+        should warn loudly rather than silently rebuilding the cache."""
+        home = _make_location(*self.HOME, "Home")
+        work = _make_location(*self.WORK, "Work")
+        acts = [self._make_commute_activity(1, "home_to_work")]
+        analyzer = RouteAnalyzer(acts, home, work, _make_config(), n_workers=1,
+                                 cache_dir=str(tmp_path))
+        # Simulate a cache built from many more activities than are present now.
+        analyzer.groups_cache = {
+            'activity_ids': list(range(1, 21)),
+            'groups': [],
+        }
+        with caplog.at_level(logging.WARNING, logger="src.route_analyzer"):
+            analyzer.group_similar_routes()
+        assert any("large drop" in r.message for r in caplog.records)
+
+    def test_small_activity_drop_does_not_warn(self, no_cache, caplog, tmp_path):
+        """A small, plausible drop (e.g. one deleted activity) shouldn't alarm."""
+        home = _make_location(*self.HOME, "Home")
+        work = _make_location(*self.WORK, "Work")
+        acts = [self._make_commute_activity(i) for i in range(1, 20)]
+        analyzer = RouteAnalyzer(acts, home, work, _make_config(), n_workers=1,
+                                 cache_dir=str(tmp_path))
+        analyzer.groups_cache = {
+            'activity_ids': list(range(1, 21)),
+            'groups': [],
+        }
+        with caplog.at_level(logging.WARNING, logger="src.route_analyzer"):
+            analyzer.group_similar_routes()
+        assert not any("large drop" in r.message for r in caplog.records)
 
 
 # ---------------------------------------------------------------------------

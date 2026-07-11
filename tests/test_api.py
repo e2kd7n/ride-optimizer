@@ -356,16 +356,35 @@ class TestDeleteUserData:
         assert response.status_code == 400
 
     def test_delete_succeeds_with_confirmation(self, client, tmp_path, monkeypatch):
+        from pathlib import Path
         from src.json_storage import JSONStorage
         from launch import app
         test_storage = JSONStorage(str(tmp_path))
         test_storage.write('test_data.json', {'key': 'value'})
         monkeypatch.setattr(app.container, 'storage', test_storage)
+
+        fake_creds = tmp_path / 'credentials.json'
+        fake_creds.write_text('{}')
+        monkeypatch.setattr(app.container, 'credentials_path', fake_creds)
+
+        # Regression guard: every path this endpoint unlinks must be derived
+        # from the (mocked) container, never hardcoded — otherwise this test
+        # deletes the real Strava cache/credentials on disk. See incident
+        # where this silently wiped data/cache/activities.json for real.
+        real_cache = Path('data/cache/activities.json')
+        real_cache_existed_before = real_cache.exists()
+        real_creds = Path('config/credentials.json')
+        real_creds_existed_before = real_creds.exists()
+
         response = client.delete('/api/user/data', json={'confirm': True})
         assert response.status_code == 200
         data = response.get_json()
         assert data['status'] == 'success'
         assert isinstance(data['deleted'], list)
+
+        assert real_cache.exists() == real_cache_existed_before
+        assert real_creds.exists() == real_creds_existed_before
+        assert not fake_creds.exists()
 
     def test_delete_no_body_returns_400(self, client):
         response = client.delete('/api/user/data')

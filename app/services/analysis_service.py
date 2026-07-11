@@ -391,6 +391,7 @@ class AnalysisService:
                     after=after,
                     before=before,
                     progress_callback=_fetch_cb,
+                    merge_cache=True,
                 )
             logger.info(f"Loaded {len(self._activities)} activities")
             
