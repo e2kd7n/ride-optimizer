@@ -1,87 +1,63 @@
 # Scripts & Utilities
 
-This directory contains utility scripts, test scripts, and automation tools.
+Utility scripts, test harnesses, and automation tools. Run Python scripts from the project root
+(e.g. `python scripts/verify_dependencies.py`); shell scripts are executable (`./scripts/foo.sh`).
 
-## 🎯 Quick Start: Interactive Menu
+## Testing & Validation
 
-The easiest way to run scripts is through the **interactive menu system**:
+- **test_imports.py** — quick syntax check across `app/`, `src/`, and the entry points
+  (`launch.py`, `wsgi.py`, `main.py`), useful before installing dependencies.
+- **verify_dependencies.py** — confirm required third-party packages are installed.
+- **run-tests.sh** / **run_tests.py** — pytest test runner (`./scripts/run-tests.sh [all|unit|integration|coverage|quick|watch]`).
+  The `.sh` file is a thin cross-platform-friendly wrapper; `run_tests.py` is the source of truth.
+- **run-integration-tests.sh** / **run_integration_tests.py** — integration test runner, same wrapper relationship.
 
-```bash
-python scripts/menu.py
-# or
-./scripts/menu.py
-```
+## Data & Migration
 
-The menu organizes all scripts into categories:
-- 🧪 **Testing & Validation** - Run test suites and verify setup
-- ✨ **Feature Testing** - Test specific features
-- 🔍 **Debugging & Diagnostics** - Debug and diagnose issues
-- 📊 **Data & Analysis** - Fetch and analyze data
-- 🐙 **GitHub Integration** - Manage GitHub issues
-- 🚀 **Application** - Run the main application
+- **migrate_cache_to_json_storage.py** — copy geocoded route names from the CLI's
+  `cache/route_groups_cache.json` (produced by `main.py --analyze` with geocoding enabled) into the
+  web app's `data/route_groups.json`. Needed because the web/cron analysis pipeline runs with
+  geocoding disabled (Nominatim rate limits) — see `AnalysisService`.
+- **set_rate_limit_block.py** — manually write a geocoding rate-limit block file when Nominatim has
+  rate-limited this IP but the app hasn't detected it yet.
 
-Simply select a category, then choose a script to run. The menu handles all the details!
+## Scheduling
 
-## Shell Scripts
+- **setup_windows_tasks.py** — Windows Task Scheduler equivalents of the Unix cron jobs in `cron/`
+  (`--install`/`--uninstall`/`--list`). On Unix, use `cron/install_cron.sh` instead.
+- **send_maintenance_summary.py** — send a weekly maintenance summary notification via ntfy; called
+  by `weekly-maintenance.sh`.
 
-### Testing & Development
-- **run-tests.sh** - Run pytest test suite with various options
+## GitHub Integration
 
-### GitHub Integration
-- **close-issue.sh** - Close GitHub issues with properly formatted comments (handles special characters)
-- **create_issues.sh** - Create GitHub issues from templates
-- **create_uiux_epic_issues_temp.sh** - Create UI/UX epic issues (temporary)
-- **sync-todos-to-issues.sh** - Sync TODO items to GitHub issues
-- **update-issue-priorities.sh** - Update ISSUE_PRIORITIES.md from GitHub
-- **verify-issue-closures.sh** - Verify issues are properly closed
+- **close-issue.sh** — close a GitHub issue with a properly formatted comment (handles special characters).
+- **align-labels.sh** — align GitHub label sets across the ride-optimizer and mealplanner projects.
+- **update-issue-priorities.sh** — regenerate `ISSUE_PRIORITIES.md` from live GitHub issues.
+- **verify-issue-closures.sh** — verify issues referenced in recent commits are actually closed.
+- **weekly-maintenance.sh** — backs up docs/plans, pushes them to the private backups repo, checks
+  git/branch/PR status, kicks off `update-issue-priorities.sh` in the background, and sends a
+  maintenance summary.
 
-### Maintenance
-- **rewrite_git_history.sh** - Git history rewriting utility (use with caution)
+## Backup & Restore
 
-## Python Scripts
+- **backup-env.sh** — back up `.env` and `*.backup` files to the private backups repository.
+- **backup_caches.sh** / **restore-caches.sh** — back up and restore analysis caches
+  (`cache/*.json`, `data/route_groups.json`, `data/long_rides.json`, `data/cache/activities.json`).
 
-### Testing & Validation
-- **test_geocoding.py** - Test geocoding functionality
-- **test_imports.py** - Verify all imports work correctly
-- **test_long_ride_recommendations.py** - Test long ride analysis
-- **test_route_naming.py** - Test route naming functionality
-- **verify_dependencies.py** - Check all dependencies are installed
+## Raspberry Pi Deployment
 
-### Data & Analysis
-- **fetch_test_activities.py** - Fetch test activities from Strava
-- **find_matched_routes.py** - Find and analyze matched routes
-- **profile_analysis.py** - Profile application performance
+- **pi-auto-update.sh** — pull the latest image from GHCR and redeploy if it changed; runs nightly
+  via a systemd timer, or manually with `--force`.
+- **pi-update-setup.sh** — install the systemd service + timer for `pi-auto-update.sh` (run once on the Pi).
+- **cleanup-pi.sh** — remove unused containers/images/build cache on the Pi without touching volumes.
+- **build-pi.sh** — last-resort local ARM build when GHCR/CI is unreachable; normal deploys go
+  through CI + `pi-auto-update.sh` instead.
 
-## Direct Script Usage
+## Archive
 
-You can also run scripts directly without the menu:
-
-```bash
-# Run tests
-./scripts/run-tests.sh all
-
-# Test geocoding
-python scripts/test_geocoding.py
-
-# Verify dependencies
-python scripts/verify_dependencies.py
-```
-
-### Menu System Script
-
-**menu.py** - Interactive menu system for easy script access
-- Organizes all scripts by category
-- Color-coded output for better readability
-- Handles script execution and error reporting
-- Supports both Python and shell scripts
-
-## Notes
-
-- Shell scripts are executable (chmod +x)
-- Python scripts should be run from project root
-- Some scripts require Strava API credentials
-- Test scripts may use test cache files
+`archive/cli-legacy/` holds scripts from the pre-web-platform CLI era (`main.py` + `src/`-only
+structure) that no longer apply to the current Flask `app/` architecture. See its README for details.
 
 ---
 
-*Last Updated: 2026-03-27*
+*Last Updated: 2026-07-11*
