@@ -300,8 +300,7 @@ def get_commute():
                 if not constraints.get('indoor_fallback'):
                     home_loc = None
                     try:
-                        home_loc = (commute_service._recommender.home_location.lat,
-                                    commute_service._recommender.home_location.lon)
+                        home_loc = commute_service._recommender.home_location
                     except Exception:
                         pass
                     rides = planner_service.get_workout_rides(
@@ -390,8 +389,7 @@ def get_workout_options():
             try:
                 home_loc = None
                 if commute_service and commute_service._recommender:
-                    hl = commute_service._recommender.home_location
-                    home_loc = (hl.lat, hl.lon)
+                    home_loc = commute_service._recommender.home_location
                 rides = planner_service.get_workout_rides(
                     workout_type=constraints.get('workout_type', ''),
                     target_duration_min=constraints.get('min_duration_minutes'),
@@ -483,18 +481,23 @@ def get_commute_map():
         if not routes:
             return jsonify({'status': 'error', 'message': 'No commute routes available'}), 404
 
-        config = ConfigManager.get_instance()
-        try:
-            home_lat = config.get('location.home.latitude')
-            home_lon = config.get('location.home.longitude')
-            work_lat = config.get('location.work.latitude')
-            work_lon = config.get('location.work.longitude')
-            if None in (home_lat, home_lon, work_lat, work_lon):
-                raise ValueError("Missing location coordinates in config")
-            home_location = Location(lat=float(home_lat), lon=float(home_lon), name="Home", activity_count=0)
-            work_location = Location(lat=float(work_lat), lon=float(work_lon), name="Work", activity_count=0)
-        except (TypeError, ValueError) as exc:
-            raise ValueError(f"Invalid location coordinates in config: {exc}")
+        home_location, work_location = (None, None)
+        if container.analysis_service is not None:
+            home_location, work_location = container.analysis_service.get_locations()
+
+        if home_location is None or work_location is None:
+            config = ConfigManager.get_instance()
+            try:
+                home_lat = config.get('location.home.latitude')
+                home_lon = config.get('location.home.longitude')
+                work_lat = config.get('location.work.latitude')
+                work_lon = config.get('location.work.longitude')
+                if None in (home_lat, home_lon, work_lat, work_lon):
+                    raise ValueError("Missing location coordinates in config")
+                home_location = Location(lat=float(home_lat), lon=float(home_lon), name="Home", activity_count=0)
+                work_location = Location(lat=float(work_lat), lon=float(work_lon), name="Work", activity_count=0)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"Invalid location coordinates in config: {exc}")
 
         map_html = commute_service.generate_comparison_map(
             routes=routes,
