@@ -22,12 +22,16 @@ import sys
 import os
 import secrets
 import hashlib
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, Optional
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 from datetime import datetime, timezone
 from collections import defaultdict
+
+if sys.platform != 'win32':
+    import fcntl
 from time import time as current_time
 
 from stravalib.client import Client
@@ -201,58 +205,76 @@ class SecureTokenStorage:
             logger.warning("Key will not persist across sessions!")
         
         return key
-    
+
+    @contextmanager
+    def _locked(self, exclusive: bool):
+        """flock on a sidecar ``<name>.lock`` file, so two processes/tabs
+        refreshing the token at once (e.g. two open settings.html tabs both
+        hitting /api/strava/status right at expiry) can't race a read against
+        a concurrent write and end up persisting a stale/invalid token pair."""
+        self.credentials_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        lock_path = self.credentials_path.parent / (self.credentials_path.name + '.lock')
+        with open(lock_path, 'a') as lf:
+            os.chmod(lock_path, 0o600)
+            if sys.platform != 'win32':
+                fcntl.flock(lf.fileno(), fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH)
+            try:
+                yield
+            finally:
+                if sys.platform != 'win32':
+                    fcntl.flock(lf.fileno(), fcntl.LOCK_UN)
+
     def save_tokens(self, tokens: Dict[str, Any]) -> None:
         """
         Save tokens with encryption and secure permissions.
-        
+
         Args:
             tokens: Dictionary containing tokens
         """
-        # Create directory with restrictive permissions
-        self.credentials_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        
         # Encrypt token data
         token_json = json.dumps(tokens)
         encrypted = self.cipher.encrypt(token_json.encode())
-        
-        # Write encrypted data
-        with open(self.credentials_path, 'wb') as f:
-            f.write(encrypted)
-        
-        # Set restrictive permissions (owner read/write only)
-        os.chmod(self.credentials_path, 0o600)
-        
+
+        with self._locked(exclusive=True):
+            # Atomic write (temp file + rename) so a reader never observes a
+            # partially-written file, and a crash mid-write can't corrupt it.
+            temp_path = self.credentials_path.with_suffix('.tmp')
+            with open(temp_path, 'wb') as f:
+                f.write(encrypted)
+            os.chmod(temp_path, 0o600)
+            temp_path.replace(self.credentials_path)
+
         logger.info(f"✓ Tokens saved securely to {self.credentials_path}")
         log_security_event('TOKENS_SAVED', {
             'path': str(self.credentials_path),
             'timestamp': datetime.now(timezone.utc).isoformat()
         })
-    
+
     def load_tokens(self) -> Optional[Dict[str, Any]]:
         """
         Load and decrypt tokens.
-        
+
         Returns:
             Dictionary containing tokens, or None if file doesn't exist
         """
         if not self.credentials_path.exists():
             return None
-        
+
         try:
-            with open(self.credentials_path, 'rb') as f:
-                encrypted = f.read()
-            
+            with self._locked(exclusive=False):
+                with open(self.credentials_path, 'rb') as f:
+                    encrypted = f.read()
+
             # Decrypt
             decrypted = self.cipher.decrypt(encrypted)
             tokens = json.loads(decrypted.decode())
-            
+
             log_security_event('TOKENS_LOADED', {
                 'path': str(self.credentials_path),
                 'timestamp': datetime.now(timezone.utc).isoformat()
             })
             return tokens
-            
+
         except Exception as e:
             logger.error(f"Failed to load tokens: {e}")
             log_security_event('TOKENS_LOAD_FAILED', {

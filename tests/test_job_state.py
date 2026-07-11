@@ -6,6 +6,7 @@ in data_bp.py and stats_bp.py.
 """
 
 import threading
+from unittest.mock import Mock
 
 import pytest
 
@@ -146,6 +147,58 @@ class TestJobEndpoints:
         resp = client.post('/api/analyze', json={})
         assert resp.status_code == 409
         assert resp.get_json()['status'] == 'already_running'
+
+    def test_analyze_defaults_force_refresh_false(self, job_client, monkeypatch):
+        """A POST /api/analyze body that omits force_refresh must NOT take
+        the destructive full-reanalysis path by default. The frontend's
+        triggerAnalysis() never sends force_refresh at all, so a stale
+        True default meant every ordinary 'reanalyze' click unconditionally
+        deleted and rebuilt cache/route_groups_cache.json instead of using
+        the cheap incremental cache-hit path."""
+        client, app = job_client
+        app.container._initialised = True  # skip real service init
+        mock_analysis_service = Mock()
+        mock_analysis_service.run_full_analysis.return_value = {
+            'status': 'success', 'activities_count': 0,
+        }
+        monkeypatch.setattr(app.container, 'analysis_service', mock_analysis_service)
+
+        class SyncThread:
+            def __init__(self, target=None, daemon=None):
+                self._target = target
+
+            def start(self):
+                self._target()
+
+        monkeypatch.setattr('app.api.data_bp.threading.Thread', SyncThread)
+
+        resp = client.post('/api/analyze', json={})
+        assert resp.status_code == 200
+        _, kwargs = mock_analysis_service.run_full_analysis.call_args
+        assert kwargs['force_refresh'] is False
+
+    def test_analyze_honors_explicit_force_refresh_true(self, job_client, monkeypatch):
+        client, app = job_client
+        app.container._initialised = True
+        mock_analysis_service = Mock()
+        mock_analysis_service.run_full_analysis.return_value = {
+            'status': 'success', 'activities_count': 0,
+        }
+        monkeypatch.setattr(app.container, 'analysis_service', mock_analysis_service)
+
+        class SyncThread:
+            def __init__(self, target=None, daemon=None):
+                self._target = target
+
+            def start(self):
+                self._target()
+
+        monkeypatch.setattr('app.api.data_bp.threading.Thread', SyncThread)
+
+        resp = client.post('/api/analyze', json={'force_refresh': True})
+        assert resp.status_code == 200
+        _, kwargs = mock_analysis_service.run_full_analysis.call_args
+        assert kwargs['force_refresh'] is True
 
     def test_fetch_rejects_when_registry_says_running(self, job_client):
         client, app = job_client

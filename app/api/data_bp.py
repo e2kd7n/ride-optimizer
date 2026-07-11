@@ -80,7 +80,7 @@ def trigger_analysis():
 
     data = request.get_json(silent=True) or {}
     fetch_new = bool(data.get('fetch_new', False))
-    force_refresh = bool(data.get('force_refresh', True))
+    force_refresh = bool(data.get('force_refresh', False))
 
     after_date = None
     before_date = None
