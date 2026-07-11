@@ -826,7 +826,8 @@ def analyze_routes(config, output_dir, n_workers=2, generate_pdf=False, force_re
             debug_logger.info(f"Creating RouteAnalyzer with {n_workers} workers, force_reanalysis={force_reanalysis}")
             try:
                 analyzer = RouteAnalyzer(commute_activities, home, work, config,
-                                        n_workers=n_workers, force_reanalysis=force_reanalysis)
+                                        n_workers=n_workers, force_reanalysis=force_reanalysis,
+                                        interactive=True)
                 debug_logger.info("RouteAnalyzer created, starting route grouping...")
                 route_groups = analyzer.group_similar_routes()
                 
