@@ -22,14 +22,17 @@ def check_syntax(file_path):
 
 def main():
     """Check all Python files for syntax errors."""
-    src_dir = Path('src')
     errors = []
-    
+
     print("Checking Python files for syntax errors...\n")
-    
-    # Check all Python files
-    python_files = list(src_dir.glob('*.py')) + [Path('main.py')]
-    
+
+    # Check all Python files across the web app (app/, src/) plus the entry points
+    python_files = (
+        list(Path('src').glob('*.py'))
+        + list(Path('app').rglob('*.py'))
+        + [Path('launch.py'), Path('wsgi.py'), Path('main.py')]
+    )
+
     for file_path in python_files:
         if not file_path.exists():
             continue
@@ -56,7 +59,7 @@ def main():
         print("  1. Create virtual environment: python3 -m venv venv")
         print("  2. Activate it: source venv/bin/activate")
         print("  3. Install dependencies: pip install -r requirements.txt")
-        print("  4. Run authentication: python3 main.py --auth")
+        print("  4. Start the web app: python launch.py")
         sys.exit(0)
 
 

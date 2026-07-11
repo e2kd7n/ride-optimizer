@@ -49,7 +49,7 @@ def check_dependencies():
     else:
         print("\n✅ All dependencies installed!")
         print("\nYou can now run the application:")
-        print("   python3 main.py")
+        print("   python launch.py")
         return True
 
 if __name__ == "__main__":
