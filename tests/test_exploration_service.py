@@ -340,17 +340,25 @@ class TestReduceSurfaceExtras:
                 ]
             }
         }
-        sb = ExplorationService._reduce_surface_extras(extras, 4000.0)
+        sb = ExplorationService._reduce_surface_extras(extras)
         assert sb["paved_pct"] == 50
         assert sb["unpaved_pct"] == 25
         assert sb["unknown_pct"] == 25
 
     def test_empty_extras(self):
-        sb = ExplorationService._reduce_surface_extras({}, 1000.0)
+        sb = ExplorationService._reduce_surface_extras({})
         assert sb == {"paved_pct": 0, "unpaved_pct": 0, "unknown_pct": 100}
 
-    def test_zero_total_distance(self):
-        """Does not divide by zero when total_distance_m is 0."""
-        extras = {"surface": {"values": [[0, 1, 1]]}}
-        sb = ExplorationService._reduce_surface_extras(extras, 0.0)
-        assert sb == {"paved_pct": 0, "unpaved_pct": 0, "unknown_pct": 100}
+    def test_weights_by_index_span_not_segment_count(self):
+        """Regression for #483: a long unpaved stretch must outweigh a short paved connector."""
+        extras = {
+            "surface": {
+                "values": [
+                    [0, 2, 1],     # paved, span 2
+                    [2, 402, 9],   # unpaved, span 400
+                ]
+            }
+        }
+        sb = ExplorationService._reduce_surface_extras(extras)
+        assert sb["paved_pct"] == 0
+        assert sb["unpaved_pct"] == 100

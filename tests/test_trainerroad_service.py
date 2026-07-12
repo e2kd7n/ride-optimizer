@@ -631,9 +631,21 @@ class TestMetricsExtraction:
     def test_extract_case_insensitive(self, trainerroad_service):
         """Test case-insensitive metric extraction."""
         tss, if_val = trainerroad_service._extract_metrics('tss: 60 if: 0.75')
-        
+
         assert tss == 60.0
         assert if_val == 0.75
+
+    def test_extract_tss_rejects_unlabeled_interval_count(self, trainerroad_service):
+        """Regression for #484: '3x10 min' must not be parsed as TSS."""
+        tss, if_val = trainerroad_service._extract_metrics('3x10 min @ 105% FTP')
+
+        assert tss is None
+
+    def test_extract_tss_rejects_intensity_factor_digit(self, trainerroad_service):
+        """Regression for #484: 'IF 0.85' must not yield tss=0."""
+        tss, if_val = trainerroad_service._extract_metrics('IF 0.85')
+
+        assert tss is None
 
 
 def _run_mutator_without_writing(filename, mutator, default=None):

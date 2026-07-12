@@ -186,9 +186,7 @@ class ExplorationService:
         distance_km = round(summary["distance"] / 1000, 2)
         duration_min = round(summary["duration"] / 60, 1)
 
-        surface_breakdown = ExplorationService._reduce_surface_extras(
-            props.get("extras", {}), summary["distance"]
-        )
+        surface_breakdown = ExplorationService._reduce_surface_extras(props.get("extras", {}))
 
         return {
             "status": "success",
@@ -199,7 +197,7 @@ class ExplorationService:
         }
 
     @staticmethod
-    def _reduce_surface_extras(extras: dict, total_distance_m: float) -> Dict[str, Any]:
+    def _reduce_surface_extras(extras: dict) -> Dict[str, Any]:
         """Reduce ORS extras.surface segment array into paved/unpaved/unknown percentages."""
         surface_values = (extras.get("surface") or {}).get("values", [])
 
@@ -211,25 +209,23 @@ class ExplorationService:
             # Each entry: [from_idx, to_idx, surface_value]
             if len(segment) < 3:
                 continue
-            _, _, value = segment[:3]
-            # Distance isn't provided per-segment in ORS v2; we approximate using
-            # the proportion of segments (ORS surface.values covers the full route).
-            # If total is 0, skip.
-            if total_distance_m <= 0:
-                continue
+            from_idx, to_idx, value = segment[:3]
+            # Distance per segment isn't provided in ORS v2, but the coordinate
+            # index span is a good proxy for how much of the route it covers.
+            span = to_idx - from_idx
             if value in _PAVED_SURFACE_VALUES:
-                paved_m += 1
+                paved_m += span
             elif value in _UNPAVED_SURFACE_VALUES:
-                unpaved_m += 1
+                unpaved_m += span
             else:
-                unknown_m += 1
+                unknown_m += span
 
-        total_segments = paved_m + unpaved_m + unknown_m
-        if total_segments == 0:
+        total_span = paved_m + unpaved_m + unknown_m
+        if total_span == 0:
             return {"paved_pct": 0, "unpaved_pct": 0, "unknown_pct": 100}
 
         return {
-            "paved_pct": round(paved_m / total_segments * 100),
-            "unpaved_pct": round(unpaved_m / total_segments * 100),
-            "unknown_pct": round(unknown_m / total_segments * 100),
+            "paved_pct": round(paved_m / total_span * 100),
+            "unpaved_pct": round(unpaved_m / total_span * 100),
+            "unknown_pct": round(unknown_m / total_span * 100),
         }
