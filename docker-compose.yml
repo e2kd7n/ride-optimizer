@@ -9,6 +9,13 @@ services:
 
     environment:
       - APP_PORT=${APP_PORT:-8083}
+      # Required: gunicorn now defaults to 127.0.0.1 (see gunicorn.conf.py) to avoid
+      # binding all host interfaces for bare/dev runs. Inside this container that
+      # default would break the "ports:" publish below, since podman/docker routes
+      # host traffic to the container's bridge interface, not its loopback — so the
+      # container must explicitly opt back into 0.0.0.0. LAN exposure is actually
+      # controlled by the "ports:" mapping below, not this value.
+      - BIND_HOST=0.0.0.0
       - NTFY_ENABLED=${NTFY_ENABLED:-false}
       - NTFY_SERVER=${NTFY_SERVER:-https://ntfy.sh}
       - NTFY_TOPIC=${NTFY_TOPIC:-ride-optimizer}

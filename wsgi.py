@@ -4,4 +4,5 @@ from launch import app  # noqa: F401  (re-exported for gunicorn)
 if __name__ == '__main__':
     import os
     port = int(os.getenv('APP_PORT', 8083))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    host = os.getenv('BIND_HOST', '127.0.0.1')
+    app.run(host=host, port=port, debug=False)

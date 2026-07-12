@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-07-08 11:38:46 UTC / 2026-07-08 11:38:46 GMT
+**Last Updated:** 2026-07-11 16:46:59 UTC / 2026-07-11 11:46:59 CDT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -9,12 +9,12 @@ This file reflects the current state of GitHub issues organized by release miles
 ## 📍 Release Context
 
 - **Current Release:** none (deployed, milestone fully closed)
-- **Next Release:** v0.17.0 (in development)
-- **Future Releases:** v0.18.0
+- **Next Release:** v0.18.0 (in development)
+- **Future Releases:** 
 
 ---
 
-## 🎯 v0.17.0 (Next Release - IN DEVELOPMENT)
+## 🎯 v0.18.0 (Next Release - IN DEVELOPMENT)
 
 **Priority within this release determines work order. Complete P0/P1 issues before moving to future releases.**
 
@@ -22,26 +22,17 @@ This file reflects the current state of GitHub issues organized by release miles
 **No P0 issues** ✅
 
 ### 🔴 P1 - HIGH
-**No P1 issues** ✅
-
-### 🟡 P2 - MEDIUM
-- #444 - Wire static/js/mobile.js into all 7 pages (bottom nav keyboard/swipe/touch support)
-
-### 🟢 P3 - LOW
-- #443 - PR #431: bottom-nav-more drawer markup duplicated across 7 pages
-
-### 📋 P4 - FUTURE
-**No P4 issues** ✅
-
----
-
-## 📅 v0.18.0 (Future Release)
-
-### 🔴 P1 - HIGH
+- #484 - TrainerRoad TSS extraction matches the first number in any description — 'IF 0.85' or '3x10 min' becomes TSS
+- #483 - Surface breakdown weights every ORS segment equally instead of by its coordinate span — paved/unpaved percentages are wrong
+- #477 - route_analyzer.py::_open_geocoding_terminal is macOS-only, silently no-ops on Windows/Linux
+- #475 - CSP allows 'unsafe-inline' for script-src and style-src
+- #472 - Setup UI: let user select home/work location instead of hand-editing .env lat/longs
+- #471 - Frontend cleanup backlog: dead JS/CSS, triplicated formatDuration, no 5xx retry
+- #470 - Duplicated navbar/bottom-nav/theme-init markup across 8-9 pages, no Jinja partial
 - #468 - settings.html polling loops swallow errors forever — stuck-button UX bug
-- #458 - Job-state race condition in data_bp.py — JobRegistry fix exists but isn't wired up
 
 ### 🟡 P2 - MEDIUM
+- #481 - /api/exploration/roads: unbounded bbox can OOM the Pi via osmnx, and road_network.graphml cache ignores requested bounds (wrong results after panning)
 - #472 - Setup UI: let user select home/work location instead of hand-editing .env lat/longs
 - #470 - Duplicated navbar/bottom-nav/theme-init markup across 8-9 pages, no Jinja partial
 - #469 - Extract 2,100+ lines of inline <script> in settings/route-detail/compare to JS modules
@@ -50,15 +41,22 @@ This file reflects the current state of GitHub issues organized by release miles
 - #461 - Duplicate uncached JSON cache reads + full service re-init after routine actions
 - #460 - Two divergent create_app() factories + dead scheduler/config infra
 - #459 - Lost-update races in read-modify-write JSON flows (plan storage, TrainerRoad cache)
-- #454 - Epic: Exploration route generator — maximize new-tile coverage instead of shortest-path out-and-back
 - #451 - Exploration route generator: extend overlap penalty to tiles claimed within the in-progress tour
-- #450 - Exploration route generator: replace top-N zone selection + TSP with cheapest-insertion construction
 
 ### 🟢 P3 - LOW
+- #484 - TrainerRoad TSS extraction matches the first number in any description — 'IF 0.85' or '3x10 min' becomes TSS
+- #483 - Surface breakdown weights every ORS segment equally instead of by its coordinate span — paved/unpaved percentages are wrong
+- #482 - /api/exploration/route: waypoints not validated (500s on malformed input, no count cap → ORS quota burn) and route memo cache grows unbounded
+- #477 - route_analyzer.py::_open_geocoding_terminal is macOS-only, silently no-ops on Windows/Linux
+- #475 - CSP allows 'unsafe-inline' for script-src and style-src
+- #471 - Frontend cleanup backlog: dead JS/CSS, triplicated formatDuration, no 5xx retry
 - #467 - Legacy report_generator.py/main.py — decide relocation vs keeping in src/
 - #453 - Exploration route generator: wind-aware outbound/return orientation (headwind out, tailwind back)
 - #452 - Exploration route generator: detect and label unavoidable out-and-back routes
 - #430 - Coverage tracker should include Garmin activities, not just Strava
+
+### 📋 P4 - FUTURE
+**No P4 issues** ✅
 
 ---
 
@@ -79,26 +77,22 @@ None
 - #462 - Duplicate backup scripts (backup-env.sh vs backup_env.sh) — consolidate
 
 ### 🟢 P3 - LOW
-- #477 - route_analyzer.py::_open_geocoding_terminal is macOS-only, silently no-ops on Windows/Linux
 - #476 - Ad-hoc time.sleep(2) rate-limit workaround embedded in data_bp.py progress callback
-- #475 - CSP allows 'unsafe-inline' for script-src and style-src
-- #471 - Frontend cleanup backlog: dead JS/CSS, triplicated formatDuration, no 5xx retry
 - #466 - Performance backlog: weather cache growth/rewrites, map simplification, redundant geodesic scans
 
 ### 📋 P4 - FUTURE
 None
 
 ### ⚠️ Unprioritized (No P-label)
-- #457 - Night mode token drift: Route Detail stat values use Bootstrap's default text color, not --ink
+None
 
 ---
 
 ## 📝 Workspace TODOs & Tasks
 Code comments and inline tasks found in the workspace that may need attention.
 
-Found **2** code comments requiring attention:
+Found **1** code comments requiring attention:
 
-- `app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
 - `static/js/dashboard.js` - 6:// NOTE: Initialization is handled by inline script in index.html
 
 ## 📖 Priority System (Release-Aware)
