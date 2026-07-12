@@ -337,6 +337,19 @@ class APIClient {
     }
 
     /**
+     * Check which planned tiles a route's actual road-route coordinates
+     * really cross (#493) — planned claim corners can be snapped to a road
+     * that never enters the tile, so this re-verifies against ground truth
+     * before the UI highlights a tile as claimed.
+     */
+    async verifyTileClaims({ coordinates, tiles } = {}) {
+        return this.fetch('/exploration/verify-tiles', {
+            method: 'POST',
+            body: JSON.stringify({ coordinates, tiles }),
+        });
+    }
+
+    /**
      * Forward-geocode a city/state or postal code to coordinates.
      */
     async geocodeLocation(query) {

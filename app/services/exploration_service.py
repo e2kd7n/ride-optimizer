@@ -67,6 +67,33 @@ class ExplorationService:
     def invalidate_caches(self):
         self._tracker.invalidate_caches()
 
+    def verify_tile_claims(
+        self,
+        coordinates: List[Tuple[float, float]],
+        tiles: List[Dict[str, int]],
+    ) -> Dict[str, Any]:
+        """Check which of the given tiles a route's actual polyline crosses.
+
+        `tiles` targets are only speculative until the road-following route
+        is known (a planned "claim" corner may end up snapped to a road that
+        never actually enters the tile). This runs the same exact tile-
+        crossing math used to score recorded activities against a planned
+        route's real coordinates, so the UI can highlight only tiles that
+        are genuinely reachable rather than ones a route merely aimed at.
+        """
+        by_zoom: Dict[int, set] = {}
+        for t in tiles:
+            by_zoom.setdefault(t["zoom"], set()).add((t["x"], t["y"]))
+
+        claimed: List[Dict[str, int]] = []
+        for zoom, wanted in by_zoom.items():
+            crossed = self._tracker.tiles_crossed_by_path(coordinates, zoom)
+            for x, y in wanted:
+                if (x, y) in crossed:
+                    claimed.append({"x": x, "y": y, "zoom": zoom})
+
+        return {"status": "success", "claimed": claimed}
+
     # ── ORS road routing ─────────────────────────────────────────
 
     def compute_route(

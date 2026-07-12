@@ -284,6 +284,18 @@ class CoverageTracker:
         except Exception:
             return []
 
+    def tiles_crossed_by_path(
+        self, coords: List[Tuple[float, float]], zoom: int
+    ) -> Set[Tuple[int, int]]:
+        """All tiles an arbitrary lat/lon path crosses, exactly.
+
+        Same exact grid-traversal ground truth used for scoring recorded
+        activities (`_activity_tiles`), exposed so a *planned* route (e.g. an
+        ORS road-route polyline that hasn't been ridden yet) can be checked
+        against it before claiming tile coverage in the UI.
+        """
+        return _activity_tiles(coords, zoom)
+
     # ------------------------------------------------------------------
     # Tile coverage
     # ------------------------------------------------------------------

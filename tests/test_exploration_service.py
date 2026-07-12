@@ -7,7 +7,13 @@ import pytest
 import requests
 
 from app.services.exploration_service import ExplorationService, _SURFACE_TO_PROFILE
-from src.coverage_tracker import TileCoverage
+from src.coverage_tracker import (
+    TileCoverage,
+    TILE_ZOOM,
+    SQUADRATINHO_ZOOM,
+    lat_lon_to_tile,
+    tile_to_bounds,
+)
 
 
 # ── Fixtures ─────────────────────────────────────────────────────
@@ -65,6 +71,59 @@ class TestExplorationService:
         with patch.object(service._tracker, "invalidate_caches") as mock_inv:
             service.invalidate_caches()
             mock_inv.assert_called_once()
+
+
+# ── verify_tile_claims (#493) ────────────────────────────────────
+
+
+class TestVerifyTileClaims:
+    """A planned route can claim a tile it never actually enters — e.g. its
+    corner waypoint gets snapped by OSRM to a road running along the tile's
+    boundary rather than through its interior. verify_tile_claims re-checks
+    planned claims against the route's real coordinates."""
+
+    def test_claims_tile_the_route_actually_enters(self, service):
+        x, y = 4825, 6160
+        south, west, north, east = tile_to_bounds(x, y, zoom=TILE_ZOOM)
+        inside_lon = west + (east - west) * 0.5
+        coordinates = [(south, inside_lon), (north, inside_lon)]
+
+        result = service.verify_tile_claims(coordinates, [{"x": x, "y": y, "zoom": TILE_ZOOM}])
+
+        assert result["status"] == "success"
+        assert result["claimed"] == [{"x": x, "y": y, "zoom": TILE_ZOOM}]
+
+    def test_does_not_claim_tile_the_route_only_skirts(self, service):
+        """Regression for #493's reported bug: a route running along a tile's
+        boundary (never entering it) must not be reported as claimed."""
+        x, y = 4825, 6160
+        south, west, north, east = tile_to_bounds(x, y, zoom=TILE_ZOOM)
+        just_outside_lon = west - (east - west) * 0.001
+        coordinates = [(south, just_outside_lon), (north, just_outside_lon)]
+
+        result = service.verify_tile_claims(coordinates, [{"x": x, "y": y, "zoom": TILE_ZOOM}])
+
+        assert result["status"] == "success"
+        assert result["claimed"] == []
+
+    def test_mixed_zooms_checked_independently(self, service):
+        x14, y14 = lat_lon_to_tile(40.7128, -74.0060, zoom=TILE_ZOOM)
+        south, west, north, east = tile_to_bounds(x14, y14, zoom=TILE_ZOOM)
+        inside_lon = west + (east - west) * 0.5
+        coordinates = [(south, inside_lon), (north, inside_lon)]
+
+        # A squadratinho (zoom 17) tile far from this squadrat should not be claimed.
+        result = service.verify_tile_claims(
+            coordinates,
+            [
+                {"x": x14, "y": y14, "zoom": TILE_ZOOM},
+                {"x": 0, "y": 0, "zoom": SQUADRATINHO_ZOOM},
+            ],
+        )
+
+        assert result["status"] == "success"
+        assert {"x": x14, "y": y14, "zoom": TILE_ZOOM} in result["claimed"]
+        assert {"x": 0, "y": 0, "zoom": SQUADRATINHO_ZOOM} not in result["claimed"]
 
 
 # ── Surface-preference → ORS profile mapping ────────────────────

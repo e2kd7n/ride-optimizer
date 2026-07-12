@@ -224,6 +224,68 @@ class TestExplorationTilesAPI:
 
 
 @pytest.mark.unit
+class TestExplorationVerifyTilesAPI:
+    """Tests for /api/exploration/verify-tiles (#493) — checks a planned
+    route's real coordinates against the tiles it claims to reach."""
+
+    def test_claims_tile_the_route_enters(self, client):
+        from src.coverage_tracker import tile_to_bounds
+        x, y, zoom = 4825, 6160, 14
+        south, west, north, east = tile_to_bounds(x, y, zoom=zoom)
+        inside_lon = west + (east - west) * 0.5
+
+        response = client.post('/api/exploration/verify-tiles', json={
+            'coordinates': [[south, inside_lon], [north, inside_lon]],
+            'tiles': [{'x': x, 'y': y, 'zoom': zoom}],
+        })
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['status'] == 'success'
+        assert data['claimed'] == [{'x': x, 'y': y, 'zoom': zoom}]
+
+    def test_does_not_claim_tile_route_only_skirts(self, client):
+        from src.coverage_tracker import tile_to_bounds
+        x, y, zoom = 4825, 6160, 14
+        south, west, north, east = tile_to_bounds(x, y, zoom=zoom)
+        just_outside_lon = west - (east - west) * 0.001
+
+        response = client.post('/api/exploration/verify-tiles', json={
+            'coordinates': [[south, just_outside_lon], [north, just_outside_lon]],
+            'tiles': [{'x': x, 'y': y, 'zoom': zoom}],
+        })
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['status'] == 'success'
+        assert data['claimed'] == []
+
+    def test_missing_coordinates_rejected(self, client):
+        response = client.post('/api/exploration/verify-tiles', json={
+            'tiles': [{'x': 1, 'y': 1, 'zoom': 14}],
+        })
+        assert response.status_code == 400
+
+    def test_missing_tiles_rejected(self, client):
+        response = client.post('/api/exploration/verify-tiles', json={
+            'coordinates': [[40.0, -74.0]],
+        })
+        assert response.status_code == 400
+
+    def test_invalid_zoom_rejected(self, client):
+        response = client.post('/api/exploration/verify-tiles', json={
+            'coordinates': [[40.0, -74.0]],
+            'tiles': [{'x': 1, 'y': 1, 'zoom': 5}],
+        })
+        assert response.status_code == 400
+
+    def test_oversized_coordinates_rejected(self, client):
+        response = client.post('/api/exploration/verify-tiles', json={
+            'coordinates': [[40.0, -74.0]] * 5001,
+            'tiles': [{'x': 1, 'y': 1, 'zoom': 14}],
+        })
+        assert response.status_code == 400
+
+
+@pytest.mark.unit
 class TestSavedPlansAPI:
     """Tests for saved plans CRUD endpoints."""
 
