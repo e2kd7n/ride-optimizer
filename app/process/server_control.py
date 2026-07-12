@@ -270,7 +270,8 @@ def open_browser(port: int) -> None:
 def run_server(app, port: int) -> None:
     """Write PID file and run the Flask server. Called from launch.py ``--serve`` mode."""
     _write_pid_file(os.getpid(), port)
+    host = os.getenv('BIND_HOST', '127.0.0.1')
     try:
-        app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+        app.run(host=host, port=port, debug=False, use_reloader=False)
     finally:
         _remove_pid_file()
