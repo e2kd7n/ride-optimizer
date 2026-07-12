@@ -98,6 +98,7 @@ if __name__ == '__main__':
     with open(log_path, 'a') as log_file:
         server_process = subprocess.Popen(
             [sys.executable, __file__, '--serve', str(port)],
+            stdin=subprocess.DEVNULL,
             stdout=log_file,
             stderr=log_file,
             start_new_session=True,

@@ -6,6 +6,7 @@ in data_bp.py and stats_bp.py.
 """
 
 import threading
+import types
 from unittest.mock import Mock
 
 import pytest
@@ -170,7 +171,14 @@ class TestJobEndpoints:
             def start(self):
                 self._target()
 
-        monkeypatch.setattr('app.api.data_bp.threading.Thread', SyncThread)
+        # Patch only the `threading` name as seen inside data_bp, not the
+        # shared stdlib module object — setting `threading.Thread` directly
+        # mutates the real module (modules are singletons) and breaks
+        # unrelated code (e.g. flask-limiter's cleanup Timer, whose
+        # __init__ resolves `Thread` via a module-global lookup at call
+        # time) for the duration of the test.
+        fake_threading = types.SimpleNamespace(Thread=SyncThread)
+        monkeypatch.setattr('app.api.data_bp.threading', fake_threading)
 
         resp = client.post('/api/analyze', json={})
         assert resp.status_code == 200
@@ -193,7 +201,8 @@ class TestJobEndpoints:
             def start(self):
                 self._target()
 
-        monkeypatch.setattr('app.api.data_bp.threading.Thread', SyncThread)
+        fake_threading = types.SimpleNamespace(Thread=SyncThread)
+        monkeypatch.setattr('app.api.data_bp.threading', fake_threading)
 
         resp = client.post('/api/analyze', json={'force_refresh': True})
         assert resp.status_code == 200
