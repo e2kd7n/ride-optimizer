@@ -55,7 +55,7 @@ def create_app(config_overrides: dict | None = None) -> Flask:
         Configured :class:`~flask.Flask` instance with ``app.container``
         set to a :class:`~app.container.ServiceContainer`.
     """
-    app = Flask(__name__, static_folder='../static', static_url_path='')
+    app = Flask(__name__, static_folder='../static', static_url_path='', template_folder='../templates')
 
     # --- core config ---
     app.config['JSON_SORT_KEYS'] = False
@@ -112,12 +112,46 @@ def _register_blueprints(app: Flask) -> None:
     from app.api.core_bp import bp as core_bp
 
     app.register_blueprint(maps_api.bp)
-    # Static file serving
-    from flask import send_from_directory
-    @app.route('/')
-    def index():
-        return send_from_directory('../static', 'index.html')
 
+    # Page routes (Jinja-rendered; nav/bottom-nav/theme-init live in
+    # templates/partials/ so they're not duplicated across pages — #470)
+    from flask import render_template, send_from_directory
+
+    @app.route('/')
+    @app.route('/index.html')
+    def index():
+        return render_template('index.html', active_page='home')
+
+    @app.route('/routes.html')
+    def routes_page():
+        return render_template('routes.html', active_page='routes')
+
+    @app.route('/weather.html')
+    def weather_page():
+        return render_template('weather.html', active_page='weather')
+
+    @app.route('/reports.html')
+    def reports_page():
+        return render_template('reports.html', active_page='reports')
+
+    @app.route('/settings.html')
+    def settings_page():
+        return render_template('settings.html', active_page='settings')
+
+    @app.route('/explore.html')
+    def explore_page():
+        return render_template('explore.html', active_page='explore')
+
+    @app.route('/route-detail.html')
+    def route_detail_page():
+        return render_template('route-detail.html', active_page='routes')
+
+    @app.route('/compare.html')
+    def compare_page():
+        return render_template('compare.html', active_page='routes')
+
+    # Everything else (JS/CSS/images, and the remaining standalone static
+    # pages: setup.html, commute.html) is served as a plain static file.
     @app.route('/<path:path>')
     def serve_static(path):
         return send_from_directory('../static', path)
@@ -159,9 +193,21 @@ def _register_after_request(app: Flask) -> None:
         response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
         response.headers['Content-Security-Policy'] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
-            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
+            # No inline <script>/onclick="" left anywhere in the app (#470,
+            # #475) — script-src can drop 'unsafe-inline'. style-src still
+            # needs it: several JS modules build data-driven inline
+            # style="" (chart/legend colors) via innerHTML; converting
+            # those to CSSOM (element.style.x = ...) is tracked separately.
+            # code.jquery.com/cdnjs/netdna.bootstrapcdn are pulled in by
+            # Folium's default map template (rendered server-side, loaded
+            # into the commute map iframe below) — not used anywhere else.
+            "script-src 'self' https://cdn.jsdelivr.net https://unpkg.com https://code.jquery.com https://cdnjs.cloudflare.com; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com https://netdna.bootstrapcdn.com; "
             "img-src 'self' data: https: blob:; "
+            # commute.js loads the server-rendered Folium map into an
+            # <iframe> via a blob: URL (no frame-src fell back to
+            # default-src 'self', which silently broke the map entirely).
+            "frame-src 'self' blob:; "
             "font-src 'self' https://cdn.jsdelivr.net; "
             "connect-src 'self'; "
             "frame-ancestors 'none'"

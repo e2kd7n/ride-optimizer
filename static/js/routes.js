@@ -678,7 +678,7 @@
         card.innerHTML = `
             <div class="card-body py-2 px-3">
                 <div class="d-flex align-items-center gap-2">
-                    <div class="form-check compare-toggle flex-shrink-0" onclick="event.stopPropagation()">
+                    <div class="form-check compare-toggle flex-shrink-0">
                         <input class="form-check-input compare-checkbox mt-0" type="checkbox"
                                id="compare-${route.id}" data-route-id="${route.id}"
                                ${isSelected ? 'checked' : ''}
@@ -706,6 +706,9 @@
         `;
 
         card.style.cursor = 'pointer';
+        // Moved off inline onclick="event.stopPropagation()" so CSP
+        // script-src can drop 'unsafe-inline' — #475.
+        card.querySelector('.compare-toggle').addEventListener('click', (e) => e.stopPropagation());
         function handleCardActivation(e) {
             if (e.target.closest('.compare-toggle') || e.target.closest('[data-route-link]') || e.target.closest('[data-route-uses]')) {
                 return;
@@ -1238,3 +1241,31 @@
 })();
 
 // Made with Bob
+
+/**
+ * Unit-aware filter labels/presets (moved from inline <script> in
+ * routes.html so CSP script-src can drop 'unsafe-inline' — #475).
+ */
+document.addEventListener('DOMContentLoaded', function() {
+    const unitSystem = window.getUnitSystem ? window.getUnitSystem() : 'imperial';
+    const distanceUnit = window.getDistanceUnit ? window.getDistanceUnit() : 'mi';
+
+    const minLabel = document.getElementById('filter-min-distance-label');
+    const maxLabel = document.getElementById('filter-max-distance-label');
+    if (minLabel) minLabel.textContent = `Min (${distanceUnit})`;
+    if (maxLabel) maxLabel.textContent = `Max (${distanceUnit})`;
+
+    const presetButtons = document.querySelectorAll('.preset-filter');
+    presetButtons.forEach(btn => {
+        const preset = btn.getAttribute('data-preset');
+        const icon = btn.querySelector('i');
+        const iconHtml = icon ? icon.outerHTML + ' ' : '';
+        if (preset === 'short') {
+            btn.innerHTML = `${iconHtml}Short (<${unitSystem === 'imperial' ? '10mi' : '16km'})`;
+        } else if (preset === 'medium') {
+            btn.innerHTML = `${iconHtml}Medium (${unitSystem === 'imperial' ? '10–20mi' : '16–32km'})`;
+        } else if (preset === 'long') {
+            btn.innerHTML = `${iconHtml}Long (>${unitSystem === 'imperial' ? '20mi' : '32km'})`;
+        }
+    });
+});

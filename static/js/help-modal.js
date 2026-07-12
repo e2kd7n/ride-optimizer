@@ -72,7 +72,6 @@
                             alt="${t.alt}"
                             loading="lazy"
                             decoding="async"
-                            onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'; var badge=this.parentElement.querySelector('.tutorial-hover-badge'); if (badge) badge.style.display='none';"
                         />
                         <div class="tutorial-img-fallback position-absolute top-0 start-0 w-100 h-100 align-items-center justify-content-center flex-column text-muted"
                              style="display:none;" aria-hidden="true">
@@ -160,6 +159,24 @@
     }
 
     // ------------------------------------------------------------------
+    // Fallback when a preview/GIF asset 404s (moved off inline onerror=""
+    // so CSP script-src can drop 'unsafe-inline' — #475)
+    // ------------------------------------------------------------------
+
+    function attachImageErrorFallback() {
+        document.querySelectorAll('.tutorial-img').forEach((img) => {
+            img.addEventListener('error', () => {
+                img.style.display = 'none';
+                if (img.nextElementSibling) {
+                    img.nextElementSibling.style.display = 'flex';
+                }
+                const badge = img.parentElement.querySelector('.tutorial-hover-badge');
+                if (badge) badge.style.display = 'none';
+            });
+        });
+    }
+
+    // ------------------------------------------------------------------
     // Hover-play: swap preview ↔ animated GIF
     // ------------------------------------------------------------------
 
@@ -237,6 +254,9 @@
 
         const modalEl = document.getElementById('helpModal');
         if (modalEl && !textOnly) {
+            // Bind immediately: the <img> starts loading as soon as it's in
+            // the DOM (independent of when the modal itself becomes visible).
+            attachImageErrorFallback();
             // Start lazy loading once modal opens (saves bandwidth until user needs it)
             modalEl.addEventListener('shown.bs.modal', () => {
                 observeImages();

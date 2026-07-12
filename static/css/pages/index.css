@@ -1,0 +1,260 @@
+        /* Page-specific styles */
+        .map-container {
+            height: var(--map-height-standard);
+            width: 100%;
+            border-radius: 8px;
+        }
+
+        /* Weather banner styles — flat cobalt (Fair Weather; gradients retired) */
+        .weather-banner {
+            background: var(--accent);
+            color: white;
+            border-radius: 16px 16px 0 0;
+            padding: var(--space-3) var(--space-4);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            display: flex;
+            align-items: center;
+            gap: var(--space-4);
+            flex-wrap: wrap;
+        }
+
+        .weather-banner .weather-icon {
+            font-size: var(--font-size-display);
+            opacity: 0.9;
+        }
+
+        .weather-banner .weather-temp {
+            font-size: var(--font-size-hero);
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .weather-banner .weather-details {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--space-3);
+            font-size: var(--font-size-sm);
+            opacity: 0.95;
+        }
+
+        .weather-banner .weather-detail-item {
+            display: flex;
+            align-items: center;
+            gap: var(--space-1);
+        }
+        
+        .weather-banner .comfort-badge {
+            background: rgba(255,255,255,0.2);
+            padding: var(--space-1) var(--space-2);
+            border-radius: 1rem;
+            font-weight: 600;
+        }
+        
+        @media (max-width: 767.98px) {
+            .weather-banner {
+                padding: var(--space-3);
+                gap: var(--space-3);
+            }
+
+            .weather-banner .weather-icon {
+                font-size: var(--font-size-xl);
+            }
+
+            .weather-banner .weather-temp {
+                font-size: var(--font-size-lg);
+            }
+
+            .weather-banner .weather-details {
+                font-size: var(--font-size-sm);
+                gap: var(--space-2);
+            }
+        }
+
+        /* Commute card styles */
+        .commute-card {
+            background: var(--surface);
+            border-radius: 16px;
+            padding: var(--space-3);
+            margin-bottom: var(--space-3);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .commute-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+
+        .commute-card.to-work {
+            border-left: 4px solid var(--success-color);
+        }
+
+        .commute-card.to-home {
+            border-left: 4px solid var(--primary-color);
+        }
+
+        .commute-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--space-3);
+        }
+
+        .commute-direction {
+            font-size: var(--font-size-base);
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+        }
+
+        .commute-score {
+            font-size: var(--font-size-xl);
+            font-weight: 700;
+            color: var(--success-color);
+        }
+
+        .commute-score.medium {
+            color: var(--warning-color);
+        }
+
+        .commute-score.low {
+            color: var(--danger-color);
+        }
+
+        .commute-route-name {
+            font-size: var(--font-size-base);
+            font-weight: 600;
+            margin-bottom: var(--space-2);
+        }
+
+        .commute-metrics {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--space-2);
+            font-size: var(--font-size-sm);
+        }
+
+        .commute-metric {
+            display: flex;
+            align-items: center;
+            gap: var(--space-1);
+        }
+
+        .commute-time-window {
+            font-size: var(--font-size-sm);
+            color: var(--ink-soft);
+            margin-top: var(--space-2);
+        }
+
+        @media (max-width: 767.98px) {
+            .map-container {
+                height: var(--map-height-standard);
+            }
+        }
+
+        /* â”€â”€ Hero Decision Card (#286) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+        .hero-decision-card {
+            padding: var(--space-1) 0;
+        }
+
+        .hero-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: var(--space-2);
+            flex-wrap: wrap;
+            gap: var(--space-2);
+        }
+
+        .hero-route-name {
+            font-size: var(--font-size-base);
+            font-weight: 700;
+        }
+
+        .hero-weather-summary {
+            font-size: var(--font-size-sm);
+            color: var(--ink-soft);
+            margin-bottom: var(--space-1);
+        }
+
+        .hero-time-estimate {
+            font-size: var(--font-size-sm);
+            font-weight: 600;
+            color: var(--ink);
+            margin-bottom: var(--space-2);
+        }
+
+        .hero-reasons {
+            margin: var(--space-2) 0 var(--space-2) var(--space-3);
+            padding: 0;
+            font-size: var(--font-size-sm);
+            color: var(--ink-soft);
+            list-style: disc;
+        }
+
+        .hero-reasons li {
+            margin-bottom: var(--space-1);
+        }
+
+        .hero-meta {
+            font-size: var(--font-size-xs);
+        }
+
+        .secondary-commute-card {
+            background: var(--light-gray);
+            font-size: var(--font-size-sm);
+        }
+
+        /* â”€â”€ Conditions / Route Status rows â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+        .conditions-row,
+        .route-status-row {
+            border-bottom: 1px solid var(--line);
+        }
+
+        .conditions-row:last-of-type,
+        .route-status-row:last-of-type {
+            border-bottom: none;
+        }
+
+        /* â”€â”€ Design system: purple gradient buttons (#280) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+        /* Primary buttons: flat cobalt via main.css .btn-primary override (Fair Weather) */
+
+        /* Commute compare chevron rotation */
+        .commute-chevron { transition: transform 0.2s; display: inline-block; }
+        [data-bs-target="#commute-detail"][aria-expanded="true"] .commute-chevron { transform: rotate(180deg); }
+
+        .card {
+            border-radius: 16px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+            border: 1px solid var(--line);
+        }
+
+        .weather-hourly-strip {
+            background: rgba(var(--accent-rgb), 0.08);
+            border-radius: 0 0 16px 16px;
+            padding: var(--space-2) var(--space-3);
+            margin-top: 0;
+        }
+
+        /* -- Help row (#363: "How It Works" relocated out of above-the-fold) -- */
+        .help-row {
+            margin-top: var(--space-3);
+            padding-top: var(--space-2);
+            border-top: 1px solid var(--line);
+        }
+
+        /* -- Route Status: collapse to a labeled summary on mobile (#370b) -- */
+        .route-status-summary-toggle .route-status-chevron {
+            transition: transform 0.2s;
+        }
+
+        @media (max-width: 767.98px) {
+            .route-status-rows {
+                display: none;
+            }
+
+            .route-status-rows.route-status-rows-open {
+                display: block;
+            }
+        }

@@ -317,11 +317,12 @@
                     <strong>Commute Unavailable</strong>
                 </div>
                 <p class="mb-2 small">${escapeHtml(message)}</p>
-                <button class="btn btn-sm btn-outline-primary" onclick="location.reload()">
+                <button type="button" class="btn btn-sm btn-outline-primary commute-error-retry-btn">
                     <i class="bi bi-arrow-clockwise"></i> Retry
                 </button>
             </div>
         `;
+        container.querySelector('.commute-error-retry-btn').addEventListener('click', () => location.reload());
     }
     
     /**

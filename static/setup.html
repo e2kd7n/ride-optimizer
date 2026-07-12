@@ -2,80 +2,14 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <script>
-    (function () {
-        try {
-            var t = localStorage.getItem('fairWeatherTheme');
-            if (t !== 'day' && t !== 'night') {
-                t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'night' : 'day';
-            }
-            document.documentElement.setAttribute('data-theme', t);
-        } catch (e) {}
-    })();
-    </script>
+    <script src="/js/theme-init.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Setup — Ride Optimizer</title>
     <link rel="icon" type="image/svg+xml" href="/img/favicon.svg">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <link rel="stylesheet" href="/css/main.css">
-    <style>
-        body { background: var(--bg); }
-
-        .setup-container {
-            max-width: 600px;
-            margin: var(--space-5) auto;
-            padding: 0 var(--space-3);
-        }
-
-        .wizard-header {
-            background: var(--accent); /* flat cobalt — Fair Weather, gradients retired */
-            color: white;
-            border-radius: 16px 16px 0 0;
-            padding: var(--space-5);
-            text-align: center;
-        }
-
-        .wizard-body {
-            background: var(--surface);
-            border: 1px solid var(--line);
-            border-top: none;
-            border-radius: 0 0 16px 16px;
-            padding: var(--space-5);
-        }
-
-        .step-indicator {
-            display: flex;
-            justify-content: center;
-            gap: var(--space-2);
-            margin-bottom: var(--space-5);
-        }
-
-        .step-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: rgba(255,255,255,0.4);
-            transition: background 0.2s;
-        }
-
-        .step-dot.active { background: white; }
-        .step-dot.done { background: rgba(255,255,255,0.8); }
-
-        .step-panel { display: none; }
-        .step-panel.active { display: block; }
-
-        .instruction-list li { margin-bottom: var(--space-2); }
-
-        .credential-field .toggle-secret {
-            cursor: pointer;
-        }
-
-        .success-icon {
-            font-size: 4rem;
-            color: var(--success);
-        }
-    </style>
+    <link rel="stylesheet" href="/css/pages/setup.css">
 </head>
 <body>
 
@@ -117,7 +51,7 @@
                 Your credentials are stored only on this device and are never sent to any third party.
             </div>
             <div class="d-flex justify-content-end mt-3">
-                <button class="btn btn-primary" onclick="goToStep(2)">
+                <button class="btn btn-primary" data-goto-step="2">
                     I have my credentials <i class="bi bi-arrow-right ms-1" aria-hidden="true"></i>
                 </button>
             </div>
@@ -147,7 +81,7 @@
                         <button type="button" class="btn btn-outline-secondary toggle-secret"
                                 aria-label="Toggle Client Secret visibility"
                                 aria-pressed="false"
-                                onclick="toggleSecret()">
+                                data-toggle-secret>
                             <i class="bi bi-eye" id="toggleIcon" aria-hidden="true"></i>
                         </button>
                     </div>
@@ -156,7 +90,7 @@
                 </div>
                 <div id="saveError" class="alert alert-danger d-none" role="alert"></div>
                 <div class="d-flex justify-content-between mt-3">
-                    <button type="button" class="btn btn-outline-secondary" onclick="goToStep(1)">
+                    <button type="button" class="btn btn-outline-secondary" data-goto-step="1">
                         <i class="bi bi-arrow-left me-1" aria-hidden="true"></i> Back
                     </button>
                     <button type="submit" class="btn btn-primary" id="saveBtn">
@@ -180,7 +114,7 @@
                 </div>
                 <p>Next, authorize Ride Optimizer to read your Strava activities.</p>
                 <div class="d-flex justify-content-between mt-3">
-                    <button type="button" class="btn btn-outline-secondary" onclick="goToStep(2)">
+                    <button type="button" class="btn btn-outline-secondary" data-goto-step="2">
                         <i class="bi bi-arrow-left me-1" aria-hidden="true"></i> Back
                     </button>
                     <a href="/api/strava/connect" class="btn btn-primary" id="connectBtn">
@@ -191,7 +125,7 @@
             <div id="verifyFail" class="d-none">
                 <div class="alert alert-danger" role="alert" id="verifyError"></div>
                 <div class="d-flex justify-content-between mt-3">
-                    <button type="button" class="btn btn-outline-secondary" onclick="goToStep(2)">
+                    <button type="button" class="btn btn-outline-secondary" data-goto-step="2">
                         <i class="bi bi-arrow-left me-1" aria-hidden="true"></i> Fix Credentials
                     </button>
                 </div>

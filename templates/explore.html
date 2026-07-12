@@ -2,17 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <script>
-    (function () {
-        try {
-            var t = localStorage.getItem('fairWeatherTheme');
-            if (t !== 'day' && t !== 'night') {
-                t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'night' : 'day';
-            }
-            document.documentElement.setAttribute('data-theme', t);
-        } catch (e) {}
-    })();
-    </script>
+    <script src="/js/theme-init.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Explore - Ride Optimizer</title>
     <link rel="icon" type="image/svg+xml" href="/img/favicon.svg">
@@ -20,146 +10,12 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="/css/main.css">
-    <style>
-        #explore-map {
-            height: 500px;
-            width: 100%;
-            border-radius: 8px;
-        }
-        @media (max-width: 767px) {
-            #explore-map { height: 350px; }
-        }
-        .coverage-stat {
-            text-align: center;
-            padding: var(--space-2);
-        }
-        .coverage-stat .stat-value {
-            font-size: var(--font-size-xl);
-            font-weight: 700;
-            color: var(--color-primary);
-        }
-        .coverage-stat .stat-label {
-            font-size: var(--font-size-xs);
-            color: var(--color-text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-        .tile-visited { fill-opacity: 0.4; stroke-width: 1; }
-        .route-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 6px 10px;
-            border-radius: 8px;
-            border: 1px solid var(--color-border, var(--line));
-            font-size: var(--font-size-xs);
-            background: var(--surface, #fff);
-            width: 100%;
-            cursor: pointer;
-        }
-        .route-badge--selected {
-            border-color: var(--accent);
-            box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.25);
-        }
-        .route-badge--dimmed {
-            opacity: 0.45;
-        }
-        .route-badge .swatch {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            flex-shrink: 0;
-        }
-        .btn-xs {
-            padding: 1px 6px;
-            font-size: 0.7rem;
-            line-height: 1.5;
-        }
-        /* Numbered workflow step headers (#361) — used inside the controls card */
-        .workflow-step {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            color: var(--color-text-muted);
-            font-weight: 600;
-        }
-        .workflow-step-num {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 22px;
-            height: 22px;
-            flex-shrink: 0;
-            border-radius: 50%;
-            background: var(--color-border, var(--line));
-            color: var(--ink-soft);
-            font-size: 0.75rem;
-            font-weight: 700;
-        }
-        .workflow-step.workflow-step-done {
-            color: var(--success);
-        }
-        .workflow-step.workflow-step-done .workflow-step-num {
-            background: var(--success);
-            color: #fff;
-        }
-        .control-step {
-            padding-left: 30px;
-        }
-        .control-step + hr {
-            margin: var(--space-3, 0.75rem) 0;
-        }
-        /* Coverage legend (#360) */
-        .legend-swatch {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            border-radius: 3px;
-            border-width: 1.5px;
-            border-style: solid;
-            flex-shrink: 0;
-        }
-        .legend-line-swatch {
-            display: inline-block;
-            width: 20px;
-            height: 0;
-            border-top: 2px dashed var(--ink-soft);
-            flex-shrink: 0;
-        }
-    </style>
+    <link rel="stylesheet" href="/css/pages/explore.css">
 </head>
 <body>
     <a href="#main-content" class="skip-link">Skip to main content</a>
 
-    <nav class="navbar navbar-expand-lg navbar-fairweather" role="navigation" aria-label="Main navigation">
-        <div class="container">
-            <a class="navbar-brand" href="/" aria-label="Ride Optimizer Home">
-                <svg class="brand-mark" viewBox="0 0 48 48" fill="none" aria-hidden="true" focusable="false">
-                    <circle cx="24" cy="24" r="12" stroke="currentColor" stroke-width="3.4"/>
-                    <g stroke="currentColor" stroke-width="3.4" stroke-linecap="round">
-                        <line x1="24" y1="2" x2="24" y2="8"/><line x1="24" y1="40" x2="24" y2="46"/>
-                        <line x1="2" y1="24" x2="8" y2="24"/><line x1="40" y1="24" x2="46" y2="24"/>
-                        <line x1="8.3" y1="8.3" x2="12.5" y2="12.5"/><line x1="35.5" y1="35.5" x2="39.7" y2="39.7"/>
-                        <line x1="39.7" y1="8.3" x2="35.5" y2="12.5"/><line x1="12.5" y1="35.5" x2="8.3" y2="39.7"/>
-                    </g>
-                </svg>
-                <span><span class="brand-ride">Ride</span>&nbsp;<span class="brand-optimizer">Optimizer</span></span>
-            </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav">
-                    <li class="nav-item"><a class="nav-link" href="/"><i class="bi bi-house-door" aria-hidden="true"></i> Home</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/routes.html"><i class="bi bi-map" aria-hidden="true"></i> Routes</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/reports.html"><i class="bi bi-bar-chart-line" aria-hidden="true"></i> Reports</a></li>
-                    <li class="nav-item"><a class="nav-link active" href="/explore.html" aria-current="page"><i class="bi bi-compass" aria-hidden="true"></i> Explore</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/weather.html"><i class="bi bi-cloud-sun" aria-hidden="true"></i> Weather</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/settings.html"><i class="bi bi-gear" aria-hidden="true"></i> Settings</a></li>
-                </ul>
-            </div>
-        </div>
-    </nav>
+    {% include "partials/nav.html" %}
 
     <main id="main-content" class="container mt-2 mb-4" role="main">
 
@@ -188,7 +44,7 @@
                                data-bs-toggle="tooltip" data-bs-placement="top"
                                title="Squadrats = zoom-14 tiles (~1.2 km² each). Squadratinhos = zoom-17 tiles (~0.15 km² each). Covering more tiles means you've ridden more unique roads."
                                aria-label="What are Squadrats and Squadratinhos?"></i>
-                            <select class="form-select form-select-sm" id="coverage-type-select" style="max-width: 180px;" aria-label="Coverage grid granularity — also controls which grid the route generator targets">
+                            <select class="form-select form-select-sm max-w-180px" id="coverage-type-select" aria-label="Coverage grid granularity — also controls which grid the route generator targets">
                                 <option value="14" selected>Squadrats</option>
                                 <option value="17">Squadratinhos</option>
                                 <option value="both">Both</option>
@@ -258,8 +114,7 @@
                                 <label class="form-label small mb-0" for="distance-slider">Distance (<span id="distance-unit-label"></span>)</label>
                                 <div class="d-flex align-items-center gap-2">
                                     <input type="range" class="form-range" id="distance-slider" min="10" max="150" value="40" step="5"
-                                           aria-label="Target route distance"
-                                           oninput="window.updateDistanceDisplay(this.value)">
+                                           aria-label="Target route distance">
                                     <span class="small fw-bold tabular-nums" id="distance-value">40</span>
                                 </div>
                             </div>
@@ -327,11 +182,11 @@
                         <!-- Coverage legend (#360) -->
                         <div class="d-flex flex-wrap gap-3 small text-muted mt-2 px-1" id="coverage-legend">
                             <span class="d-inline-flex align-items-center gap-1">
-                                <span class="legend-swatch" style="background:#e8a84c; border-color:#c8813a;"></span>
+                                <span class="legend-swatch legend-swatch-caution"></span>
                                 Visited tile
                             </span>
                             <span class="d-inline-flex align-items-center gap-1">
-                                <span class="legend-swatch" style="background:#4caf50; border-color:#2e7d32;"></span>
+                                <span class="legend-swatch legend-swatch-good"></span>
                                 New tile this route adds
                             </span>
                             <span class="d-inline-flex align-items-center gap-1">
@@ -383,30 +238,6 @@
     <script src="/js/explore.js?v=5"></script>
     <script src="/js/mobile.js"></script>
 
-    <div id="bottom-nav-more" class="bottom-nav-drawer collapse d-md-none" aria-label="More pages"></div>
-    <nav id="bottom-nav" class="bottom-nav d-md-none" role="navigation" aria-label="Mobile navigation">
-        <a href="/" class="bottom-nav-item" aria-label="Home" data-page="home">
-            <i class="bi bi-house-door" aria-hidden="true"></i>
-            <span>Home</span>
-        </a>
-        <a href="/routes.html" class="bottom-nav-item" aria-label="Routes" data-page="routes">
-            <i class="bi bi-map" aria-hidden="true"></i>
-            <span>Routes</span>
-        </a>
-        <a href="/weather.html" class="bottom-nav-item" aria-label="Weather" data-page="weather">
-            <i class="bi bi-cloud-sun" aria-hidden="true"></i>
-            <span>Weather</span>
-        </a>
-        <a href="/reports.html" class="bottom-nav-item" aria-label="Reports" data-page="reports">
-            <i class="bi bi-bar-chart-line" aria-hidden="true"></i>
-            <span>Reports</span>
-        </a>
-        <button type="button" class="bottom-nav-item" aria-label="More pages"
-                data-bs-toggle="collapse" data-bs-target="#bottom-nav-more"
-                aria-expanded="false" aria-controls="bottom-nav-more">
-            <i class="bi bi-three-dots" aria-hidden="true"></i>
-            <span>More</span>
-        </button>
-    </nav>
+    {% include "partials/bottom_nav.html" %}
 </body>
 </html>

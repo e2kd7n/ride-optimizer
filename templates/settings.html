@@ -2,17 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <script>
-    (function () {
-        try {
-            var t = localStorage.getItem('fairWeatherTheme');
-            if (t !== 'day' && t !== 'night') {
-                t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'night' : 'day';
-            }
-            document.documentElement.setAttribute('data-theme', t);
-        } catch (e) {}
-    })();
-    </script>
+    <script src="/js/theme-init.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Settings - Ride Optimizer</title>
 
@@ -26,127 +16,14 @@
     <link rel="stylesheet" href="/css/main.css">
 
     <!-- Page-specific styles (#368/#376 design-review restructure) -->
-    <style>
-        .card-header-btn {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: var(--space-2, 8px);
-            width: 100%;
-            border: none;
-            text-align: left;
-            cursor: pointer;
-            min-height: 44px;
-            font: inherit;
-        }
-        .card-header-btn:focus-visible {
-            outline: 2px solid var(--accent);
-            outline-offset: -2px;
-        }
-        .card-header-btn .chevron {
-            transition: transform 0.2s;
-            flex-shrink: 0;
-        }
-        .card-header-btn[aria-expanded="true"] .chevron {
-            transform: rotate(180deg);
-        }
-        .card-header-status {
-            font-weight: 400;
-            color: #fff;
-        }
-        .card-header-status .text-muted {
-            color: rgba(255, 255, 255, 0.8) !important;
-        }
-        .danger-zone-toggle {
-            min-height: 44px;
-        }
-        .danger-zone-toggle .chevron {
-            transition: transform 0.2s;
-        }
-        .danger-zone-toggle[aria-expanded="true"] .chevron {
-            transform: rotate(180deg);
-        }
-        .danger-zone-body {
-            border: 1px solid var(--danger);
-            border-radius: 10px;
-            padding: 16px;
-            margin-top: 8px;
-            background: rgba(196, 72, 58, 0.06);
-        }
-        .about-card-header {
-            background: var(--surface-2);
-            color: var(--ink);
-        }
-        .save-behavior-line {
-            font-size: 0.875rem;
-            color: var(--ink-soft);
-        }
-        .requires-tr-note {
-            font-size: 0.875rem;
-        }
-        .workflow-explainer {
-            font-size: 0.875rem;
-            color: var(--ink-soft);
-        }
-        .step-badge {
-            font-weight: 700;
-        }
-        #location-map {
-            height: 400px;
-            width: 100%;
-            border-radius: 8px;
-        }
-        @media (max-width: 767px) {
-            #location-map { height: 300px; }
-        }
-    </style>
+    <link rel="stylesheet" href="/css/pages/settings.css">
 </head>
 <body>
     <!-- Skip Links for Accessibility -->
     <a href="#main-content" class="skip-link">Skip to main content</a>
 
     <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-fairweather" role="navigation" aria-label="Main navigation">
-        <div class="container">
-            <a class="navbar-brand" href="/" aria-label="Ride Optimizer Home">
-                <svg class="brand-mark" viewBox="0 0 48 48" fill="none" aria-hidden="true" focusable="false">
-                    <circle cx="24" cy="24" r="12" stroke="currentColor" stroke-width="3.4"/>
-                    <g stroke="currentColor" stroke-width="3.4" stroke-linecap="round">
-                        <line x1="24" y1="2" x2="24" y2="8"/><line x1="24" y1="40" x2="24" y2="46"/>
-                        <line x1="2" y1="24" x2="8" y2="24"/><line x1="40" y1="24" x2="46" y2="24"/>
-                        <line x1="8.3" y1="8.3" x2="12.5" y2="12.5"/><line x1="35.5" y1="35.5" x2="39.7" y2="39.7"/>
-                        <line x1="39.7" y1="8.3" x2="35.5" y2="12.5"/><line x1="12.5" y1="35.5" x2="8.3" y2="39.7"/>
-                    </g>
-                </svg>
-                <span><span class="brand-ride">Ride</span>&nbsp;<span class="brand-optimizer">Optimizer</span></span>
-            </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav">
-                    <li class="nav-item">
-                        <a class="nav-link" href="/"><i class="bi bi-house-door" aria-hidden="true"></i> Home</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/routes.html"><i class="bi bi-map" aria-hidden="true"></i> Routes</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/reports.html"><i class="bi bi-bar-chart-line" aria-hidden="true"></i> Reports</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/explore.html"><i class="bi bi-compass" aria-hidden="true"></i> Explore</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/weather.html"><i class="bi bi-cloud-sun" aria-hidden="true"></i> Weather</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link active" href="/settings.html" aria-current="page"><i class="bi bi-gear" aria-hidden="true"></i> Settings</a>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </nav>
+    {% include "partials/nav.html" %}
 
     <!-- Main Content -->
     <main id="main-content" class="container mt-2 mb-3" role="main">
@@ -154,7 +31,7 @@
             <h1 class="mb-0 fs-4">
                 <i class="bi bi-gear" aria-hidden="true"></i> Settings
             </h1>
-            <span id="unsaved-indicator" class="badge bg-warning text-dark" style="display: none;">
+            <span id="unsaved-indicator" class="badge bg-warning text-dark d-none">
                 <i class="bi bi-exclamation-circle" aria-hidden="true"></i> Unsaved changes
             </span>
         </div>
@@ -359,7 +236,7 @@
                                         <button type="button" class="btn btn-primary w-100" id="location-save-btn">
                                             <i class="bi bi-floppy" aria-hidden="true"></i> Save Locations
                                         </button>
-                                        <div id="location-save-feedback" class="mt-2" style="display:none"></div>
+                                        <div id="location-save-feedback" class="mt-2 d-none"></div>
                                     </div>
 
                                     <!-- Map column -->
@@ -392,10 +269,10 @@
                             <div class="card-body">
 
                                 <div class="mb-3 d-flex align-items-center gap-3 flex-wrap">
-                                    <a href="/api/strava/connect" class="btn btn-sm btn-outline-primary" id="strava-connect-btn" style="display:none">
+                                    <a href="/api/strava/connect" class="btn btn-sm btn-outline-primary d-none" id="strava-connect-btn">
                                         <i class="bi bi-link-45deg"></i> Connect to Strava
                                     </a>
-                                    <button type="button" class="btn btn-sm btn-outline-danger" id="strava-disconnect-btn" style="display:none">
+                                    <button type="button" class="btn btn-sm btn-outline-danger d-none" id="strava-disconnect-btn">
                                         <i class="bi bi-x-lg" aria-hidden="true"></i> Disconnect
                                     </button>
                                 </div>
@@ -415,7 +292,7 @@
                                         <i class="bi bi-patch-check" aria-hidden="true"></i> Repair Gear Names
                                     </button>
                                 </div>
-                                <div id="gear-admin-feedback" class="mb-2" style="display:none"></div>
+                                <div id="gear-admin-feedback" class="mb-2 d-none"></div>
 
                                 <!-- Strava Sync section -->
                                 <div class="mb-3">
@@ -435,7 +312,7 @@
                                             <button type="button" class="btn btn-sm btn-outline-secondary fetch-preset" data-preset="custom"
                                                     aria-expanded="false" aria-controls="custom-date-fields">Custom…</button>
                                         </div>
-                                        <div id="custom-date-fields" class="d-flex flex-wrap gap-2 align-items-end mt-2" style="display:none">
+                                        <div id="custom-date-fields" class="d-flex flex-wrap gap-2 align-items-end mt-2 d-none">
                                             <div>
                                                 <label class="form-label small mb-0" for="fetch-after">From</label>
                                                 <input type="date" class="form-control form-control-sm" id="fetch-after">
@@ -453,15 +330,15 @@
                                     </button>
 
                                     <!-- Fetch progress -->
-                                    <div id="fetch-progress" class="mt-2" style="display:none">
+                                    <div id="fetch-progress" class="mt-2 d-none">
                                         <div class="d-flex align-items-center gap-2 mb-1">
                                             <span class="spinner-border spinner-border-sm text-primary flex-shrink-0"
                                                   id="fetch-spinner" role="status" aria-hidden="true"></span>
                                             <span id="fetch-status" class="small fw-medium text-body"></span>
                                         </div>
                                         <div class="progress progress-xs">
-                                            <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
-                                                 role="progressbar" style="width:100%"></div>
+                                            <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary w-100"
+                                                 role="progressbar"></div>
                                         </div>
                                     </div>
                                 </div>
@@ -481,18 +358,18 @@
                                 </div>
 
                                 <!-- Progress panel (hidden until analysis starts) -->
-                                <div id="analysis-progress" class="mt-3" style="display:none">
+                                <div id="analysis-progress" class="mt-3 d-none">
                                     <div class="d-flex align-items-center gap-2 mb-1">
                                         <span class="spinner-border spinner-border-sm text-success flex-shrink-0"
                                               id="analysis-spinner" role="status" aria-hidden="true"></span>
                                         <span id="analysis-status" class="small fw-medium text-body"></span>
                                     </div>
                                     <div class="progress progress-xs mb-2">
-                                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-success"
-                                             id="analysis-progress-bar" role="progressbar" style="width:100%"
+                                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-success w-100"
+                                             id="analysis-progress-bar" role="progressbar"
                                              aria-valuenow="100" aria-valuemin="0" aria-valuemax="100"></div>
                                     </div>
-                                    <div id="preview-ready-msg" class="small text-success" style="display:none">
+                                    <div id="preview-ready-msg" class="small text-success d-none">
                                         <i class="bi bi-check-circle-fill me-1" aria-hidden="true"></i>
                                         Preview ready —
                                         <a href="/routes.html" class="text-success fw-medium">view routes →</a>
@@ -523,7 +400,7 @@
                         <div class="collapse" id="icu-card-body">
                             <div class="card-body">
                                 <div class="mb-3 d-flex align-items-center gap-3 flex-wrap">
-                                    <button type="button" class="btn btn-sm btn-outline-danger" id="icu-disconnect-btn" style="display:none">
+                                    <button type="button" class="btn btn-sm btn-outline-danger d-none" id="icu-disconnect-btn">
                                         <i class="bi bi-x-lg" aria-hidden="true"></i> Disconnect
                                     </button>
                                 </div>
@@ -555,7 +432,7 @@
                                         </button>
                                     </div>
                                 </div>
-                                <div id="icu-connect-feedback" class="mt-2" style="display:none"></div>
+                                <div id="icu-connect-feedback" class="mt-2 d-none"></div>
                             </div>
                         </div>
                     </div>
@@ -580,7 +457,7 @@
                         <div class="collapse" id="ors-card-body">
                             <div class="card-body">
                                 <div class="mb-3 d-flex align-items-center gap-3 flex-wrap">
-                                    <button type="button" class="btn btn-sm btn-outline-danger" id="ors-disconnect-btn" style="display:none">
+                                    <button type="button" class="btn btn-sm btn-outline-danger d-none" id="ors-disconnect-btn">
                                         <i class="bi bi-x-lg" aria-hidden="true"></i> Disconnect
                                     </button>
                                 </div>
@@ -607,7 +484,7 @@
                                         </button>
                                     </div>
                                 </div>
-                                <div id="ors-save-feedback" class="mt-2" style="display:none"></div>
+                                <div id="ors-save-feedback" class="mt-2 d-none"></div>
                             </div>
                         </div>
                     </div>
@@ -653,10 +530,10 @@
                                             </button>
                                         </div>
                                     </div>
-                                    <div id="garmin-connect-feedback" class="mt-2" style="display:none"></div>
+                                    <div id="garmin-connect-feedback" class="mt-2 d-none"></div>
                                 </div>
 
-                                <div id="garmin-connected-state" style="display:none">
+                                <div id="garmin-connected-state" class="d-none">
                                     <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
                                         <span class="badge bg-success"><i class="bi bi-check-circle"></i> Connected</span>
                                         <span class="text-muted small" id="garmin-display-name"></span>
@@ -669,7 +546,7 @@
                                             <i class="bi bi-x-lg" aria-hidden="true"></i> Disconnect
                                         </button>
                                     </div>
-                                    <div id="garmin-sync-feedback" class="mt-2" style="display:none"></div>
+                                    <div id="garmin-sync-feedback" class="mt-2 d-none"></div>
                                 </div>
                             </div>
                         </div>
@@ -715,11 +592,11 @@
                                             </button>
                                         </div>
                                     </div>
-                                    <div id="tr-connect-feedback" class="mt-2" style="display:none"></div>
+                                    <div id="tr-connect-feedback" class="mt-2 d-none"></div>
                                 </div>
 
                                 <!-- Connected state (shown when connected) -->
-                                <div id="tr-connected-state" style="display:none">
+                                <div id="tr-connected-state" class="d-none">
                                     <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
                                         <span class="badge bg-success" id="tr-conn-badge">
                                             <i class="bi bi-check-circle" aria-hidden="true"></i> Connected
@@ -737,7 +614,7 @@
                                             <i class="bi bi-x-lg" aria-hidden="true"></i> Disconnect
                                         </button>
                                     </div>
-                                    <div id="tr-sync-feedback" class="mt-2" style="display:none"></div>
+                                    <div id="tr-sync-feedback" class="mt-2 d-none"></div>
                                 </div>
 
                                 <hr class="my-4">
@@ -748,7 +625,7 @@
                                     When a TrainerRoad workout is scheduled, these thresholds determine whether
                                     to recommend riding outdoors or on the trainer.
                                 </p>
-                                <p class="small text-muted requires-tr-note" id="outdoor-prefs-requires-note" style="display:none">
+                                <p class="small text-muted requires-tr-note d-none" id="outdoor-prefs-requires-note">
                                     <i class="bi bi-info-circle" aria-hidden="true"></i> Requires TrainerRoad — connect above to put these thresholds to use.
                                 </p>
                                 <div class="row g-3">
@@ -760,8 +637,7 @@
                                             <input type="range" class="form-range flex-grow-1"
                                                    id="outdoor-min-temp" min="0" max="80" step="5" value="40"
                                                    aria-describedby="outdoor-min-temp-value">
-                                            <span id="outdoor-min-temp-value" class="badge bg-secondary"
-                                                  style="min-width: 48px">40°F</span>
+                                            <span id="outdoor-min-temp-value" class="badge bg-secondary min-w-48px">40°F</span>
                                         </div>
                                         <div class="form-text">
                                             <i class="bi bi-info-circle" aria-hidden="true"></i>
@@ -848,32 +724,7 @@
         </form>
     </main>
 
-    <!-- Bottom Navigation (Mobile) -->
-    <div id="bottom-nav-more" class="bottom-nav-drawer collapse d-md-none" aria-label="More pages"></div>
-    <nav id="bottom-nav" class="bottom-nav d-md-none" role="navigation" aria-label="Mobile navigation">
-        <a href="/" class="bottom-nav-item" aria-label="Home" data-page="home">
-            <i class="bi bi-house-door" aria-hidden="true"></i>
-            <span>Home</span>
-        </a>
-        <a href="/routes.html" class="bottom-nav-item" aria-label="Routes" data-page="routes">
-            <i class="bi bi-map" aria-hidden="true"></i>
-            <span>Routes</span>
-        </a>
-        <a href="/weather.html" class="bottom-nav-item" aria-label="Weather" data-page="weather">
-            <i class="bi bi-cloud-sun" aria-hidden="true"></i>
-            <span>Weather</span>
-        </a>
-        <a href="/reports.html" class="bottom-nav-item" aria-label="Reports" data-page="reports">
-            <i class="bi bi-bar-chart-line" aria-hidden="true"></i>
-            <span>Reports</span>
-        </a>
-        <button type="button" class="bottom-nav-item" aria-label="More pages"
-                data-bs-toggle="collapse" data-bs-target="#bottom-nav-more"
-                aria-expanded="false" aria-controls="bottom-nav-more">
-            <i class="bi bi-three-dots" aria-hidden="true"></i>
-            <span>More</span>
-        </button>
-    </nav>
+    {% include "partials/bottom_nav.html" %}
 
     <!-- Footer -->
     <footer class="mt-3">

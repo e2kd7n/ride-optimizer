@@ -65,13 +65,17 @@ function initTooltips() {
 function initDistanceSlider() {
     const unit = window.getDistanceUnit ? window.getDistanceUnit() : 'km';
     document.getElementById('distance-unit-label').textContent = unit;
-    updateDistanceDisplay(document.getElementById('distance-slider').value);
+    const slider = document.getElementById('distance-slider');
+    updateDistanceDisplay(slider.value);
+    // Bound here instead of an inline oninput="" attribute so CSP
+    // script-src can drop 'unsafe-inline' — #475.
+    slider.addEventListener('input', () => updateDistanceDisplay(slider.value));
 }
 
-window.updateDistanceDisplay = function(kmValue) {
+function updateDistanceDisplay(kmValue) {
     document.getElementById('distance-value').textContent =
         window.formatDistance ? window.formatDistance(parseFloat(kmValue), 1) : `${kmValue} km`;
-};
+}
 
 // ── Map setup ───────────────────────────────────────────────────
 

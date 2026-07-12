@@ -2134,3 +2134,26 @@ h5.card-title {
 .hourly-precip {
     font-size: 0.65rem;
 }
+
+/* ===== Inline-style extraction utilities (#475: drop CSP style-src 'unsafe-inline') ===== */
+.fs-10 { font-size: 10px; }
+.fs-11 { font-size: 11px; }
+.fs-085 { font-size: 0.85em; }
+.zindex-1 { z-index: 1; }
+.min-w-48px { min-width: 48px; }
+.w-88px { width: 88px; }
+.min-w-100px { min-width: 100px; }
+.min-w-104px { min-width: 104px; }
+.min-w-112px { min-width: 112px; }
+.min-w-120px { min-width: 120px; }
+.min-w-144px { min-width: 144px; }
+.max-w-180px { max-width: 180px; }
+.max-w-320px { max-width: 320px; }
+.icon-tile-56x80 { width: 56px; height: 80px; border-radius: 6px; }
+.skeleton-line-gap { height: var(--space-2); margin-bottom: var(--space-2); }
+.skeleton-line { height: var(--space-2); }
+.chart-axis-label { font-size: 10px; margin-top: var(--space-1); text-align: center; }
+.text-case-normal { text-transform: none; letter-spacing: normal; font-weight: 400; }
+.table-header-muted { font-size: 10px; text-transform: uppercase; color: var(--color-text-muted); }
+.legend-swatch-caution { background: #e8a84c; border-color: #c8813a; }
+.legend-swatch-good { background: #4caf50; border-color: #2e7d32; }

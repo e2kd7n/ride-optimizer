@@ -2,225 +2,19 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <script>
-    (function () {
-        try {
-            var t = localStorage.getItem('fairWeatherTheme');
-            if (t !== 'day' && t !== 'night') {
-                t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'night' : 'day';
-            }
-            document.documentElement.setAttribute('data-theme', t);
-        } catch (e) {}
-    })();
-    </script>
+    <script src="/js/theme-init.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Reports - Ride Optimizer</title>
     <link rel="icon" type="image/svg+xml" href="/img/favicon.svg">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <link rel="stylesheet" href="/css/main.css">
-    <style>
-        .stat-card {
-            text-align: center;
-            padding: var(--space-3) var(--space-2);
-        }
-        .stat-card .stat-value {
-            font-size: var(--font-size-xl);
-            font-weight: 700;
-            line-height: 1.1;
-            color: var(--color-primary);
-        }
-        .stat-card .stat-label {
-            font-size: var(--font-size-xs);
-            color: var(--color-text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-top: var(--space-1);
-        }
-        .stat-card .stat-sub {
-            font-size: var(--font-size-xs);
-            color: var(--color-text-muted);
-            margin-top: var(--space-1);
-        }
-
-        /* Secondary stat cards (#369a) — visibly smaller than the four primary stats above */
-        .stat-card-secondary {
-            padding: var(--space-2) var(--space-1);
-        }
-        .stat-card-secondary .stat-value {
-            font-size: var(--font-size-base);
-        }
-
-        .record-card {
-            display: flex;
-            flex-direction: column;
-            gap: var(--space-1);
-        }
-        .record-card .record-value {
-            font-size: var(--font-size-lg);
-            font-weight: 700;
-            color: var(--color-primary);
-        }
-        .record-card .record-label {
-            font-size: var(--font-size-xs);
-            color: var(--color-text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-        }
-        .record-card .record-name {
-            font-size: var(--font-size-sm);
-            color: var(--color-text);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .record-card .record-date {
-            font-size: var(--font-size-xs);
-            color: var(--color-text-muted);
-        }
-
-        .gear-card {
-            border-left: 3px solid var(--color-primary);
-            cursor: pointer;
-            transition: background-color 0.15s;
-        }
-        .gear-card:hover {
-            background-color: var(--color-bg-hover);
-        }
-        .gear-card.active {
-            border-left-color: var(--color-accent);
-            background-color: var(--color-bg-selected);
-        }
-        .gear-card .gear-name {
-            font-weight: 600;
-            font-size: var(--font-size-sm);
-        }
-        .gear-card .gear-meta {
-            font-size: var(--font-size-xs);
-            color: var(--color-text-muted);
-        }
-        .gear-card .gear-stats {
-            display: flex;
-            gap: var(--space-3);
-            margin-top: var(--space-1);
-            font-size: var(--font-size-xs);
-        }
-        .gear-card .gear-stat {
-            display: flex;
-            flex-direction: column;
-        }
-        .gear-card .gear-stat-value {
-            font-weight: 600;
-            color: var(--color-text);
-        }
-        .gear-card .gear-stat-label {
-            color: var(--color-text-muted);
-        }
-
-        /* Consolidated trend chart tabs (#366c) — taller than the old 64px per-chart cards */
-        .bar-chart {
-            display: flex;
-            align-items: flex-end;
-            gap: 2px;
-            height: 120px;
-        }
-        .bar-chart .bar {
-            flex: 1;
-            background-color: var(--color-primary);
-            opacity: 0.7;
-            border-radius: 2px 2px 0 0;
-            min-height: 2px;
-            cursor: pointer;
-            transition: opacity 0.15s;
-        }
-        .bar-chart .bar:hover { opacity: 1; }
-
-        .trend-tabs .nav-link {
-            font-size: var(--font-size-sm);
-            padding: 4px 12px;
-        }
-
-        .activity-row {
-            font-size: var(--font-size-sm);
-        }
-        .activity-row td {
-            padding: var(--space-1) var(--space-2);
-            vertical-align: middle;
-        }
-        .activity-row .activity-name {
-            max-width: 220px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .metric-pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 3px;
-            font-size: var(--font-size-xs);
-            color: var(--color-text-muted);
-        }
-
-        .type-badge {
-            font-size: 10px;
-            padding: 1px 5px;
-            border-radius: 3px;
-            font-weight: 500;
-        }
-
-        #activity-table-container {
-            max-height: 480px;
-            overflow-y: auto;
-        }
-
-        .section-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: var(--space-2);
-        }
-        .section-header h6 {
-            margin: 0;
-            font-weight: 600;
-            font-size: var(--font-size-sm);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: var(--color-text-muted);
-        }
-    </style>
+    <link rel="stylesheet" href="/css/pages/reports.css">
 </head>
 <body>
     <a href="#main-content" class="skip-link">Skip to main content</a>
 
-    <nav class="navbar navbar-expand-lg navbar-fairweather" role="navigation" aria-label="Main navigation">
-        <div class="container">
-            <a class="navbar-brand" href="/" aria-label="Ride Optimizer Home">
-                <svg class="brand-mark" viewBox="0 0 48 48" fill="none" aria-hidden="true" focusable="false">
-                    <circle cx="24" cy="24" r="12" stroke="currentColor" stroke-width="3.4"/>
-                    <g stroke="currentColor" stroke-width="3.4" stroke-linecap="round">
-                        <line x1="24" y1="2" x2="24" y2="8"/><line x1="24" y1="40" x2="24" y2="46"/>
-                        <line x1="2" y1="24" x2="8" y2="24"/><line x1="40" y1="24" x2="46" y2="24"/>
-                        <line x1="8.3" y1="8.3" x2="12.5" y2="12.5"/><line x1="35.5" y1="35.5" x2="39.7" y2="39.7"/>
-                        <line x1="39.7" y1="8.3" x2="35.5" y2="12.5"/><line x1="12.5" y1="35.5" x2="8.3" y2="39.7"/>
-                    </g>
-                </svg>
-                <span><span class="brand-ride">Ride</span>&nbsp;<span class="brand-optimizer">Optimizer</span></span>
-            </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav">
-                    <li class="nav-item"><a class="nav-link" href="/"><i class="bi bi-house-door" aria-hidden="true"></i> Home</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/routes.html"><i class="bi bi-map" aria-hidden="true"></i> Routes</a></li>
-                    <li class="nav-item"><a class="nav-link active" href="/reports.html" aria-current="page"><i class="bi bi-bar-chart-line" aria-hidden="true"></i> Reports</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/explore.html"><i class="bi bi-compass" aria-hidden="true"></i> Explore</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/weather.html"><i class="bi bi-cloud-sun" aria-hidden="true"></i> Weather</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/settings.html"><i class="bi bi-gear" aria-hidden="true"></i> Settings</a></li>
-                </ul>
-            </div>
-        </div>
-    </nav>
+    {% include "partials/nav.html" %}
 
     <main id="main-content" class="container mt-2 mb-4" role="main">
 
@@ -292,6 +86,33 @@
             </div>
         </div>
 
+        <!-- Calendar view: per-day activity counts + Strava backfill for gaps -->
+        <div class="card mb-2">
+            <div class="card-body py-2 px-3">
+                <div class="section-header flex-wrap">
+                    <h6><i class="bi bi-calendar3" aria-hidden="true"></i> Calendar</h6>
+                    <div class="d-flex flex-wrap align-items-center gap-1">
+                        <select id="cal-month" class="form-select form-select-sm w-auto fs-11" aria-label="Month"></select>
+                        <select id="cal-year" class="form-select form-select-sm w-auto fs-11" aria-label="Year"></select>
+                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" id="cal-prev" aria-label="Previous month">
+                            <i class="bi bi-chevron-left" aria-hidden="true"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" id="cal-next" aria-label="Next month">
+                            <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2 ms-1" id="cal-backfill-btn">
+                            <i class="bi bi-cloud-download" aria-hidden="true"></i> Backfill this month
+                        </button>
+                    </div>
+                </div>
+                <div class="calendar-grid" id="cal-grid" role="group" aria-label="Activity calendar">
+                    <div class="text-muted small">Loading…</div>
+                </div>
+                <div id="cal-summary" class="text-muted fs-11 mt-1"></div>
+                <div id="cal-backfill-status" class="text-muted fs-11 mt-1 d-none"></div>
+            </div>
+        </div>
+
         <div class="row g-2">
             <!-- Left column: trend chart + PRs + type breakdown (#366b) -->
             <div class="col-lg-5">
@@ -321,19 +142,19 @@
                                 <div class="bar-chart" id="monthly-chart" role="group" aria-label="Monthly distance bar chart">
                                     <div class="text-muted small">Loading…</div>
                                 </div>
-                                <div id="monthly-chart-label" class="text-muted" style="font-size:10px; margin-top:var(--space-1); text-align:center;"></div>
+                                <div id="monthly-chart-label" class="text-muted chart-axis-label"></div>
                             </div>
                             <div class="tab-pane fade" id="pane-speed" role="tabpanel" aria-labelledby="tab-speed">
                                 <div class="bar-chart" id="speed-chart" role="group" aria-label="Speed distribution histogram">
                                     <div class="text-muted small">Loading…</div>
                                 </div>
-                                <div id="speed-chart-label" class="text-muted" style="font-size:10px; margin-top:var(--space-1); text-align:center;"></div>
+                                <div id="speed-chart-label" class="text-muted chart-axis-label"></div>
                             </div>
                             <div class="tab-pane fade" id="pane-elevation" role="tabpanel" aria-labelledby="tab-elevation">
                                 <div class="bar-chart" id="elevation-chart" role="group" aria-label="Elevation gain distribution histogram">
                                     <div class="text-muted small">Loading…</div>
                                 </div>
-                                <div id="elevation-chart-label" class="text-muted" style="font-size:10px; margin-top:var(--space-1); text-align:center;"></div>
+                                <div id="elevation-chart-label" class="text-muted chart-axis-label"></div>
                             </div>
                         </div>
                     </div>
@@ -344,7 +165,7 @@
                     <div class="card-body py-2 px-3">
                         <div class="section-header mb-2">
                             <h6><i class="bi bi-trophy" aria-hidden="true"></i> Personal Records
-                                <span id="records-qualifier" class="text-muted" style="text-transform:none; letter-spacing:normal; font-weight:400;"></span>
+                                <span id="records-qualifier" class="text-muted text-case-normal"></span>
                             </h6>
                         </div>
                         <div class="row g-2" id="records-grid">
@@ -406,10 +227,10 @@
                     <div class="card-body py-2 px-3">
                         <div class="section-header flex-wrap">
                             <h6><i class="bi bi-list-ul" aria-hidden="true"></i> Activities
-                                <span id="activity-list-title" class="fw-normal text-muted ms-1" style="font-size:11px;"></span>
+                                <span id="activity-list-title" class="fw-normal text-muted ms-1 fs-11"></span>
                             </h6>
                             <div class="d-flex flex-wrap gap-1">
-                                <select id="activity-type-filter" class="form-select form-select-sm" style="width:auto; font-size:11px;" aria-label="Filter by activity type">
+                                <select id="activity-type-filter" class="form-select form-select-sm w-auto fs-11" aria-label="Filter by activity type">
                                     <option value="">All Types</option>
                                     <option value="Ride">Ride</option>
                                     <option value="GravelRide">Gravel</option>
@@ -417,7 +238,7 @@
                                     <option value="VirtualRide">Virtual</option>
                                     <option value="Run">Run</option>
                                 </select>
-                                <select id="activity-sort" class="form-select form-select-sm" style="width:auto; font-size:11px;" aria-label="Sort activities">
+                                <select id="activity-sort" class="form-select form-select-sm w-auto fs-11" aria-label="Sort activities">
                                     <option value="date_desc">Date ↓</option>
                                     <option value="date_asc">Date ↑</option>
                                     <option value="distance_desc">Distance ↓</option>
@@ -428,8 +249,8 @@
                         </div>
                         <div id="activity-table-container" class="table-responsive">
                             <table class="table table-sm table-hover mb-0" id="activity-table">
-                                <thead class="sticky-top bg-white" style="z-index:1;">
-                                    <tr style="font-size:10px; text-transform:uppercase; color:var(--color-text-muted);">
+                                <thead class="sticky-top bg-white zindex-1">
+                                    <tr class="table-header-muted">
                                         <th class="ps-2">Activity</th>
                                         <th class="text-end">Miles</th>
                                         <th class="text-end">Time</th>
@@ -443,7 +264,7 @@
                                 </tbody>
                             </table>
                         </div>
-                        <div id="activity-table-footer" class="text-muted mt-1" style="font-size:11px;"></div>
+                        <div id="activity-table-footer" class="text-muted mt-1 fs-11"></div>
                     </div>
                 </div>
 
@@ -453,9 +274,9 @@
                         <div class="section-header flex-wrap">
                             <h6><i class="bi bi-bicycle" aria-hidden="true"></i> Gear</h6>
                             <div class="d-flex flex-wrap gap-1 align-items-center">
-                                <span id="gear-cache-status" class="text-muted" style="font-size:10px;"></span>
-                                <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-1"
-                                        id="clear-gear-filter-btn" title="Show all rides" style="font-size:11px; display:none;">
+                                <span id="gear-cache-status" class="text-muted fs-10"></span>
+                                <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-1 fs-11 d-none"
+                                        id="clear-gear-filter-btn" title="Show all rides">
                                     <i class="bi bi-x-circle" aria-hidden="true"></i> Clear Filter
                                 </button>
                             </div>
@@ -482,31 +303,6 @@
     <script src="/js/reports.js?v=2"></script>
     <script src="/js/mobile.js"></script>
 
-    <!-- Bottom Navigation (Mobile) -->
-    <div id="bottom-nav-more" class="bottom-nav-drawer collapse d-md-none" aria-label="More pages"></div>
-    <nav id="bottom-nav" class="bottom-nav d-md-none" role="navigation" aria-label="Mobile navigation">
-        <a href="/" class="bottom-nav-item" aria-label="Home" data-page="home">
-            <i class="bi bi-house-door" aria-hidden="true"></i>
-            <span>Home</span>
-        </a>
-        <a href="/routes.html" class="bottom-nav-item" aria-label="Routes" data-page="routes">
-            <i class="bi bi-map" aria-hidden="true"></i>
-            <span>Routes</span>
-        </a>
-        <a href="/weather.html" class="bottom-nav-item" aria-label="Weather" data-page="weather">
-            <i class="bi bi-cloud-sun" aria-hidden="true"></i>
-            <span>Weather</span>
-        </a>
-        <a href="/reports.html" class="bottom-nav-item active" aria-label="Reports" aria-current="page" data-page="reports">
-            <i class="bi bi-bar-chart-line" aria-hidden="true"></i>
-            <span>Reports</span>
-        </a>
-        <button type="button" class="bottom-nav-item" aria-label="More pages"
-                data-bs-toggle="collapse" data-bs-target="#bottom-nav-more"
-                aria-expanded="false" aria-controls="bottom-nav-more">
-            <i class="bi bi-three-dots" aria-hidden="true"></i>
-            <span>More</span>
-        </button>
-    </nav>
+    {% include "partials/bottom_nav.html" %}
 </body>
 </html>

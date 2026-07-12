@@ -404,7 +404,7 @@ async function loadSystemStatus() {
         container.innerHTML = html;
     } catch (error) {
         console.error('Failed to load system status:', error);
-        container.innerHTML = window.renderErrorState('System status unavailable.', { variant: 'danger', retry: 'loadSystemStatus()' });
+        window.renderErrorStateInto(container, 'System status unavailable.', { variant: 'danger', retry: loadSystemStatus });
     }
 }
 
@@ -588,7 +588,8 @@ async function loadWeather() {
         container.innerHTML = html;
     } catch (error) {
         console.error('Failed to load weather:', error);
-        container.innerHTML = '<span class="text-white small"><i class="bi bi-cloud-slash me-1"></i>Weather unavailable <button class="btn btn-sm btn-outline-light ms-2 py-0 px-1" onclick="loadWeather()">Retry</button></span>';
+        container.innerHTML = '<span class="text-white small"><i class="bi bi-cloud-slash me-1"></i>Weather unavailable <button type="button" class="btn btn-sm btn-outline-light ms-2 py-0 px-1 weather-retry-btn">Retry</button></span>';
+        container.querySelector('.weather-retry-btn').addEventListener('click', loadWeather);
     }
 }
 
@@ -793,7 +794,7 @@ async function loadRecommendation() {
         container.innerHTML = html;
     } catch (error) {
         console.error('Failed to load commute recommendations:', error);
-        container.innerHTML = window.renderErrorState('Commute recommendations unavailable.', { retry: 'loadRecommendation()' });
+        window.renderErrorStateInto(container, 'Commute recommendations unavailable.', { retry: loadRecommendation });
     }
 }
 
@@ -883,7 +884,7 @@ async function loadConditionsCard() {
         if (mobile) mobile.innerHTML = html;
     } catch (error) {
         console.error('Failed to load conditions card:', error);
-        container.innerHTML = window.renderErrorState('Conditions unavailable.', { small: true, retry: 'loadConditionsCard()' });
+        window.renderErrorStateInto(container, 'Conditions unavailable.', { small: true, retry: loadConditionsCard });
     }
 }
 
@@ -957,7 +958,7 @@ async function loadRouteStatus() {
         if (mobile) mobile.innerHTML = html;
     } catch (error) {
         console.error('Failed to load route status:', error);
-        container.innerHTML = window.renderErrorState('Route status unavailable.', { small: true, retry: 'loadRouteStatus()' });
+        window.renderErrorStateInto(container, 'Route status unavailable.', { small: true, retry: loadRouteStatus });
     }
 }
 
@@ -1014,7 +1015,7 @@ async function loadRouteStats() {
         container.innerHTML = statsHtml;
     } catch (error) {
         console.error('Failed to load route stats:', error);
-        container.innerHTML = window.renderErrorState('Failed to load route statistics.', { variant: 'danger', retry: 'loadRouteStats()' });
+        window.renderErrorStateInto(container, 'Failed to load route statistics.', { variant: 'danger', retry: loadRouteStats });
     }
 }
 
@@ -1059,7 +1060,7 @@ async function loadHourlyForecast() {
         container.innerHTML = `<div class="hourly-strip">${hourCells}</div>`;
     } catch (error) {
         console.error('Failed to load hourly forecast:', error);
-        container.innerHTML = window.renderErrorState('Hourly forecast unavailable.', { small: true, retry: 'loadHourlyForecast()' });
+        window.renderErrorStateInto(container, 'Hourly forecast unavailable.', { small: true, retry: loadHourlyForecast });
     }
 }
 
@@ -1106,3 +1107,50 @@ function getScoreClass(score) {
     if (score >= 40) return 'bg-warning';
     return 'bg-danger';
 }
+
+/**
+ * Initialize dashboard on page load (moved from inline <script> in
+ * index.html so CSP script-src can drop 'unsafe-inline' — #475).
+ */
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log('[OK] Dashboard initializing...');
+
+    // Load dashboard data
+    await loadDashboard();
+
+    // Refresh data every 5 minutes
+    setInterval(async () => {
+        await loadDashboard();
+    }, 5 * 60 * 1000);
+
+    // “What's New” toast on first visit
+    (function showWhatsNew() {
+        var WHATS_NEW_KEY = 'rideOptimizer_whatsNew_v0.17.0';
+        if (localStorage.getItem(WHATS_NEW_KEY)) return;
+        localStorage.setItem(WHATS_NEW_KEY, '1');
+        var toastEl = document.createElement('div');
+        toastEl.className = 'toast show position-fixed bottom-0 end-0 m-3';
+        toastEl.setAttribute('role', 'alert');
+        toastEl.setAttribute('aria-live', 'polite');
+        toastEl.style.zIndex = '1090';
+        toastEl.style.maxWidth = '340px';
+        toastEl.innerHTML =
+            '<div class="toast-header">' +
+                '<i class="bi bi-stars text-primary me-2" aria-hidden="true"></i>' +
+                '<strong class="me-auto">What\'s New in v0.17.0</strong>' +
+                '<button type="button" class="btn-close" aria-label="Close"></button>' +
+            '</div>' +
+            '<div class="toast-body">' +
+                '<ul class="mb-0 ps-3 small">' +
+                    '<li>Fair Weather visual refresh — new cobalt &amp; coral color system</li>' +
+                    '<li>Mobile layout reordered: your commute decision leads, map and route status follow</li>' +
+                    '<li>Reports and Explore added to the mobile bottom navigation</li>' +
+                '</ul>' +
+            '</div>';
+        document.body.appendChild(toastEl);
+        toastEl.querySelector('.btn-close').addEventListener('click', function () { toastEl.remove(); });
+        setTimeout(function () { if (toastEl.parentNode) toastEl.remove(); }, 12000);
+    })();
+
+    console.log('[OK] Dashboard initialized');
+});
