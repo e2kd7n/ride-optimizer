@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
     bindActivityFilters();
     loadStats();
     loadGear();
+    initCalendar();
 });
 
 // -----------------------------------------------------------------------
@@ -380,6 +381,157 @@ async function loadActivities() {
         tbody.innerHTML = `<tr><td colspan="6" class="text-danger small ps-2">Error: ${escapeHtml(e.message)}</td></tr>`;
         footer.textContent = '';
     }
+}
+
+// -----------------------------------------------------------------------
+// Calendar (#485) — per-day activity counts + Strava backfill for a
+// specific month, so gaps left by the 500-most-recent fetch cap (#486)
+// can be filled in by date range instead of only "fetch newest."
+// -----------------------------------------------------------------------
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+const DOW_NAMES = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+let calYear = new Date().getFullYear();
+let calMonth = new Date().getMonth() + 1; // 1-12
+
+function initCalendar() {
+    const monthSel = document.getElementById('cal-month');
+    monthSel.innerHTML = MONTH_NAMES.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
+
+    const yearSel = document.getElementById('cal-year');
+    const nowYear = new Date().getFullYear();
+    const years = [];
+    for (let y = nowYear + 1; y >= 2000; y--) years.push(y);
+    yearSel.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
+
+    monthSel.value = String(calMonth);
+    yearSel.value = String(calYear);
+
+    monthSel.addEventListener('change', () => { calMonth = parseInt(monthSel.value, 10); loadCalendar(); });
+    yearSel.addEventListener('change', () => { calYear = parseInt(yearSel.value, 10); loadCalendar(); });
+
+    document.getElementById('cal-prev').addEventListener('click', () => shiftCalendar(-1));
+    document.getElementById('cal-next').addEventListener('click', () => shiftCalendar(1));
+    document.getElementById('cal-backfill-btn').addEventListener('click', backfillCurrentMonth);
+
+    loadCalendar();
+}
+
+function shiftCalendar(delta) {
+    calMonth += delta;
+    if (calMonth > 12) { calMonth = 1; calYear++; }
+    if (calMonth < 1) { calMonth = 12; calYear--; }
+    document.getElementById('cal-month').value = String(calMonth);
+    document.getElementById('cal-year').value = String(calYear);
+    loadCalendar();
+}
+
+async function loadCalendar() {
+    const grid = document.getElementById('cal-grid');
+    const summaryEl = document.getElementById('cal-summary');
+    grid.innerHTML = '<div class="text-muted small">Loading…</div>';
+    summaryEl.textContent = '';
+
+    try {
+        const resp = await api.get(`/stats/calendar?year=${calYear}&month=${calMonth}`);
+        if (resp.status !== 'success') throw new Error(resp.message || 'Error');
+        renderCalendar(resp.data);
+    } catch (e) {
+        grid.innerHTML = `<div class="text-danger small">Error: ${escapeHtml(e.message)}</div>`;
+    }
+}
+
+function renderCalendar(data) {
+    const grid = document.getElementById('cal-grid');
+    const summaryEl = document.getElementById('cal-summary');
+    const { days, month_summary: s } = data;
+
+    const firstDow = new Date(data.year, data.month - 1, 1).getDay(); // 0=Sun
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const maxCount = Math.max(...days.map(d => d.count), 1);
+
+    let html = DOW_NAMES.map(d => `<div class="cal-dow">${d}</div>`).join('');
+    for (let i = 0; i < firstDow; i++) html += '<div class="cal-day cal-day-empty"></div>';
+
+    html += days.map(d => {
+        const dayNum = parseInt(d.date.slice(-2), 10);
+        const isToday = d.date === todayIso;
+        const cls = ['cal-day'];
+        if (isToday) cls.push('cal-today');
+        let style = '';
+        let title = `${d.date}: no activities`;
+        if (d.count > 0) {
+            cls.push('cal-has-activity');
+            const opacity = 0.35 + 0.65 * (d.count / maxCount);
+            style = `style="background-color:var(--color-primary); opacity:${opacity.toFixed(2)};"`;
+            title = `${d.date}: ${d.count} ${d.count === 1 ? 'ride' : 'rides'}, ${fmt(d.distance_mi)} mi`;
+        }
+        return `<div class="${cls.join(' ')}" ${style} title="${escapeHtml(title)}">
+            <span>${dayNum}</span>${d.count > 0 ? `<span class="cal-day-count">${d.count}</span>` : ''}
+        </div>`;
+    }).join('');
+
+    grid.innerHTML = html;
+
+    if (s.total_rides > 0) {
+        summaryEl.textContent = `${s.total_rides} ${s.total_rides === 1 ? 'ride' : 'rides'} · ${fmt(s.total_distance_mi)} mi · ${fmtInt(s.total_elevation_ft)} ft this month`;
+    } else {
+        summaryEl.textContent = 'No activities cached for this month — use "Backfill this month" if you expect rides here.';
+    }
+}
+
+async function backfillCurrentMonth() {
+    const btn = document.getElementById('cal-backfill-btn');
+    const statusEl = document.getElementById('cal-backfill-status');
+    const daysInMonth = new Date(calYear, calMonth, 0).getDate();
+    const afterDate = `${calYear}-${String(calMonth).padStart(2, '0')}-01`;
+    const beforeDate = `${calYear}-${String(calMonth).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Requesting…';
+    statusEl.classList.remove('d-none');
+    statusEl.textContent = 'Connecting to Strava…';
+
+    try {
+        await api.post('/fetch', { after_date: afterDate, before_date: beforeDate, limit: 1000 });
+        pollCalendarBackfillStatus();
+    } catch (e) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-cloud-download"></i> Backfill this month';
+        const msg = e && e.status === 409
+            ? 'Another fetch is already running — try again shortly.'
+            : ((e && e.message) || 'Failed to start backfill');
+        statusEl.textContent = msg;
+        if (typeof showToast === 'function') showToast(msg, 'error');
+    }
+}
+
+function pollCalendarBackfillStatus() {
+    const btn = document.getElementById('cal-backfill-btn');
+    const statusEl = document.getElementById('cal-backfill-status');
+
+    const poll = setInterval(async () => {
+        try {
+            const job = await api.get('/fetch/status');
+            statusEl.textContent = job.label || 'Fetching…';
+
+            if (job.status === 'done' || job.status === 'error') {
+                clearInterval(poll);
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-cloud-download"></i> Backfill this month';
+                if (typeof showToast === 'function') {
+                    showToast(job.label || (job.status === 'done' ? 'Backfill complete' : 'Backfill failed'),
+                        job.status === 'done' ? 'success' : 'error');
+                }
+                if (job.status === 'done') {
+                    loadCalendar();
+                    loadStats();
+                    loadActivities();
+                }
+            }
+        } catch (_) { /* network hiccup — keep polling */ }
+    }, 3000);
 }
 
 // -----------------------------------------------------------------------
