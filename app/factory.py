@@ -198,9 +198,16 @@ def _register_after_request(app: Flask) -> None:
             # needs it: several JS modules build data-driven inline
             # style="" (chart/legend colors) via innerHTML; converting
             # those to CSSOM (element.style.x = ...) is tracked separately.
-            # code.jquery.com/cdnjs/netdna.bootstrapcdn are pulled in by
-            # Folium's default map template (rendered server-side, loaded
-            # into the commute map iframe below) — not used anywhere else.
+            # code.jquery.com/cdnjs are pulled in by Folium's default map
+            # template (rendered server-side, loaded into the commute map
+            # iframe below) — not used anywhere else. Folium's own map-init
+            # <script> embeds per-request coordinate data inline (no fixed
+            # hash, no nonce support), so it's still blocked here and the
+            # commute map iframe currently renders blank — a pre-existing
+            # break (it was already fully non-functional before this CSP
+            # pass, via the missing frame-src below) that would need either
+            # per-request nonce injection into Folium's HTML or dropping
+            # Folium for a custom CSP-compatible renderer to fully fix.
             "script-src 'self' https://cdn.jsdelivr.net https://unpkg.com https://code.jquery.com https://cdnjs.cloudflare.com; "
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com https://netdna.bootstrapcdn.com; "
             "img-src 'self' data: https: blob:; "
@@ -208,7 +215,7 @@ def _register_after_request(app: Flask) -> None:
             # <iframe> via a blob: URL (no frame-src fell back to
             # default-src 'self', which silently broke the map entirely).
             "frame-src 'self' blob:; "
-            "font-src 'self' https://cdn.jsdelivr.net; "
+            "font-src 'self' https://cdn.jsdelivr.net https://netdna.bootstrapcdn.com; "
             "connect-src 'self'; "
             "frame-ancestors 'none'"
         )

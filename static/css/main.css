@@ -192,8 +192,6 @@ html[data-theme="night"] .form-select {
 h1, h2, h3,
 .navbar-brand,
 .btn,
-.temperature-display,
-.stat-value-hero,
 .hero-route-name {
     font-family: var(--font-display);
 }
@@ -236,10 +234,8 @@ a {
 }
 
 /* ===== Navigation ===== */
-/* Fair Weather Day ground: light surface-2 bar, ink text, cobalt accents.
-   .navbar-gradient kept as a legacy alias for any untouched markup. */
-.navbar-fairweather,
-.navbar-gradient {
+/* Fair Weather Day ground: light surface-2 bar, ink text, cobalt accents. */
+.navbar-fairweather {
     background: var(--surface-2);
     border-bottom: 1px solid var(--line);
 }
@@ -312,8 +308,7 @@ a {
 }
 
 /* Toggler on the light bar (pages no longer use navbar-dark) */
-.navbar-fairweather .navbar-toggler,
-.navbar-gradient .navbar-toggler {
+.navbar-fairweather .navbar-toggler {
     color: var(--ink);
     border-color: var(--line);
 }
@@ -443,10 +438,6 @@ a {
     color: var(--accent) !important;
 }
 
-.border-primary {
-    border-color: var(--accent) !important;
-}
-
 .form-check-input:checked {
     background-color: var(--accent);
     border-color: var(--accent);
@@ -522,16 +513,6 @@ footer {
     padding-bottom: var(--space-2) !important;
 }
 
-.filter-group {
-    margin-bottom: var(--space-3);
-}
-
-.filter-group label {
-    font-weight: 600;
-    margin-bottom: var(--space-2);
-    display: block;
-}
-
 /* Preset filter buttons */
 .preset-filter {
     min-width: 120px;
@@ -555,10 +536,6 @@ footer {
     .preset-filter {
         flex: 1 1 calc(50% - var(--space-2));
         min-width: 0;
-    }
-    
-    .filter-group label {
-        font-size: var(--font-size-sm);
     }
 }
 
@@ -643,12 +620,6 @@ footer {
     color: var(--info-color);
 }
 
-.temperature-display {
-    font-size: var(--font-size-hero);
-    font-weight: 700;
-    color: var(--dark-gray);
-    font-variant-numeric: tabular-nums;
-}
 
 /* ===== Responsive Design (Mobile First) ===== */
 
@@ -822,10 +793,6 @@ select:focus {
     cursor: pointer;
 }
 
-.no-select {
-    user-select: none;
-}
-
 /* ===== Animation Classes ===== */
 @keyframes fadeIn {
     from {
@@ -836,10 +803,6 @@ select:focus {
         opacity: 1;
         transform: translateY(0);
     }
-}
-
-.fade-in {
-    animation: fadeIn 0.3s ease-in-out;
 }
 
 /* ===== Loading States ===== */
@@ -1360,8 +1323,7 @@ a {
 }
 
 p a,
-li a,
-.inline-link {
+li a {
     min-height: auto;
     display: inline;
     padding: 0;
@@ -1436,20 +1398,10 @@ input[type="radio"] {
     padding: var(--space-3) var(--space-2);
 }
 
-.btn-close,
-.modal-close {
+.btn-close {
     min-width: 44px;
     min-height: 44px;
     padding: var(--space-2);
-}
-
-.btn-icon {
-    min-width: 44px;
-    min-height: 44px;
-    padding: var(--space-2);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
 }
 
 .nav-link + .nav-link {
@@ -1609,40 +1561,6 @@ input[type="radio"] {
     align-items: center;
 }
 
-.home-info-section {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-}
-
-.home-info-title {
-    font-size: var(--font-size-sm);
-    opacity: 0.9;
-    margin-bottom: var(--space-1);
-}
-
-.home-info-value {
-    font-size: var(--font-size-base);
-    font-weight: 600;
-}
-
-.home-quick-actions {
-    display: flex;
-    gap: var(--space-2);
-    margin-bottom: var(--space-2);
-    height: 48px;
-}
-
-.home-quick-actions .btn {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-2);
-    font-size: var(--font-size-sm);
-    padding: var(--space-2) var(--space-3);
-}
 
 .home-recent-routes {
     height: 592px;
@@ -1859,13 +1777,6 @@ h5.card-title {
     font-size: var(--font-size-lg);
 }
 
-/* Hero display value (temperature, big stats) */
-.temperature-display,
-.stat-value-hero {
-    font-size: var(--font-size-hero);
-    font-weight: 700;
-}
-
 /* --- Hero decision card: elevated shadow + branded border (#68) --- */
 .card.hero-card {
     box-shadow: 0 4px 16px rgba(var(--accent-rgb), 0.15) !important;
@@ -2064,19 +1975,6 @@ h5.card-title {
     }
 }
 
-.alert-workout-fit {
-    border-radius: 8px;
-    font-size: var(--font-size-sm);
-    border-left: 4px solid;
-}
-
-.alert-workout-fit.alert-success { border-left-color: var(--success-color); }
-.alert-workout-fit.alert-warning { border-left-color: var(--warning-color); }
-.alert-workout-fit.alert-danger  { border-left-color: var(--danger-color); }
-
-/* TrainerRoad settings chevron */
-[aria-expanded="true"] .tr-chevron { transform: rotate(90deg); }
-.tr-chevron { transition: transform 0.2s; display: inline-block; }
 
 /* Dashboard mobile disclosure chevrons (Conditions summary, Route Status) —
    CSS-driven off aria-expanded so rotation can't desync from the ARIA state. */
