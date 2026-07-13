@@ -12,7 +12,7 @@ import secrets
 from datetime import timedelta
 from pathlib import Path
 
-from flask import Flask
+from flask import Flask, g
 from flask_wtf.csrf import CSRFProtect
 
 from app.extensions import limiter
@@ -77,6 +77,17 @@ def create_app(config_overrides: dict | None = None) -> Flask:
         # singleton after creation, so keep CSRF enforcement in sync with it
         # dynamically instead of baking a static value in at app-creation time.
         app.config['WTF_CSRF_ENABLED'] = not app.testing
+
+    @app.before_request
+    def _generate_csp_nonce():
+        # A fresh per-request nonce, exposed to Jinja as csp_nonce() and
+        # matched into the CSP header in _register_after_request. Lets
+        # index.html authorize one small nonced inline script (which stashes
+        # the nonce for commute.js) without reopening script-src's
+        # 'unsafe-inline' — #475 follow-up for the commute-map iframe.
+        g.csp_nonce = secrets.token_urlsafe(16)
+
+    app.jinja_env.globals['csp_nonce'] = lambda: g.csp_nonce
 
     csrf = CSRFProtect(app)
     limiter.init_app(app)
@@ -200,15 +211,15 @@ def _register_after_request(app: Flask) -> None:
             # those to CSSOM (element.style.x = ...) is tracked separately.
             # code.jquery.com/cdnjs are pulled in by Folium's default map
             # template (rendered server-side, loaded into the commute map
-            # iframe below) — not used anywhere else. Folium's own map-init
-            # <script> embeds per-request coordinate data inline (no fixed
-            # hash, no nonce support), so it's still blocked here and the
-            # commute map iframe currently renders blank — a pre-existing
-            # break (it was already fully non-functional before this CSP
-            # pass, via the missing frame-src below) that would need either
-            # per-request nonce injection into Folium's HTML or dropping
-            # Folium for a custom CSP-compatible renderer to fully fix.
-            "script-src 'self' https://cdn.jsdelivr.net https://unpkg.com https://code.jquery.com https://cdnjs.cloudflare.com; "
+            # iframe below) — not used anywhere else. The 'nonce-...' value
+            # is this request's g.csp_nonce (see before_request above):
+            # index.html embeds one small nonced <script> that stashes the
+            # nonce on window, and commute.js copies it onto every <script>
+            # tag in the Folium HTML it fetches before building the blob:
+            # iframe — the blob document inherits index.html's CSP (same
+            # nonce, same request), so those tags validate without reopening
+            # 'unsafe-inline' for the whole app.
+            f"script-src 'self' 'nonce-{g.csp_nonce}' https://cdn.jsdelivr.net https://unpkg.com https://code.jquery.com https://cdnjs.cloudflare.com; "
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com https://netdna.bootstrapcdn.com; "
             "img-src 'self' data: https: blob:; "
             # commute.js loads the server-rendered Folium map into an

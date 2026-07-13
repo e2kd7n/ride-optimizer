@@ -285,8 +285,19 @@
             const response = await fetch('/api/commute/map');
             
             if (response.ok) {
-                const mapHtml = await response.text();
-                
+                let mapHtml = await response.text();
+
+                // The blob document below inherits this page's CSP, which
+                // only allows inline scripts carrying this request's nonce
+                // (window.__cspNonce, stashed by a nonced <script> in
+                // index.html — see app/factory.py's CSP header comment).
+                // Folium's map HTML has its own inline <script> tags with
+                // no nonce, so stamp one on before handing it off (#475
+                // follow-up).
+                if (window.__cspNonce) {
+                    mapHtml = mapHtml.replace(/<script(?![^>]*\bnonce=)/g, `<script nonce="${window.__cspNonce}"`);
+                }
+
                 // Create a blob URL for the map HTML
                 const blob = new Blob([mapHtml], { type: 'text/html' });
                 const url = URL.createObjectURL(blob);

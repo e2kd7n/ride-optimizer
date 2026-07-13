@@ -175,7 +175,13 @@
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    
+
+    <!-- Stashes this request's CSP nonce so commute.js can apply it to the
+         Folium map HTML it fetches, letting that content's inline <script>
+         tags validate against the same policy this page was served with
+         (#475 follow-up — see app/factory.py's CSP header comment) -->
+    <script nonce="{{ csp_nonce() }}">window.__cspNonce = "{{ csp_nonce() }}";</script>
+
     <!-- Custom JavaScript -->
     <script src="/js/common.js"></script>
     <script src="/js/accessibility.js"></script>
