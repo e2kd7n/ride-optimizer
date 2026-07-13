@@ -27,13 +27,20 @@ def mock_config():
 
 
 @pytest.fixture
-def service(mock_config):
+def service(mock_config, tmp_path):
     with patch('app.services.exploration_service.ConfigManager.get_instance', return_value=mock_config):
-        return ExplorationService()
+        svc = ExplorationService()
+    # Isolate from the real data/cache/ dir — CoverageTracker's on-disk tile
+    # cache has no expiration, so a real coverage_tiles_*_all.json left over
+    # from actual app usage would otherwise be returned instead of the
+    # empty/mocked _activities_cache the tests set up, making results depend
+    # on whatever happens to be cached on the machine running the tests.
+    svc._tracker.cache_dir = tmp_path
+    return svc
 
 
 @pytest.fixture
-def service_with_key(mock_config):
+def service_with_key(mock_config, tmp_path):
     """Service pre-configured with a fake ORS API key."""
     def _get(key, default=None):
         if key == 'ors.api_key':
@@ -42,7 +49,9 @@ def service_with_key(mock_config):
 
     mock_config.get = MagicMock(side_effect=_get)
     with patch('app.services.exploration_service.ConfigManager.get_instance', return_value=mock_config):
-        return ExplorationService()
+        svc = ExplorationService()
+    svc._tracker.cache_dir = tmp_path
+    return svc
 
 
 # ── Existing coverage tests ──────────────────────────────────────
