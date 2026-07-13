@@ -883,4 +883,78 @@ window.renderEmptyState = function(message, suggestion = '', icon = 'bi-inbox') 
         </div>`;
 };
 
+/**
+ * Poll a status endpoint until it reports completion, capping both
+ * consecutive-failure count and total duration so a persistently-failing
+ * endpoint can't poll forever with a stuck "Running…" button (#468).
+ *
+ * @param {object} opts
+ * @param {function} opts.fetchStatus - async () => job/status object
+ * @param {function} opts.onStatus - (job) => 'done'|'error'|'running'.
+ *   Inspects the job, updates the caller's UI as a side effect, and
+ *   returns the phase so pollJob knows whether to keep polling.
+ * @param {function} [opts.onGiveUp] - (reason: 'timeout'|'error') => void.
+ *   Called once, in place of onStatus, when polling gives up without ever
+ *   seeing 'done'/'error' — the caller's chance to reset its UI to idle.
+ * @param {number} [opts.intervalMs=3000] - delay between polls
+ * @param {number} [opts.maxConsecutiveFailures=5] - fetchStatus rejections
+ *   in a row before giving up
+ * @param {number} [opts.maxDurationMs=600000] - hard cap on total poll time
+ *   (10 min default) before giving up even if fetchStatus keeps succeeding
+ *   with a non-terminal status
+ * @returns {function} stop - cancel polling early (e.g. on page navigation)
+ */
+window.pollJob = function({
+    fetchStatus,
+    onStatus,
+    onGiveUp = null,
+    intervalMs = 3000,
+    maxConsecutiveFailures = 5,
+    maxDurationMs = 600000,
+}) {
+    const startTime = Date.now();
+    let consecutiveFailures = 0;
+    let stopped = false;
+    let timer = null;
+
+    function stop() {
+        stopped = true;
+        if (timer) clearTimeout(timer);
+    }
+
+    async function tick() {
+        if (stopped) return;
+
+        if (Date.now() - startTime > maxDurationMs) {
+            stop();
+            if (onGiveUp) onGiveUp('timeout');
+            return;
+        }
+
+        try {
+            const job = await fetchStatus();
+            consecutiveFailures = 0;
+            const phase = onStatus(job);
+            if (phase === 'done' || phase === 'error') {
+                stop();
+                return;
+            }
+        } catch (e) {
+            consecutiveFailures++;
+            if (consecutiveFailures >= maxConsecutiveFailures) {
+                stop();
+                if (onGiveUp) onGiveUp('error');
+                return;
+            }
+        }
+
+        if (!stopped) {
+            timer = setTimeout(tick, intervalMs);
+        }
+    }
+
+    tick();
+    return stop;
+};
+
 console.log('✓ common.js loaded - Toast, auto-save, undo, unit conversion, and timestamp utilities ready');

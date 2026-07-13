@@ -1038,10 +1038,26 @@
                 grouping: 'Grouping routes…',
             };
 
-            const poll = setInterval(async () => {
-                try {
-                    const job = await window.apiClient.getAnalysisStatus();
+            function resetToIdle(message) {
+                spinnerEl.style.display = 'none';
+                progressEl.style.display = 'none';
+                progressBar.classList.remove('progress-bar-animated');
+                progressBar.style.animationDuration = '';
+                btn.disabled = false;
+                updateRunBtnLabel();
+                statusEl.textContent = message;
+            }
 
+            window.pollJob({
+                intervalMs: 3000,
+                fetchStatus: () => window.apiClient.getAnalysisStatus(),
+                onGiveUp: (reason) => {
+                    resetToIdle(reason === 'timeout'
+                        ? 'Analysis is taking unusually long — check back later or try again.'
+                        : 'Lost connection while checking analysis status. Try again.');
+                    if (typeof showToast === 'function') showToast('Stopped watching analysis progress', 'warning');
+                },
+                onStatus: (job) => {
                     // Update status text: prefer the server label, fall back to phase map
                     const label = job.label || phaseLabels[job.phase] || 'Running…';
                     statusEl.textContent = label;
@@ -1072,12 +1088,11 @@
                     }
 
                     if (job.status === 'done') {
-                        clearInterval(poll);
-                        spinnerEl.style.display = 'none';
                         progressBar.style.width = '100%';
                         progressBar.classList.remove('progress-bar-animated');
                         progressBar.style.animationDuration = '';
                         btn.disabled = false;
+                        spinnerEl.style.display = 'none';
                         updateRunBtnLabel();
                         const r = job.result || {};
                         const acts = (r.activities_count || 0).toLocaleString();
@@ -1085,8 +1100,8 @@
                         statusEl.textContent = `Done — ${acts} activities, ${groups} route group${groups !== 1 ? 's' : ''}`;
                         if (typeof showToast === 'function') showToast('Analysis complete', 'success');
                         loadCacheInfo();
+                        return 'done';
                     } else if (job.status === 'stopped') {
-                        clearInterval(poll);
                         spinnerEl.style.display = 'none';
                         progressBar.classList.remove('progress-bar-animated');
                         progressBar.style.animationDuration = '';
@@ -1094,8 +1109,8 @@
                         updateRunBtnLabel();
                         statusEl.textContent = 'Analysis stopped.';
                         if (typeof showToast === 'function') showToast('Analysis stopped', 'info');
+                        return 'done';
                     } else if (job.status === 'error') {
-                        clearInterval(poll);
                         spinnerEl.style.display = 'none';
                         progressBar.classList.remove('progress-bar-animated');
                         progressBar.classList.replace('bg-success', 'bg-danger');
@@ -1104,23 +1119,33 @@
                         const msg = (job.result || {}).message || 'Unknown error';
                         statusEl.textContent = 'Error: ' + msg;
                         if (typeof showToast === 'function') showToast('Analysis failed: ' + msg, 'error');
+                        return 'error';
                     } else {
                         // Still running — show Stop button
                         btn.disabled = false;
                         btn.innerHTML = '<i class="bi bi-stop-fill" aria-hidden="true"></i> Stop';
                         btn.onclick = stopAnalysis;
+                        return 'running';
                     }
-                } catch (_) { /* network hiccup — keep polling */ }
-            }, 3000);
+                },
+            });
         }
 
         async function stopAnalysis() {
             const btn = document.getElementById('run-analysis-btn');
+            const statusEl = document.getElementById('analysis-status');
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Stopping…';
             try {
                 await window.apiClient.fetch('/analyze/stop', { method: 'POST' });
-            } catch (_) {}
+            } catch (e) {
+                // /analyze/stop itself failed — don't leave the button stuck
+                // disabled forever with no way out (#468).
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-stop-fill" aria-hidden="true"></i> Stop';
+                if (statusEl) statusEl.textContent = 'Failed to stop: ' + (e.message || 'Unknown error');
+                if (typeof showToast === 'function') showToast('Failed to stop analysis', 'error');
+            }
         }
 
         async function startFetch() {
@@ -1172,29 +1197,46 @@
             const progressEl = document.getElementById('fetch-progress');
             const spinnerEl = document.getElementById('fetch-spinner');
             const statusEl = document.getElementById('fetch-status');
+            const idleBtnHtml = '<span class="step-badge">Step 1:</span> <i class="bi bi-cloud-download"></i> Fetch Activities';
 
-            const poll = setInterval(async () => {
-                try {
-                    const job = await window.apiClient.fetch('/fetch/status');
+            function resetToIdle(message) {
+                spinnerEl.style.display = 'none';
+                progressEl.style.display = 'none';
+                btn.disabled = false;
+                btn.innerHTML = idleBtnHtml;
+                statusEl.textContent = message;
+            }
+
+            window.pollJob({
+                intervalMs: 3000,
+                fetchStatus: () => window.apiClient.fetch('/fetch/status'),
+                onGiveUp: (reason) => {
+                    resetToIdle(reason === 'timeout'
+                        ? 'Fetch is taking unusually long — check back later or try again.'
+                        : 'Lost connection while checking fetch status. Try again.');
+                    if (typeof showToast === 'function') showToast('Stopped watching fetch progress', 'warning');
+                },
+                onStatus: (job) => {
                     statusEl.textContent = job.label || 'Fetching…';
 
                     if (job.status === 'done') {
-                        clearInterval(poll);
                         spinnerEl.style.display = 'none';
                         btn.disabled = false;
-                        btn.innerHTML = '<span class="step-badge">Step 1:</span> <i class="bi bi-cloud-download"></i> Fetch Activities';
+                        btn.innerHTML = idleBtnHtml;
                         if (typeof showToast === 'function') showToast(job.label || 'Fetch complete', 'success');
                         loadCacheInfo();
+                        return 'done';
                     } else if (job.status === 'error') {
-                        clearInterval(poll);
                         spinnerEl.style.display = 'none';
                         btn.disabled = false;
-                        btn.innerHTML = '<span class="step-badge">Step 1:</span> <i class="bi bi-cloud-download"></i> Fetch Activities';
+                        btn.innerHTML = idleBtnHtml;
                         statusEl.textContent = job.label || 'Fetch failed';
                         if (typeof showToast === 'function') showToast(job.label || 'Fetch failed', 'error');
+                        return 'error';
                     }
-                } catch (_) {}
-            }, 3000);
+                    return 'running';
+                },
+            });
         }
 
         // ── Gear admin (moved from Reports — #369b) ──────────────
@@ -1234,11 +1276,10 @@
             repairBtn.addEventListener('click', startGearRepair);
         }
 
-        let _gearRepairPollInterval = null;
+        let _gearRepairStop = null;
 
         async function startGearRepair() {
             const btn = document.getElementById('repair-gear-btn');
-            const statusEl = document.getElementById('gear-cache-status-settings');
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Repairing…';
 
@@ -1248,7 +1289,7 @@
                     body: JSON.stringify({}),
                 });
                 if (resp.status === 'started' || resp.status === 'already_running') {
-                    _gearRepairPollInterval = setInterval(pollGearRepair, 1500);
+                    pollGearRepair();
                 } else {
                     if (typeof showToast === 'function') showToast(resp.message || 'Failed to start repair', 'error');
                     resetGearRepairBtn();
@@ -1259,28 +1300,37 @@
             }
         }
 
-        async function pollGearRepair() {
+        function pollGearRepair() {
             const statusEl = document.getElementById('gear-cache-status-settings');
-            try {
-                const resp = await window.apiClient.fetch('/stats/backfill-gear-ids/status');
-                if (resp.status === 'running') {
-                    statusEl.textContent = resp.label || 'Repairing…';
-                } else if (resp.status === 'done') {
-                    clearInterval(_gearRepairPollInterval);
-                    _gearRepairPollInterval = null;
-                    if (typeof showToast === 'function') showToast(resp.label || 'Gear names repaired', 'success');
+
+            _gearRepairStop = window.pollJob({
+                intervalMs: 1500,
+                fetchStatus: () => window.apiClient.fetch('/stats/backfill-gear-ids/status'),
+                onGiveUp: (reason) => {
                     statusEl.textContent = '';
                     resetGearRepairBtn();
-                } else if (resp.status === 'error') {
-                    clearInterval(_gearRepairPollInterval);
-                    _gearRepairPollInterval = null;
-                    if (typeof showToast === 'function') showToast(resp.label || 'Repair error', 'error');
-                    statusEl.textContent = '';
-                    resetGearRepairBtn();
-                }
-            } catch (e) {
-                // ignore transient poll errors
-            }
+                    if (typeof showToast === 'function') {
+                        showToast(reason === 'timeout' ? 'Gear repair is taking unusually long' : 'Lost connection while checking repair status', 'warning');
+                    }
+                },
+                onStatus: (resp) => {
+                    if (resp.status === 'running') {
+                        statusEl.textContent = resp.label || 'Repairing…';
+                        return 'running';
+                    } else if (resp.status === 'done') {
+                        if (typeof showToast === 'function') showToast(resp.label || 'Gear names repaired', 'success');
+                        statusEl.textContent = '';
+                        resetGearRepairBtn();
+                        return 'done';
+                    } else if (resp.status === 'error') {
+                        if (typeof showToast === 'function') showToast(resp.label || 'Repair error', 'error');
+                        statusEl.textContent = '';
+                        resetGearRepairBtn();
+                        return 'error';
+                    }
+                    return 'running';
+                },
+            });
         }
 
         function resetGearRepairBtn() {
