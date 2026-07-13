@@ -551,11 +551,11 @@ async function loadWeather() {
             </div>
             <div>
                 <div class="weather-temp">${current.temperature}°F</div>
-                <small style="opacity: 0.9;">Feels like ${current.feels_like}°F</small>
+                <small class="opacity-90">Feels like ${current.feels_like}°F</small>
             </div>
             <div class="weather-details flex-grow-1">
                 <div class="weather-detail-item">
-                    <span class="badge bg-${severity.color}" style="font-size: 1rem; padding: var(--space-2) var(--space-3);" title="Weather severity: ${severity.label}">
+                    <span class="badge bg-${severity.color} hero-weather-badge" title="Weather severity: ${severity.label}">
                         ${severity.icon} ${severity.label}
                     </span>
                 </div>
@@ -578,7 +578,7 @@ async function loadWeather() {
                 </div>
             </div>
             ${weather.timestamp ? `
-                <div class="weather-detail-item timestamp-display" data-timestamp="${weather.timestamp}" title="${formatAbsoluteTime(weather.timestamp)}" style="opacity: 0.8;">
+                <div class="weather-detail-item timestamp-display opacity-80" data-timestamp="${weather.timestamp}" title="${formatAbsoluteTime(weather.timestamp)}">
                     <i class="bi bi-clock"></i>
                     <span>${formatRelativeTime(weather.timestamp)}</span>
                 </div>
@@ -655,7 +655,7 @@ function renderHeroCard(rec, isHero, secondaryRec) {
         ? `Compare both directions — return score: ${secondaryScore}`
         : 'Compare both directions';
 
-    const borderColor = score >= 70 ? '#28a745' : score >= 50 ? '#ffc107' : '#dc3545';
+    const borderClass = score >= 70 ? 'hero-border-good' : score >= 50 ? 'hero-border-warn' : 'hero-border-bad';
     const windImpact = rec.wind_impact;
     const windBadge = windImpact
         ? `<span class="badge bg-light text-dark border ms-2" title="Wind impact on this route">
@@ -684,7 +684,7 @@ function renderHeroCard(rec, isHero, secondaryRec) {
 
     if (isHero) {
         return `
-            <div class="hero-decision-card" style="border-left: 4px solid ${borderColor}; padding-left: var(--space-3);">
+            <div class="hero-decision-card ${borderClass}">
                 <div class="hero-card-header">
                     <span class="hero-route-name">
                         <i class="bi ${scoreIcon} me-1"></i>${routeName}
@@ -817,17 +817,17 @@ async function loadRouteStatus() {
         const esc = window.escapeHtml;
         function routeStatusRow(route) {
             const score = route.condition_score || 75;
-            let icon, color;
-            if (score >= 80) { icon = 'bi-check-circle-fill'; color = '#28a745'; }
-            else if (score >= 65) { icon = 'bi-hand-thumbs-up-fill'; color = '#20c997'; }
-            else if (score >= 50) { icon = 'bi-exclamation-triangle-fill'; color = '#ffc107'; }
-            else if (score >= 35) { icon = 'bi-hand-thumbs-down-fill'; color = '#fd7e14'; }
-            else { icon = 'bi-x-circle-fill'; color = '#dc3545'; }
+            let icon, colorClass;
+            if (score >= 80) { icon = 'bi-check-circle-fill'; colorClass = 'route-status-icon-great'; }
+            else if (score >= 65) { icon = 'bi-hand-thumbs-up-fill'; colorClass = 'route-status-icon-good'; }
+            else if (score >= 50) { icon = 'bi-exclamation-triangle-fill'; colorClass = 'route-status-icon-fair'; }
+            else if (score >= 35) { icon = 'bi-hand-thumbs-down-fill'; colorClass = 'route-status-icon-poor'; }
+            else { icon = 'bi-x-circle-fill'; colorClass = 'route-status-icon-bad'; }
             const name = esc((route.name || 'Route').slice(0, 22));
             return `
                 <div class="route-status-row d-flex align-items-center gap-2 py-1">
-                    <span class="small text-truncate" style="min-width:120px;max-width:140px">${name}</span>
-                    <i class="bi ${icon}" style="color:${color};font-size:1rem;flex-shrink:0"></i>
+                    <span class="small text-truncate route-name-truncate">${name}</span>
+                    <i class="bi ${icon} route-status-icon ${colorClass}"></i>
                     <span class="small text-muted">${esc(route.condition_note || 'Clear')}</span>
                 </div>`;
         }

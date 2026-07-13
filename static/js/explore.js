@@ -891,7 +891,7 @@ function addRouteListItem(route, index, targetDistanceKm, extraLabel = '') {
     badge.style.gap = '4px';
     badge.innerHTML = `
         <div class="d-flex align-items-center gap-2 w-100">
-            <span class="swatch" style="background:${color}"></span>
+            <span class="swatch"></span>
             <span class="route-label">${DIRECTION_LABELS[dir]} · ${distanceLabel} · ${newTilesLabel(route.stats)}${extraLabel ? ' ' + extraLabel : ''}</span>
             <button class="btn btn-xs btn-outline-primary ms-auto plot-road-btn" data-direction="${dir}"
                     aria-label="Plot road route for ${DIRECTION_LABELS[dir]}">
@@ -901,6 +901,7 @@ function addRouteListItem(route, index, targetDistanceKm, extraLabel = '') {
         <div class="route-phase2-info text-muted small d-none" data-direction="${dir}"></div>
     `;
     document.getElementById('route-list').appendChild(badge);
+    badge.querySelector('.swatch').style.background = color;
 
     badge.addEventListener('click', (e) => {
         if (e.target.closest('.plot-road-btn')) return;
@@ -1150,7 +1151,7 @@ async function plotRoadRoute(direction, route, targetDistanceKm, color, badgeEl)
         const tilesText = claimed == null ? '' : `· ${claimed.length} new tile${claimed.length === 1 ? '' : 's'}`;
         const dataKey = `${direction}-${suffix}`;
         return `
-            <div class="d-flex align-items-center gap-2 flex-wrap" style="margin-top:4px">
+            <div class="d-flex align-items-center gap-2 flex-wrap mt-4px">
                 <span class="text-muted small">${label} ${v.distLabel} · ${v.result.duration_min} min
                     ${surfText ? `· ${surfText}` : ''} ${tilesText}</span>
                 <button class="btn btn-xs btn-outline-secondary export-gpx-btn ms-auto"

@@ -92,10 +92,9 @@ window.showToast = function(message, type = 'info', options = {}) {
     if (undoAction) {
         const undoId = 'undo-' + Date.now();
         toastContent += `
-            <button type="button" class="btn btn-sm btn-outline-light ms-2"
+            <button type="button" class="btn btn-sm btn-outline-light ms-2 border-currentcolor"
                     id="${undoId}"
-                    aria-label="Undo last action"
-                    style="border-color: currentColor;">
+                    aria-label="Undo last action">
                 ↶ Undo
             </button>
         `;

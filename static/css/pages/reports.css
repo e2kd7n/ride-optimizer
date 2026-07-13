@@ -197,6 +197,7 @@
             background: none;
         }
         .cal-day.cal-has-activity {
+            background-color: var(--color-primary);
             color: #fff;
             cursor: default;
             font-weight: 600;

@@ -61,11 +61,9 @@
         const cards = TUTORIALS.map((t) => `
             <div class="col-md-6">
                 <div class="card h-100 tutorial-card" data-tutorial-id="${t.id}">
-                    ${textOnly ? '' : `<div class="tutorial-img-wrapper position-relative overflow-hidden"
-                         style="height:176px; background:var(--surface-2, #f8f9fa);">
+                    ${textOnly ? '' : `<div class="tutorial-img-wrapper position-relative overflow-hidden tutorial-img-wrapper-fixed">
                         <img
-                            class="tutorial-img w-100 h-100"
-                            style="object-fit:cover; cursor:pointer;"
+                            class="tutorial-img w-100 h-100 tutorial-img-cover"
                             src="${t.preview}"
                             data-gif="${t.gif}"
                             data-preview="${t.preview}"
@@ -73,9 +71,8 @@
                             loading="lazy"
                             decoding="async"
                         />
-                        <div class="tutorial-img-fallback position-absolute top-0 start-0 w-100 h-100 align-items-center justify-content-center flex-column text-muted"
-                             style="display:none;" aria-hidden="true">
-                            <i class="bi bi-image" style="font-size:2rem;"></i>
+                        <div class="tutorial-img-fallback position-absolute top-0 start-0 w-100 h-100 align-items-center justify-content-center flex-column text-muted hidden-until-shown" aria-hidden="true">
+                            <i class="bi bi-image tutorial-img-fallback-icon"></i>
                             <span class="small mt-1">Preview coming soon</span>
                         </div>
                         <span class="tutorial-hover-badge position-absolute bottom-0 end-0 m-2 badge bg-secondary"

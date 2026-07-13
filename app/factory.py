@@ -204,23 +204,41 @@ def _register_after_request(app: Flask) -> None:
         response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
         response.headers['Content-Security-Policy'] = (
             "default-src 'self'; "
-            # No inline <script>/onclick="" left anywhere in the app (#470,
-            # #475) — script-src can drop 'unsafe-inline'. style-src still
-            # needs it: several JS modules build data-driven inline
-            # style="" (chart/legend colors) via innerHTML; converting
-            # those to CSSOM (element.style.x = ...) is tracked separately.
+            # No inline <script>/onclick="" or inline style="" left anywhere
+            # in code we author (#470, #475) — script-src and style-src(-elem)
+            # both drop 'unsafe-inline'. The remaining data-driven "inline
+            # style" cases (chart bars, route/legend colors, comfort scores)
+            # were rewritten as either a small fixed set of CSS classes (see
+            # the "#475: drop CSP style-src 'unsafe-inline'" section of
+            # main.css) or CSSOM property assignment (element.style.x = ...),
+            # which CSP does not restrict.
             # code.jquery.com/cdnjs are pulled in by Folium's default map
             # template (rendered server-side, loaded into the commute map
             # iframe below) — not used anywhere else. The 'nonce-...' value
             # is this request's g.csp_nonce (see before_request above):
             # index.html embeds one small nonced <script> that stashes the
             # nonce on window, and commute.js copies it onto every <script>
-            # tag in the Folium HTML it fetches before building the blob:
-            # iframe — the blob document inherits index.html's CSP (same
-            # nonce, same request), so those tags validate without reopening
+            # AND <style> tag in the Folium HTML it fetches (plus its own
+            # error-page <style> block) before building the blob: iframe —
+            # the blob document inherits index.html's CSP (same nonce, same
+            # request), so those tags validate without reopening
             # 'unsafe-inline' for the whole app.
             f"script-src 'self' 'nonce-{g.csp_nonce}' https://cdn.jsdelivr.net https://unpkg.com https://code.jquery.com https://cdnjs.cloudflare.com; "
-            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com https://netdna.bootstrapcdn.com; "
+            f"style-src 'self' 'nonce-{g.csp_nonce}' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com https://netdna.bootstrapcdn.com; "
+            # style-src-attr overrides style-src for the style="" HTML
+            # attribute specifically (CSP3) and is intentionally left at
+            # 'unsafe-inline': the commute-map iframe bundles Folium's
+            # default jQuery + leaflet.awesome-markers + bootstrap-glyphicons
+            # assets, which build style="" attributes at *runtime* (e.g.
+            # marker-icon coloring) — code we don't author and can't stamp a
+            # nonce onto (nonces/hashes don't apply to style attributes at
+            # all per the CSP3 spec). style-src-elem (our own <style> blocks,
+            # all 4 of them — 3 in Folium's template, 1 in commute.js's
+            # error page — are nonce-stamped) stays on the strict style-src
+            # value above, so arbitrary <style> block injection is still
+            # blocked; only attribute-level styling is relaxed, and only for
+            # this one iframe's third-party bundle.
+            "style-src-attr 'unsafe-inline'; "
             "img-src 'self' data: https: blob:; "
             # commute.js loads the server-rendered Folium map into an
             # <iframe> via a blob: URL (no frame-src fell back to

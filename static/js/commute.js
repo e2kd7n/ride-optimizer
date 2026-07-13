@@ -186,7 +186,7 @@
                 ${isToday ? '<span class="badge bg-success ms-2">Today</span>' : '<span class="badge bg-info ms-2">Tomorrow</span>'}
             </div>
             <div class="mb-2">
-                <span class="badge bg-${severity.color}" style="font-size: 0.9rem; padding: 0.4rem 0.6rem;" title="Weather conditions: ${severity.label}">
+                <span class="badge bg-${severity.color} commute-weather-badge" title="Weather conditions: ${severity.label}">
                     ${severity.icon} ${severity.label}
                 </span>
             </div>
@@ -288,14 +288,14 @@
                 let mapHtml = await response.text();
 
                 // The blob document below inherits this page's CSP, which
-                // only allows inline scripts carrying this request's nonce
-                // (window.__cspNonce, stashed by a nonced <script> in
+                // only allows inline scripts/styles carrying this request's
+                // nonce (window.__cspNonce, stashed by a nonced <script> in
                 // index.html — see app/factory.py's CSP header comment).
-                // Folium's map HTML has its own inline <script> tags with
-                // no nonce, so stamp one on before handing it off (#475
-                // follow-up).
+                // Folium's map HTML has its own inline <script> and <style>
+                // tags with no nonce, so stamp one on before handing it off
+                // (#475 follow-up — style-src dropped 'unsafe-inline' too).
                 if (window.__cspNonce) {
-                    mapHtml = mapHtml.replace(/<script(?![^>]*\bnonce=)/g, `<script nonce="${window.__cspNonce}"`);
+                    mapHtml = mapHtml.replace(/<(script|style)(?![^>]*\bnonce=)/g, `<$1 nonce="${window.__cspNonce}"`);
                 }
 
                 // Create a blob URL for the map HTML
@@ -344,7 +344,7 @@
             <!DOCTYPE html>
             <html>
             <head>
-                <style>
+                <style${window.__cspNonce ? ` nonce="${window.__cspNonce}"` : ''}>
                     body {
                         display: flex;
                         align-items: center;

@@ -142,10 +142,10 @@ function renderTypeBreakdown(byType) {
 
     const rows = byType.map(t => {
         const icon = sportIcon(t.sport_type);
-        return `<div class="d-flex align-items-center justify-content-between py-1" style="border-bottom:1px solid var(--color-border);">
+        return `<div class="d-flex align-items-center justify-content-between py-1 border-bottom-thin">
             <div class="d-flex align-items-center gap-2">
-                <span style="font-size:14px;">${icon}</span>
-                <span class="fw-medium" style="font-size:var(--font-size-sm);">${escapeHtml(t.sport_type)}</span>
+                <span class="fs-14">${icon}</span>
+                <span class="fw-medium fs-sm">${escapeHtml(t.sport_type)}</span>
             </div>
             <div class="d-flex gap-3 text-end">
                 <span class="metric-pill"><strong>${fmt(t.total_rides)}</strong> rides</span>
@@ -166,8 +166,9 @@ function renderMonthlyChart(byMonth) {
     el.innerHTML = byMonth.map(m => {
         const h = Math.max(Math.round((m.total_distance_mi / maxDist) * 100), 2);
         const label = m.month;
-        return `<div class="bar" style="height:${h}%;" title="${label}: ${fmt(m.total_distance_mi)} mi, ${fmt(m.total_rides)} rides" aria-label="${label}"></div>`;
+        return `<div class="bar" data-height="${h}" title="${label}: ${fmt(m.total_distance_mi)} mi, ${fmt(m.total_rides)} rides" aria-label="${label}"></div>`;
     }).join('');
+    el.querySelectorAll('.bar[data-height]').forEach(bar => { bar.style.height = `${bar.dataset.height}%`; });
 
     // Show first and last month label
     const first = byMonth[0].month;
@@ -183,8 +184,9 @@ function renderDistributionChart(data, chartId, labelId, unit) {
     const maxCount = Math.max(...data.map(b => b.count), 1);
     el.innerHTML = data.map(b => {
         const h = Math.max(Math.round((b.count / maxCount) * 100), 2);
-        return `<div class="bar" style="height:${h}%;" title="${b.label} ${unit}: ${b.count} rides" aria-label="${b.label} ${unit}"></div>`;
+        return `<div class="bar" data-height="${h}" title="${b.label} ${unit}: ${b.count} rides" aria-label="${b.label} ${unit}"></div>`;
     }).join('');
+    el.querySelectorAll('.bar[data-height]').forEach(bar => { bar.style.height = `${bar.dataset.height}%`; });
 
     const first = data[0].label;
     const last = data[data.length - 1].label;
@@ -231,7 +233,7 @@ function renderGearCards(data) {
 
     const cards = data.gear.map(g => {
         const typeIcon = g.type === 'bike' ? '🚲' : g.type === 'shoe' ? '👟' : '⚙️';
-        const primary = g.primary ? '<span class="badge bg-success ms-1" style="font-size:9px;">Primary</span>' : '';
+        const primary = g.primary ? '<span class="badge bg-success ms-1 fs-9">Primary</span>' : '';
         const lastUsed = g.last_used ? `Last used ${g.last_used}` : '';
         const displayName = gearDisplayName(g);
         return `<div class="col-12 col-md-6">
@@ -239,7 +241,7 @@ function renderGearCards(data) {
                  tabindex="0" aria-label="Filter by ${escapeHtml(displayName)}">
                 <div class="d-flex justify-content-between align-items-start">
                     <div>
-                        <span style="font-size:14px;">${typeIcon}</span>
+                        <span class="fs-14">${typeIcon}</span>
                         <span class="gear-name ms-1">${escapeHtml(displayName)}</span>${primary}
                     </div>
                 </div>
@@ -363,7 +365,7 @@ async function loadActivities() {
             return `<tr class="activity-row">
                 <td class="ps-2">
                     <div class="activity-name" title="${escapeHtml(a.name)}">${escapeHtml(a.name)}</div>
-                    <div style="font-size:10px; color:var(--color-text-muted);">${a.date} ${typeBadge} ${gearLabel ? '· ' + gearLabel : ''}</div>
+                    <div class="fs-10 text-color-muted">${a.date} ${typeBadge} ${gearLabel ? '· ' + gearLabel : ''}</div>
                 </td>
                 <td class="text-end">${fmt(a.distance_mi)}</td>
                 <td class="text-end">${fmtTime(a.time_h)}</td>
@@ -459,20 +461,21 @@ function renderCalendar(data) {
         const isToday = d.date === todayIso;
         const cls = ['cal-day'];
         if (isToday) cls.push('cal-today');
-        let style = '';
+        let opacityAttr = '';
         let title = `${d.date}: no activities`;
         if (d.count > 0) {
             cls.push('cal-has-activity');
             const opacity = 0.35 + 0.65 * (d.count / maxCount);
-            style = `style="background-color:var(--color-primary); opacity:${opacity.toFixed(2)};"`;
+            opacityAttr = `data-opacity="${opacity.toFixed(2)}"`;
             title = `${d.date}: ${d.count} ${d.count === 1 ? 'ride' : 'rides'}, ${fmt(d.distance_mi)} mi`;
         }
-        return `<div class="${cls.join(' ')}" ${style} title="${escapeHtml(title)}">
+        return `<div class="${cls.join(' ')}" ${opacityAttr} title="${escapeHtml(title)}">
             <span>${dayNum}</span>${d.count > 0 ? `<span class="cal-day-count">${d.count}</span>` : ''}
         </div>`;
     }).join('');
 
     grid.innerHTML = html;
+    grid.querySelectorAll('.cal-day[data-opacity]').forEach(day => { day.style.opacity = day.dataset.opacity; });
 
     if (s.total_rides > 0) {
         summaryEl.textContent = `${s.total_rides} ${s.total_rides === 1 ? 'ride' : 'rides'} · ${fmt(s.total_distance_mi)} mi · ${fmtInt(s.total_elevation_ft)} ft this month`;
