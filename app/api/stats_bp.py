@@ -60,6 +60,21 @@ def _seconds_to_hours(s):
     return s / 3600.0
 
 
+def _parse_activity_start_local(start_date):
+    """
+    Parse a Strava activity's start_date (UTC, e.g. "...Z") into a naive
+    datetime in the server's local time.
+
+    A bare `.replace(tzinfo=None)` on the parsed UTC value keeps the UTC
+    wall-clock numbers, so a ride that starts late at night locally but
+    crosses into the next UTC day gets bucketed/compared against
+    `datetime.now()` (local) as if it happened a day later than it did
+    (issue #496). Converting via `.astimezone()` first shifts the
+    wall-clock to local time before the tzinfo is dropped.
+    """
+    return datetime.fromisoformat(start_date.replace('Z', '+00:00')).astimezone().replace(tzinfo=None)
+
+
 def _filter_activities_by_period(activities, period):
     """Return activities within the requested period."""
     now = datetime.now()
@@ -82,7 +97,7 @@ def _filter_activities_by_period(activities, period):
             if not a.start_date:
                 continue
             try:
-                d = datetime.fromisoformat(a.start_date.replace('Z', '+00:00')).replace(tzinfo=None)
+                d = _parse_activity_start_local(a.start_date)
                 if start <= d <= end:
                     result.append(a)
             except (ValueError, AttributeError):
@@ -97,7 +112,7 @@ def _filter_activities_by_period(activities, period):
         if not a.start_date:
             continue
         try:
-            d = datetime.fromisoformat(a.start_date.replace('Z', '+00:00')).replace(tzinfo=None)
+            d = _parse_activity_start_local(a.start_date)
             if d >= start:
                 result.append(a)
         except (ValueError, AttributeError):
@@ -241,7 +256,7 @@ def get_stats():
         if not a.start_date:
             continue
         try:
-            d = datetime.fromisoformat(a.start_date.replace('Z', '+00:00')).replace(tzinfo=None)
+            d = _parse_activity_start_local(a.start_date)
             label = d.strftime('%G-W%V')
             week_buckets.setdefault(label, []).append(a)
         except (ValueError, AttributeError):
@@ -255,7 +270,7 @@ def get_stats():
         if not a.start_date:
             continue
         try:
-            d = datetime.fromisoformat(a.start_date.replace('Z', '+00:00')).replace(tzinfo=None)
+            d = _parse_activity_start_local(a.start_date)
             label = d.strftime('%Y-%m')
             month_buckets.setdefault(label, []).append(a)
         except (ValueError, AttributeError):

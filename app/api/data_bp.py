@@ -12,7 +12,7 @@ Routes:
 
 import json
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict
 
@@ -45,6 +45,45 @@ def _ms_to_mph(ms):
 
 def _seconds_to_hours(s):
     return s / 3600.0
+
+
+def _parse_date_range(data: dict):
+    """
+    Parse after_date/before_date from a request body into datetimes suitable
+    for stravalib's get_activities(after=, before=).
+
+    Two corrections vs a bare `datetime.fromisoformat()`:
+    - A naive datetime is treated by stravalib as already being UTC. Our
+      callers (the Settings custom-range picker) send bare "YYYY-MM-DD"
+      values that represent a *local* calendar date, so the naive datetime
+      is localized to the server's local timezone before being handed off —
+      otherwise the query window is shifted by the server's UTC offset
+      (issue #494).
+    - `before_date` is documented/used as an inclusive end date ("through
+      this day"), but Strava's `before` filter is a strict less-than. A
+      bare date (no time component) is bumped forward one day so the whole
+      selected day is included (issue #495).
+    """
+    after_date = None
+    before_date = None
+    for key, target in (('after_date', 'after'), ('before_date', 'before')):
+        raw = data.get(key)
+        if not raw:
+            continue
+        try:
+            parsed = datetime.fromisoformat(raw)
+        except (ValueError, TypeError):
+            continue
+        is_bare_date = 'T' not in raw
+        if target == 'before' and is_bare_date:
+            parsed = parsed + timedelta(days=1)
+        if parsed.tzinfo is None:
+            parsed = parsed.astimezone()  # attach server-local tzinfo, same wall-clock time
+        if target == 'after':
+            after_date = parsed
+        else:
+            before_date = parsed
+    return after_date, before_date
 
 
 # ---------------------------------------------------------------------------
@@ -82,20 +121,7 @@ def trigger_analysis():
     fetch_new = bool(data.get('fetch_new', False))
     force_refresh = bool(data.get('force_refresh', False))
 
-    after_date = None
-    before_date = None
-    if fetch_new:
-        for key, target in [('after_date', 'after_date'), ('before_date', 'before_date')]:
-            raw = data.get(key)
-            if raw:
-                try:
-                    parsed = datetime.fromisoformat(raw)
-                    if key == 'after_date':
-                        after_date = parsed
-                    else:
-                        before_date = parsed
-                except (ValueError, TypeError):
-                    pass
+    after_date, before_date = _parse_date_range(data) if fetch_new else (None, None)
 
     jobs.analysis_stop.clear()
 
@@ -166,19 +192,7 @@ def trigger_fetch():
 
     data = request.get_json(silent=True) or {}
 
-    after_date = None
-    before_date = None
-    for key in ('after_date', 'before_date'):
-        raw = data.get(key)
-        if raw:
-            try:
-                val = datetime.fromisoformat(raw)
-                if key == 'after_date':
-                    after_date = val
-                else:
-                    before_date = val
-            except (ValueError, TypeError):
-                pass
+    after_date, before_date = _parse_date_range(data)
 
     limit = int(data.get('limit', 1000))
 
