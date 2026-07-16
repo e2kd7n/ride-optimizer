@@ -42,110 +42,177 @@ def mock_storage():
     return storage
 
 
+def _http_response(status_code=200, json_data=None):
+    """Build a mock requests.Response."""
+    resp = Mock()
+    resp.status_code = status_code
+    resp.json.return_value = json_data or {}
+    if status_code >= 400:
+        resp.raise_for_status.side_effect = Exception(f"HTTP {status_code}")
+    else:
+        resp.raise_for_status.return_value = None
+    return resp
+
+
 class TestDailyAnalysisJob:
-    """Tests for daily_analysis.py cron job."""
-    
-    @patch('cron.daily_analysis.AnalysisService')
+    """Tests for daily_analysis.py cron job (thin HTTP client)."""
+
+    @patch('cron.daily_analysis.time.sleep')
+    @patch('cron.daily_analysis.requests.Session')
     @patch('cron.daily_analysis.JSONStorage')
     @patch('cron.daily_analysis.ConfigManager.get_instance')
-    def test_daily_analysis_success(self, mock_config, mock_storage_class, mock_service_class):
-        """Test daily analysis job runs successfully."""
-        # Setup mocks
+    def test_daily_analysis_success(self, mock_config, mock_storage_class,
+                                    mock_session_class, mock_sleep):
+        """Job triggers /api/analyze, polls to done, records history."""
         mock_storage = Mock()
         mock_storage.read.return_value = {'jobs': []}
         mock_storage_class.return_value = mock_storage
-        
-        mock_service = Mock()
-        mock_service.run_full_analysis.return_value = {
-            'success': True,
-            'activities_count': 100,
-            'route_groups_count': 10,
-            'long_rides_count': 5
-        }
-        mock_service_class.return_value = mock_service
-        
-        # Import and run
+
+        session = Mock()
+        session.get.side_effect = [
+            _http_response(json_data={'csrf_token': 'tok'}),
+            _http_response(json_data={'status': 'running'}),
+            _http_response(json_data={
+                'status': 'done',
+                'result': {'success': True, 'activities_count': 100,
+                           'route_groups_count': 10, 'long_rides_count': 5},
+            }),
+        ]
+        session.post.return_value = _http_response(
+            json_data={'status': 'started'})
+        mock_session_class.return_value = session
+
         from cron import daily_analysis
         result = daily_analysis.main()
-        
-        # Verify
+
         assert result == 0
-        mock_service.run_full_analysis.assert_called_once()
+        session.post.assert_called_once()
+        assert '/api/analyze' in session.post.call_args[0][0]
+        # CSRF token forwarded on the POST
+        assert session.post.call_args.kwargs['headers']['X-CSRFToken'] == 'tok'
         mock_storage.write.assert_called()
-    
-    @patch('cron.daily_analysis.AnalysisService')
+
+    @patch('cron.daily_analysis.time.sleep')
+    @patch('cron.daily_analysis.requests.Session')
     @patch('cron.daily_analysis.JSONStorage')
     @patch('cron.daily_analysis.ConfigManager.get_instance')
-    def test_daily_analysis_failure(self, mock_config, mock_storage_class, mock_service_class):
-        """Test daily analysis job handles failures."""
-        # Setup mocks
+    def test_daily_analysis_already_running(self, mock_config, mock_storage_class,
+                                            mock_session_class, mock_sleep):
+        """A 409 from /api/analyze is treated as a graceful skip."""
         mock_storage = Mock()
         mock_storage.read.return_value = {'jobs': []}
         mock_storage_class.return_value = mock_storage
-        
-        mock_service = Mock()
-        mock_service.run_full_analysis.side_effect = Exception('Test error')
-        mock_service_class.return_value = mock_service
-        
-        # Import and run
+
+        session = Mock()
+        session.get.return_value = _http_response(
+            json_data={'csrf_token': 'tok'})
+        session.post.return_value = _http_response(
+            status_code=409, json_data={'status': 'already_running'})
+        mock_session_class.return_value = session
+
+        from cron import daily_analysis
+        assert daily_analysis.main() == 0
+
+    @patch('cron.daily_analysis.time.sleep')
+    @patch('cron.daily_analysis.requests.Session')
+    @patch('cron.daily_analysis.JSONStorage')
+    @patch('cron.daily_analysis.ConfigManager.get_instance')
+    def test_daily_analysis_error_status(self, mock_config, mock_storage_class,
+                                         mock_session_class, mock_sleep):
+        """A job that ends in 'error' state exits 1 and records the failure."""
+        mock_storage = Mock()
+        mock_storage.read.return_value = {'jobs': []}
+        mock_storage_class.return_value = mock_storage
+
+        session = Mock()
+        session.get.side_effect = [
+            _http_response(json_data={'csrf_token': 'tok'}),
+            _http_response(json_data={'status': 'error',
+                                      'label': 'Error: boom'}),
+        ]
+        session.post.return_value = _http_response(
+            json_data={'status': 'started'})
+        mock_session_class.return_value = session
+
         from cron import daily_analysis
         result = daily_analysis.main()
-        
-        # Verify failure recorded
+
         assert result == 1
         mock_storage.write.assert_called()  # Should still record failure
 
-
-class TestWeatherRefreshJob:
-    """Tests for weather_refresh.py cron job."""
-    
-    @patch('cron.weather_refresh.WeatherService')
-    @patch('cron.weather_refresh.JSONStorage')
-    @patch('cron.weather_refresh.ConfigManager.get_instance')
-    def test_weather_refresh_success(self, mock_config, mock_storage_class, mock_service_class):
-        """Test weather refresh job runs successfully."""
-        # Setup mocks
-        mock_config_inst = Mock()
-        mock_config_inst.get.side_effect = lambda key: {
-            'location.home.latitude': 40.7128,
-            'location.home.longitude': -74.0060
-        }.get(key)
-        mock_config.return_value = mock_config_inst
-        
+    @patch('cron.daily_analysis.time.sleep')
+    @patch('cron.daily_analysis.requests.Session')
+    @patch('cron.daily_analysis.JSONStorage')
+    @patch('cron.daily_analysis.ConfigManager.get_instance')
+    def test_daily_analysis_app_unreachable(self, mock_config, mock_storage_class,
+                                            mock_session_class, mock_sleep):
+        """Connection failure exits 1 and records the failure."""
         mock_storage = Mock()
         mock_storage.read.return_value = {'jobs': []}
         mock_storage_class.return_value = mock_storage
-        
-        mock_service = Mock()
-        mock_service.get_current_weather.return_value = {
-            'current': {
-                'temperature': 72,
-                'comfort_score': 85
-            }
-        }
-        mock_service_class.return_value = mock_service
-        
-        # Import and run
-        from cron import weather_refresh
-        result = weather_refresh.main()
-        
-        # Verify
-        assert result == 0
-        mock_service.get_current_weather.assert_called_once()
+
+        session = Mock()
+        session.get.side_effect = Exception('connection refused')
+        mock_session_class.return_value = session
+
+        from cron import daily_analysis
+        result = daily_analysis.main()
+
+        assert result == 1
         mock_storage.write.assert_called()
-    
-    @patch('cron.weather_refresh.ConfigManager.get_instance')
-    def test_weather_refresh_no_location(self, mock_config):
-        """Test weather refresh skips when no location configured."""
-        mock_config_inst = Mock()
-        mock_config_inst.get.return_value = None
-        mock_config.return_value = mock_config_inst
-        
+
+
+class TestWeatherRefreshJob:
+    """Tests for weather_refresh.py cron job (thin HTTP client)."""
+
+    @patch('cron.weather_refresh.requests.get')
+    @patch('cron.weather_refresh.JSONStorage')
+    def test_weather_refresh_success(self, mock_storage_class, mock_get):
+        """Job hits /api/weather and records history."""
+        mock_storage = Mock()
+        mock_storage.read.return_value = {'jobs': []}
+        mock_storage_class.return_value = mock_storage
+
+        mock_get.return_value = _http_response(json_data={
+            'status': 'success',
+            'current': {'temperature': 72, 'comfort_score': 85},
+        })
+
         from cron import weather_refresh
         result = weather_refresh.main()
-        
-        # Should skip gracefully
+
         assert result == 0
+        assert '/api/weather' in mock_get.call_args[0][0]
+        mock_storage.write.assert_called()
+
+    @patch('cron.weather_refresh.requests.get')
+    @patch('cron.weather_refresh.JSONStorage')
+    def test_weather_refresh_no_location(self, mock_storage_class, mock_get):
+        """A 400 (no home location configured) is a graceful skip."""
+        mock_storage = Mock()
+        mock_storage.read.return_value = {'jobs': []}
+        mock_storage_class.return_value = mock_storage
+
+        mock_get.return_value = _http_response(status_code=400)
+
+        from cron import weather_refresh
+        assert weather_refresh.main() == 0
+
+    @patch('cron.weather_refresh.requests.get')
+    @patch('cron.weather_refresh.JSONStorage')
+    def test_weather_refresh_failure_non_critical(self, mock_storage_class, mock_get):
+        """Weather refresh failure is non-critical: exit 0, failure recorded."""
+        mock_storage = Mock()
+        mock_storage.read.return_value = {'jobs': []}
+        mock_storage_class.return_value = mock_storage
+
+        mock_get.side_effect = Exception('connection refused')
+
+        from cron import weather_refresh
+        result = weather_refresh.main()
+
+        assert result == 0
+        mock_storage.write.assert_called()
 
 
 class TestCacheCleanupJob:
@@ -255,27 +322,31 @@ class TestSystemHealthJob:
 class TestCronJobHistory:
     """Tests for job history tracking."""
     
+    @patch('cron.daily_analysis.time.sleep')
+    @patch('cron.daily_analysis.requests.Session')
     @patch('cron.daily_analysis.JSONStorage')
-    @patch('cron.daily_analysis.AnalysisService')
     @patch('cron.daily_analysis.ConfigManager.get_instance')
-    def test_job_history_recorded(self, mock_config, mock_service_class, mock_storage_class):
+    def test_job_history_recorded(self, mock_config, mock_storage_class,
+                                  mock_session_class, mock_sleep):
         """Test job execution is recorded in history."""
         # Setup mock storage
         mock_storage = Mock()
         mock_storage.read.return_value = {'jobs': []}
         mock_storage_class.return_value = mock_storage
-        
-        # Setup mock service
-        mock_service = Mock()
-        mock_service.run_full_analysis.return_value = {
-            'status': 'success',
-            'activities_count': 100
-        }
-        mock_service_class.return_value = mock_service
-        
+
+        session = Mock()
+        session.get.side_effect = [
+            _http_response(json_data={'csrf_token': 'tok'}),
+            _http_response(json_data={'status': 'done',
+                                      'result': {'activities_count': 100}}),
+        ]
+        session.post.return_value = _http_response(
+            json_data={'status': 'started'})
+        mock_session_class.return_value = session
+
         from cron import daily_analysis
         result = daily_analysis.main()
-        
+
         # Verify storage.write was called (job history recorded)
         assert mock_storage.write.called
         # Check that job_history.json was written

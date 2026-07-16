@@ -765,7 +765,11 @@ class RouteAnalyzer:
         # Parallelise the inner comparison loop across n_workers processes.
         # The outer (pivot) loop remains sequential because each iteration
         # depends on which routes the previous one removed.
-        self._executor = ProcessPoolExecutor(max_workers=self.n_workers)
+        # With a single worker a pool would only fork one extra copy of the
+        # numpy stack for zero parallelism (a real cost on the Pi), so run
+        # the sequential path instead.
+        self._executor = (ProcessPoolExecutor(max_workers=self.n_workers)
+                          if self.n_workers > 1 else None)
         try:
             if home_to_work:
                 tqdm.write(f"   → Processing {len(home_to_work)} home→work routes "
@@ -785,8 +789,9 @@ class RouteAnalyzer:
                 groups.extend(wth_groups)
                 tqdm.write(f"   ✓ {len(wth_groups)} groups")
         finally:
-            self._executor.shutdown(wait=False, cancel_futures=True)
-            self._executor = None
+            if self._executor is not None:
+                self._executor.shutdown(wait=False, cancel_futures=True)
+                self._executor = None
 
         tqdm.write(f"   Total: {len(groups)} groups")
         logger.info(f"Created {len(groups)} route groups from {len(routes)} routes")
