@@ -448,74 +448,13 @@ class CommuteService:
             # Route visibility is controlled by clicking cards/polylines, not layer control
             folium.LayerControl(collapsed=True).add_to(map_obj)
             
-            # Get the HTML and inject JavaScript for route highlighting
+            # Get the HTML and inject the route-highlighting script tag.
+            # The script itself lives in static/js/commute-map-frame.js (not
+            # inlined here) so CSP script-src doesn't need 'unsafe-inline'
+            # for it (#475).
             map_html = map_obj.get_root().render()
-            
-            # Inject JavaScript to handle postMessage for route highlighting
-            highlight_script = """
-            <script>
-            (function() {
-                // Listen for messages from parent window to highlight routes
-                window.addEventListener('message', function(event) {
-                    if (event.data && event.data.type === 'highlightRoute') {
-                        highlightRoute(event.data.direction);
-                    }
-                });
-                
-                function highlightRoute(direction) {
-                    // Find all polylines with direction class
-                    const allPolylines = document.querySelectorAll('path.leaflet-interactive');
-                    
-                    allPolylines.forEach(function(polyline) {
-                        const classes = polyline.getAttribute('class') || '';
-                        
-                        // Check if this polyline matches the selected direction
-                        if (classes.includes('direction-' + direction)) {
-                            // Highlight: full opacity, thicker stroke
-                            polyline.style.opacity = '1.0';
-                            polyline.style.strokeOpacity = '1.0';
-                            polyline.style.strokeWidth = '8';
-                            polyline.style.zIndex = '1000';
-                        } else if (classes.includes('direction-')) {
-                            // Subdue: reduced opacity, thinner stroke
-                            polyline.style.opacity = '0.3';
-                            polyline.style.strokeOpacity = '0.3';
-                            polyline.style.strokeWidth = '5';
-                            polyline.style.zIndex = '1';
-                        }
-                    });
-                }
-                
-                // Also add click handlers to polylines for direct interaction
-                document.addEventListener('DOMContentLoaded', function() {
-                    const allPolylines = document.querySelectorAll('path.leaflet-interactive');
-                    
-                    allPolylines.forEach(function(polyline) {
-                        polyline.style.cursor = 'pointer';
-                        
-                        polyline.addEventListener('click', function() {
-                            const classes = this.getAttribute('class') || '';
-                            
-                            // Extract direction from class
-                            const directionMatch = classes.match(/direction-(\\w+)/);
-                            if (directionMatch) {
-                                highlightRoute(directionMatch[1]);
-                                
-                                // Notify parent window
-                                if (window.parent !== window) {
-                                    window.parent.postMessage({
-                                        type: 'routeClicked',
-                                        direction: directionMatch[1]
-                                    }, '*');
-                                }
-                            }
-                        });
-                    });
-                });
-            })();
-            </script>
-            """
-            
+            highlight_script = '<script src="/js/commute-map-frame.js"></script>'
+
             # Insert the script before the closing body tag
             map_html = map_html.replace('</body>', highlight_script + '</body>')
             

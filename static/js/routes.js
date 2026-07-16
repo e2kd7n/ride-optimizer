@@ -13,6 +13,25 @@
         routeColors: ['#007bff', '#28a745', '#dc3545', '#ffc107', '#17a2b8', '#6f42c1', '#fd7e14']
     };
 
+    // Every route/legend color used on this page comes from a fixed palette
+    // (routeColors above plus distanceColor/recencyColor's buckets) — map each
+    // hex to a CSS class instead of an inline style="" so CSP style-src can
+    // drop 'unsafe-inline' (#475).
+    const ROUTE_COLOR_CLASS = {
+        '#007bff': 'c-blue',
+        '#28a745': 'c-green',
+        '#dc3545': 'c-red',
+        '#ffc107': 'c-yellow',
+        '#17a2b8': 'c-teal',
+        '#6f42c1': 'c-purple',
+        '#fd7e14': 'c-orange',
+        '#6c757d': 'c-gray'
+    };
+
+    function colorClass(hex) {
+        return ROUTE_COLOR_CLASS[hex] || 'c-blue';
+    }
+
     function byId(id) {
         return document.getElementById(id);
     }
@@ -78,11 +97,11 @@
         if (mode === 'distance') {
             legendEl.innerHTML = '<span class="me-2 fw-semibold">Distance:</span>'
                 + ['#28a745|<10' + unit, '#ffc107|10–20' + unit, '#fd7e14|20–40' + unit, '#dc3545|>40' + unit]
-                    .map(s => { const [c, l] = s.split('|'); return `<span class="me-2"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${c};vertical-align:middle;"></span> ${l}</span>`; }).join('');
+                    .map(s => { const [c, l] = s.split('|'); return `<span class="me-2"><span class="legend-dot ${colorClass(c)}"></span> ${l}</span>`; }).join('');
         } else {
             legendEl.innerHTML = '<span class="me-2 fw-semibold">Last ridden:</span>'
                 + ['#007bff|<30d', '#28a745|1–3mo', '#ffc107|3–6mo', '#fd7e14|6–12mo', '#6c757d|>1yr']
-                    .map(s => { const [c, l] = s.split('|'); return `<span class="me-2"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${c};vertical-align:middle;"></span> ${l}</span>`; }).join('');
+                    .map(s => { const [c, l] = s.split('|'); return `<span class="me-2"><span class="legend-dot ${colorClass(c)}"></span> ${l}</span>`; }).join('');
         }
     }
 
@@ -108,7 +127,7 @@
                 if (icon.options && icon.options.html) {
                     mapObjects.startMarker.setIcon(L.divIcon({
                         className: 'custom-marker',
-                        html: `<div style="background-color:${color};width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 0 4px rgba(0,0,0,.5)"></div>`,
+                        html: `<div class="marker-dot-sm ${colorClass(color)}"></div>`,
                         iconSize: [12, 12]
                     }));
                 }
@@ -116,7 +135,7 @@
             if (mapObjects.endMarker) {
                 mapObjects.endMarker.setIcon(L.divIcon({
                     className: 'custom-marker',
-                    html: `<div style="background-color:${color};width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 0 4px rgba(0,0,0,.5)"></div>`,
+                    html: `<div class="marker-dot-sm ${colorClass(color)}"></div>`,
                     iconSize: [12, 12]
                 }));
             }
@@ -286,7 +305,7 @@
             const startMarker = L.marker(start, {
                 icon: L.divIcon({
                     className: 'custom-marker',
-                    html: `<div style="background-color: ${color}; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.5);"></div>`,
+                    html: `<div class="marker-dot-sm ${colorClass(color)}"></div>`,
                     iconSize: [12, 12]
                 })
             }).addTo(state.mapInstance);
@@ -295,7 +314,7 @@
             const endMarker = L.marker(end, {
                 icon: L.divIcon({
                     className: 'custom-marker',
-                    html: `<div style="background-color: ${color}; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.5);"></div>`,
+                    html: `<div class="marker-dot-sm ${colorClass(color)}"></div>`,
                     iconSize: [12, 12]
                 })
             }).addTo(state.mapInstance);
@@ -431,7 +450,7 @@
 
                     const mkIcon = c => L.divIcon({
                         className: 'custom-marker',
-                        html: `<div style="background-color:${c};width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 0 4px rgba(0,0,0,.5)"></div>`,
+                        html: `<div class="marker-dot-sm ${colorClass(c)}"></div>`,
                         iconSize: [12, 12]
                     });
                     const startMarker = L.marker(coords[0], { icon: mkIcon(color) }).addTo(state.mapInstance);
@@ -613,7 +632,7 @@
             
             row.innerHTML = `
                 <div class="d-flex justify-content-between align-items-start">
-                    <div class="flex-grow-1 me-2" style="min-width: 0;">
+                    <div class="flex-grow-1 me-2 min-w-0">
                         <h6 class="mb-1 text-truncate" title="${escapeHtml(route.name)}">
                             ${route.is_favorite ? '<i class="bi bi-star-fill text-warning"></i> ' : ''}
                             ${escapeHtml(route.name)}
@@ -658,15 +677,15 @@
         };
 
         const favIcon   = route.is_favorite  ? '<i class="bi bi-star-fill text-warning me-1" aria-hidden="true"></i>' : '';
-        const plusBadge = route.is_plus_route ? '<span class="badge bg-success-subtle text-success-emphasis me-1" style="font-size:.65em;vertical-align:middle">PLUS</span>' : '';
-        const diffBadge = `<span class="badge ${difficultyColors[difficulty]} flex-shrink-0" style="font-size:.7em" title="${difficulty}" aria-label="Difficulty: ${difficulty}"><i class="bi ${difficultyIcons[difficulty]}" aria-hidden="true"></i></span>`;
+        const plusBadge = route.is_plus_route ? '<span class="badge bg-success-subtle text-success-emphasis me-1 badge-plus">PLUS</span>' : '';
+        const diffBadge = `<span class="badge ${difficultyColors[difficulty]} flex-shrink-0 fs-07em" title="${difficulty}" aria-label="Difficulty: ${difficulty}"><i class="bi ${difficultyIcons[difficulty]}" aria-hidden="true"></i></span>`;
 
         // Direction badge for commute routes
         let dirBadge = '';
         if (route.direction === 'home_to_work') {
-            dirBadge = '<span class="badge border border-info-subtle text-info-emphasis flex-shrink-0 ms-1" style="font-size:.65em" title="Direction: To Work" aria-label="Direction: To Work"><i class="bi bi-sunrise" aria-hidden="true"></i> To Work</span>';
+            dirBadge = '<span class="badge border border-info-subtle text-info-emphasis flex-shrink-0 ms-1 fs-065em" title="Direction: To Work" aria-label="Direction: To Work"><i class="bi bi-sunrise" aria-hidden="true"></i> To Work</span>';
         } else if (route.direction === 'work_to_home') {
-            dirBadge = '<span class="badge border border-warning-subtle text-warning-emphasis flex-shrink-0 ms-1" style="font-size:.65em" title="Direction: To Home" aria-label="Direction: To Home"><i class="bi bi-sunset" aria-hidden="true"></i> To Home</span>';
+            dirBadge = '<span class="badge border border-warning-subtle text-warning-emphasis flex-shrink-0 ms-1 fs-065em" title="Direction: To Home" aria-label="Direction: To Home"><i class="bi bi-sunset" aria-hidden="true"></i> To Home</span>';
         }
 
         // Terrain label for sub-line (extracted from name)
@@ -678,27 +697,26 @@
         card.innerHTML = `
             <div class="card-body py-2 px-3">
                 <div class="d-flex align-items-center gap-2">
-                    <div class="form-check compare-toggle flex-shrink-0" onclick="event.stopPropagation()">
+                    <div class="form-check compare-toggle flex-shrink-0">
                         <input class="form-check-input compare-checkbox mt-0" type="checkbox"
                                id="compare-${route.id}" data-route-id="${route.id}"
                                ${isSelected ? 'checked' : ''}
                                title="Compare">
                         <label class="form-check-label small text-muted" for="compare-${route.id}">Compare</label>
                     </div>
-                    <span class="fw-semibold text-truncate flex-grow-1" style="font-size:.875rem;cursor:pointer" title="${escapeHtml(route.name)}" data-route-link>
+                    <span class="fw-semibold text-truncate flex-grow-1 route-name-link" title="${escapeHtml(route.name)}" data-route-link>
                         ${favIcon}${plusBadge}${escapeHtml(route.name)}
                     </span>
                     ${diffBadge}${dirBadge}
                 </div>
-                <div class="d-flex align-items-center gap-3 mt-1 text-muted" style="font-size:.78rem;padding-left:1.65rem">
+                <div class="d-flex align-items-center gap-3 mt-1 text-muted route-meta-row">
                     <span title="Distance"><i class="bi bi-arrow-left-right" aria-hidden="true"></i> ${window.formatDistance(route.distance)}</span>
                     <span title="Duration"><i class="bi bi-clock" aria-hidden="true"></i> ${formatDuration(route.duration)}</span>
                     <span title="Elevation gain"><i class="bi bi-arrow-up" aria-hidden="true"></i> ${window.formatElevation(route.elevation_gain || route.elevation || 0)}</span>
                     ${terrainLabel}
-                    <span class="uses-link" role="button" tabindex="0" title="View activities" data-route-uses
-                          style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted"
+                    <span class="uses-link uses-link-style" role="button" tabindex="0" title="View activities" data-route-uses
                           ><i class="bi bi-repeat" aria-hidden="true"></i> ${route.uses || 0}</span>
-                    <span class="ms-auto text-primary" style="cursor:pointer" data-route-link title="View details">
+                    <span class="ms-auto text-primary cursor-pointer" data-route-link title="View details">
                         <i class="bi bi-arrow-right" aria-hidden="true"></i>
                     </span>
                 </div>
@@ -706,6 +724,9 @@
         `;
 
         card.style.cursor = 'pointer';
+        // Moved off inline onclick="event.stopPropagation()" so CSP
+        // script-src can drop 'unsafe-inline' — #475.
+        card.querySelector('.compare-toggle').addEventListener('click', (e) => e.stopPropagation());
         function handleCardActivation(e) {
             if (e.target.closest('.compare-toggle') || e.target.closest('[data-route-link]') || e.target.closest('[data-route-uses]')) {
                 return;
@@ -1238,3 +1259,31 @@
 })();
 
 // Made with Bob
+
+/**
+ * Unit-aware filter labels/presets (moved from inline <script> in
+ * routes.html so CSP script-src can drop 'unsafe-inline' — #475).
+ */
+document.addEventListener('DOMContentLoaded', function() {
+    const unitSystem = window.getUnitSystem ? window.getUnitSystem() : 'imperial';
+    const distanceUnit = window.getDistanceUnit ? window.getDistanceUnit() : 'mi';
+
+    const minLabel = document.getElementById('filter-min-distance-label');
+    const maxLabel = document.getElementById('filter-max-distance-label');
+    if (minLabel) minLabel.textContent = `Min (${distanceUnit})`;
+    if (maxLabel) maxLabel.textContent = `Max (${distanceUnit})`;
+
+    const presetButtons = document.querySelectorAll('.preset-filter');
+    presetButtons.forEach(btn => {
+        const preset = btn.getAttribute('data-preset');
+        const icon = btn.querySelector('i');
+        const iconHtml = icon ? icon.outerHTML + ' ' : '';
+        if (preset === 'short') {
+            btn.innerHTML = `${iconHtml}Short (<${unitSystem === 'imperial' ? '10mi' : '16km'})`;
+        } else if (preset === 'medium') {
+            btn.innerHTML = `${iconHtml}Medium (${unitSystem === 'imperial' ? '10–20mi' : '16–32km'})`;
+        } else if (preset === 'long') {
+            btn.innerHTML = `${iconHtml}Long (>${unitSystem === 'imperial' ? '20mi' : '32km'})`;
+        }
+    });
+});

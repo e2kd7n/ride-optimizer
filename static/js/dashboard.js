@@ -1,9 +1,9 @@
 /**
  * Dashboard page logic
  * Loads and displays system status, weather, recommendations, and routes
+ * (initialization happens in the DOMContentLoaded listener at the bottom
+ * of this file)
  */
-
-// NOTE: Initialization is handled by inline script in index.html
 
 /**
  * Load all dashboard data
@@ -404,7 +404,7 @@ async function loadSystemStatus() {
         container.innerHTML = html;
     } catch (error) {
         console.error('Failed to load system status:', error);
-        container.innerHTML = window.renderErrorState('System status unavailable.', { variant: 'danger', retry: 'loadSystemStatus()' });
+        window.renderErrorStateInto(container, 'System status unavailable.', { variant: 'danger', retry: loadSystemStatus });
     }
 }
 
@@ -551,11 +551,11 @@ async function loadWeather() {
             </div>
             <div>
                 <div class="weather-temp">${current.temperature}°F</div>
-                <small style="opacity: 0.9;">Feels like ${current.feels_like}°F</small>
+                <small class="opacity-90">Feels like ${current.feels_like}°F</small>
             </div>
             <div class="weather-details flex-grow-1">
                 <div class="weather-detail-item">
-                    <span class="badge bg-${severity.color}" style="font-size: 1rem; padding: var(--space-2) var(--space-3);" title="Weather severity: ${severity.label}">
+                    <span class="badge bg-${severity.color} hero-weather-badge" title="Weather severity: ${severity.label}">
                         ${severity.icon} ${severity.label}
                     </span>
                 </div>
@@ -578,7 +578,7 @@ async function loadWeather() {
                 </div>
             </div>
             ${weather.timestamp ? `
-                <div class="weather-detail-item timestamp-display" data-timestamp="${weather.timestamp}" title="${formatAbsoluteTime(weather.timestamp)}" style="opacity: 0.8;">
+                <div class="weather-detail-item timestamp-display opacity-80" data-timestamp="${weather.timestamp}" title="${formatAbsoluteTime(weather.timestamp)}">
                     <i class="bi bi-clock"></i>
                     <span>${formatRelativeTime(weather.timestamp)}</span>
                 </div>
@@ -588,7 +588,8 @@ async function loadWeather() {
         container.innerHTML = html;
     } catch (error) {
         console.error('Failed to load weather:', error);
-        container.innerHTML = '<span class="text-white small"><i class="bi bi-cloud-slash me-1"></i>Weather unavailable <button class="btn btn-sm btn-outline-light ms-2 py-0 px-1" onclick="loadWeather()">Retry</button></span>';
+        container.innerHTML = '<span class="text-white small"><i class="bi bi-cloud-slash me-1"></i>Weather unavailable <button type="button" class="btn btn-sm btn-outline-light ms-2 py-0 px-1 weather-retry-btn">Retry</button></span>';
+        container.querySelector('.weather-retry-btn').addEventListener('click', loadWeather);
     }
 }
 
@@ -654,7 +655,7 @@ function renderHeroCard(rec, isHero, secondaryRec) {
         ? `Compare both directions — return score: ${secondaryScore}`
         : 'Compare both directions';
 
-    const borderColor = score >= 70 ? '#28a745' : score >= 50 ? '#ffc107' : '#dc3545';
+    const borderClass = score >= 70 ? 'hero-border-good' : score >= 50 ? 'hero-border-warn' : 'hero-border-bad';
     const windImpact = rec.wind_impact;
     const windBadge = windImpact
         ? `<span class="badge bg-light text-dark border ms-2" title="Wind impact on this route">
@@ -683,7 +684,7 @@ function renderHeroCard(rec, isHero, secondaryRec) {
 
     if (isHero) {
         return `
-            <div class="hero-decision-card" style="border-left: 4px solid ${borderColor}; padding-left: var(--space-3);">
+            <div class="hero-decision-card ${borderClass}">
                 <div class="hero-card-header">
                     <span class="hero-route-name">
                         <i class="bi ${scoreIcon} me-1"></i>${routeName}
@@ -793,97 +794,7 @@ async function loadRecommendation() {
         container.innerHTML = html;
     } catch (error) {
         console.error('Failed to load commute recommendations:', error);
-        container.innerHTML = window.renderErrorState('Commute recommendations unavailable.', { retry: 'loadRecommendation()' });
-    }
-}
-
-/**
- * Load Today's Conditions card with traffic-light indicators (#288).
- * Mobile: collapses to a 1-line summary with an expand chevron.
- */
-async function loadConditionsCard() {
-    const container = document.getElementById('conditions-card');
-    if (!container) return;
-
-    try {
-        const weather = await window.apiClient.getWeather();
-        if (!weather || !weather.current) {
-            container.innerHTML = window.renderEmptyState('Conditions unavailable.', '', 'bi-cloud-slash');
-            return;
-        }
-
-        const esc = window.escapeHtml;
-        const current = weather.current;
-        const severity = getWeatherSeverity(current);
-        const comfort = current.comfort_score || 0;
-
-        function conditionStatus(score) {
-            if (score >= 80) return { icon: 'bi-check-circle-fill', color: '#28a745', label: 'Excellent' };
-            if (score >= 65) return { icon: 'bi-hand-thumbs-up-fill', color: '#20c997', label: 'Good' };
-            if (score >= 50) return { icon: 'bi-exclamation-triangle-fill', color: '#ffc107', label: 'Fair' };
-            if (score >= 35) return { icon: 'bi-hand-thumbs-down-fill', color: '#fd7e14', label: 'Poor' };
-            return { icon: 'bi-x-circle-fill', color: '#dc3545', label: 'Bad' };
-        }
-
-        function conditionRow(label, score, note) {
-            const s = conditionStatus(score);
-            return `
-                <div class="conditions-row d-flex align-items-center gap-2 py-1">
-                    <span class="conditions-label small text-muted" style="min-width:90px">${label}</span>
-                    <i class="bi ${s.icon}" style="color:${s.color};font-size:1rem;"></i>
-                    <span class="small">${esc(note)}</span>
-                </div>`;
-        }
-
-        const windSpeed = current.wind_speed;
-        const windDir = current.wind_direction || '';
-        const windScore = windSpeed <= 5 ? 90
-                        : windSpeed <= 10 ? 75
-                        : windSpeed <= 18 ? 55
-                        : 30;
-        const windNote = windSpeed <= 5 ? 'Calm'
-                       : windSpeed <= 10 ? `Light ${windDir} wind`
-                       : windSpeed <= 18 ? `${windDir} wind (${windSpeed} mph)`
-                       : `Strong ${windDir} wind (${windSpeed} mph)`;
-        const conditionsText = `${severity.label} — ${(current.conditions || '').toLowerCase()}`;
-
-        const overall = conditionStatus(comfort);
-        const html = `
-            <div class="conditions-summary-toggle d-flex d-md-none align-items-center gap-2"
-                 role="button" tabindex="0" aria-expanded="false" aria-controls="conditions-full-rows">
-                <i class="bi ${overall.icon}" style="color:${overall.color}"></i>
-                <span class="small fw-semibold">${overall.label} · ${comfort}/100</span>
-                <i class="bi bi-chevron-down ms-auto conditions-chevron" aria-hidden="true"></i>
-            </div>
-            <div class="conditions-full-rows">
-                ${conditionRow('Weather', comfort, conditionsText)}
-                ${conditionRow('Wind', windScore, windNote)}
-                ${conditionRow('Comfort', comfort, `${comfort}/100`)}
-                <div class="mt-2">
-                    <a href="/weather.html" class="small text-muted">Detailed forecast →</a>
-                </div>
-            </div>`;
-
-        container.innerHTML = html;
-
-        const toggle = container.querySelector('.conditions-summary-toggle');
-        const fullRows = container.querySelector('.conditions-full-rows');
-        if (toggle && fullRows) {
-            toggle.addEventListener('click', () => {
-                const expanded = toggle.getAttribute('aria-expanded') === 'true';
-                toggle.setAttribute('aria-expanded', String(!expanded));
-                fullRows.classList.toggle('conditions-rows-open', !expanded);
-            });
-            toggle.addEventListener('keydown', e => {
-                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle.click(); }
-            });
-        }
-
-        const mobile = document.getElementById('conditions-card-mobile');
-        if (mobile) mobile.innerHTML = html;
-    } catch (error) {
-        console.error('Failed to load conditions card:', error);
-        container.innerHTML = window.renderErrorState('Conditions unavailable.', { small: true, retry: 'loadConditionsCard()' });
+        window.renderErrorStateInto(container, 'Commute recommendations unavailable.', { retry: loadRecommendation });
     }
 }
 
@@ -906,17 +817,17 @@ async function loadRouteStatus() {
         const esc = window.escapeHtml;
         function routeStatusRow(route) {
             const score = route.condition_score || 75;
-            let icon, color;
-            if (score >= 80) { icon = 'bi-check-circle-fill'; color = '#28a745'; }
-            else if (score >= 65) { icon = 'bi-hand-thumbs-up-fill'; color = '#20c997'; }
-            else if (score >= 50) { icon = 'bi-exclamation-triangle-fill'; color = '#ffc107'; }
-            else if (score >= 35) { icon = 'bi-hand-thumbs-down-fill'; color = '#fd7e14'; }
-            else { icon = 'bi-x-circle-fill'; color = '#dc3545'; }
+            let icon, colorClass;
+            if (score >= 80) { icon = 'bi-check-circle-fill'; colorClass = 'route-status-icon-great'; }
+            else if (score >= 65) { icon = 'bi-hand-thumbs-up-fill'; colorClass = 'route-status-icon-good'; }
+            else if (score >= 50) { icon = 'bi-exclamation-triangle-fill'; colorClass = 'route-status-icon-fair'; }
+            else if (score >= 35) { icon = 'bi-hand-thumbs-down-fill'; colorClass = 'route-status-icon-poor'; }
+            else { icon = 'bi-x-circle-fill'; colorClass = 'route-status-icon-bad'; }
             const name = esc((route.name || 'Route').slice(0, 22));
             return `
                 <div class="route-status-row d-flex align-items-center gap-2 py-1">
-                    <span class="small text-truncate" style="min-width:120px;max-width:140px">${name}</span>
-                    <i class="bi ${icon}" style="color:${color};font-size:1rem;flex-shrink:0"></i>
+                    <span class="small text-truncate route-name-truncate">${name}</span>
+                    <i class="bi ${icon} route-status-icon ${colorClass}"></i>
                     <span class="small text-muted">${esc(route.condition_note || 'Clear')}</span>
                 </div>`;
         }
@@ -957,64 +868,7 @@ async function loadRouteStatus() {
         if (mobile) mobile.innerHTML = html;
     } catch (error) {
         console.error('Failed to load route status:', error);
-        container.innerHTML = window.renderErrorState('Route status unavailable.', { small: true, retry: 'loadRouteStatus()' });
-    }
-}
-
-/**
- * Load and display route statistics
- */
-async function loadRouteStats() {
-    const container = document.getElementById('route-stats');
-    
-    try {
-        const data = await window.apiClient.getRoutes();
-        const routes = data.routes || [];
-        
-        // Calculate statistics
-        const totalRoutes = routes.length;
-        const favoriteRoutes = routes.filter(r => r.is_favorite).length;
-        const totalDistanceKm = routes.reduce((sum, r) => sum + (r.distance || 0), 0);
-        const avgDistanceKm = totalRoutes > 0 ? totalDistanceKm / totalRoutes : 0;
-        
-        // Stats HTML
-        const statsHtml = `
-            <div class="row text-center">
-                <div class="col-md-3">
-                    <div class="stat-card">
-                        <i class="bi bi-map fs-2 text-primary"></i>
-                        <h3 class="mt-2">${totalRoutes}</h3>
-                        <small class="text-muted">Total Routes</small>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="stat-card">
-                        <i class="bi bi-star-fill fs-2 text-warning"></i>
-                        <h3 class="mt-2">${favoriteRoutes}</h3>
-                        <small class="text-muted">Favorites</small>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="stat-card">
-                        <i class="bi bi-speedometer2 fs-2 text-success"></i>
-                        <h3 class="mt-2">${window.formatDistance(totalDistanceKm, 0)}</h3>
-                        <small class="text-muted">Total Distance</small>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="stat-card">
-                        <i class="bi bi-graph-up fs-2 text-info"></i>
-                        <h3 class="mt-2">${window.formatDistance(avgDistanceKm)}</h3>
-                        <small class="text-muted">Avg Distance</small>
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        container.innerHTML = statsHtml;
-    } catch (error) {
-        console.error('Failed to load route stats:', error);
-        container.innerHTML = window.renderErrorState('Failed to load route statistics.', { variant: 'danger', retry: 'loadRouteStats()' });
+        window.renderErrorStateInto(container, 'Route status unavailable.', { small: true, retry: loadRouteStatus });
     }
 }
 
@@ -1059,7 +913,7 @@ async function loadHourlyForecast() {
         container.innerHTML = `<div class="hourly-strip">${hourCells}</div>`;
     } catch (error) {
         console.error('Failed to load hourly forecast:', error);
-        container.innerHTML = window.renderErrorState('Hourly forecast unavailable.', { small: true, retry: 'loadHourlyForecast()' });
+        window.renderErrorStateInto(container, 'Hourly forecast unavailable.', { small: true, retry: loadHourlyForecast });
     }
 }
 
@@ -1106,3 +960,50 @@ function getScoreClass(score) {
     if (score >= 40) return 'bg-warning';
     return 'bg-danger';
 }
+
+/**
+ * Initialize dashboard on page load (moved from inline <script> in
+ * index.html so CSP script-src can drop 'unsafe-inline' — #475).
+ */
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log('[OK] Dashboard initializing...');
+
+    // Load dashboard data
+    await loadDashboard();
+
+    // Refresh data every 5 minutes
+    setInterval(async () => {
+        await loadDashboard();
+    }, 5 * 60 * 1000);
+
+    // “What's New” toast on first visit
+    (function showWhatsNew() {
+        var WHATS_NEW_KEY = 'rideOptimizer_whatsNew_v0.17.0';
+        if (localStorage.getItem(WHATS_NEW_KEY)) return;
+        localStorage.setItem(WHATS_NEW_KEY, '1');
+        var toastEl = document.createElement('div');
+        toastEl.className = 'toast show position-fixed bottom-0 end-0 m-3';
+        toastEl.setAttribute('role', 'alert');
+        toastEl.setAttribute('aria-live', 'polite');
+        toastEl.style.zIndex = '1090';
+        toastEl.style.maxWidth = '340px';
+        toastEl.innerHTML =
+            '<div class="toast-header">' +
+                '<i class="bi bi-stars text-primary me-2" aria-hidden="true"></i>' +
+                '<strong class="me-auto">What\'s New in v0.17.0</strong>' +
+                '<button type="button" class="btn-close" aria-label="Close"></button>' +
+            '</div>' +
+            '<div class="toast-body">' +
+                '<ul class="mb-0 ps-3 small">' +
+                    '<li>Fair Weather visual refresh — new cobalt &amp; coral color system</li>' +
+                    '<li>Mobile layout reordered: your commute decision leads, map and route status follow</li>' +
+                    '<li>Reports and Explore added to the mobile bottom navigation</li>' +
+                '</ul>' +
+            '</div>';
+        document.body.appendChild(toastEl);
+        toastEl.querySelector('.btn-close').addEventListener('click', function () { toastEl.remove(); });
+        setTimeout(function () { if (toastEl.parentNode) toastEl.remove(); }, 12000);
+    })();
+
+    console.log('[OK] Dashboard initialized');
+});

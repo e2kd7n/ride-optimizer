@@ -1,0 +1,29 @@
+    <nav class="navbar navbar-expand-lg navbar-fairweather" role="navigation" aria-label="Main navigation">
+        <div class="container">
+            <a class="navbar-brand" href="/" aria-label="Ride Optimizer Home">
+                <svg class="brand-mark" viewBox="0 0 48 48" fill="none" aria-hidden="true" focusable="false">
+                    <circle cx="24" cy="24" r="12" stroke="currentColor" stroke-width="3.4"/>
+                    <g stroke="currentColor" stroke-width="3.4" stroke-linecap="round">
+                        <line x1="24" y1="2" x2="24" y2="8"/><line x1="24" y1="40" x2="24" y2="46"/>
+                        <line x1="2" y1="24" x2="8" y2="24"/><line x1="40" y1="24" x2="46" y2="24"/>
+                        <line x1="8.3" y1="8.3" x2="12.5" y2="12.5"/><line x1="35.5" y1="35.5" x2="39.7" y2="39.7"/>
+                        <line x1="39.7" y1="8.3" x2="35.5" y2="12.5"/><line x1="12.5" y1="35.5" x2="8.3" y2="39.7"/>
+                    </g>
+                </svg>
+                <span><span class="brand-ride">Ride</span>&nbsp;<span class="brand-optimizer">Optimizer</span></span>
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item"><a class="nav-link{% if active_page == 'home' %} active{% endif %}" href="/"{% if active_page == 'home' %} aria-current="page"{% endif %}><i class="bi bi-house-door" aria-hidden="true"></i> Home</a></li>
+                    <li class="nav-item"><a class="nav-link{% if active_page == 'routes' %} active{% endif %}" href="/routes.html"{% if active_page == 'routes' %} aria-current="page"{% endif %}><i class="bi bi-map" aria-hidden="true"></i> Routes</a></li>
+                    <li class="nav-item"><a class="nav-link{% if active_page == 'reports' %} active{% endif %}" href="/reports.html"{% if active_page == 'reports' %} aria-current="page"{% endif %}><i class="bi bi-bar-chart-line" aria-hidden="true"></i> Reports</a></li>
+                    <li class="nav-item"><a class="nav-link{% if active_page == 'explore' %} active{% endif %}" href="/explore.html"{% if active_page == 'explore' %} aria-current="page"{% endif %}><i class="bi bi-compass" aria-hidden="true"></i> Explore</a></li>
+                    <li class="nav-item"><a class="nav-link{% if active_page == 'weather' %} active{% endif %}" href="/weather.html"{% if active_page == 'weather' %} aria-current="page"{% endif %}><i class="bi bi-cloud-sun" aria-hidden="true"></i> Weather</a></li>
+                    <li class="nav-item"><a class="nav-link{% if active_page == 'settings' %} active{% endif %}" href="/settings.html"{% if active_page == 'settings' %} aria-current="page"{% endif %}><i class="bi bi-gear" aria-hidden="true"></i> Settings</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>

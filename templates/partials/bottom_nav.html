@@ -1,0 +1,26 @@
+    <!-- Bottom Navigation (Mobile) -->
+    <div id="bottom-nav-more" class="bottom-nav-drawer collapse d-md-none" aria-label="More pages"></div>
+    <nav id="bottom-nav" class="bottom-nav d-md-none" role="navigation" aria-label="Mobile navigation">
+        <a href="/" class="bottom-nav-item{% if active_page == 'home' %} active{% endif %}" aria-label="Home"{% if active_page == 'home' %} aria-current="page"{% endif %} data-page="home">
+            <i class="bi bi-house-door" aria-hidden="true"></i>
+            <span>Home</span>
+        </a>
+        <a href="/routes.html" class="bottom-nav-item{% if active_page == 'routes' %} active{% endif %}" aria-label="Routes"{% if active_page == 'routes' %} aria-current="page"{% endif %} data-page="routes">
+            <i class="bi bi-map" aria-hidden="true"></i>
+            <span>Routes</span>
+        </a>
+        <a href="/weather.html" class="bottom-nav-item{% if active_page == 'weather' %} active{% endif %}" aria-label="Weather"{% if active_page == 'weather' %} aria-current="page"{% endif %} data-page="weather">
+            <i class="bi bi-cloud-sun" aria-hidden="true"></i>
+            <span>Weather</span>
+        </a>
+        <a href="/reports.html" class="bottom-nav-item{% if active_page == 'reports' %} active{% endif %}" aria-label="Reports"{% if active_page == 'reports' %} aria-current="page"{% endif %} data-page="reports">
+            <i class="bi bi-bar-chart-line" aria-hidden="true"></i>
+            <span>Reports</span>
+        </a>
+        <button type="button" class="bottom-nav-item" aria-label="More pages"
+                data-bs-toggle="collapse" data-bs-target="#bottom-nav-more"
+                aria-expanded="false" aria-controls="bottom-nav-more">
+            <i class="bi bi-three-dots" aria-hidden="true"></i>
+            <span>More</span>
+        </button>
+    </nav>

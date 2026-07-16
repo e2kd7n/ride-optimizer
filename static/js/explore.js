@@ -65,13 +65,17 @@ function initTooltips() {
 function initDistanceSlider() {
     const unit = window.getDistanceUnit ? window.getDistanceUnit() : 'km';
     document.getElementById('distance-unit-label').textContent = unit;
-    updateDistanceDisplay(document.getElementById('distance-slider').value);
+    const slider = document.getElementById('distance-slider');
+    updateDistanceDisplay(slider.value);
+    // Bound here instead of an inline oninput="" attribute so CSP
+    // script-src can drop 'unsafe-inline' — #475.
+    slider.addEventListener('input', () => updateDistanceDisplay(slider.value));
 }
 
-window.updateDistanceDisplay = function(kmValue) {
+function updateDistanceDisplay(kmValue) {
     document.getElementById('distance-value').textContent =
         window.formatDistance ? window.formatDistance(parseFloat(kmValue), 1) : `${kmValue} km`;
-};
+}
 
 // ── Map setup ───────────────────────────────────────────────────
 
@@ -84,7 +88,10 @@ function initMap() {
     tileLayer = L.layerGroup().addTo(map);
     tileLayerSecondary = L.layerGroup().addTo(map);
     newTilesLayer = L.layerGroup().addTo(map);  // above coverage, below routes
-    routeLayer = L.layerGroup().addTo(map);
+    // FeatureGroup, not LayerGroup — routeLayer.getBounds() (used to fit the
+    // map after routes are generated) only exists on FeatureGroup in Leaflet
+    // 1.9.4; LayerGroup lacks it despite otherwise sharing the same API.
+    routeLayer = L.featureGroup().addTo(map);
     waypointMarkers = L.layerGroup().addTo(map);
 
     map.on('click', (e) => {
@@ -472,22 +479,33 @@ function drawTileGrid(layerGroup, visited, zoom, style) {
  * Render green highlight rectangles for the new (unvisited) tiles a route
  * will claim, using the same tile-boundary math as drawTileGrid.
  * newTilesByZoom: [{zoom, tiles: [{x, y}]}]
+ *
+ * When `direction` is given, any rectangles previously rendered for that
+ * direction are removed first — this lets Phase 2 (#493) replace a
+ * direction's speculative Phase-1 highlight with the set of tiles the real
+ * road route actually crosses, without disturbing the other 3 directions.
  */
-function renderNewTiles(newTilesByZoom) {
-    if (!newTilesByZoom) return;
-    for (const { zoom, tiles } of newTilesByZoom) {
+function renderNewTiles(newTilesByZoom, direction = null) {
+    if (direction && _newTileRectsByDirection[direction]) {
+        _newTileRectsByDirection[direction].forEach(r => newTilesLayer.removeLayer(r));
+    }
+    const rects = [];
+    for (const { zoom, tiles } of newTilesByZoom || []) {
         const n = Math.pow(2, zoom);
         for (const { x, y } of tiles) {
             const west  = x / n * 360 - 180;
             const east  = (x + 1) / n * 360 - 180;
             const north = Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n)))       * 180 / Math.PI;
             const south = Math.atan(Math.sinh(Math.PI * (1 - 2 * (y + 1) / n))) * 180 / Math.PI;
-            newTilesLayer.addLayer(L.rectangle([[south, west], [north, east]], {
+            const rect = L.rectangle([[south, west], [north, east]], {
                 ...TILE_STYLE_NEW,
                 interactive: false,
-            }));
+            });
+            newTilesLayer.addLayer(rect);
+            rects.push(rect);
         }
     }
+    if (direction) _newTileRectsByDirection[direction] = rects;
 }
 
 // ── Route generation ────────────────────────────────────────────
@@ -515,6 +533,10 @@ const DIRECTION_LABELS = { NE: 'Northeast', SE: 'Southeast', SW: 'Southwest', NW
 const _phase1Polylines = {};
 // Per-direction Phase-2 polyline references
 const _phase2Polylines = {};
+// Per-direction new-tile highlight rectangles (#493), so Phase 2 verification
+// can replace one direction's highlight with ground truth without touching
+// the other three directions' Phase-1 previews.
+const _newTileRectsByDirection = {};
 
 // ── Highlight / deselect state (#407 + #408) ─────────────────────
 
@@ -622,6 +644,7 @@ async function generateRoute() {
     _phase1Candidates = {};
     Object.keys(_phase1Polylines).forEach(k => delete _phase1Polylines[k]);
     Object.keys(_phase2Polylines).forEach(k => delete _phase2Polylines[k]);
+    Object.keys(_newTileRectsByDirection).forEach(k => delete _newTileRectsByDirection[k]);
 
     const startPos = startMarker.getLatLng();
     const distanceKm = parseFloat(document.getElementById('distance-slider').value);
@@ -652,7 +675,7 @@ async function generateRoute() {
             renderRoute(msg.route, routeCount);
             addRouteListItem(msg.route, routeCount, distanceKm);
             // Highlight the new tiles this route will claim.
-            renderNewTiles(msg.route.newTilesByZoom);
+            renderNewTiles(msg.route.newTilesByZoom, msg.route.direction);
             // Store Phase-1 candidate data for iterative refinement.
             if (msg.candidates) {
                 _phase1Candidates[msg.route.direction] = msg.candidates;
@@ -755,6 +778,7 @@ async function generateWorkoutCombo() {
     _phase1Candidates = {};
     Object.keys(_phase1Polylines).forEach(k => delete _phase1Polylines[k]);
     Object.keys(_phase2Polylines).forEach(k => delete _phase2Polylines[k]);
+    Object.keys(_newTileRectsByDirection).forEach(k => delete _newTileRectsByDirection[k]);
 
     let routeCount = 0;
     explorationWorker.onmessage = (e) => {
@@ -764,7 +788,7 @@ async function generateWorkoutCombo() {
             renderRoute(msg.route, routeCount);
             // Label as workout combo.
             addRouteListItem(msg.route, routeCount, distanceKm, '· Workout combo');
-            renderNewTiles(msg.route.newTilesByZoom);
+            renderNewTiles(msg.route.newTilesByZoom, msg.route.direction);
             if (msg.candidates) _phase1Candidates[msg.route.direction] = msg.candidates;
             routeCount++;
             statusEl.textContent = `Found ${routeCount} workout-combo route${routeCount > 1 ? 's' : ''} so far…`;
@@ -867,7 +891,7 @@ function addRouteListItem(route, index, targetDistanceKm, extraLabel = '') {
     badge.style.gap = '4px';
     badge.innerHTML = `
         <div class="d-flex align-items-center gap-2 w-100">
-            <span class="swatch" style="background:${color}"></span>
+            <span class="swatch"></span>
             <span class="route-label">${DIRECTION_LABELS[dir]} · ${distanceLabel} · ${newTilesLabel(route.stats)}${extraLabel ? ' ' + extraLabel : ''}</span>
             <button class="btn btn-xs btn-outline-primary ms-auto plot-road-btn" data-direction="${dir}"
                     aria-label="Plot road route for ${DIRECTION_LABELS[dir]}">
@@ -877,6 +901,7 @@ function addRouteListItem(route, index, targetDistanceKm, extraLabel = '') {
         <div class="route-phase2-info text-muted small d-none" data-direction="${dir}"></div>
     `;
     document.getElementById('route-list').appendChild(badge);
+    badge.querySelector('.swatch').style.background = color;
 
     badge.addEventListener('click', (e) => {
         if (e.target.closest('.plot-road-btn')) return;
@@ -983,6 +1008,33 @@ async function refineRoute(baseWaypoints, targetKm, surfacePref, candidateList, 
 /** Bearing (degrees) from the start toward the quadrant centre. */
 const QUADRANT_BEARING = { NE: 45, SE: 135, SW: 225, NW: 315 };
 
+/** Flatten a worker's newTilesByZoom into a flat [{x, y, zoom}] list (#493). */
+function flattenNewTiles(newTilesByZoom) {
+    const out = [];
+    for (const { zoom, tiles } of newTilesByZoom || []) {
+        for (const { x, y } of tiles) out.push({ x, y, zoom });
+    }
+    return out;
+}
+
+/**
+ * Ask the backend which of the planned tiles a route's real coordinates
+ * actually cross (#493), using the same exact tile-crossing math used to
+ * score recorded activities. Returns null (not []) on failure so callers
+ * can distinguish "verified, claims nothing" from "couldn't verify" and
+ * fall back to leaving the Phase-1 preview alone rather than wrongly
+ * clearing it because of a network hiccup.
+ */
+async function verifyClaimedTiles(coordinates, tiles) {
+    if (!tiles.length) return [];
+    try {
+        const res = await api.verifyTileClaims({ coordinates, tiles });
+        return (res && res.status === 'success') ? res.claimed : null;
+    } catch (e) {
+        return null;
+    }
+}
+
 async function plotRoadRoute(direction, route, targetDistanceKm, color, badgeEl) {
     const plotBtn = badgeEl.querySelector('.plot-road-btn');
     const infoEl = badgeEl.querySelector('.route-phase2-info');
@@ -1062,17 +1114,46 @@ async function plotRoadRoute(direction, route, targetDistanceKm, color, badgeEl)
     // Store last (long preferred) as phase-2 ref for cleanup.
     _phase2Polylines[direction] = (long || short).line;
 
-    function variantRow(v, label, suffix) {
+    // #493 — the Phase-1 green highlight is only a speculative claim (a
+    // straight-line "corner" the router was aimed at, which may get snapped
+    // to a road that never enters the tile, or dropped entirely while
+    // refineRoute trims waypoints to hit the distance target). Re-check the
+    // planned tiles against each variant's *actual* road-route coordinates
+    // before trusting the claim.
+    const plannedTiles = flattenNewTiles(route.newTilesByZoom);
+    const [shortClaimed, longClaimed] = await Promise.all([
+        short ? verifyClaimedTiles(shortResult.coordinates, plannedTiles) : Promise.resolve(null),
+        long  ? verifyClaimedTiles(longResult.coordinates,  plannedTiles) : Promise.resolve(null),
+    ]);
+    const verified = shortClaimed !== null || longClaimed !== null;
+
+    // Union of tiles either exportable variant genuinely reaches — replaces
+    // the Phase-1 highlight for this direction with ground truth.
+    const unionMap = new Map();
+    for (const list of [shortClaimed, longClaimed]) {
+        for (const t of list || []) unionMap.set(`${t.zoom}:${t.x},${t.y}`, t);
+    }
+    if (verified) {
+        const byZoom = new Map();
+        for (const t of unionMap.values()) {
+            if (!byZoom.has(t.zoom)) byZoom.set(t.zoom, []);
+            byZoom.get(t.zoom).push({ x: t.x, y: t.y });
+        }
+        renderNewTiles([...byZoom.entries()].map(([zoom, tiles]) => ({ zoom, tiles })), direction);
+    }
+
+    function variantRow(v, label, suffix, claimed) {
         if (!v) return '';
         const sb = v.result.surface_breakdown || {};
         const surfText = (sb.paved_pct != null)
             ? `${sb.paved_pct}% paved · ${sb.unpaved_pct}% unpaved · ${sb.unknown_pct}% unknown`
             : '';
+        const tilesText = claimed == null ? '' : `· ${claimed.length} new tile${claimed.length === 1 ? '' : 's'}`;
         const dataKey = `${direction}-${suffix}`;
         return `
-            <div class="d-flex align-items-center gap-2 flex-wrap" style="margin-top:4px">
+            <div class="d-flex align-items-center gap-2 flex-wrap mt-4px">
                 <span class="text-muted small">${label} ${v.distLabel} · ${v.result.duration_min} min
-                    ${surfText ? `· ${surfText}` : ''}</span>
+                    ${surfText ? `· ${surfText}` : ''} ${tilesText}</span>
                 <button class="btn btn-xs btn-outline-secondary export-gpx-btn ms-auto"
                         data-variant="${dataKey}"
                         aria-label="Export GPX ${label}">
@@ -1086,12 +1167,15 @@ async function plotRoadRoute(direction, route, targetDistanceKm, color, badgeEl)
         const parts = [];
         if (short) parts.push(`${short.distLabel} (−)`);
         if (long)  parts.push(`${long.distLabel} (+)`);
-        labelEl.textContent = `${DIRECTION_LABELS[direction]} · ${parts.join(' / ')}`;
+        const tilesSuffix = verified
+            ? ` · ${unionMap.size} new tile${unionMap.size === 1 ? '' : 's'}${unionMap.size === 0 ? ' reached' : ''}`
+            : '';
+        labelEl.textContent = `${DIRECTION_LABELS[direction]} · ${parts.join(' / ')}${tilesSuffix}`;
     }
 
     infoEl.innerHTML =
-        variantRow(short, 'Short:', 'short') +
-        variantRow(long,  'Long:',  'long');
+        variantRow(short, 'Short:', 'short', shortClaimed) +
+        variantRow(long,  'Long:',  'long', longClaimed);
     infoEl.classList.remove('d-none');
 
     // Wire up GPX exports.

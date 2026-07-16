@@ -295,6 +295,74 @@ def get_stats():
     })
 
 
+@bp.route('/stats/calendar')
+@limiter.limit("30 per minute")
+def get_calendar_stats():
+    """
+    Per-day activity counts/summary for a single calendar month, for the
+    Reports page's calendar view.
+
+    Query params:
+    - year: int, required
+    - month: int 1-12, required
+    """
+    import calendar as _calendar
+
+    try:
+        year = int(request.args.get('year'))
+        month = int(request.args.get('month'))
+        if not (1 <= month <= 12):
+            raise ValueError
+    except (TypeError, ValueError):
+        return jsonify({'status': 'error', 'message': 'year and month query params are required (month 1-12)'}), 400
+
+    all_activities = _load_activities_for_stats()
+
+    days_in_month = _calendar.monthrange(year, month)[1]
+    day_buckets: Dict[int, list] = {d: [] for d in range(1, days_in_month + 1)}
+    month_prefix = f'{year:04d}-{month:02d}'
+
+    for a in all_activities:
+        if not a.start_date or not a.start_date.startswith(month_prefix):
+            continue
+        try:
+            day = int(a.start_date[8:10])
+            day_buckets[day].append(a)
+        except (ValueError, IndexError, KeyError):
+            continue
+
+    days = []
+    for d in range(1, days_in_month + 1):
+        acts = day_buckets[d]
+        s = _compute_summary(acts)
+        days.append({
+            'date': f'{month_prefix}-{d:02d}',
+            'count': s['total_rides'],
+            'distance_mi': s['total_distance_mi'],
+            'elevation_ft': s['total_elevation_ft'],
+            'time_h': s['total_time_h'],
+        })
+
+    month_activities = [a for acts in day_buckets.values() for a in acts]
+
+    dates = sorted(a.start_date for a in all_activities if a.start_date)
+    cache_earliest = dates[0][:10] if dates else None
+    cache_latest = dates[-1][:10] if dates else None
+
+    return jsonify({
+        'status': 'success',
+        'data': {
+            'year': year,
+            'month': month,
+            'days': days,
+            'month_summary': _compute_summary(month_activities),
+            'cache_earliest_date': cache_earliest,
+            'cache_latest_date': cache_latest,
+        },
+        'timestamp': datetime.now().isoformat(),
+    })
+
+
 @bp.route('/stats/gear')
 def get_gear_stats():
     """Per-gear (bike/shoe) statistics computed from cached activities."""

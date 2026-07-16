@@ -1,0 +1,35 @@
+        .comparison-table {
+            overflow-x: auto;
+        }
+        .comparison-table th {
+            background-color: var(--surface-2);
+            font-weight: 600;
+            position: sticky;
+            left: 0;
+            z-index: 10;
+        }
+        .comparison-table td:first-child {
+            background-color: var(--surface-2);
+            font-weight: 600;
+            position: sticky;
+            left: 0;
+            z-index: 5;
+        }
+        .route-map-small {
+            height: 200px;
+            border-radius: 8px;
+            margin-bottom: var(--space-3);
+        }
+        .metric-highlight {
+            font-size: var(--font-size-lg);
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+        .winner-badge {
+            background-color: var(--success);
+            color: white;
+            padding: var(--space-1) var(--space-2);
+            border-radius: 4px;
+            font-size: var(--font-size-xs);
+            font-weight: 600;
+        }

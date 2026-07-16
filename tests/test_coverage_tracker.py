@@ -162,6 +162,55 @@ class TestActivityTiles:
             assert lat_lon_to_tile(lat, lon, TILE_ZOOM) in tiles
 
 
+# ── CoverageTracker.tiles_crossed_by_path (#493) ──────────────────
+
+class TestTilesCrossedByPath:
+    @pytest.fixture
+    def mock_config(self):
+        config = MagicMock()
+        config.get = MagicMock(side_effect=lambda key, default=None: default)
+        return config
+
+    @pytest.fixture
+    def tracker(self, mock_config, tmp_path):
+        t = CoverageTracker(mock_config)
+        t.cache_dir = tmp_path
+        return t
+
+    def test_matches_activity_tiles(self, tracker):
+        coords = [(40.5, -74.1), (40.6, -74.0), (40.7, -73.9)]
+        assert tracker.tiles_crossed_by_path(coords, TILE_ZOOM) == _activity_tiles(coords, TILE_ZOOM)
+
+    def test_empty_path(self, tracker):
+        assert tracker.tiles_crossed_by_path([], TILE_ZOOM) == set()
+
+    def test_single_point(self, tracker):
+        result = tracker.tiles_crossed_by_path([(40.0, -74.0)], TILE_ZOOM)
+        assert result == {lat_lon_to_tile(40.0, -74.0, TILE_ZOOM)}
+
+    def test_road_route_boundary_never_enters_tile(self, tracker):
+        """Regression for #493: a route that hugs a tile's boundary edge
+        (e.g. a road running along a section line) must NOT be reported as
+        crossing the adjacent tile just because it runs close to it."""
+        x, y = 4825, 6160
+        south, west, north, east = tile_to_bounds(x, y, zoom=TILE_ZOOM)
+        tile_width = east - west
+
+        # Path runs just outside the tile's west edge (in the neighbouring
+        # tile) — this is the "road along the section line" case from the
+        # bug report: geometrically close, but never actually inside.
+        just_outside_lon = west - tile_width * 0.001
+        outside_path = [(south, just_outside_lon), (north, just_outside_lon)]
+        crossed = tracker.tiles_crossed_by_path(outside_path, TILE_ZOOM)
+        assert (x, y) not in crossed
+
+        # A path that actually dips into the tile's interior does enter it.
+        inside_lon = west + tile_width * 0.5
+        inside_path = [(south, inside_lon), (north, inside_lon)]
+        crossed_interior = tracker.tiles_crossed_by_path(inside_path, TILE_ZOOM)
+        assert (x, y) in crossed_interior
+
+
 # ── TileCoverage dataclass ───────────────────────────────────────
 
 class TestTileCoverage:

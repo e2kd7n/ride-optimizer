@@ -1,0 +1,212 @@
+        .stat-card {
+            text-align: center;
+            padding: var(--space-3) var(--space-2);
+        }
+        .stat-card .stat-value {
+            font-size: var(--font-size-xl);
+            font-weight: 700;
+            line-height: 1.1;
+            color: var(--color-primary);
+        }
+        .stat-card .stat-label {
+            font-size: var(--font-size-xs);
+            color: var(--color-text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-top: var(--space-1);
+        }
+        .stat-card .stat-sub {
+            font-size: var(--font-size-xs);
+            color: var(--color-text-muted);
+            margin-top: var(--space-1);
+        }
+
+        /* Secondary stat cards (#369a) — visibly smaller than the four primary stats above */
+        .stat-card-secondary {
+            padding: var(--space-2) var(--space-1);
+        }
+        .stat-card-secondary .stat-value {
+            font-size: var(--font-size-base);
+        }
+
+        .record-card {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-1);
+        }
+        .record-card .record-value {
+            font-size: var(--font-size-lg);
+            font-weight: 700;
+            color: var(--color-primary);
+        }
+        .record-card .record-label {
+            font-size: var(--font-size-xs);
+            color: var(--color-text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .record-card .record-name {
+            font-size: var(--font-size-sm);
+            color: var(--color-text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .record-card .record-date {
+            font-size: var(--font-size-xs);
+            color: var(--color-text-muted);
+        }
+
+        .gear-card {
+            border-left: 3px solid var(--color-primary);
+            cursor: pointer;
+            transition: background-color 0.15s;
+        }
+        .gear-card:hover {
+            background-color: var(--color-bg-hover);
+        }
+        .gear-card.active {
+            border-left-color: var(--color-accent);
+            background-color: var(--color-bg-selected);
+        }
+        .gear-card .gear-name {
+            font-weight: 600;
+            font-size: var(--font-size-sm);
+        }
+        .gear-card .gear-meta {
+            font-size: var(--font-size-xs);
+            color: var(--color-text-muted);
+        }
+        .gear-card .gear-stats {
+            display: flex;
+            gap: var(--space-3);
+            margin-top: var(--space-1);
+            font-size: var(--font-size-xs);
+        }
+        .gear-card .gear-stat {
+            display: flex;
+            flex-direction: column;
+        }
+        .gear-card .gear-stat-value {
+            font-weight: 600;
+            color: var(--color-text);
+        }
+        .gear-card .gear-stat-label {
+            color: var(--color-text-muted);
+        }
+
+        /* Consolidated trend chart tabs (#366c) — taller than the old 64px per-chart cards */
+        .bar-chart {
+            display: flex;
+            align-items: flex-end;
+            gap: 2px;
+            height: 120px;
+        }
+        .bar-chart .bar {
+            flex: 1;
+            background-color: var(--color-primary);
+            opacity: 0.7;
+            border-radius: 2px 2px 0 0;
+            min-height: 2px;
+            cursor: pointer;
+            transition: opacity 0.15s;
+        }
+        .bar-chart .bar:hover { opacity: 1; }
+
+        .trend-tabs .nav-link {
+            font-size: var(--font-size-sm);
+            padding: 4px 12px;
+        }
+
+        .activity-row {
+            font-size: var(--font-size-sm);
+        }
+        .activity-row td {
+            padding: var(--space-1) var(--space-2);
+            vertical-align: middle;
+        }
+        .activity-row .activity-name {
+            max-width: 220px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .metric-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            font-size: var(--font-size-xs);
+            color: var(--color-text-muted);
+        }
+
+        .type-badge {
+            font-size: 10px;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-weight: 500;
+        }
+
+        #activity-table-container {
+            max-height: 480px;
+            overflow-y: auto;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: var(--space-2);
+        }
+        .section-header h6 {
+            margin: 0;
+            font-weight: 600;
+            font-size: var(--font-size-sm);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--color-text-muted);
+        }
+
+        /* Calendar view (#485) */
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 3px;
+        }
+        .cal-dow {
+            text-align: center;
+            font-size: var(--font-size-xs);
+            color: var(--color-text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            padding-bottom: 2px;
+        }
+        .cal-day {
+            aspect-ratio: 1 / 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            background-color: var(--color-bg-hover);
+            font-size: var(--font-size-xs);
+            color: var(--color-text-muted);
+            cursor: default;
+            position: relative;
+        }
+        .cal-day.cal-day-empty {
+            background: none;
+        }
+        .cal-day.cal-has-activity {
+            background-color: var(--color-primary);
+            color: #fff;
+            cursor: default;
+            font-weight: 600;
+        }
+        .cal-day .cal-day-count {
+            font-size: 9px;
+            font-weight: 400;
+            line-height: 1;
+        }
+        .cal-day.cal-today {
+            box-shadow: inset 0 0 0 2px var(--color-accent, var(--color-primary));
+        }

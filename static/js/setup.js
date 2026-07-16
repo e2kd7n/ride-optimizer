@@ -15,7 +15,7 @@
     // Step navigation
     // ------------------------------------------------------------------
 
-    window.goToStep = function (step) {
+    function goToStep(step) {
         // Hide all panels
         document.querySelectorAll('.step-panel').forEach((el) => el.classList.remove('active'));
         // Show target
@@ -42,13 +42,13 @@
         if (step === 3) {
             verifyCredentials();
         }
-    };
+    }
 
     // ------------------------------------------------------------------
     // Toggle secret visibility
     // ------------------------------------------------------------------
 
-    window.toggleSecret = function () {
+    function toggleSecret() {
         const input = document.getElementById('clientSecret');
         const icon = document.getElementById('toggleIcon');
         const btn = icon && icon.closest('button');
@@ -63,7 +63,7 @@
             btn.setAttribute('aria-pressed', String(isPassword));
             btn.setAttribute('aria-label', isPassword ? 'Hide Client Secret' : 'Show Client Secret');
         }
-    };
+    }
 
     // ------------------------------------------------------------------
     // Form submission: save credentials then go to step 3
@@ -239,5 +239,15 @@
         initForm();
         checkQueryParams();
         patchOAuthConnectLink();
+
+        // Bind step-navigation/secret-toggle buttons (moved off inline
+        // onclick="" attributes so CSP script-src can drop 'unsafe-inline' — #475)
+        document.querySelectorAll('[data-goto-step]').forEach((btn) => {
+            btn.addEventListener('click', () => goToStep(Number(btn.dataset.gotoStep)));
+        });
+        const secretToggle = document.querySelector('[data-toggle-secret]');
+        if (secretToggle) {
+            secretToggle.addEventListener('click', toggleSecret);
+        }
     });
 })();

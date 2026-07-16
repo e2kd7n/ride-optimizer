@@ -484,10 +484,10 @@ class TrainerRoadService:
         tss = None
         intensity_factor = None
 
-        tss_match = re.search(r'(?:tss[:\s]+)?(\d+)(?:\s+tss)?', description, re.IGNORECASE)
+        tss_match = re.search(r'(\d+)\s*tss\b|\btss[:\s]+(\d+)', description, re.IGNORECASE)
         if tss_match:
             try:
-                tss = float(tss_match.group(1))
+                tss = float(tss_match.group(1) or tss_match.group(2))
             except ValueError:
                 pass
 

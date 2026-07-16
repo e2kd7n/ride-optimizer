@@ -192,8 +192,6 @@ html[data-theme="night"] .form-select {
 h1, h2, h3,
 .navbar-brand,
 .btn,
-.temperature-display,
-.stat-value-hero,
 .hero-route-name {
     font-family: var(--font-display);
 }
@@ -236,10 +234,8 @@ a {
 }
 
 /* ===== Navigation ===== */
-/* Fair Weather Day ground: light surface-2 bar, ink text, cobalt accents.
-   .navbar-gradient kept as a legacy alias for any untouched markup. */
-.navbar-fairweather,
-.navbar-gradient {
+/* Fair Weather Day ground: light surface-2 bar, ink text, cobalt accents. */
+.navbar-fairweather {
     background: var(--surface-2);
     border-bottom: 1px solid var(--line);
 }
@@ -312,8 +308,7 @@ a {
 }
 
 /* Toggler on the light bar (pages no longer use navbar-dark) */
-.navbar-fairweather .navbar-toggler,
-.navbar-gradient .navbar-toggler {
+.navbar-fairweather .navbar-toggler {
     color: var(--ink);
     border-color: var(--line);
 }
@@ -443,10 +438,6 @@ a {
     color: var(--accent) !important;
 }
 
-.border-primary {
-    border-color: var(--accent) !important;
-}
-
 .form-check-input:checked {
     background-color: var(--accent);
     border-color: var(--accent);
@@ -522,16 +513,6 @@ footer {
     padding-bottom: var(--space-2) !important;
 }
 
-.filter-group {
-    margin-bottom: var(--space-3);
-}
-
-.filter-group label {
-    font-weight: 600;
-    margin-bottom: var(--space-2);
-    display: block;
-}
-
 /* Preset filter buttons */
 .preset-filter {
     min-width: 120px;
@@ -555,10 +536,6 @@ footer {
     .preset-filter {
         flex: 1 1 calc(50% - var(--space-2));
         min-width: 0;
-    }
-    
-    .filter-group label {
-        font-size: var(--font-size-sm);
     }
 }
 
@@ -643,12 +620,6 @@ footer {
     color: var(--info-color);
 }
 
-.temperature-display {
-    font-size: var(--font-size-hero);
-    font-weight: 700;
-    color: var(--dark-gray);
-    font-variant-numeric: tabular-nums;
-}
 
 /* ===== Responsive Design (Mobile First) ===== */
 
@@ -822,10 +793,6 @@ select:focus {
     cursor: pointer;
 }
 
-.no-select {
-    user-select: none;
-}
-
 /* ===== Animation Classes ===== */
 @keyframes fadeIn {
     from {
@@ -836,10 +803,6 @@ select:focus {
         opacity: 1;
         transform: translateY(0);
     }
-}
-
-.fade-in {
-    animation: fadeIn 0.3s ease-in-out;
 }
 
 /* ===== Loading States ===== */
@@ -1360,8 +1323,7 @@ a {
 }
 
 p a,
-li a,
-.inline-link {
+li a {
     min-height: auto;
     display: inline;
     padding: 0;
@@ -1436,20 +1398,10 @@ input[type="radio"] {
     padding: var(--space-3) var(--space-2);
 }
 
-.btn-close,
-.modal-close {
+.btn-close {
     min-width: 44px;
     min-height: 44px;
     padding: var(--space-2);
-}
-
-.btn-icon {
-    min-width: 44px;
-    min-height: 44px;
-    padding: var(--space-2);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
 }
 
 .nav-link + .nav-link {
@@ -1609,40 +1561,6 @@ input[type="radio"] {
     align-items: center;
 }
 
-.home-info-section {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-}
-
-.home-info-title {
-    font-size: var(--font-size-sm);
-    opacity: 0.9;
-    margin-bottom: var(--space-1);
-}
-
-.home-info-value {
-    font-size: var(--font-size-base);
-    font-weight: 600;
-}
-
-.home-quick-actions {
-    display: flex;
-    gap: var(--space-2);
-    margin-bottom: var(--space-2);
-    height: 48px;
-}
-
-.home-quick-actions .btn {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-2);
-    font-size: var(--font-size-sm);
-    padding: var(--space-2) var(--space-3);
-}
 
 .home-recent-routes {
     height: 592px;
@@ -1859,13 +1777,6 @@ h5.card-title {
     font-size: var(--font-size-lg);
 }
 
-/* Hero display value (temperature, big stats) */
-.temperature-display,
-.stat-value-hero {
-    font-size: var(--font-size-hero);
-    font-weight: 700;
-}
-
 /* --- Hero decision card: elevated shadow + branded border (#68) --- */
 .card.hero-card {
     box-shadow: 0 4px 16px rgba(var(--accent-rgb), 0.15) !important;
@@ -2064,19 +1975,6 @@ h5.card-title {
     }
 }
 
-.alert-workout-fit {
-    border-radius: 8px;
-    font-size: var(--font-size-sm);
-    border-left: 4px solid;
-}
-
-.alert-workout-fit.alert-success { border-left-color: var(--success-color); }
-.alert-workout-fit.alert-warning { border-left-color: var(--warning-color); }
-.alert-workout-fit.alert-danger  { border-left-color: var(--danger-color); }
-
-/* TrainerRoad settings chevron */
-[aria-expanded="true"] .tr-chevron { transform: rotate(90deg); }
-.tr-chevron { transition: transform 0.2s; display: inline-block; }
 
 /* Dashboard mobile disclosure chevrons (Conditions summary, Route Status) —
    CSS-driven off aria-expanded so rotation can't desync from the ARIA state. */
@@ -2134,3 +2032,87 @@ h5.card-title {
 .hourly-precip {
     font-size: 0.65rem;
 }
+
+/* ===== Inline-style extraction utilities (#475: drop CSP style-src 'unsafe-inline') ===== */
+.fs-10 { font-size: 10px; }
+.fs-11 { font-size: 11px; }
+.fs-085 { font-size: 0.85em; }
+.zindex-1 { z-index: 1; }
+.min-w-48px { min-width: 48px; }
+.w-88px { width: 88px; }
+.min-w-100px { min-width: 100px; }
+.min-w-104px { min-width: 104px; }
+.min-w-112px { min-width: 112px; }
+.min-w-120px { min-width: 120px; }
+.min-w-144px { min-width: 144px; }
+.max-w-180px { max-width: 180px; }
+.max-w-320px { max-width: 320px; }
+.icon-tile-56x80 { width: 56px; height: 80px; border-radius: 6px; }
+.skeleton-line-gap { height: var(--space-2); margin-bottom: var(--space-2); }
+.skeleton-line { height: var(--space-2); }
+.chart-axis-label { font-size: 10px; margin-top: var(--space-1); text-align: center; }
+.text-case-normal { text-transform: none; letter-spacing: normal; font-weight: 400; }
+.table-header-muted { font-size: 10px; text-transform: uppercase; color: var(--color-text-muted); }
+.legend-swatch-caution { background: #e8a84c; border-color: #c8813a; }
+.legend-swatch-good { background: #4caf50; border-color: #2e7d32; }
+.border-currentcolor { border-color: currentColor; }
+/* Plain (non-!important) hidden state — JS toggles visibility afterward via
+   element.style.display, which needs to be able to override this. */
+.hidden-until-shown { display: none; }
+.tutorial-img-wrapper-fixed { height: 176px; background: var(--surface-2, #f8f9fa); }
+.tutorial-img-cover { object-fit: cover; cursor: pointer; }
+.tutorial-img-fallback-icon { font-size: 2rem; }
+.fs-9 { font-size: 9px; }
+.fs-14 { font-size: 14px; }
+.fs-sm { font-size: var(--font-size-sm); }
+.border-bottom-thin { border-bottom: 1px solid var(--color-border); }
+.text-color-muted { color: var(--color-text-muted); }
+.chart-max-height { max-height: var(--chart-height); }
+.opacity-35 { opacity: 0.35; }
+.th-sortable { cursor: pointer; user-select: none; }
+.th-sortable-active { color: var(--bs-primary, #0d6efd); }
+.color-accent { color: var(--accent); }
+.color-ink-soft { color: var(--ink-soft); }
+.sticky-top-space3 { position: sticky; top: var(--space-3); }
+.marker-dot { width: 25px; height: 25px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+.marker-color-green { background-color: #28a745; }
+.marker-color-blue { background-color: #007bff; }
+.marker-color-red { background-color: #dc3545; }
+.marker-color-yellow { background-color: #ffc107; }
+.marker-color-orange { background-color: #fd7e14; }
+.marker-color-purple { background-color: #6f42c1; }
+.commute-weather-badge { font-size: 0.9rem; padding: 0.4rem 0.6rem; }
+/* routes.js legend dots + Leaflet divIcon markers (#475: fixed color palette,
+   see ROUTE_COLOR_CLASS in routes.js) */
+.legend-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: middle; }
+.marker-dot-sm { width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,.5); }
+.c-blue { background-color: #007bff; }
+.c-green { background-color: #28a745; }
+.c-red { background-color: #dc3545; }
+.c-yellow { background-color: #ffc107; }
+.c-teal { background-color: #17a2b8; }
+.c-purple { background-color: #6f42c1; }
+.c-orange { background-color: #fd7e14; }
+.c-gray { background-color: #6c757d; }
+.min-w-0 { min-width: 0; }
+.badge-plus { font-size: .65em; vertical-align: middle; }
+.fs-07em { font-size: .7em; }
+.fs-065em { font-size: .65em; }
+.route-name-link { font-size: .875rem; cursor: pointer; }
+.route-meta-row { font-size: .78rem; padding-left: 1.65rem; }
+.uses-link-style { cursor: pointer; text-decoration: underline; text-decoration-style: dotted; }
+.cursor-pointer { cursor: pointer; }
+.mt-4px { margin-top: 4px; }
+.opacity-90 { opacity: 0.9; }
+.opacity-80 { opacity: 0.8; }
+.hero-weather-badge { font-size: 1rem; padding: var(--space-2) var(--space-3); }
+.hero-border-good { border-left: 4px solid #28a745; padding-left: var(--space-3); }
+.hero-border-warn { border-left: 4px solid #ffc107; padding-left: var(--space-3); }
+.hero-border-bad { border-left: 4px solid #dc3545; padding-left: var(--space-3); }
+.route-name-truncate { min-width: 120px; max-width: 140px; }
+.route-status-icon { font-size: 1rem; flex-shrink: 0; }
+.route-status-icon-great { color: #28a745; }
+.route-status-icon-good { color: #20c997; }
+.route-status-icon-fair { color: #ffc107; }
+.route-status-icon-poor { color: #fd7e14; }
+.route-status-icon-bad { color: #dc3545; }
