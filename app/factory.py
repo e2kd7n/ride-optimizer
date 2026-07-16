@@ -12,7 +12,7 @@ import secrets
 from datetime import timedelta
 from pathlib import Path
 
-from flask import Flask
+from flask import Flask, g
 from flask_wtf.csrf import CSRFProtect
 
 from app.extensions import limiter
@@ -55,7 +55,7 @@ def create_app(config_overrides: dict | None = None) -> Flask:
         Configured :class:`~flask.Flask` instance with ``app.container``
         set to a :class:`~app.container.ServiceContainer`.
     """
-    app = Flask(__name__, static_folder='../static', static_url_path='')
+    app = Flask(__name__, static_folder='../static', static_url_path='', template_folder='../templates')
 
     # --- core config ---
     app.config['JSON_SORT_KEYS'] = False
@@ -77,6 +77,17 @@ def create_app(config_overrides: dict | None = None) -> Flask:
         # singleton after creation, so keep CSRF enforcement in sync with it
         # dynamically instead of baking a static value in at app-creation time.
         app.config['WTF_CSRF_ENABLED'] = not app.testing
+
+    @app.before_request
+    def _generate_csp_nonce():
+        # A fresh per-request nonce, exposed to Jinja as csp_nonce() and
+        # matched into the CSP header in _register_after_request. Lets
+        # index.html authorize one small nonced inline script (which stashes
+        # the nonce for commute.js) without reopening script-src's
+        # 'unsafe-inline' — #475 follow-up for the commute-map iframe.
+        g.csp_nonce = secrets.token_urlsafe(16)
+
+    app.jinja_env.globals['csp_nonce'] = lambda: g.csp_nonce
 
     csrf = CSRFProtect(app)
     limiter.init_app(app)
@@ -112,12 +123,46 @@ def _register_blueprints(app: Flask) -> None:
     from app.api.core_bp import bp as core_bp
 
     app.register_blueprint(maps_api.bp)
-    # Static file serving
-    from flask import send_from_directory
-    @app.route('/')
-    def index():
-        return send_from_directory('../static', 'index.html')
 
+    # Page routes (Jinja-rendered; nav/bottom-nav/theme-init live in
+    # templates/partials/ so they're not duplicated across pages — #470)
+    from flask import render_template, send_from_directory
+
+    @app.route('/')
+    @app.route('/index.html')
+    def index():
+        return render_template('index.html', active_page='home')
+
+    @app.route('/routes.html')
+    def routes_page():
+        return render_template('routes.html', active_page='routes')
+
+    @app.route('/weather.html')
+    def weather_page():
+        return render_template('weather.html', active_page='weather')
+
+    @app.route('/reports.html')
+    def reports_page():
+        return render_template('reports.html', active_page='reports')
+
+    @app.route('/settings.html')
+    def settings_page():
+        return render_template('settings.html', active_page='settings')
+
+    @app.route('/explore.html')
+    def explore_page():
+        return render_template('explore.html', active_page='explore')
+
+    @app.route('/route-detail.html')
+    def route_detail_page():
+        return render_template('route-detail.html', active_page='routes')
+
+    @app.route('/compare.html')
+    def compare_page():
+        return render_template('compare.html', active_page='routes')
+
+    # Everything else (JS/CSS/images, and the remaining standalone static
+    # pages: setup.html, commute.html) is served as a plain static file.
     @app.route('/<path:path>')
     def serve_static(path):
         return send_from_directory('../static', path)
@@ -159,10 +204,47 @@ def _register_after_request(app: Flask) -> None:
         response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
         response.headers['Content-Security-Policy'] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
-            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
+            # No inline <script>/onclick="" or inline style="" left anywhere
+            # in code we author (#470, #475) — script-src and style-src(-elem)
+            # both drop 'unsafe-inline'. The remaining data-driven "inline
+            # style" cases (chart bars, route/legend colors, comfort scores)
+            # were rewritten as either a small fixed set of CSS classes (see
+            # the "#475: drop CSP style-src 'unsafe-inline'" section of
+            # main.css) or CSSOM property assignment (element.style.x = ...),
+            # which CSP does not restrict.
+            # code.jquery.com/cdnjs are pulled in by Folium's default map
+            # template (rendered server-side, loaded into the commute map
+            # iframe below) — not used anywhere else. The 'nonce-...' value
+            # is this request's g.csp_nonce (see before_request above):
+            # index.html embeds one small nonced <script> that stashes the
+            # nonce on window, and commute.js copies it onto every <script>
+            # AND <style> tag in the Folium HTML it fetches (plus its own
+            # error-page <style> block) before building the blob: iframe —
+            # the blob document inherits index.html's CSP (same nonce, same
+            # request), so those tags validate without reopening
+            # 'unsafe-inline' for the whole app.
+            f"script-src 'self' 'nonce-{g.csp_nonce}' https://cdn.jsdelivr.net https://unpkg.com https://code.jquery.com https://cdnjs.cloudflare.com; "
+            f"style-src 'self' 'nonce-{g.csp_nonce}' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com https://netdna.bootstrapcdn.com; "
+            # style-src-attr overrides style-src for the style="" HTML
+            # attribute specifically (CSP3) and is intentionally left at
+            # 'unsafe-inline': the commute-map iframe bundles Folium's
+            # default jQuery + leaflet.awesome-markers + bootstrap-glyphicons
+            # assets, which build style="" attributes at *runtime* (e.g.
+            # marker-icon coloring) — code we don't author and can't stamp a
+            # nonce onto (nonces/hashes don't apply to style attributes at
+            # all per the CSP3 spec). style-src-elem (our own <style> blocks,
+            # all 4 of them — 3 in Folium's template, 1 in commute.js's
+            # error page — are nonce-stamped) stays on the strict style-src
+            # value above, so arbitrary <style> block injection is still
+            # blocked; only attribute-level styling is relaxed, and only for
+            # this one iframe's third-party bundle.
+            "style-src-attr 'unsafe-inline'; "
             "img-src 'self' data: https: blob:; "
-            "font-src 'self' https://cdn.jsdelivr.net; "
+            # commute.js loads the server-rendered Folium map into an
+            # <iframe> via a blob: URL (no frame-src fell back to
+            # default-src 'self', which silently broke the map entirely).
+            "frame-src 'self' blob:; "
+            "font-src 'self' https://cdn.jsdelivr.net https://netdna.bootstrapcdn.com; "
             "connect-src 'self'; "
             "frame-ancestors 'none'"
         )

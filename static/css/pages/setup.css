@@ -1,0 +1,55 @@
+        body { background: var(--bg); }
+
+        .setup-container {
+            max-width: 600px;
+            margin: var(--space-5) auto;
+            padding: 0 var(--space-3);
+        }
+
+        .wizard-header {
+            background: var(--accent); /* flat cobalt — Fair Weather, gradients retired */
+            color: white;
+            border-radius: 16px 16px 0 0;
+            padding: var(--space-5);
+            text-align: center;
+        }
+
+        .wizard-body {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-top: none;
+            border-radius: 0 0 16px 16px;
+            padding: var(--space-5);
+        }
+
+        .step-indicator {
+            display: flex;
+            justify-content: center;
+            gap: var(--space-2);
+            margin-bottom: var(--space-5);
+        }
+
+        .step-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.4);
+            transition: background 0.2s;
+        }
+
+        .step-dot.active { background: white; }
+        .step-dot.done { background: rgba(255,255,255,0.8); }
+
+        .step-panel { display: none; }
+        .step-panel.active { display: block; }
+
+        .instruction-list li { margin-bottom: var(--space-2); }
+
+        .credential-field .toggle-secret {
+            cursor: pointer;
+        }
+
+        .success-icon {
+            font-size: 4rem;
+            color: var(--success);
+        }

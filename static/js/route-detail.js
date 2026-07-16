@@ -112,19 +112,19 @@
                     <div class="row g-4">
                         <div class="col-12 col-lg-6">
                             <h3 class="h6 text-muted mb-3">Average Speed Over Time</h3>
-                            <canvas id="speed-chart" style="max-height: var(--chart-height);"></canvas>
+                            <canvas id="speed-chart" class="chart-max-height"></canvas>
                         </div>
                         <div class="col-12 col-lg-6">
                             <h3 class="h6 text-muted mb-3">Duration Trends</h3>
-                            <canvas id="duration-chart" style="max-height: var(--chart-height);"></canvas>
+                            <canvas id="duration-chart" class="chart-max-height"></canvas>
                         </div>
                         <div class="col-12 col-lg-6">
                             <h3 class="h6 text-muted mb-3">Heart Rate (if available)</h3>
-                            <canvas id="heartrate-chart" style="max-height: var(--chart-height);"></canvas>
+                            <canvas id="heartrate-chart" class="chart-max-height"></canvas>
                         </div>
                         <div class="col-12 col-lg-6">
                             <h3 class="h6 text-muted mb-3">Power Output (if available)</h3>
-                            <canvas id="power-chart" style="max-height: var(--chart-height);"></canvas>
+                            <canvas id="power-chart" class="chart-max-height"></canvas>
                         </div>
                     </div>
                 `;
@@ -252,14 +252,14 @@
             const historySort = { key: 'name', dir: 1 };
 
             function sortIcon(state, key) {
-                if (state.key !== key) return ' <span style="opacity:0.35;font-size:10px;">↕</span>';
+                if (state.key !== key) return ' <span class="fs-10 opacity-35">↕</span>';
                 return state.dir === 1
-                    ? ' <span style="font-size:10px;">↑</span>'
-                    : ' <span style="font-size:10px;">↓</span>';
+                    ? ' <span class="fs-10">↑</span>'
+                    : ' <span class="fs-10">↓</span>';
             }
 
-            function thStyle(state, key) {
-                return `cursor:pointer; user-select:none;${state.key === key ? ' color:var(--bs-primary,#0d6efd);' : ''}`;
+            function thClass(state, key) {
+                return `th-sortable${state.key === key ? ' th-sortable-active' : ''}`;
             }
 
             function renderUsesTable(route) {
@@ -280,8 +280,8 @@
 
                 container.innerHTML = `<table class="table table-sm align-middle mb-0">
                     <thead><tr>
-                        <th scope="col" data-sort="name" style="${thStyle(usesSort, 'name')}">Activity${sortIcon(usesSort, 'name')}</th>
-                        <th scope="col" data-sort="date" style="${thStyle(usesSort, 'date')}">Date${sortIcon(usesSort, 'date')}</th>
+                        <th scope="col" data-sort="name" class="${thClass(usesSort, 'name')}">Activity${sortIcon(usesSort, 'name')}</th>
+                        <th scope="col" data-sort="date" class="${thClass(usesSort, 'date')}">Date${sortIcon(usesSort, 'date')}</th>
                     </tr></thead>
                     <tbody>${rows.map(r => {
                         const dateStr = r.rawDate
@@ -325,8 +325,8 @@
 
                 container.innerHTML = `<table class="table table-sm align-middle mb-0">
                     <thead><tr>
-                        <th scope="col" data-sort="name" style="${thStyle(historySort, 'name')}">Activity${sortIcon(historySort, 'name')}</th>
-                        <th scope="col" data-sort="date" style="${thStyle(historySort, 'date')}">Date${sortIcon(historySort, 'date')}</th>
+                        <th scope="col" data-sort="name" class="${thClass(historySort, 'name')}">Activity${sortIcon(historySort, 'name')}</th>
+                        <th scope="col" data-sort="date" class="${thClass(historySort, 'date')}">Date${sortIcon(historySort, 'date')}</th>
                         <th scope="col">Distance</th>
                         <th scope="col">Duration</th>
                         <th scope="col">Elevation</th>
@@ -369,7 +369,7 @@
                             ${route.weather.temp_c != null ? `
                                 <div class="col-6">
                                     <div class="d-flex align-items-center gap-2">
-                                        <i class="bi bi-thermometer-half" style="color: var(--accent);" aria-hidden="true"></i>
+                                        <i class="bi bi-thermometer-half color-accent" aria-hidden="true"></i>
                                         <div>
                                             <div class="small text-muted">Temperature</div>
                                             <div class="fw-semibold">${window.formatTemperature(route.weather.temp_c)}</div>
@@ -380,7 +380,7 @@
                             ${route.weather.wind_speed_kph != null ? `
                                 <div class="col-6">
                                     <div class="d-flex align-items-center gap-2">
-                                        <i class="bi bi-wind" style="color: var(--accent);" aria-hidden="true"></i>
+                                        <i class="bi bi-wind color-accent" aria-hidden="true"></i>
                                         <div>
                                             <div class="small text-muted">Wind</div>
                                             <div class="fw-semibold">${window.formatSpeed(route.weather.wind_speed_kph)}${route.weather.wind_direction_cardinal ? ` ${route.weather.wind_direction_cardinal}` : ''}</div>
@@ -391,7 +391,7 @@
                             ${route.weather.precipitation_mm != null ? `
                                 <div class="col-6">
                                     <div class="d-flex align-items-center gap-2">
-                                        <i class="bi bi-cloud-rain" style="color: var(--accent);" aria-hidden="true"></i>
+                                        <i class="bi bi-cloud-rain color-accent" aria-hidden="true"></i>
                                         <div>
                                             <div class="small text-muted">Precipitation</div>
                                             <div class="fw-semibold">${route.weather.precipitation_mm} mm</div>
@@ -402,7 +402,7 @@
                             ${route.weather.conditions ? `
                                 <div class="col-6">
                                     <div class="d-flex align-items-center gap-2">
-                                        <i class="bi bi-cloud-sun" style="color: var(--ink-soft);" aria-hidden="true"></i>
+                                        <i class="bi bi-cloud-sun color-ink-soft" aria-hidden="true"></i>
                                         <div>
                                             <div class="small text-muted">Conditions</div>
                                             <div class="fw-semibold">${route.weather.conditions}</div>
@@ -486,7 +486,7 @@
                                             </div>
                                             <div class="col-6 col-md-4">
                                                 <div class="d-flex align-items-center gap-2">
-                                                    <i class="bi bi-clock" style="color: var(--accent);" aria-hidden="true"></i>
+                                                    <i class="bi bi-clock color-accent" aria-hidden="true"></i>
                                                     <div>
                                                         <div class="small text-muted">Duration</div>
                                                         <div class="fw-semibold tabular-nums">${formatDuration(route.duration)}</div>
@@ -532,7 +532,7 @@
                                 ${longRideUsesMarkup}
                             </div>
                             <div class="col-lg-5">
-                                <div style="position: sticky; top: var(--space-3);">
+                                <div class="sticky-top-space3">
                                     <div class="card">
                                         <div class="card-body p-0">
                                             <div id="route-map" aria-label="Interactive route map"></div>

@@ -54,11 +54,11 @@ def _parse_date_range(data: dict):
 
     Two corrections vs a bare `datetime.fromisoformat()`:
     - A naive datetime is treated by stravalib as already being UTC. Our
-      callers (the Settings custom-range picker) send bare "YYYY-MM-DD"
-      values that represent a *local* calendar date, so the naive datetime
-      is localized to the server's local timezone before being handed off —
-      otherwise the query window is shifted by the server's UTC offset
-      (issue #494).
+      callers (the calendar view, the Settings custom-range picker) send
+      bare "YYYY-MM-DD" values that represent a *local* calendar date, so
+      the naive datetime is localized to the server's local timezone before
+      being handed off — otherwise the query window is shifted by the
+      server's UTC offset (issue #494).
     - `before_date` is documented/used as an inclusive end date ("through
       this day"), but Strava's `before` filter is a strict less-than. A
       bare date (no time component) is bumped forward one day so the whole

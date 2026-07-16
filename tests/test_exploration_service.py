@@ -7,7 +7,13 @@ import pytest
 import requests
 
 from app.services.exploration_service import ExplorationService, _SURFACE_TO_PROFILE
-from src.coverage_tracker import TileCoverage
+from src.coverage_tracker import (
+    TileCoverage,
+    TILE_ZOOM,
+    SQUADRATINHO_ZOOM,
+    lat_lon_to_tile,
+    tile_to_bounds,
+)
 
 
 # ── Fixtures ─────────────────────────────────────────────────────
@@ -21,13 +27,20 @@ def mock_config():
 
 
 @pytest.fixture
-def service(mock_config):
+def service(mock_config, tmp_path):
     with patch('app.services.exploration_service.ConfigManager.get_instance', return_value=mock_config):
-        return ExplorationService()
+        svc = ExplorationService()
+    # Isolate from the real data/cache/ dir — CoverageTracker's on-disk tile
+    # cache has no expiration, so a real coverage_tiles_*_all.json left over
+    # from actual app usage would otherwise be returned instead of the
+    # empty/mocked _activities_cache the tests set up, making results depend
+    # on whatever happens to be cached on the machine running the tests.
+    svc._tracker.cache_dir = tmp_path
+    return svc
 
 
 @pytest.fixture
-def service_with_key(mock_config):
+def service_with_key(mock_config, tmp_path):
     """Service pre-configured with a fake ORS API key."""
     def _get(key, default=None):
         if key == 'ors.api_key':
@@ -36,7 +49,9 @@ def service_with_key(mock_config):
 
     mock_config.get = MagicMock(side_effect=_get)
     with patch('app.services.exploration_service.ConfigManager.get_instance', return_value=mock_config):
-        return ExplorationService()
+        svc = ExplorationService()
+    svc._tracker.cache_dir = tmp_path
+    return svc
 
 
 # ── Existing coverage tests ──────────────────────────────────────
@@ -65,6 +80,59 @@ class TestExplorationService:
         with patch.object(service._tracker, "invalidate_caches") as mock_inv:
             service.invalidate_caches()
             mock_inv.assert_called_once()
+
+
+# ── verify_tile_claims (#493) ────────────────────────────────────
+
+
+class TestVerifyTileClaims:
+    """A planned route can claim a tile it never actually enters — e.g. its
+    corner waypoint gets snapped by OSRM to a road running along the tile's
+    boundary rather than through its interior. verify_tile_claims re-checks
+    planned claims against the route's real coordinates."""
+
+    def test_claims_tile_the_route_actually_enters(self, service):
+        x, y = 4825, 6160
+        south, west, north, east = tile_to_bounds(x, y, zoom=TILE_ZOOM)
+        inside_lon = west + (east - west) * 0.5
+        coordinates = [(south, inside_lon), (north, inside_lon)]
+
+        result = service.verify_tile_claims(coordinates, [{"x": x, "y": y, "zoom": TILE_ZOOM}])
+
+        assert result["status"] == "success"
+        assert result["claimed"] == [{"x": x, "y": y, "zoom": TILE_ZOOM}]
+
+    def test_does_not_claim_tile_the_route_only_skirts(self, service):
+        """Regression for #493's reported bug: a route running along a tile's
+        boundary (never entering it) must not be reported as claimed."""
+        x, y = 4825, 6160
+        south, west, north, east = tile_to_bounds(x, y, zoom=TILE_ZOOM)
+        just_outside_lon = west - (east - west) * 0.001
+        coordinates = [(south, just_outside_lon), (north, just_outside_lon)]
+
+        result = service.verify_tile_claims(coordinates, [{"x": x, "y": y, "zoom": TILE_ZOOM}])
+
+        assert result["status"] == "success"
+        assert result["claimed"] == []
+
+    def test_mixed_zooms_checked_independently(self, service):
+        x14, y14 = lat_lon_to_tile(40.7128, -74.0060, zoom=TILE_ZOOM)
+        south, west, north, east = tile_to_bounds(x14, y14, zoom=TILE_ZOOM)
+        inside_lon = west + (east - west) * 0.5
+        coordinates = [(south, inside_lon), (north, inside_lon)]
+
+        # A squadratinho (zoom 17) tile far from this squadrat should not be claimed.
+        result = service.verify_tile_claims(
+            coordinates,
+            [
+                {"x": x14, "y": y14, "zoom": TILE_ZOOM},
+                {"x": 0, "y": 0, "zoom": SQUADRATINHO_ZOOM},
+            ],
+        )
+
+        assert result["status"] == "success"
+        assert {"x": x14, "y": y14, "zoom": TILE_ZOOM} in result["claimed"]
+        assert {"x": 0, "y": 0, "zoom": SQUADRATINHO_ZOOM} not in result["claimed"]
 
 
 # ── Surface-preference → ORS profile mapping ────────────────────
@@ -340,17 +408,25 @@ class TestReduceSurfaceExtras:
                 ]
             }
         }
-        sb = ExplorationService._reduce_surface_extras(extras, 4000.0)
+        sb = ExplorationService._reduce_surface_extras(extras)
         assert sb["paved_pct"] == 50
         assert sb["unpaved_pct"] == 25
         assert sb["unknown_pct"] == 25
 
     def test_empty_extras(self):
-        sb = ExplorationService._reduce_surface_extras({}, 1000.0)
+        sb = ExplorationService._reduce_surface_extras({})
         assert sb == {"paved_pct": 0, "unpaved_pct": 0, "unknown_pct": 100}
 
-    def test_zero_total_distance(self):
-        """Does not divide by zero when total_distance_m is 0."""
-        extras = {"surface": {"values": [[0, 1, 1]]}}
-        sb = ExplorationService._reduce_surface_extras(extras, 0.0)
-        assert sb == {"paved_pct": 0, "unpaved_pct": 0, "unknown_pct": 100}
+    def test_weights_by_index_span_not_segment_count(self):
+        """Regression for #483: a long unpaved stretch must outweigh a short paved connector."""
+        extras = {
+            "surface": {
+                "values": [
+                    [0, 2, 1],     # paved, span 2
+                    [2, 402, 9],   # unpaved, span 400
+                ]
+            }
+        }
+        sb = ExplorationService._reduce_surface_extras(extras)
+        assert sb["paved_pct"] == 0
+        assert sb["unpaved_pct"] == 100

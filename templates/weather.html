@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <script src="/js/theme-init.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather Forecast - Ride Optimizer</title>
+    <link rel="icon" type="image/svg+xml" href="/img/favicon.svg">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="/css/main.css">
+    <link rel="stylesheet" href="/css/pages/weather.css">
+</head>
+<body>
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+
+    {% include "partials/nav.html" %}
+
+    <main id="main-content" class="container mt-2" role="main">
+        <div class="d-flex align-items-center mb-2">
+            <h1 class="fs-4 mb-0"><i class="bi bi-cloud-sun me-2" aria-hidden="true"></i>Weather Forecast</h1>
+        </div>
+
+        <!-- Transit alert — shown when today is unfavorable -->
+        <div id="transit-alert" class="alert transit-alert d-none mb-3" role="alert">
+            <div class="d-flex align-items-start gap-2">
+                <i class="bi bi-bus-front fs-5 text-danger mt-1"></i>
+                <div>
+                    <strong>Consider transit today</strong>
+                    <div id="transit-reason" class="small mt-1"></div>
+                    <a id="transit-link" href="https://www.google.com/maps" target="_blank" rel="noopener"
+                       class="btn btn-sm btn-outline-danger mt-2">
+                        <i class="bi bi-box-arrow-up-right me-1"></i>Open transit planner
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Today at a Glance — shown when the transit alert is hidden (today is favorable) -->
+        <div id="today-glance" class="card mb-3 d-none">
+            <div class="card-body">
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <i class="bi bi-sun text-success fs-5" aria-hidden="true"></i>
+                    <strong>Today at a Glance</strong>
+                </div>
+                <div id="today-glance-content" class="d-flex flex-wrap gap-3"></div>
+            </div>
+        </div>
+
+        <!-- Today's commute windows -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <i class="bi bi-clock me-2"></i>Today's Commute Windows
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div id="morning-window" class="commute-window-card morning">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <i class="bi bi-sunrise text-warning fs-5"></i>
+                                <strong>Morning <span id="morning-time-range" class="fw-normal text-muted">(loading…)</span></strong>
+                            </div>
+                            <div id="morning-content">
+                                <div class="text-muted small">Loading…</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div id="evening-window" class="commute-window-card evening">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <i class="bi bi-sunset text-primary fs-5"></i>
+                                <strong>Evening <span id="evening-time-range" class="fw-normal text-muted">(loading…)</span></strong>
+                            </div>
+                            <div id="evening-content">
+                                <div class="text-muted small">Loading…</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="windows-error" class="text-center text-muted py-2 d-none">
+                    <i class="bi bi-exclamation-circle me-1"></i>Commute window data unavailable
+                </div>
+            </div>
+        </div>
+
+        <!-- 7-day forecast -->
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>
+                    <i class="bi bi-calendar-week me-2"></i>7-Day Forecast
+                    <i id="comfort-legend-icon" class="bi bi-question-circle text-muted ms-1 cursor-pointer fs-085"
+                       tabindex="0" role="button"
+                       aria-label="What does the comfort score and pill color mean?"
+                       data-bs-toggle="popover" data-bs-placement="bottom"
+                       data-bs-title="Comfort score"
+                       data-bs-content="Combines temperature, precipitation risk, and wind into a single 0–100 score. 70+ = favorable, 40–69 = neutral, below 40 = unfavorable."></i>
+                </span>
+                <small id="forecast-updated" class="text-muted"></small>
+            </div>
+            <div class="card-body">
+                <div id="forecast-grid" class="forecast-grid">
+                    <!-- Skeletons while loading -->
+                    <div class="skeleton-forecast"></div>
+                    <div class="skeleton-forecast"></div>
+                    <div class="skeleton-forecast"></div>
+                    <div class="skeleton-forecast"></div>
+                    <div class="skeleton-forecast d-none d-sm-block"></div>
+                    <div class="skeleton-forecast d-none d-sm-block"></div>
+                    <div class="skeleton-forecast d-none d-sm-block"></div>
+                </div>
+                <div id="forecast-error" class="text-center text-muted py-3 d-none">
+                    <i class="bi bi-exclamation-circle me-1"></i>
+                    <span id="forecast-error-msg">Unable to load forecast</span>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="mt-3">
+        <div class="container text-center text-muted">
+            <small>Ride Optimizer v0.17.0 - Smart Static Architecture</small>
+        </div>
+    </footer>
+
+    {% include "partials/bottom_nav.html" %}
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/js/common.js"></script>
+    <script src="/js/help-modal.js"></script>
+    <script src="/js/api-client.js"></script>
+    <script src="/js/weather.js"></script>
+    <script src="/js/mobile.js"></script>
+</body>
+</html>

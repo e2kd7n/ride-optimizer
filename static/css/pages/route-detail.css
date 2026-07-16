@@ -1,0 +1,31 @@
+        #route-map {
+            height: var(--map-height-standard);
+            border-radius: 8px;
+        }
+        @media (max-width: 991.98px) {
+            #route-map { height: 320px; }
+        }
+        @media (max-width: 767.98px) {
+            /* #371c: fixed 320px map fills the whole viewport on short mobile screens;
+               cap it so content peeks above/below. */
+            #route-map { max-height: 50vh; }
+        }
+        .metric-card {
+            height: 100%;
+        }
+        .detail-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--space-1);
+            padding: var(--space-1) var(--space-2);
+            border-radius: 999px;
+            background: var(--surface-2);
+            margin: 0 var(--space-2) var(--space-2) 0;
+        }
+        /* Demoted secondary metric (popularity/uses) — same chip shape, muted ink */
+        .detail-chip-muted {
+            color: var(--ink-soft);
+        }
+        .performance-placeholder {
+            color: var(--ink-soft);
+        }

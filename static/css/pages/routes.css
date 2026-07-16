@@ -1,0 +1,77 @@
+        #routes-map {
+            height: var(--map-height-large);
+            min-height: 400px;
+            border-radius: 0 0 8px 8px;
+        }
+
+        /* Force single-column cards inside the scrollable list panel */
+        #routes-container .row > [class*="col-"] {
+            flex: 0 0 100%;
+            max-width: 100%;
+        }
+
+        .route-list-scroll {
+            height: var(--map-height-large);
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        /* Map panel stays visible while the route list scrolls */
+        .map-panel-sticky {
+            position: sticky;
+            top: 72px;
+        }
+
+        #results-summary {
+            padding: var(--space-1) 0;
+            font-size: var(--font-size-sm);
+        }
+
+        /* More Filters toggle: chevron flips when expanded, never a bare icon (§7) */
+        #more-filters-toggle {
+            min-height: 44px;
+        }
+        #more-filters-toggle .more-filters-chevron {
+            transition: transform 0.2s ease;
+        }
+        #more-filters-toggle[aria-expanded="true"] .more-filters-chevron {
+            transform: rotate(180deg);
+        }
+        #more-filters-count:not(:empty) {
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        /* Saved Plans: always-visible stub, highlighted once plans exist */
+        #saved-plans-card {
+            border-color: var(--line);
+        }
+        #toggle-plans-btn {
+            min-height: 44px;
+        }
+        #saved-plans-card.saved-plans-active {
+            border-color: var(--accent);
+        }
+        #saved-plans-card .saved-plans-chevron {
+            transition: transform 0.2s ease;
+        }
+        #toggle-plans-btn[aria-expanded="true"] .saved-plans-chevron {
+            transform: rotate(180deg);
+        }
+        #toggle-plans-btn:disabled {
+            opacity: 0.6;
+        }
+
+        /* Compare checkbox: enlarge the tappable area beyond the visual checkbox+label
+           without inflating the compact card row height (§7 touch target). */
+        .compare-toggle {
+            padding: 10px 6px;
+            margin: -10px 0 -10px -6px;
+            border-radius: var(--radius-sm, 4px);
+            min-height: 44px;
+            display: flex;
+            align-items: center;
+        }
+        .compare-toggle:hover {
+            background: var(--surface-2);
+        }

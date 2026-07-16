@@ -9,7 +9,7 @@ but Strava's before filter is a strict less-than, so a bare end date must
 be bumped forward one day to include the whole selected day.
 """
 
-from datetime import timezone
+from datetime import datetime
 
 import pytest
 
@@ -21,7 +21,11 @@ class TestParseDateRange:
     def test_bare_after_date_is_localized_not_utc(self):
         after, _ = _parse_date_range({'after_date': '2026-01-15'})
         assert after.tzinfo is not None
-        assert after.tzinfo != timezone.utc
+        # Localized = server-local offset attached with the wall-clock time
+        # preserved. (Can't assert tzinfo != UTC — on a UTC-localtime host,
+        # e.g. CI runners, local *is* UTC.)
+        local_offset = datetime(2026, 1, 15).astimezone().utcoffset()
+        assert after.utcoffset() == local_offset
         assert (after.year, after.month, after.day) == (2026, 1, 15)
         assert after.hour == 0
 

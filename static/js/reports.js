@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
     bindActivityFilters();
     loadStats();
     loadGear();
+    initCalendar();
 });
 
 // -----------------------------------------------------------------------
@@ -141,10 +142,10 @@ function renderTypeBreakdown(byType) {
 
     const rows = byType.map(t => {
         const icon = sportIcon(t.sport_type);
-        return `<div class="d-flex align-items-center justify-content-between py-1" style="border-bottom:1px solid var(--color-border);">
+        return `<div class="d-flex align-items-center justify-content-between py-1 border-bottom-thin">
             <div class="d-flex align-items-center gap-2">
-                <span style="font-size:14px;">${icon}</span>
-                <span class="fw-medium" style="font-size:var(--font-size-sm);">${escapeHtml(t.sport_type)}</span>
+                <span class="fs-14">${icon}</span>
+                <span class="fw-medium fs-sm">${escapeHtml(t.sport_type)}</span>
             </div>
             <div class="d-flex gap-3 text-end">
                 <span class="metric-pill"><strong>${fmt(t.total_rides)}</strong> rides</span>
@@ -165,8 +166,9 @@ function renderMonthlyChart(byMonth) {
     el.innerHTML = byMonth.map(m => {
         const h = Math.max(Math.round((m.total_distance_mi / maxDist) * 100), 2);
         const label = m.month;
-        return `<div class="bar" style="height:${h}%;" title="${label}: ${fmt(m.total_distance_mi)} mi, ${fmt(m.total_rides)} rides" aria-label="${label}"></div>`;
+        return `<div class="bar" data-height="${h}" title="${label}: ${fmt(m.total_distance_mi)} mi, ${fmt(m.total_rides)} rides" aria-label="${label}"></div>`;
     }).join('');
+    el.querySelectorAll('.bar[data-height]').forEach(bar => { bar.style.height = `${bar.dataset.height}%`; });
 
     // Show first and last month label
     const first = byMonth[0].month;
@@ -182,8 +184,9 @@ function renderDistributionChart(data, chartId, labelId, unit) {
     const maxCount = Math.max(...data.map(b => b.count), 1);
     el.innerHTML = data.map(b => {
         const h = Math.max(Math.round((b.count / maxCount) * 100), 2);
-        return `<div class="bar" style="height:${h}%;" title="${b.label} ${unit}: ${b.count} rides" aria-label="${b.label} ${unit}"></div>`;
+        return `<div class="bar" data-height="${h}" title="${b.label} ${unit}: ${b.count} rides" aria-label="${b.label} ${unit}"></div>`;
     }).join('');
+    el.querySelectorAll('.bar[data-height]').forEach(bar => { bar.style.height = `${bar.dataset.height}%`; });
 
     const first = data[0].label;
     const last = data[data.length - 1].label;
@@ -230,7 +233,7 @@ function renderGearCards(data) {
 
     const cards = data.gear.map(g => {
         const typeIcon = g.type === 'bike' ? '🚲' : g.type === 'shoe' ? '👟' : '⚙️';
-        const primary = g.primary ? '<span class="badge bg-success ms-1" style="font-size:9px;">Primary</span>' : '';
+        const primary = g.primary ? '<span class="badge bg-success ms-1 fs-9">Primary</span>' : '';
         const lastUsed = g.last_used ? `Last used ${g.last_used}` : '';
         const displayName = gearDisplayName(g);
         return `<div class="col-12 col-md-6">
@@ -238,7 +241,7 @@ function renderGearCards(data) {
                  tabindex="0" aria-label="Filter by ${escapeHtml(displayName)}">
                 <div class="d-flex justify-content-between align-items-start">
                     <div>
-                        <span style="font-size:14px;">${typeIcon}</span>
+                        <span class="fs-14">${typeIcon}</span>
                         <span class="gear-name ms-1">${escapeHtml(displayName)}</span>${primary}
                     </div>
                 </div>
@@ -362,7 +365,7 @@ async function loadActivities() {
             return `<tr class="activity-row">
                 <td class="ps-2">
                     <div class="activity-name" title="${escapeHtml(a.name)}">${escapeHtml(a.name)}</div>
-                    <div style="font-size:10px; color:var(--color-text-muted);">${a.date} ${typeBadge} ${gearLabel ? '· ' + gearLabel : ''}</div>
+                    <div class="fs-10 text-color-muted">${a.date} ${typeBadge} ${gearLabel ? '· ' + gearLabel : ''}</div>
                 </td>
                 <td class="text-end">${fmt(a.distance_mi)}</td>
                 <td class="text-end">${fmtTime(a.time_h)}</td>
@@ -380,6 +383,158 @@ async function loadActivities() {
         tbody.innerHTML = `<tr><td colspan="6" class="text-danger small ps-2">Error: ${escapeHtml(e.message)}</td></tr>`;
         footer.textContent = '';
     }
+}
+
+// -----------------------------------------------------------------------
+// Calendar (#485) — per-day activity counts + Strava backfill for a
+// specific month, so gaps left by the 500-most-recent fetch cap (#486)
+// can be filled in by date range instead of only "fetch newest."
+// -----------------------------------------------------------------------
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+const DOW_NAMES = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+let calYear = new Date().getFullYear();
+let calMonth = new Date().getMonth() + 1; // 1-12
+
+function initCalendar() {
+    const monthSel = document.getElementById('cal-month');
+    monthSel.innerHTML = MONTH_NAMES.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
+
+    const yearSel = document.getElementById('cal-year');
+    const nowYear = new Date().getFullYear();
+    const years = [];
+    for (let y = nowYear + 1; y >= 2000; y--) years.push(y);
+    yearSel.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
+
+    monthSel.value = String(calMonth);
+    yearSel.value = String(calYear);
+
+    monthSel.addEventListener('change', () => { calMonth = parseInt(monthSel.value, 10); loadCalendar(); });
+    yearSel.addEventListener('change', () => { calYear = parseInt(yearSel.value, 10); loadCalendar(); });
+
+    document.getElementById('cal-prev').addEventListener('click', () => shiftCalendar(-1));
+    document.getElementById('cal-next').addEventListener('click', () => shiftCalendar(1));
+    document.getElementById('cal-backfill-btn').addEventListener('click', backfillCurrentMonth);
+
+    loadCalendar();
+}
+
+function shiftCalendar(delta) {
+    calMonth += delta;
+    if (calMonth > 12) { calMonth = 1; calYear++; }
+    if (calMonth < 1) { calMonth = 12; calYear--; }
+    document.getElementById('cal-month').value = String(calMonth);
+    document.getElementById('cal-year').value = String(calYear);
+    loadCalendar();
+}
+
+async function loadCalendar() {
+    const grid = document.getElementById('cal-grid');
+    const summaryEl = document.getElementById('cal-summary');
+    grid.innerHTML = '<div class="text-muted small">Loading…</div>';
+    summaryEl.textContent = '';
+
+    try {
+        const resp = await api.get(`/stats/calendar?year=${calYear}&month=${calMonth}`);
+        if (resp.status !== 'success') throw new Error(resp.message || 'Error');
+        renderCalendar(resp.data);
+    } catch (e) {
+        grid.innerHTML = `<div class="text-danger small">Error: ${escapeHtml(e.message)}</div>`;
+    }
+}
+
+function renderCalendar(data) {
+    const grid = document.getElementById('cal-grid');
+    const summaryEl = document.getElementById('cal-summary');
+    const { days, month_summary: s } = data;
+
+    const firstDow = new Date(data.year, data.month - 1, 1).getDay(); // 0=Sun
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const maxCount = Math.max(...days.map(d => d.count), 1);
+
+    let html = DOW_NAMES.map(d => `<div class="cal-dow">${d}</div>`).join('');
+    for (let i = 0; i < firstDow; i++) html += '<div class="cal-day cal-day-empty"></div>';
+
+    html += days.map(d => {
+        const dayNum = parseInt(d.date.slice(-2), 10);
+        const isToday = d.date === todayIso;
+        const cls = ['cal-day'];
+        if (isToday) cls.push('cal-today');
+        let opacityAttr = '';
+        let title = `${d.date}: no activities`;
+        if (d.count > 0) {
+            cls.push('cal-has-activity');
+            const opacity = 0.35 + 0.65 * (d.count / maxCount);
+            opacityAttr = `data-opacity="${opacity.toFixed(2)}"`;
+            title = `${d.date}: ${d.count} ${d.count === 1 ? 'ride' : 'rides'}, ${fmt(d.distance_mi)} mi`;
+        }
+        return `<div class="${cls.join(' ')}" ${opacityAttr} title="${escapeHtml(title)}">
+            <span>${dayNum}</span>${d.count > 0 ? `<span class="cal-day-count">${d.count}</span>` : ''}
+        </div>`;
+    }).join('');
+
+    grid.innerHTML = html;
+    grid.querySelectorAll('.cal-day[data-opacity]').forEach(day => { day.style.opacity = day.dataset.opacity; });
+
+    if (s.total_rides > 0) {
+        summaryEl.textContent = `${s.total_rides} ${s.total_rides === 1 ? 'ride' : 'rides'} · ${fmt(s.total_distance_mi)} mi · ${fmtInt(s.total_elevation_ft)} ft this month`;
+    } else {
+        summaryEl.textContent = 'No activities cached for this month — use "Backfill this month" if you expect rides here.';
+    }
+}
+
+async function backfillCurrentMonth() {
+    const btn = document.getElementById('cal-backfill-btn');
+    const statusEl = document.getElementById('cal-backfill-status');
+    const daysInMonth = new Date(calYear, calMonth, 0).getDate();
+    const afterDate = `${calYear}-${String(calMonth).padStart(2, '0')}-01`;
+    const beforeDate = `${calYear}-${String(calMonth).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Requesting…';
+    statusEl.classList.remove('d-none');
+    statusEl.textContent = 'Connecting to Strava…';
+
+    try {
+        await api.post('/fetch', { after_date: afterDate, before_date: beforeDate, limit: 1000 });
+        pollCalendarBackfillStatus();
+    } catch (e) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-cloud-download"></i> Backfill this month';
+        const msg = e && e.status === 409
+            ? 'Another fetch is already running — try again shortly.'
+            : ((e && e.message) || 'Failed to start backfill');
+        statusEl.textContent = msg;
+        if (typeof showToast === 'function') showToast(msg, 'error');
+    }
+}
+
+function pollCalendarBackfillStatus() {
+    const btn = document.getElementById('cal-backfill-btn');
+    const statusEl = document.getElementById('cal-backfill-status');
+
+    const poll = setInterval(async () => {
+        try {
+            const job = await api.get('/fetch/status');
+            statusEl.textContent = job.label || 'Fetching…';
+
+            if (job.status === 'done' || job.status === 'error') {
+                clearInterval(poll);
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-cloud-download"></i> Backfill this month';
+                if (typeof showToast === 'function') {
+                    showToast(job.label || (job.status === 'done' ? 'Backfill complete' : 'Backfill failed'),
+                        job.status === 'done' ? 'success' : 'error');
+                }
+                if (job.status === 'done') {
+                    loadCalendar();
+                    loadStats();
+                    loadActivities();
+                }
+            }
+        } catch (_) { /* network hiccup — keep polling */ }
+    }, 3000);
 }
 
 // -----------------------------------------------------------------------

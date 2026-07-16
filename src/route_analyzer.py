@@ -1777,6 +1777,7 @@ end tell
                 import subprocess
                 result = subprocess.run(
                     [sys.executable, 'scripts/migrate_cache_to_json_storage.py'],
+                    stdin=subprocess.DEVNULL,
                     capture_output=True,
                     text=True,
                     timeout=30

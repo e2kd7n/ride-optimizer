@@ -9,6 +9,7 @@ Routes:
   GET  /api/exploration/roads
   POST /api/exploration/invalidate
   POST /api/exploration/route
+  POST /api/exploration/verify-tiles
   GET  /api/geocode
 """
 
@@ -194,6 +195,50 @@ def exploration_route():
     result = svc.compute_route(waypoints, surface_preference=surface_preference)
     status_code = 200 if result.get('status') == 'success' else 500
     return jsonify(result), status_code
+
+
+@bp.route('/exploration/verify-tiles', methods=['POST'])
+@limiter.limit("30 per minute")
+def exploration_verify_tiles():
+    """Check which planned tiles a route's actual polyline really crosses.
+
+    Planned "new tile" claims are computed before the road route is known
+    (see exploration-worker.js); a claim corner can end up snapped to a road
+    that never enters the tile. This re-checks claims against the real
+    routed coordinates using the same tile-crossing math used to score
+    recorded activities (#493).
+    """
+    from src.coverage_tracker import TILE_ZOOM, SQUADRATINHO_ZOOM
+
+    svc = current_app.container.get_exploration_service()
+    data = request.get_json(silent=True) or {}
+
+    coordinates = data.get('coordinates')
+    if not isinstance(coordinates, list) or len(coordinates) < 1:
+        return jsonify({'status': 'error', 'message': 'coordinates must be a non-empty list of [lat, lon] pairs'}), 400
+    if len(coordinates) > 5000:
+        return jsonify({'status': 'error', 'message': 'coordinates list too large (max 5000)'}), 400
+    try:
+        coordinates = [(float(c[0]), float(c[1])) for c in coordinates]
+    except (TypeError, ValueError, IndexError):
+        return jsonify({'status': 'error', 'message': 'coordinates must be [lat, lon] number pairs'}), 400
+
+    tiles = data.get('tiles')
+    if not isinstance(tiles, list) or len(tiles) < 1:
+        return jsonify({'status': 'error', 'message': 'tiles must be a non-empty list of {x, y, zoom}'}), 400
+    if len(tiles) > 500:
+        return jsonify({'status': 'error', 'message': 'tiles list too large (max 500)'}), 400
+
+    allowed_zooms = (TILE_ZOOM, SQUADRATINHO_ZOOM)
+    try:
+        tiles = [{'x': int(t['x']), 'y': int(t['y']), 'zoom': int(t['zoom'])} for t in tiles]
+    except (TypeError, ValueError, KeyError):
+        return jsonify({'status': 'error', 'message': 'each tile must have integer x, y, zoom'}), 400
+    if any(t['zoom'] not in allowed_zooms for t in tiles):
+        return jsonify({'status': 'error', 'message': f'zoom must be one of {allowed_zooms}'}), 400
+
+    result = svc.verify_tile_claims(coordinates, tiles)
+    return jsonify(result), 200
 
 
 # ---------------------------------------------------------------------------

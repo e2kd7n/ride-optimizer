@@ -268,20 +268,12 @@ class MapRenderer {
 
         // Use Font Awesome icons via Leaflet.awesome-markers
         // For now, use default colored markers
-        const iconColors = {
-            'green': '#28a745',
-            'blue': '#007bff',
-            'red': '#dc3545',
-            'yellow': '#ffc107',
-            'orange': '#fd7e14',
-            'purple': '#6f42c1'
-        };
-
-        const color = iconColors[iconData.color] || '#007bff';
+        const iconColorClasses = ['green', 'blue', 'red', 'yellow', 'orange', 'purple'];
+        const colorClass = iconColorClasses.includes(iconData.color) ? iconData.color : 'blue';
 
         return L.divIcon({
             className: 'custom-marker',
-            html: `<div style="background-color: ${color}; width: 25px; height: 25px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);"></div>`,
+            html: `<div class="marker-dot marker-color-${colorClass}"></div>`,
             iconSize: [25, 25],
             iconAnchor: [12, 12]
         });

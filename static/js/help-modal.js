@@ -61,22 +61,18 @@
         const cards = TUTORIALS.map((t) => `
             <div class="col-md-6">
                 <div class="card h-100 tutorial-card" data-tutorial-id="${t.id}">
-                    ${textOnly ? '' : `<div class="tutorial-img-wrapper position-relative overflow-hidden"
-                         style="height:176px; background:var(--surface-2, #f8f9fa);">
+                    ${textOnly ? '' : `<div class="tutorial-img-wrapper position-relative overflow-hidden tutorial-img-wrapper-fixed">
                         <img
-                            class="tutorial-img w-100 h-100"
-                            style="object-fit:cover; cursor:pointer;"
+                            class="tutorial-img w-100 h-100 tutorial-img-cover"
                             src="${t.preview}"
                             data-gif="${t.gif}"
                             data-preview="${t.preview}"
                             alt="${t.alt}"
                             loading="lazy"
                             decoding="async"
-                            onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'; var badge=this.parentElement.querySelector('.tutorial-hover-badge'); if (badge) badge.style.display='none';"
                         />
-                        <div class="tutorial-img-fallback position-absolute top-0 start-0 w-100 h-100 align-items-center justify-content-center flex-column text-muted"
-                             style="display:none;" aria-hidden="true">
-                            <i class="bi bi-image" style="font-size:2rem;"></i>
+                        <div class="tutorial-img-fallback position-absolute top-0 start-0 w-100 h-100 align-items-center justify-content-center flex-column text-muted hidden-until-shown" aria-hidden="true">
+                            <i class="bi bi-image tutorial-img-fallback-icon"></i>
                             <span class="small mt-1">Preview coming soon</span>
                         </div>
                         <span class="tutorial-hover-badge position-absolute bottom-0 end-0 m-2 badge bg-secondary"
@@ -160,6 +156,24 @@
     }
 
     // ------------------------------------------------------------------
+    // Fallback when a preview/GIF asset 404s (moved off inline onerror=""
+    // so CSP script-src can drop 'unsafe-inline' — #475)
+    // ------------------------------------------------------------------
+
+    function attachImageErrorFallback() {
+        document.querySelectorAll('.tutorial-img').forEach((img) => {
+            img.addEventListener('error', () => {
+                img.style.display = 'none';
+                if (img.nextElementSibling) {
+                    img.nextElementSibling.style.display = 'flex';
+                }
+                const badge = img.parentElement.querySelector('.tutorial-hover-badge');
+                if (badge) badge.style.display = 'none';
+            });
+        });
+    }
+
+    // ------------------------------------------------------------------
     // Hover-play: swap preview ↔ animated GIF
     // ------------------------------------------------------------------
 
@@ -237,6 +251,9 @@
 
         const modalEl = document.getElementById('helpModal');
         if (modalEl && !textOnly) {
+            // Bind immediately: the <img> starts loading as soon as it's in
+            // the DOM (independent of when the modal itself becomes visible).
+            attachImageErrorFallback();
             // Start lazy loading once modal opens (saves bandwidth until user needs it)
             modalEl.addEventListener('shown.bs.modal', () => {
                 observeImages();

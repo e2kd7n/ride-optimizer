@@ -1,0 +1,72 @@
+        .card-header-btn {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: var(--space-2, 8px);
+            width: 100%;
+            border: none;
+            text-align: left;
+            cursor: pointer;
+            min-height: 44px;
+            font: inherit;
+        }
+        .card-header-btn:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: -2px;
+        }
+        .card-header-btn .chevron {
+            transition: transform 0.2s;
+            flex-shrink: 0;
+        }
+        .card-header-btn[aria-expanded="true"] .chevron {
+            transform: rotate(180deg);
+        }
+        .card-header-status {
+            font-weight: 400;
+            color: #fff;
+        }
+        .card-header-status .text-muted {
+            color: rgba(255, 255, 255, 0.8) !important;
+        }
+        .danger-zone-toggle {
+            min-height: 44px;
+        }
+        .danger-zone-toggle .chevron {
+            transition: transform 0.2s;
+        }
+        .danger-zone-toggle[aria-expanded="true"] .chevron {
+            transform: rotate(180deg);
+        }
+        .danger-zone-body {
+            border: 1px solid var(--danger);
+            border-radius: 10px;
+            padding: 16px;
+            margin-top: 8px;
+            background: rgba(196, 72, 58, 0.06);
+        }
+        .about-card-header {
+            background: var(--surface-2);
+            color: var(--ink);
+        }
+        .save-behavior-line {
+            font-size: 0.875rem;
+            color: var(--ink-soft);
+        }
+        .requires-tr-note {
+            font-size: 0.875rem;
+        }
+        .workflow-explainer {
+            font-size: 0.875rem;
+            color: var(--ink-soft);
+        }
+        .step-badge {
+            font-weight: 700;
+        }
+        #location-map {
+            height: 400px;
+            width: 100%;
+            border-radius: 8px;
+        }
+        @media (max-width: 767px) {
+            #location-map { height: 300px; }
+        }
