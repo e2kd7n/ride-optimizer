@@ -28,6 +28,14 @@ logger = SecureLogger(__name__)
 _THREAD_LOCKS: dict[str, threading.Lock] = {}
 _THREAD_LOCKS_GUARD = threading.Lock()
 
+# Parsed-JSON read cache keyed by resolved file path, invalidated by file
+# (mtime_ns, size). Module-level for the same reason as _THREAD_LOCKS: all
+# JSONStorage instances over the same file share one cached parse. This
+# exists for the large hot files (route_groups.json is ~12MB on disk) that
+# were being re-read and re-parsed on every API request (#461).
+_READ_CACHE: dict[str, tuple] = {}
+_READ_CACHE_GUARD = threading.Lock()
+
 
 def secure_chmod(path) -> None:
     """
@@ -172,7 +180,43 @@ class JSONStorage:
         except Exception as e:
             logger.error(f"Error reading {filename}: {e}", exc_info=True)
             return default
-    
+
+    def read_cached(self, filename: str, default: Any = None) -> Any:
+        """
+        Read JSON with an in-process cache invalidated by file (mtime, size).
+
+        Repeated calls return the same parsed object until the file changes
+        on disk (writes through JSONStorage rename the file, which bumps the
+        mtime and invalidates naturally). Use for large, frequently-read,
+        rarely-written files where a per-request re-parse is the bottleneck.
+
+        The returned object is SHARED across callers and threads — treat it
+        as read-only. Copy before sorting or mutating.
+        """
+        filepath = self._validate_filename(filename)
+        key = str(filepath)
+
+        try:
+            st = filepath.stat()
+        except OSError:
+            # Missing file: drop any stale entry so a later recreate re-reads
+            with _READ_CACHE_GUARD:
+                _READ_CACHE.pop(key, None)
+            return default
+        stamp = (st.st_mtime_ns, st.st_size)
+
+        with _READ_CACHE_GUARD:
+            hit = _READ_CACHE.get(key)
+            if hit is not None and hit[0] == stamp:
+                return hit[1]
+
+        data = self.read(filename, default=default)
+        # Don't cache failures/defaults — let the next call retry the read
+        if data is not default:
+            with _READ_CACHE_GUARD:
+                _READ_CACHE[key] = (stamp, data)
+        return data
+
     def write(self, filename: str, data: Any) -> bool:
         """
         Write JSON file atomically with proper permissions and path validation.

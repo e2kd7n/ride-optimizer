@@ -13,7 +13,8 @@ from html import escape
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
 
-import folium
+# folium is imported lazily in the map-generation methods to avoid startup
+# cost on the Pi — see the same pattern in analysis_service.py.
 
 from src.long_ride_analyzer import LongRideAnalyzer, LongRide, RideRecommendation
 from src.config_manager import ConfigManager
@@ -944,7 +945,9 @@ class PlannerService:
         if not long_rides:
             logger.warning("No long rides provided for map generation")
             return None
-        
+
+        import folium  # lazy import to avoid startup cost on Pi
+
         try:
             # Collect all rides from all days
             all_rides = []
@@ -1131,13 +1134,14 @@ class PlannerService:
         return '#dc3545'
     
     def _add_weather_segmented_route(self,
-                                     feature_group: folium.FeatureGroup,
+                                     feature_group: 'folium.FeatureGroup',
                                      coordinates: List[Tuple[float, float]],
                                      weather_score: float,
                                      popup_html: str,
                                      ride_name: str,
                                      ride_distance: float) -> None:
         """Draw route segments with semantic weather coloring."""
+        import folium  # lazy import to avoid startup cost on Pi
         if len(coordinates) < 2:
             return
         
@@ -1166,10 +1170,11 @@ class PlannerService:
             ).add_to(feature_group)
     
     def _add_weather_forecast_markers(self,
-                                      weather_overlay: folium.FeatureGroup,
+                                      weather_overlay: 'folium.FeatureGroup',
                                       ride_obj: LongRide,
                                       ride: Dict[str, Any]) -> None:
         """Add forecast markers at start, midpoint, and end for long ride routes."""
+        import folium  # lazy import to avoid startup cost on Pi
         points = [
             ('Start', ride_obj.coordinates[0]),
             ('Midpoint', ride_obj.coordinates[len(ride_obj.coordinates) // 2]),

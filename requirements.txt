@@ -13,17 +13,18 @@ scipy>=1.9.0
 similaritymeasures>=0.5.0
 cryptography>=41.0.0
 tqdm>=4.65.0
-qrcode[pil]>=7.4.2
-weasyprint>=60.0
 defusedxml>=0.7.1
 gunicorn>=21.2.0
 flask>=3.0.0
 flask-cors>=4.0.0
-flask-sqlalchemy>=3.1.1
 flask-wtf>=1.2.0
 flask-limiter>=3.5.0
-sqlalchemy>=2.0.16
 icalendar>=5.0.0
 marshmallow>=3.20.0
 garth>=0.4.0
 psutil>=5.9.0
+
+# Legacy-CLI-only extras (report_generator.py PDF/QR export via deprecated
+# main.py; degrades gracefully when absent — #467, #498). Install manually if
+# you need the CLI PDF reports:
+#   pip install "qrcode[pil]>=7.4.2" "weasyprint>=60.0"
