@@ -24,19 +24,23 @@ class WeatherFetcher:
     """Fetches weather data from Open-Meteo API (free, no API key needed)."""
     
     def __init__(self, cache_radius_km: float = 2.0, cache_duration_hours: float = 1.5,
-                 cache_file: Optional[str] = None):
+                 cache_file: Optional[str] = None, max_cache_entries: int = 500):
         """
         Initialize weather fetcher.
-        
+
         Args:
             cache_radius_km: Radius in km to consider locations as "same" for caching (default 2.0)
             cache_duration_hours: How long to cache weather data in hours (default 1.5 = 90 minutes)
             cache_file: Path to cache file (default: cache/weather_cache.json)
+            max_cache_entries: Hard cap on cache size. Once exceeded, the oldest entries are
+                evicted regardless of TTL, bounding both memory use and the cost of the linear
+                scan _find_cached_weather does on every lookup (default 500).
         """
         self.base_url = "https://api.open-meteo.com/v1/forecast"
         self.session = requests.Session()
         self.cache_radius_km = cache_radius_km
         self.cache_duration_hours = cache_duration_hours
+        self.max_cache_entries = max_cache_entries
         
         # Set up cache file path
         if cache_file is None:
@@ -103,7 +107,25 @@ class WeatherFetcher:
             
         except Exception as e:
             logger.error(f"Error saving cache file: {e}")
-        
+
+    def _evict_oldest_if_needed(self) -> None:
+        """
+        Bound cache size regardless of TTL.
+
+        _find_cached_weather already prunes expired entries lazily as it scans, but a
+        session that queries many distinct locations within a single cache_duration_hours
+        window can still grow the cache without limit. Evict the oldest entries by
+        timestamp once max_cache_entries is exceeded.
+        """
+        overflow = len(self.cache) - self.max_cache_entries
+        if overflow <= 0:
+            return
+        oldest_keys = sorted(self.cache.keys(), key=lambda k: self.cache[k]['timestamp'])[:overflow]
+        for key in oldest_keys:
+            del self.cache[key]
+        logger.debug(f"Evicted {overflow} oldest weather cache entries "
+                     f"(cache size capped at {self.max_cache_entries})")
+
     def _find_cached_weather(self, lat: float, lon: float) -> Optional[Dict]:
         """
         Find cached weather data for a nearby location (if not expired).
@@ -205,6 +227,7 @@ class WeatherFetcher:
                 'data': conditions,
                 'timestamp': datetime.now()
             }
+            self._evict_oldest_if_needed()
 
             if save_cache:
                 self._save_cache()
