@@ -10,7 +10,6 @@ Routes:
   GET  /api/activities
 """
 
-import json
 import threading
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -272,12 +271,9 @@ def get_cache_info():
     if not cache_path.exists():
         return jsonify({'status': 'no_cache', 'activity_count': 0})
     try:
-        with open(cache_path) as f:
-            cache_data = json.load(f)
-        activities = cache_data.get('activities', cache_data) if isinstance(cache_data, dict) else cache_data
-        if not isinstance(activities, list):
-            return jsonify({'status': 'error', 'message': 'Cache format unrecognized'}), 500
-        dates = sorted(a['start_date'] for a in activities if isinstance(a, dict) and a.get('start_date'))
+        from app.api.activity_cache import load_cached_activities
+        activities = load_cached_activities()
+        dates = sorted(a.start_date for a in activities if a.start_date)
         stat = cache_path.stat()
         return jsonify({
             'status': 'ok',
@@ -305,7 +301,6 @@ def get_activities():
     - limit: max results (default 200)
     - offset: pagination offset (default 0)
     """
-    from src.data_fetcher import Activity as _Activity
     from datetime import timedelta
 
     gear_id = request.args.get('gear_id', '').strip() or None
@@ -318,16 +313,9 @@ def get_activities():
     except (ValueError, TypeError):
         limit, offset = 200, 0
 
-    # Load activities
-    cache_path = Path('data/cache/activities.json')
-    all_activities = []
-    if cache_path.exists():
-        try:
-            with open(cache_path, 'r') as f:
-                raw = json.load(f)
-            all_activities = [_Activity.from_dict(a) for a in raw.get('activities', [])]
-        except Exception as e:
-            logger.warning(f"Could not load activities: {e}")
+    # Load activities (shared cached list — read-only, copy before mutating)
+    from app.api.activity_cache import load_cached_activities
+    all_activities = load_cached_activities()
 
     # Filter by period
     now = datetime.now()
@@ -348,7 +336,8 @@ def get_activities():
         end = now.replace(year=now.year - 1, month=12, day=31, hour=23, minute=59, second=59, microsecond=0)
         activities = [a for a in all_activities if a.start_date and start <= _parse_date(a.start_date) <= end]
     else:
-        activities = all_activities
+        # Copy: the shared cached list must not be sorted in place below
+        activities = list(all_activities)
 
     # Load gear metadata
     analysis_service = current_app.container.analysis_service

@@ -8,7 +8,8 @@ Licensed under the MIT License - see LICENSE file for details.
 """
 
 from .secure_logger import SecureLogger
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
+import math
 
 import folium
 from folium import plugins
@@ -19,6 +20,68 @@ from .route_namer import RouteNamer
 from .units import UnitConverter
 
 logger = SecureLogger(__name__)
+
+
+def simplify_coordinates(coords: List[Tuple[float, float]],
+                          tolerance_deg: float = 0.00005) -> List[Tuple[float, float]]:
+    """
+    Simplify a route's coordinate list with the (iterative) Douglas-Peucker algorithm.
+
+    Full-resolution GPS tracks can have a point every few meters, and Folium embeds
+    every coordinate directly into the generated map's SVG/JS, so large routes bloat
+    map HTML size and render cost with no visible benefit at typical zoom levels.
+
+    Implemented directly (no shapely dependency) since shapely is only an optional,
+    try/except-gated dependency elsewhere in this codebase (coverage_tracker.py), not
+    a guaranteed one.
+
+    Args:
+        coords: List of (lat, lon) tuples
+        tolerance_deg: Maximum perpendicular distance (in degrees) a point may deviate
+            from the simplified line before it's kept as significant. The default
+            (~0.00005 deg) is roughly 5m at mid-latitudes.
+
+    Returns:
+        Simplified list of (lat, lon) tuples. Always keeps both endpoints.
+    """
+    n = len(coords)
+    if n < 3:
+        return list(coords)
+
+    def _perp_distance(point, start, end) -> float:
+        x, y = point
+        x1, y1 = start
+        x2, y2 = end
+        if (x1, y1) == (x2, y2):
+            return math.hypot(x - x1, y - y1)
+        num = abs((y2 - y1) * x - (x2 - x1) * y + x2 * y1 - y2 * x1)
+        den = math.hypot(y2 - y1, x2 - x1)
+        return num / den
+
+    keep = [False] * n
+    keep[0] = keep[-1] = True
+
+    # Iterative (stack-based) rather than recursive to avoid Python recursion-depth
+    # issues on very long, low-curvature routes.
+    stack = [(0, n - 1)]
+    while stack:
+        start_idx, end_idx = stack.pop()
+        if end_idx - start_idx < 2:
+            continue
+        start, end = coords[start_idx], coords[end_idx]
+        max_dist = -1.0
+        max_idx = start_idx
+        for i in range(start_idx + 1, end_idx):
+            dist = _perp_distance(coords[i], start, end)
+            if dist > max_dist:
+                max_dist = dist
+                max_idx = i
+        if max_dist > tolerance_deg:
+            keep[max_idx] = True
+            stack.append((start_idx, max_idx))
+            stack.append((max_idx, end_idx))
+
+    return [c for c, k in zip(coords, keep) if k]
 
 
 class RouteVisualizer:
@@ -157,10 +220,15 @@ class RouteVisualizer:
         
         # Build className with all applicable classes
         class_names = f"route-line route-{route_group.id} {direction_class} {plus_class}".strip()
-        
+
+        # Simplify before embedding into the map — full-resolution GPS tracks bloat the
+        # generated HTML/SVG with points too close together to matter at map zoom levels.
+        simplify_tolerance = self.config.get('visualization.route_simplify_tolerance_deg', 0.00005)
+        render_coords = simplify_coordinates(coords, simplify_tolerance)
+
         # Add polyline with custom class and data attributes for JavaScript interaction
         folium.PolyLine(
-            coords,
+            render_coords,
             color=color,
             weight=weight,
             opacity=opacity,
@@ -293,13 +361,15 @@ class RouteVisualizer:
         if self.map is None:
             raise ValueError("Map not initialized. Call create_base_map() first.")
         
-        # Collect all coordinates from all routes
+        # Collect all coordinates from all routes (simplified — a heatmap doesn't need
+        # full-resolution GPS density, and this is summed across every route in every
+        # group, which can be a lot of points).
         heat_data = []
-        
+        simplify_tolerance = self.config.get('visualization.route_simplify_tolerance_deg', 0.00005)
+
         for group in self.route_groups:
             for route in group.routes:
-                # Add all coordinates
-                for coord in route.coordinates:
+                for coord in simplify_coordinates(route.coordinates, simplify_tolerance):
                     heat_data.append([coord[0], coord[1]])
         
         if heat_data:
@@ -489,10 +559,12 @@ class RouteVisualizer:
         
         if optimal_route.representative_route and optimal_route.representative_route.coordinates:
             coords = optimal_route.representative_route.coordinates
-            
+            simplify_tolerance = self.config.get('visualization.route_simplify_tolerance_deg', 0.00005)
+            render_coords = simplify_coordinates(coords, simplify_tolerance)
+
             # Add route polyline
             folium.PolyLine(
-                coords,
+                render_coords,
                 color=optimal_color,
                 weight=optimal_weight,
                 opacity=0.8,
