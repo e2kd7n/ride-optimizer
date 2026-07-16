@@ -12,13 +12,14 @@ from html import escape
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, time, date
 
-import folium
+# folium and src.visualizer (which imports folium) are imported lazily in the
+# map-generation methods to avoid startup cost on the Pi — see the same
+# pattern in analysis_service.py.
 
 from src.next_commute_recommender import NextCommuteRecommender, CommuteRecommendation
 from src.route_analyzer import RouteGroup
 from src.location_finder import Location
 from src.config_manager import ConfigManager
-from src.visualizer import RouteVisualizer
 from app.services.trainerroad_service import TrainerRoadService
 from app.services.weather_service import WeatherService
 from app.services.settings_service import SettingsService
@@ -350,7 +351,10 @@ class CommuteService:
         if not routes:
             logger.warning("No routes provided for commute comparison map")
             return None
-        
+
+        import folium  # lazy import to avoid startup cost on Pi
+        from src.visualizer import RouteVisualizer
+
         try:
             route_groups = []
             route_lookup = {}
@@ -525,11 +529,12 @@ class CommuteService:
         """
     
     def _add_commute_weather_overlay(self,
-                                     map_obj: folium.Map,
+                                     map_obj: 'folium.Map',
                                      routes: List[Dict[str, Any]],
                                      home_location: Location,
                                      work_location: Location) -> None:
         """Add toggleable current weather markers for commute locations and route midpoints."""
+        import folium  # lazy import to avoid startup cost on Pi
         weather_layer = folium.FeatureGroup(name='Weather Overlay', show=False)
         
         key_points: List[Tuple[str, Tuple[float, float], str]] = [

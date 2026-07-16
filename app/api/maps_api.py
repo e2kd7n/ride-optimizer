@@ -21,8 +21,13 @@ _storage = JSONStorage()
 
 
 def load_route_groups() -> Dict:
-    """Load route groups from data/route_groups.json (the data actually kept current by AnalysisService)."""
-    data = _storage.read('route_groups.json', default={})
+    """Load route groups from data/route_groups.json (the data actually kept current by AnalysisService).
+
+    Uses the shared parsed-JSON cache — this file is ~12MB and was being
+    re-parsed on every /api/maps/* request (#461). The returned groups are
+    shared; treat them as read-only.
+    """
+    data = _storage.read_cached('route_groups.json', default={}) or {}
     return {'groups': data.get('route_groups', [])}
 
 

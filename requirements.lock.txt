@@ -8,22 +8,20 @@ blinker==1.9.0
     # via flask
 branca==0.8.2
     # via folium
-brotli==1.2.0
-    # via fonttools
 certifi==2026.6.17
     # via requests
 cffi==2.1.0
-    # via
-    #   cryptography
-    #   weasyprint
+    # via cryptography
 charset-normalizer==3.4.9
     # via requests
 click==8.4.2
     # via flask
+colorama==0.4.6
+    # via
+    #   click
+    #   tqdm
 cryptography==49.0.0
     # via -r requirements.txt
-cssselect2==0.9.0
-    # via weasyprint
 defusedxml==0.7.1
     # via -r requirements.txt
 deprecated==1.3.1
@@ -35,13 +33,10 @@ flask==3.1.3
     #   -r requirements.txt
     #   flask-cors
     #   flask-limiter
-    #   flask-sqlalchemy
     #   flask-wtf
 flask-cors==6.0.5
     # via -r requirements.txt
 flask-limiter==4.1.1
-    # via -r requirements.txt
-flask-sqlalchemy==3.1.1
     # via -r requirements.txt
 flask-wtf==1.3.0
     # via -r requirements.txt
@@ -51,8 +46,6 @@ flexparser==0.4
     # via pint
 folium==0.20.0
     # via -r requirements.txt
-fonttools==4.63.0
-    # via weasyprint
 garth==0.8.0
     # via -r requirements.txt
 geographiclib==2.1
@@ -140,10 +133,6 @@ packaging==26.2
     #   opentelemetry-instrumentation
 pandas==3.0.3
     # via -r requirements.txt
-pillow==12.3.0
-    # via
-    #   qrcode
-    #   weasyprint
 pint==0.25.3
     # via stravalib
 platformdirs==4.10.0
@@ -168,12 +157,8 @@ pydantic-core==2.46.4
     # via pydantic
 pydantic-settings==2.14.2
     # via garth
-pydyf==0.12.1
-    # via weasyprint
 pygments==2.20.0
     # via rich
-pyphen==0.17.2
-    # via weasyprint
 python-dateutil==2.9.0.post0
     # via
     #   arrow
@@ -184,8 +169,6 @@ python-dotenv==1.2.2
     #   -r requirements.txt
     #   pydantic-settings
 pyyaml==6.0.3
-    # via -r requirements.txt
-qrcode==8.2
     # via -r requirements.txt
 requests==2.34.2
     # via
@@ -210,20 +193,10 @@ similaritymeasures==1.4.0
     # via -r requirements.txt
 six==1.17.0
     # via python-dateutil
-sqlalchemy==2.0.51
-    # via
-    #   -r requirements.txt
-    #   flask-sqlalchemy
 stravalib==2.5.0
     # via -r requirements.txt
 threadpoolctl==3.6.0
     # via scikit-learn
-tinycss2==1.5.1
-    # via
-    #   cssselect2
-    #   weasyprint
-tinyhtml5==2.1.0
-    # via weasyprint
 tqdm==4.68.4
     # via -r requirements.txt
 typing-extensions==4.16.0
@@ -240,7 +213,6 @@ typing-extensions==4.16.0
     #   pint
     #   pydantic
     #   pydantic-core
-    #   sqlalchemy
     #   typing-inspection
 typing-inspection==0.4.2
     # via
@@ -250,15 +222,9 @@ tzdata==2026.3
     # via
     #   arrow
     #   icalendar
+    #   pandas
 urllib3==2.7.0
     # via requests
-weasyprint==69.0
-    # via -r requirements.txt
-webencodings==0.5.1
-    # via
-    #   cssselect2
-    #   tinycss2
-    #   tinyhtml5
 werkzeug==3.1.8
     # via
     #   flask
@@ -271,5 +237,3 @@ wtforms==3.2.2
     # via flask-wtf
 xyzservices==2026.3.0
     # via folium
-zopfli==0.4.3
-    # via fonttools

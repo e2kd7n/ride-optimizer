@@ -19,8 +19,10 @@ from typing import Dict, Any
 # defusedxml is only needed for parsing untrusted XML input
 from xml.etree import ElementTree as ET
 
-# qrcode is a hard dependency (requirements.txt); this import-fallback only
-# guards against it being missing from the environment, not a feature flag.
+# qrcode and weasyprint are optional extras (removed from requirements.txt in
+# #498 Phase 2 — this legacy-CLI-only module was the sole consumer). QR/PDF
+# export degrades gracefully when they're absent; install manually if needed:
+#   pip install "qrcode[pil]>=7.4.2" "weasyprint>=60.0"
 try:
     import qrcode
     QRCODE_AVAILABLE = True

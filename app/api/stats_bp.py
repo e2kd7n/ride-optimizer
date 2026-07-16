@@ -8,10 +8,8 @@ Routes:
   GET  /api/stats/backfill-gear-ids/status
 """
 
-import json
 import threading
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Dict
 
 from flask import Blueprint, current_app, jsonify, request
@@ -30,18 +28,13 @@ bp = Blueprint('stats', __name__, url_prefix='/api')
 # ---------------------------------------------------------------------------
 
 def _load_activities_for_stats():
-    """Load raw activities from cache for stats computation."""
-    from src.data_fetcher import Activity as _Activity
-    cache_path = Path('data/cache/activities.json')
-    if not cache_path.exists():
-        return []
-    try:
-        with open(cache_path, 'r') as f:
-            raw = json.load(f)
-        return [_Activity.from_dict(a) for a in raw.get('activities', [])]
-    except Exception as e:
-        logger.warning(f"Could not load activities for stats: {e}")
-        return []
+    """Load raw activities from cache for stats computation.
+
+    Served from the shared mtime-invalidated cache — do not mutate the
+    returned list.
+    """
+    from app.api.activity_cache import load_cached_activities
+    return load_cached_activities()
 
 
 def _meters_to_miles(m):

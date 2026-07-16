@@ -13,10 +13,11 @@ ENV PYTHONUNBUFFERED=1 \
     MKL_NUM_THREADS=1 \
     NUMEXPR_NUM_THREADS=1
 
+# libcairo2/libpango*/libgdk-pixbuf/shared-mime-info/fonts-dejavu-core were
+# only needed by weasyprint (legacy CLI PDF export, removed from
+# requirements.txt in #498 Phase 2).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc g++ curl \
-    libcairo2 libpango-1.0-0 libpangocairo-1.0-0 \
-    libgdk-pixbuf2.0-0 libffi8 shared-mime-info fonts-dejavu-core \
+    gcc g++ curl libffi8 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
