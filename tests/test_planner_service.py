@@ -16,14 +16,18 @@ from datetime import datetime, date, timedelta
 from app.services.planner_service import PlannerService
 from src.long_ride_analyzer import LongRide
 from src.config_manager import ConfigManager
-from app import create_app
+from app.factory import create_app
 
 
 @pytest.fixture
 def app():
-    """Create Flask app for testing."""
-    app = create_app('testing')
-    app.config['TESTING'] = True
+    """Create Flask app for testing.
+
+    Uses the real production factory (app.factory.create_app) rather than a
+    second, divergent test-only factory — see #460. TESTING=True disables
+    CSRF enforcement (app.factory's before_request hook keys off app.testing).
+    """
+    app = create_app({'TESTING': True})
     return app
 
 
