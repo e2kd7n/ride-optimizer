@@ -16,6 +16,10 @@ services:
       # container must explicitly opt back into 0.0.0.0. LAN exposure is actually
       # controlled by the "ports:" mapping below, not this value.
       - BIND_HOST=0.0.0.0
+      # Cap analysis worker processes: each ProcessPoolExecutor child forks a
+      # full copy of the numpy stack, which pushed the Pi into swap. 1 = run
+      # analysis sequentially in-process (RouteAnalyzer skips the pool).
+      - ANALYSIS_N_WORKERS=${ANALYSIS_N_WORKERS:-1}
       - NTFY_ENABLED=${NTFY_ENABLED:-false}
       - NTFY_SERVER=${NTFY_SERVER:-https://ntfy.sh}
       - NTFY_TOPIC=${NTFY_TOPIC:-ride-optimizer}

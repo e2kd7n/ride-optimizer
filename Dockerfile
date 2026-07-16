@@ -4,7 +4,14 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    APP_PORT=8083
+    APP_PORT=8083 \
+    # numpy/scipy BLAS backends default to one thread per core, which
+    # multiplies memory/CPU pressure inside the 512MB container on the Pi.
+    # Analysis parallelism is governed by ANALYSIS_N_WORKERS instead.
+    OPENBLAS_NUM_THREADS=1 \
+    OMP_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1 \
+    NUMEXPR_NUM_THREADS=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc g++ curl \

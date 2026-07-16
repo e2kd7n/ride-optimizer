@@ -552,7 +552,7 @@ class LongRideAnalyzer:
             import os
             cpu_count = os.cpu_count() or 2
             workload_size = len(activities_data)
-            
+
             # Intelligent worker selection based on workload
             if workload_size < 20:
                 # Small workload: 2 workers (minimum parallelism)
@@ -563,10 +563,24 @@ class LongRideAnalyzer:
             else:
                 # Large workload: up to 6 workers (maximum efficiency)
                 optimal_workers = min(6, cpu_count)
-            
+
+            # Memory-constrained deployments (the Pi container) cap this via
+            # ANALYSIS_N_WORKERS so analysis never forks extra numpy stacks.
+            env_cap = os.getenv('ANALYSIS_N_WORKERS')
+            if env_cap:
+                try:
+                    optimal_workers = max(1, min(optimal_workers, int(env_cap)))
+                except ValueError:
+                    pass
+
             max_workers = optimal_workers
             logger.info(f"Using {max_workers} workers for {workload_size} comparisons")
-        
+
+        # A 1-worker pool forks a full extra process for zero parallelism —
+        # fall through to the sequential path instead.
+        if max_workers is not None and max_workers <= 1:
+            use_parallel = False
+
         if use_parallel and len(activities_data) >= 10:
             # Use parallel processing (threshold: 10 items minimum)
             logger.info(f"Using parallel processing to match {len(activities_data)} unnamed rides...")
