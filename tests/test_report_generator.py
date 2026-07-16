@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 from xml.etree import ElementTree as ET
 
-from src.report_generator import ReportGenerator
+from legacy.report_generator import ReportGenerator
 
 
 def _make_config(unit_system='metric'):
