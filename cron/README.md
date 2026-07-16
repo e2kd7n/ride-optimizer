@@ -21,15 +21,17 @@ All cron jobs support **push notifications via ntfy.sh** for proactive monitorin
 
 ### 1. Daily Analysis (`daily_analysis.py`)
 - **Schedule**: Daily at 2 AM
-- **Purpose**: Fetch latest activities from Strava and perform full route analysis
-- **Output**: Updates `cache/activities_cache.json`, `cache/route_groups_cache.json`
+- **Purpose**: Trigger a full fetch + analysis in the running app via `POST /api/analyze`, then poll `/api/analyze/status` until done
+- **How**: Thin HTTP client — does **not** import the analysis stack (the app container does the work inside its own memory limit; see issue #498)
+- **Config**: `RIDE_OPTIMIZER_URL` (default `http://127.0.0.1:$APP_PORT`), `ANALYSIS_TIMEOUT` (default 3h), `ANALYSIS_POLL_INTERVAL` (default 30s)
 - **Logs**: `logs/cron_daily_analysis.log`
 - **Notifications**: Sends critical alert on failure
 
 ### 2. Weather Refresh (`weather_refresh.py`)
 - **Schedule**: Every 6 hours
-- **Purpose**: Update weather data for home location
-- **Output**: Updates `cache/weather_cache.json`
+- **Purpose**: Refresh home-location weather via `GET /api/weather` (the app caches it server-side)
+- **How**: Thin HTTP client — does **not** import the service stack (see issue #498)
+- **Config**: `RIDE_OPTIMIZER_URL` (default `http://127.0.0.1:$APP_PORT`)
 - **Logs**: `logs/cron_weather_refresh.log`
 - **Notifications**: None (non-critical job)
 
@@ -220,7 +222,7 @@ crontab cron/crontab.backup.YYYYMMDD_HHMMSS
 
 Each job:
 1. Runs as standalone process
-2. Loads only required services
+2. Talks to the running app over HTTP where possible (`daily_analysis.py`, `weather_refresh.py`) so the heavy lifting happens once, inside the app container's memory budget — the jobs themselves import only stdlib + `requests` + light helpers
 3. Records execution in `job_history.json`
 4. Exits cleanly after completion
 5. No shared state between runs

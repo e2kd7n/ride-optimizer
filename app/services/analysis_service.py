@@ -9,6 +9,7 @@ This service orchestrates the main analysis workflow:
 """
 
 import json
+import os
 from src.secure_logger import SecureLogger
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
@@ -22,6 +23,18 @@ from src.config_manager import ConfigManager
 from app.services.weather_service import WeatherService
 
 logger = SecureLogger(__name__)
+
+
+def _analysis_workers(default: int = 2) -> int:
+    """Worker-process count for route analysis, capped by ANALYSIS_N_WORKERS.
+
+    Memory-constrained deployments (the Pi container) set ANALYSIS_N_WORKERS=1
+    so analysis never forks extra copies of the numpy stack.
+    """
+    try:
+        return max(1, int(os.getenv('ANALYSIS_N_WORKERS', default)))
+    except (TypeError, ValueError):
+        return default
 
 
 class AnalysisService:
@@ -421,6 +434,7 @@ class AnalysisService:
                     h, w = lf.identify_home_work()
                     ra = RouteAnalyzer(activities=preview_acts, home=h, work=w,
                                        config=self.config, force_reanalysis=True,
+                                       n_workers=_analysis_workers(),
                                        enable_geocoding=False)
                     ra.group_similar_routes()
                     logger.info(f"Preview analysis complete on {preview_n} activities")
@@ -480,6 +494,7 @@ class AnalysisService:
                 work=self._work_location,
                 config=self.config,
                 force_reanalysis=force_refresh,
+                n_workers=_analysis_workers(),
                 progress_callback=_route_progress,
                 stop_check=stop_check,
             )
