@@ -13,7 +13,7 @@ from src.data_fetcher import Activity, StravaDataFetcher
 from src.location_finder import LocationFinder
 from src.route_analyzer import RouteAnalyzer
 from src.optimizer import RouteOptimizer
-from src.report_generator import ReportGenerator
+from legacy.report_generator import ReportGenerator
 
 
 @pytest.mark.integration
@@ -211,7 +211,7 @@ units:
         assert len(cached_activities) == len(sample_activities)
         assert all(isinstance(a, Activity) for a in cached_activities)
     
-    @patch('src.report_generator.ReportGenerator._render_template')
+    @patch('legacy.report_generator.ReportGenerator._render_template')
     def test_report_generation(self, mock_render, sample_activities,
                               mock_config, temp_dir):
         """Test report generation."""
@@ -308,7 +308,7 @@ units:
             assert len(ranked_routes) > 0
         
         # Step 4: Generate report (mocked)
-        with patch('src.report_generator.ReportGenerator._render_template') as mock_render:
+        with patch('legacy.report_generator.ReportGenerator._render_template') as mock_render:
             mock_render.return_value = "<html><body>Report</body></html>"
             
             analysis_results = {

@@ -7,7 +7,7 @@ Copyright (c) 2024-2026 e2kd7n
 Licensed under the MIT License - see LICENSE file for details.
 """
 
-from .secure_logger import SecureLogger
+from src.secure_logger import SecureLogger
 import base64
 import csv
 import json
@@ -42,8 +42,8 @@ except (ImportError, OSError) as e:
     logger.warning(f"WeasyPrint not available: {e}. PDF export will be disabled.")
     HTML = None
 
-from .route_analyzer import Route
-from .units import UnitConverter
+from src.route_analyzer import Route
+from src.units import UnitConverter
 
 logger = SecureLogger(__name__)
 
@@ -361,7 +361,7 @@ class ReportGenerator:
         current_weather = None
         home = self.results.get('home')
         if home:
-            from .weather_fetcher import WeatherFetcher
+            from src.weather_fetcher import WeatherFetcher
             weather_fetcher = WeatherFetcher()
             current_weather = weather_fetcher.get_current_conditions(home.lat, home.lon)
         
