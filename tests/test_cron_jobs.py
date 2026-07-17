@@ -144,6 +144,43 @@ class TestDailyAnalysisJob:
     @patch('cron.daily_analysis.requests.Session')
     @patch('cron.daily_analysis.JSONStorage')
     @patch('cron.daily_analysis.ConfigManager.get_instance')
+    def test_daily_analysis_error_payload_in_done_job(self, mock_config,
+                                                      mock_storage_class,
+                                                      mock_session_class,
+                                                      mock_sleep):
+        """A 'done' job whose result payload is an internal error exits 1.
+
+        run_full_analysis catches errors (e.g. Strava auth failure) and
+        returns {'status': 'error', ...} — the job state still reads 'done',
+        so the script must inspect the payload (found live on pi4, #498).
+        """
+        mock_storage = Mock()
+        mock_storage.read.return_value = {'jobs': []}
+        mock_storage_class.return_value = mock_storage
+
+        session = Mock()
+        session.get.side_effect = [
+            _http_response(json_data={'csrf_token': 'tok'}),
+            _http_response(json_data={
+                'status': 'done',
+                'result': {'status': 'error', 'activities_count': 0,
+                           'message': 'Analysis failed: Unauthorized'},
+            }),
+        ]
+        session.post.return_value = _http_response(
+            json_data={'status': 'started'})
+        mock_session_class.return_value = session
+
+        from cron import daily_analysis
+        result = daily_analysis.main()
+
+        assert result == 1
+        mock_storage.write.assert_called()  # failure recorded in history
+
+    @patch('cron.daily_analysis.time.sleep')
+    @patch('cron.daily_analysis.requests.Session')
+    @patch('cron.daily_analysis.JSONStorage')
+    @patch('cron.daily_analysis.ConfigManager.get_instance')
     def test_daily_analysis_app_unreachable(self, mock_config, mock_storage_class,
                                             mock_session_class, mock_sleep):
         """Connection failure exits 1 and records the failure."""
