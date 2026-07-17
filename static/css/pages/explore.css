@@ -6,22 +6,6 @@
         @media (max-width: 767px) {
             #explore-map { height: 350px; }
         }
-        .coverage-stat {
-            text-align: center;
-            padding: var(--space-2);
-        }
-        .coverage-stat .stat-value {
-            font-size: var(--font-size-xl);
-            font-weight: 700;
-            color: var(--color-primary);
-        }
-        .coverage-stat .stat-label {
-            font-size: var(--font-size-xs);
-            color: var(--color-text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-        .tile-visited { fill-opacity: 0.4; stroke-width: 1; }
         .route-badge {
             display: inline-flex;
             align-items: center;

@@ -10,8 +10,6 @@
 
 const api = new APIClient('/api');
 let map = null;
-let tileLayer = null;
-let tileLayerSecondary = null;
 let newTilesLayer = null;   // green highlight for tiles a route will claim
 let routeLayer = null;
 let waypointMarkers = null;
@@ -25,13 +23,12 @@ let explorationWorker = null;
 // { NE: [zoneList, ...], SE: [...], ... }
 let _phase1Candidates = {};
 
-const ZOOM_LABELS = { 14: 'Squadrats', 17: 'Squadratinhos' };
-
 document.addEventListener('DOMContentLoaded', () => {
     initMap();
     initWorker();
-    document.getElementById('load-coverage-btn').addEventListener('click', loadCoverage);
-    document.getElementById('coverage-type-select').addEventListener('change', loadCoverage);
+    document.getElementById('coverage-type-select').addEventListener('change', () => {
+        if (startMarker) loadCoverage();
+    });
     document.getElementById('clear-cache-btn').addEventListener('click', clearCache);
     document.getElementById('generate-route-btn').addEventListener('click', generateRoute);
     document.getElementById('workout-combo-btn').addEventListener('click', generateWorkoutCombo);
@@ -48,7 +45,6 @@ document.addEventListener('DOMContentLoaded', () => {
     initDistanceSlider();
     initTooltips();
     updateWorkflowState();
-    loadCoverage();
 });
 
 // ── Bootstrap tooltips (#360 help icon) ────────────────────────
@@ -85,9 +81,7 @@ function initMap() {
         attribution: '&copy; OpenStreetMap contributors',
         maxZoom: 18,
     }).addTo(map);
-    tileLayer = L.layerGroup().addTo(map);
-    tileLayerSecondary = L.layerGroup().addTo(map);
-    newTilesLayer = L.layerGroup().addTo(map);  // above coverage, below routes
+    newTilesLayer = L.layerGroup().addTo(map);  // below routes
     // FeatureGroup, not LayerGroup — routeLayer.getBounds() (used to fit the
     // map after routes are generated) only exists on FeatureGroup in Leaflet
     // 1.9.4; LayerGroup lacks it despite otherwise sharing the same API.
@@ -114,6 +108,9 @@ function setStart(lat, lon, label = null) {
     }).addTo(map).bindPopup('Start').openPopup();
     document.getElementById('start-display').textContent = label || `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
     updateWorkflowState();
+    // #488: coverage loads silently against the new start point instead of
+    // requiring a separate "Load Coverage" step.
+    loadCoverage();
 }
 
 function setEnd(lat, lon, label = null) {
@@ -166,9 +163,8 @@ function updateWorkflowState() {
     const isPtp = document.getElementById('route-type-select').value === 'point_to_point';
     const ready = coverageReady && startReady && (!isPtp || !!endMarker);
 
-    document.getElementById('workflow-step-1').classList.toggle('workflow-step-done', coverageReady);
-    document.getElementById('workflow-step-2').classList.toggle('workflow-step-done', startReady);
-    document.getElementById('workflow-step-3').classList.toggle('workflow-step-done', ready);
+    document.getElementById('workflow-step-1').classList.toggle('workflow-step-done', startReady);
+    document.getElementById('workflow-step-2').classList.toggle('workflow-step-done', ready);
 
     if (!explorationWorker) return; // unsupported-worker state already disables the button with its own message
 
@@ -185,8 +181,8 @@ function updateWorkflowState() {
     const statusEl = document.getElementById('worker-status');
     if (!ready) {
         const missing = [];
-        if (!coverageReady) missing.push('load your coverage');
         if (!startReady) missing.push('set a start point');
+        if (startReady && !coverageReady) missing.push('wait for coverage to finish loading');
         if (isPtp && !endMarker) missing.push('set an end point');
         statusEl.textContent = `Next: ${missing.join(' and ')} to generate routes.`;
     } else {
@@ -214,8 +210,8 @@ async function searchLocation() {
             if (typeof showToast === 'function') showToast(result.message || 'Location not found', 'warning');
             return;
         }
-        setStart(result.lat, result.lon, result.display_name);
         map.setView([result.lat, result.lon], 12);
+        setStart(result.lat, result.lon, result.display_name);
     } catch (e) {
         statusEl.textContent = previousText;
         if (typeof showToast === 'function') showToast(e.message || 'Location search failed', 'error');
@@ -267,8 +263,8 @@ async function useMyLocation() {
     navigator.geolocation.getCurrentPosition(
         (position) => {
             const { latitude, longitude } = position.coords;
-            setStart(latitude, longitude);
             map.setView([latitude, longitude], 13);
+            setStart(latitude, longitude);
             btn.disabled = false;
         },
         (err) => {
@@ -329,9 +325,10 @@ async function loadCoverage() {
         coverageData = results[0];
         coverageDataSecondary = results[1] || null;
 
-        renderStats(coverageData, coverageDataSecondary);
-        renderTiles(coverageData, coverageDataSecondary);
-        fitToCoverage(coverageData);
+        // #488: coverage is loaded to feed the route generator, not to browse
+        // on the map — clear any stale "new tile" highlight from a previous
+        // start point/grid rather than rendering the full visited-tile grid.
+        newTilesLayer.clearLayers();
         statusEl.textContent = `Updated ${new Date(coverageData.computed_at + 'Z').toLocaleTimeString()}`;
     } catch (e) {
         statusEl.textContent = `Error: ${e.message}`;
@@ -341,143 +338,12 @@ async function loadCoverage() {
     }
 }
 
-/**
- * Riders' visited tiles can span disconnected regions (home turf plus the
- * occasional trip elsewhere). Fitting to the bounds of ALL of them zooms out
- * to a near-world view. Instead, bucket tiles into coarse cells, find the
- * cell with the most tiles, and fit to that cluster (plus its neighbors so a
- * cluster split across a cell boundary isn't cropped).
- */
-function findDensityCluster(visited, zoom) {
-    if (!visited || typeof visited !== 'object') return null;
-    const n = Math.pow(2, zoom || 14);
-    const points = Object.keys(visited).map((key) => {
-        const [x, y] = key.split(',').map(Number);
-        const lon = (x + 0.5) / n * 360 - 180;
-        const lat = Math.atan(Math.sinh(Math.PI * (1 - 2 * (y + 0.5) / n))) * 180 / Math.PI;
-        return { lat, lon };
-    });
-    if (points.length === 0) return null;
-
-    const BUCKET_DEG = 0.5; // ~55km cells
-    const buckets = new Map();
-    for (const p of points) {
-        const bx = Math.floor(p.lon / BUCKET_DEG);
-        const by = Math.floor(p.lat / BUCKET_DEG);
-        const key = `${bx},${by}`;
-        buckets.set(key, (buckets.get(key) || 0) + 1);
-    }
-
-    let best = null;
-    for (const [key, count] of buckets) {
-        if (!best || count > best.count) {
-            const [bx, by] = key.split(',').map(Number);
-            best = { bx, by, count };
-        }
-    }
-    if (!best) return null;
-
-    const minLat = (best.by - 1) * BUCKET_DEG;
-    const maxLat = (best.by + 2) * BUCKET_DEG;
-    const minLon = (best.bx - 1) * BUCKET_DEG;
-    const maxLon = (best.bx + 2) * BUCKET_DEG;
-
-    let south = Infinity, west = Infinity, north = -Infinity, east = -Infinity;
-    for (const p of points) {
-        if (p.lat >= minLat && p.lat <= maxLat && p.lon >= minLon && p.lon <= maxLon) {
-            south = Math.min(south, p.lat);
-            west = Math.min(west, p.lon);
-            north = Math.max(north, p.lat);
-            east = Math.max(east, p.lon);
-        }
-    }
-    if (!isFinite(south)) return null;
-    return [[south, west], [north, east]];
-}
-
-function fitToCoverage(data) {
-    if (map.getZoom() >= 10) return; // user already navigated (search, click, or "Use location") — don't override
-
-    const cluster = findDensityCluster(data.visited, data.zoom);
-    if (cluster) {
-        map.fitBounds(cluster, { padding: [20, 20], maxZoom: 13 });
-        return;
-    }
-    if (!data.bounds) return;
-    const [south, west, north, east] = data.bounds;
-    map.fitBounds([[south, west], [north, east]], { padding: [20, 20], maxZoom: 13 });
-}
-
-function renderStats(primary, secondary) {
-    const labelEls = document.querySelectorAll('#coverage-stats .stat-label');
-    if (secondary) {
-        document.getElementById('stat-tiles-visited').textContent =
-            `${primary.visited_count.toLocaleString()} / ${secondary.visited_count.toLocaleString()}`;
-        document.getElementById('stat-coverage-pct').textContent =
-            `${primary.coverage_pct}% / ${secondary.coverage_pct}%`;
-        document.getElementById('stat-total-tiles').textContent =
-            `${primary.total_in_bounds.toLocaleString()} / ${secondary.total_in_bounds.toLocaleString()}`;
-        labelEls.forEach(el => {
-            if (!el.dataset.baseLabel) el.dataset.baseLabel = el.textContent;
-            el.textContent = `${el.dataset.baseLabel} (Sq / Sqi)`;
-        });
-    } else {
-        document.getElementById('stat-tiles-visited').textContent = primary.visited_count.toLocaleString();
-        document.getElementById('stat-coverage-pct').textContent = primary.coverage_pct + '%';
-        document.getElementById('stat-total-tiles').textContent = primary.total_in_bounds.toLocaleString();
-        labelEls.forEach(el => {
-            if (el.dataset.baseLabel) el.textContent = el.dataset.baseLabel;
-        });
-    }
-}
-
-// Squadrats-matching colors: visited = warm orange fill, outline slightly darker
-const TILE_STYLE_VISITED   = { color: '#c8813a', weight: 0.5, fillColor: '#e8a84c', fillOpacity: 0.55 };
-const TILE_STYLE_SECONDARY = { color: '#c8813a', weight: 0.5, fillColor: '#e8a84c', fillOpacity: 0.55 };
-const TILE_STYLE_BOTH_PRIMARY = { color: '#c8813a', weight: 1,   fillColor: '#e8a84c', fillOpacity: 0.35 };
 // New tiles a route will claim: bright Squadrats-green
 const TILE_STYLE_NEW = { color: '#2e7d32', weight: 0.5, fillColor: '#4caf50', fillOpacity: 0.65 };
 
-function renderTiles(primary, secondary) {
-    tileLayer.clearLayers();
-    tileLayerSecondary.clearLayers();
-    newTilesLayer.clearLayers();
-
-    // In single-grid mode show a solid orange fill. In "both" mode the
-    // squadrat grid gets a lighter orange outline so the squadratinho
-    // grid can show on top with full fill.
-    const primaryStyle = secondary ? TILE_STYLE_BOTH_PRIMARY : TILE_STYLE_VISITED;
-
-    drawTileGrid(tileLayer, primary.visited, primary.zoom, primaryStyle);
-    if (secondary) {
-        drawTileGrid(tileLayerSecondary, secondary.visited, secondary.zoom, TILE_STYLE_SECONDARY);
-    }
-}
-
-function drawTileGrid(layerGroup, visited, zoom, style) {
-    if (!visited || typeof visited !== 'object') return;
-    const n = Math.pow(2, zoom || 14);
-
-    for (const key of Object.keys(visited)) {
-        const [x, y] = key.split(',').map(Number);
-        const west = x / n * 360 - 180;
-        const east = (x + 1) / n * 360 - 180;
-        const northRad = Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n)));
-        const southRad = Math.atan(Math.sinh(Math.PI * (1 - 2 * (y + 1) / n)));
-        const north = northRad * 180 / Math.PI;
-        const south = southRad * 180 / Math.PI;
-
-        const rect = L.rectangle([[south, west], [north, east]], {
-            ...style,
-            interactive: false,
-        });
-        layerGroup.addLayer(rect);
-    }
-}
-
 /**
  * Render green highlight rectangles for the new (unvisited) tiles a route
- * will claim, using the same tile-boundary math as drawTileGrid.
+ * will claim, computing each tile's lat/lon boundary from its zoom-level key.
  * newTilesByZoom: [{zoom, tiles: [{x, y}]}]
  *
  * When `direction` is given, any rectangles previously rendered for that
