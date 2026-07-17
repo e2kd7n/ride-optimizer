@@ -69,7 +69,15 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('location-search-input').addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); searchLocation(); }
     });
-    document.getElementById('use-my-location-btn').addEventListener('click', useMyLocation);
+    const useLocationBtn = document.getElementById('use-my-location-btn');
+    if (window.isSecureContext) {
+        useLocationBtn.addEventListener('click', useMyLocation);
+    } else {
+        // Geolocation is unavailable on insecure origins (no HTTPS/localhost) — the
+        // browser denies it instantly with no permission prompt, so hide the button
+        // rather than let it fail confusingly (#526).
+        useLocationBtn.style.display = 'none';
+    }
     document.getElementById('route-type-select').addEventListener('change', onRouteTypeChange);
     document.getElementById('end-search-btn').addEventListener('click', searchEndLocation);
     document.getElementById('end-search-input').addEventListener('keydown', (e) => {
