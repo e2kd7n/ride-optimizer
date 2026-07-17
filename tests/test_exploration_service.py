@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from app.services.exploration_service import ExplorationService, _SURFACE_TO_PROFILE
+from app.services.exploration_service import ExplorationService, _SURFACE_TO_PROFILE, MAX_ROUTE_CACHE_ENTRIES
 from src.coverage_tracker import (
     TileCoverage,
     TILE_ZOOM,
@@ -391,6 +391,48 @@ class TestComputeRoute:
                 service_with_key._route_cache[k] = (result, time.monotonic() - 1)
             service_with_key.compute_route([[41.98, -87.65], [41.99, -87.64]])
         assert mock_get.call_count == 2
+
+    def test_route_cache_evicts_expired_entries_on_write(self, service_with_key):
+        """Expired memo entries must not accumulate forever (#482)."""
+        raw = {
+            "features": [{
+                "geometry": {"coordinates": [[-87.65, 41.98], [-87.64, 41.99]]},
+                "properties": {
+                    "summary": {"distance": 1000.0, "duration": 300.0},
+                    "extras": {},
+                },
+            }],
+        }
+        with patch("src.ors_client.get_route", return_value=raw):
+            service_with_key.compute_route([[41.98, -87.65], [41.99, -87.64]])
+            assert len(service_with_key._route_cache) == 1
+
+            # Expire the existing entry, then trigger another write.
+            for k in list(service_with_key._route_cache.keys()):
+                result, _ = service_with_key._route_cache[k]
+                service_with_key._route_cache[k] = (result, time.monotonic() - 1)
+
+            service_with_key.compute_route([[40.0, -80.0], [40.1, -80.1]])
+
+        # The expired entry should have been evicted, leaving only the new one.
+        assert len(service_with_key._route_cache) == 1
+
+    def test_route_cache_caps_total_entries(self, service_with_key):
+        """Once over the cap, oldest entries are evicted rather than growing forever (#482)."""
+        raw = {
+            "features": [{
+                "geometry": {"coordinates": [[-87.65, 41.98], [-87.64, 41.99]]},
+                "properties": {
+                    "summary": {"distance": 1000.0, "duration": 300.0},
+                    "extras": {},
+                },
+            }],
+        }
+        with patch("src.ors_client.get_route", return_value=raw):
+            for i in range(MAX_ROUTE_CACHE_ENTRIES + 10):
+                service_with_key.compute_route([[41.0, -87.0 - i * 0.001], [41.1, -87.1 - i * 0.001]])
+
+        assert len(service_with_key._route_cache) == MAX_ROUTE_CACHE_ENTRIES
 
 
 # ── surface_breakdown reduction ──────────────────────────────────
