@@ -65,5 +65,8 @@ class JobRegistry:
         self.fetch.reset({'status': 'idle', 'fetched': 0, 'label': '', 'started_at': None})
         self.backfill: JobState = JobState()
         self.backfill.reset({'status': 'idle'})
+        self.history_backfill: JobState = JobState()
+        self.history_backfill.reset({'status': 'idle'})
         # threading.Event replaces the bare bool _analysis_stop_requested
         self.analysis_stop: threading.Event = threading.Event()
+        self.history_backfill_stop: threading.Event = threading.Event()

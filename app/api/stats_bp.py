@@ -53,19 +53,37 @@ def _seconds_to_hours(s):
     return s / 3600.0
 
 
-def _parse_activity_start_local(start_date):
+def _activity_local_start(a):
     """
-    Parse a Strava activity's start_date (UTC, e.g. "...Z") into a naive
-    datetime in the server's local time.
+    Return an activity's start as a naive datetime in the *ride's own*
+    local time — i.e. the calendar day/month/year it actually started in,
+    regardless of where this server happens to run (issue #496).
 
-    A bare `.replace(tzinfo=None)` on the parsed UTC value keeps the UTC
-    wall-clock numbers, so a ride that starts late at night locally but
-    crosses into the next UTC day gets bucketed/compared against
-    `datetime.now()` (local) as if it happened a day later than it did
-    (issue #496). Converting via `.astimezone()` first shifts the
-    wall-clock to local time before the tzinfo is dropped.
+    Strava's `start_date_local` carries the wall-clock time at the ride's
+    start location, encoded with a spurious UTC/`Z` marker; we take its
+    date/time components at face value rather than converting through any
+    timezone (converting would re-introduce the server-timezone bug this
+    field exists to avoid). Garmin-sourced activities already store local
+    wall-clock time in both `start_date` and `start_date_local`.
+
+    Falls back to `start_date` (true UTC) converted via the *server's*
+    local timezone for activities cached before `start_date_local` existed
+    — an approximation, not a fix, for that older data.
     """
-    return datetime.fromisoformat(start_date.replace('Z', '+00:00')).astimezone().replace(tzinfo=None)
+    local = getattr(a, 'start_date_local', None)
+    if local:
+        return datetime.fromisoformat(local.replace('Z', '+00:00')).replace(tzinfo=None)
+    return datetime.fromisoformat(a.start_date.replace('Z', '+00:00')).astimezone().replace(tzinfo=None)
+
+
+def _activity_local_date_str(a):
+    """Return an activity's local calendar date as 'YYYY-MM-DD', or None."""
+    if not a.start_date and not getattr(a, 'start_date_local', None):
+        return None
+    try:
+        return _activity_local_start(a).strftime('%Y-%m-%d')
+    except (ValueError, AttributeError):
+        return None
 
 
 def _filter_activities_by_period(activities, period):
@@ -90,7 +108,7 @@ def _filter_activities_by_period(activities, period):
             if not a.start_date:
                 continue
             try:
-                d = _parse_activity_start_local(a.start_date)
+                d = _activity_local_start(a)
                 if start <= d <= end:
                     result.append(a)
             except (ValueError, AttributeError):
@@ -105,7 +123,7 @@ def _filter_activities_by_period(activities, period):
         if not a.start_date:
             continue
         try:
-            d = _parse_activity_start_local(a.start_date)
+            d = _activity_local_start(a)
             if d >= start:
                 result.append(a)
         except (ValueError, AttributeError):
@@ -187,7 +205,7 @@ def _compute_records(activities):
     def _fmt(a):
         return {
             'id': a.id, 'name': a.name,
-            'date': (a.start_date or '')[:10],
+            'date': _activity_local_date_str(a) or '',
             'distance_mi': round(_meters_to_miles(a.distance), 1),
             'speed_mph': round(_ms_to_mph(a.average_speed), 1),
             'elevation_ft': round(_meters_to_feet(a.total_elevation_gain)),
@@ -249,7 +267,7 @@ def get_stats():
         if not a.start_date:
             continue
         try:
-            d = _parse_activity_start_local(a.start_date)
+            d = _activity_local_start(a)
             label = d.strftime('%G-W%V')
             week_buckets.setdefault(label, []).append(a)
         except (ValueError, AttributeError):
@@ -263,7 +281,7 @@ def get_stats():
         if not a.start_date:
             continue
         try:
-            d = _parse_activity_start_local(a.start_date)
+            d = _activity_local_start(a)
             label = d.strftime('%Y-%m')
             month_buckets.setdefault(label, []).append(a)
         except (ValueError, AttributeError):
@@ -316,10 +334,11 @@ def get_calendar_stats():
     month_prefix = f'{year:04d}-{month:02d}'
 
     for a in all_activities:
-        if not a.start_date or not a.start_date.startswith(month_prefix):
+        local_date = _activity_local_date_str(a)
+        if not local_date or not local_date.startswith(month_prefix):
             continue
         try:
-            day = int(a.start_date[8:10])
+            day = int(local_date[8:10])
             day_buckets[day].append(a)
         except (ValueError, IndexError, KeyError):
             continue
@@ -338,9 +357,9 @@ def get_calendar_stats():
 
     month_activities = [a for acts in day_buckets.values() for a in acts]
 
-    dates = sorted(a.start_date for a in all_activities if a.start_date)
-    cache_earliest = dates[0][:10] if dates else None
-    cache_latest = dates[-1][:10] if dates else None
+    dates = sorted(d for d in (_activity_local_date_str(a) for a in all_activities) if d)
+    cache_earliest = dates[0] if dates else None
+    cache_latest = dates[-1] if dates else None
 
     return jsonify({
         'status': 'success',
@@ -386,7 +405,7 @@ def get_gear_stats():
     for gear_id, acts in gear_buckets.items():
         meta = gear_meta.get(gear_id, {'id': gear_id, 'name': gear_id, 'type': 'unknown'})
         s = _compute_summary(acts)
-        last_used = max((a.start_date or '' for a in acts), default='')[:10]
+        last_used = max((_activity_local_date_str(a) or '' for a in acts), default='')
         gear_list.append({**meta, **s, 'last_used': last_used})
 
     gear_list.sort(key=lambda g: (0 if g.get('type') == 'bike' else 1, -g.get('total_distance_mi', 0)))

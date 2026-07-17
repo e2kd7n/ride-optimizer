@@ -23,6 +23,7 @@ location:
 data_fetching:
   cache_duration_days: 365  # Extended to 1 year - historical data doesn't change
   max_activities: 500
+  backfill_page_size: 200  # page size for the explicit full-history backfill (issue #486)
 
 long_rides:
 

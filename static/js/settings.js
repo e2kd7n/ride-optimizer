@@ -55,6 +55,7 @@
             setupFetchModeControls();
             document.getElementById('run-analysis-btn').addEventListener('click', runAnalysis);
             document.getElementById('fetch-btn').addEventListener('click', startFetch);
+            document.getElementById('backfill-history-btn').addEventListener('click', startHistoryBackfill);
 
             // Restore progress UI if analysis or fetch is already running (e.g. after page reload)
             (async () => {
@@ -86,6 +87,21 @@
                         progressEl.style.display = '';
                         statusEl.textContent = job.label || 'Fetch in progress…';
                         pollFetchStatus();
+                    }
+                } catch (_) {}
+            })();
+            (async () => {
+                try {
+                    const job = await window.apiClient.fetch('/fetch/backfill-history/status');
+                    if (job.status === 'running') {
+                        const btn = document.getElementById('backfill-history-btn');
+                        const progressEl = document.getElementById('backfill-history-progress');
+                        const statusEl = document.getElementById('backfill-history-status');
+                        btn.disabled = true;
+                        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Backfilling…';
+                        progressEl.classList.remove('d-none');
+                        statusEl.textContent = job.label || 'Backfill in progress…';
+                        pollHistoryBackfillStatus();
                     }
                 } catch (_) {}
             })();
@@ -1337,6 +1353,75 @@
             const btn = document.getElementById('repair-gear-btn');
             btn.disabled = false;
             btn.innerHTML = '<i class="bi bi-patch-check" aria-hidden="true"></i> Repair Gear Names';
+        }
+
+        // ── Full history backfill (#486) ─────────────────────────
+
+        let _historyBackfillStop = null;
+
+        async function startHistoryBackfill() {
+            const btn = document.getElementById('backfill-history-btn');
+            const progressEl = document.getElementById('backfill-history-progress');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Backfilling…';
+            progressEl.classList.remove('d-none');
+
+            try {
+                const resp = await window.apiClient.fetch('/fetch/backfill-history', {
+                    method: 'POST',
+                    body: JSON.stringify({}),
+                });
+                if (resp.status === 'started' || resp.status === 'already_running') {
+                    pollHistoryBackfillStatus();
+                } else {
+                    if (typeof showToast === 'function') showToast(resp.message || 'Failed to start backfill', 'error');
+                    resetHistoryBackfillBtn();
+                }
+            } catch (e) {
+                if (typeof showToast === 'function') showToast(`Backfill failed: ${e.message}`, 'error');
+                resetHistoryBackfillBtn();
+            }
+        }
+
+        function pollHistoryBackfillStatus() {
+            const statusEl = document.getElementById('backfill-history-status');
+
+            _historyBackfillStop = window.pollJob({
+                intervalMs: 2000,
+                fetchStatus: () => window.apiClient.fetch('/fetch/backfill-history/status'),
+                onGiveUp: (reason) => {
+                    resetHistoryBackfillBtn();
+                    if (typeof showToast === 'function') {
+                        showToast(reason === 'timeout' ? 'Backfill is taking unusually long' : 'Lost connection while checking backfill status', 'warning');
+                    }
+                },
+                onStatus: (resp) => {
+                    if (resp.status === 'running') {
+                        statusEl.textContent = resp.label || 'Backfilling…';
+                        return 'running';
+                    } else if (resp.status === 'done') {
+                        if (typeof showToast === 'function') showToast(resp.label || 'Backfill complete', 'success');
+                        resetHistoryBackfillBtn();
+                        loadCacheInfo();
+                        return 'done';
+                    } else if (resp.status === 'error') {
+                        if (typeof showToast === 'function') showToast(resp.label || 'Backfill error', 'error');
+                        resetHistoryBackfillBtn();
+                        return 'error';
+                    }
+                    return 'running';
+                },
+            });
+        }
+
+        function resetHistoryBackfillBtn() {
+            const btn = document.getElementById('backfill-history-btn');
+            const progressEl = document.getElementById('backfill-history-progress');
+            const statusEl = document.getElementById('backfill-history-status');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-clock-history" aria-hidden="true"></i> Backfill Full History';
+            progressEl.classList.add('d-none');
+            statusEl.textContent = '';
         }
 
         // ── Home & Work Location (#472) ─────────────────────────
