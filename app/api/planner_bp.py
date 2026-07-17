@@ -13,6 +13,7 @@ Routes:
   GET  /api/geocode
 """
 
+import math
 from datetime import datetime
 
 from flask import Blueprint, current_app, jsonify, request
@@ -23,6 +24,22 @@ from src.secure_logger import SecureLogger
 logger = SecureLogger(__name__)
 
 bp = Blueprint('planner', __name__, url_prefix='/api')
+
+# Largest bbox span (degrees) accepted by bbox-based exploration endpoints.
+# Matches what the Explore UI can realistically request on-screen; anything
+# larger risks a huge Overpass download / graph build (#481).
+MAX_BBOX_DEGREES = 0.5
+
+
+def _validate_bbox(south, west, north, east):
+    """Return an error message string if the bbox is malformed or too large, else None."""
+    if south >= north:
+        return 'south must be less than north'
+    if west >= east:
+        return 'west must be less than east'
+    if (north - south) > MAX_BBOX_DEGREES or (east - west) > MAX_BBOX_DEGREES:
+        return f'bounding box too large (max {MAX_BBOX_DEGREES} degrees per side)'
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -145,6 +162,9 @@ def exploration_tiles():
         }), 400
 
     if all(v is not None for v in (south, west, north, east)):
+        bbox_error = _validate_bbox(south, west, north, east)
+        if bbox_error:
+            return jsonify({'status': 'error', 'message': bbox_error}), 400
         result = svc.get_tile_coverage((south, west, north, east), zoom=zoom)
     else:
         result = svc.get_tile_coverage_all(zoom=zoom)
@@ -167,6 +187,10 @@ def exploration_roads():
     if any(v is None for v in (south, west, north, east)):
         return jsonify({'status': 'error', 'message': 'south, west, north, east are required'}), 400
 
+    bbox_error = _validate_bbox(south, west, north, east)
+    if bbox_error:
+        return jsonify({'status': 'error', 'message': bbox_error}), 400
+
     result = svc.get_road_coverage((south, west, north, east))
     status_code = 200 if result.get('status') == 'success' else 500
     return jsonify(result), status_code
@@ -180,6 +204,30 @@ def exploration_invalidate():
     return jsonify({'status': 'success', 'message': 'Coverage caches invalidated'})
 
 
+MAX_ROUTE_WAYPOINTS = 50
+
+
+def _validate_waypoints(waypoints):
+    """Return an error message string if waypoints are malformed, else None."""
+    if not waypoints or not isinstance(waypoints, list) or len(waypoints) < 2:
+        return 'waypoints must be a list of at least 2 [lat, lon] pairs'
+    if len(waypoints) > MAX_ROUTE_WAYPOINTS:
+        return f'waypoints list too large (max {MAX_ROUTE_WAYPOINTS})'
+    for wp in waypoints:
+        if not isinstance(wp, (list, tuple)) or len(wp) != 2:
+            return 'each waypoint must be a [lat, lon] pair'
+        lat, lon = wp
+        if isinstance(lat, bool) or isinstance(lon, bool) or not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
+            return 'each waypoint must be a [lat, lon] pair of numbers'
+        if not (math.isfinite(lat) and math.isfinite(lon)):
+            return 'waypoint coordinates must be finite numbers'
+        if not (-90 <= lat <= 90):
+            return 'waypoint latitude must be between -90 and 90'
+        if not (-180 <= lon <= 180):
+            return 'waypoint longitude must be between -180 and 180'
+    return None
+
+
 @bp.route('/exploration/route', methods=['POST'])
 @limiter.limit("20 per minute")
 def exploration_route():
@@ -187,8 +235,9 @@ def exploration_route():
     svc = current_app.container.get_exploration_service()
     data = request.get_json(silent=True) or {}
     waypoints = data.get('waypoints')
-    if not waypoints or not isinstance(waypoints, list) or len(waypoints) < 2:
-        return jsonify({'status': 'error', 'message': 'waypoints must be a list of at least 2 [lat, lon] pairs'}), 400
+    waypoints_error = _validate_waypoints(waypoints)
+    if waypoints_error:
+        return jsonify({'status': 'error', 'message': waypoints_error}), 400
     surface_preference = data.get('surface_preference', 'any')
     if surface_preference not in ('any', 'paved', 'unpaved'):
         return jsonify({'status': 'error', 'message': 'surface_preference must be any, paved, or unpaved'}), 400

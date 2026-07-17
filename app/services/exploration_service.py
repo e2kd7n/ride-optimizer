@@ -26,6 +26,10 @@ _PAVED_SURFACE_VALUES = {0, 1, 2, 3, 4, 5, 6}    # asphalt, concrete, paved, ...
 _UNPAVED_SURFACE_VALUES = {7, 8, 9, 10, 11, 12}   # gravel, dirt, grass, ...
 # Values outside both sets are treated as unknown.
 
+# Cap on retained route-memo entries (#482) — each entry holds a full route
+# polyline, so an unbounded dict is a slow memory leak on a long-running Pi.
+MAX_ROUTE_CACHE_ENTRIES = 200
+
 
 class ExplorationService:
 
@@ -66,6 +70,22 @@ class ExplorationService:
 
     def invalidate_caches(self):
         self._tracker.invalidate_caches()
+
+    def _store_route_cache(self, cache_key: tuple, result: dict, expires_at: float) -> None:
+        """Store a route memo entry, evicting expired entries first and then
+        the oldest entries if still over the cap (#482)."""
+        now = time.monotonic()
+        expired = [k for k, (_, exp) in self._route_cache.items() if exp <= now]
+        for k in expired:
+            del self._route_cache[k]
+
+        self._route_cache[cache_key] = (result, expires_at)
+
+        if len(self._route_cache) > MAX_ROUTE_CACHE_ENTRIES:
+            # dicts preserve insertion order — oldest entries were inserted first.
+            overflow = len(self._route_cache) - MAX_ROUTE_CACHE_ENTRIES
+            for k in list(self._route_cache.keys())[:overflow]:
+                del self._route_cache[k]
 
     def verify_tile_claims(
         self,
@@ -194,7 +214,7 @@ class ExplorationService:
             logger.error("Failed to parse ORS response: %s", exc, exc_info=True)
             return {"status": "error", "message": "Unexpected ORS response format"}
 
-        self._route_cache[cache_key] = (result, time.monotonic() + ttl)
+        self._store_route_cache(cache_key, result, time.monotonic() + ttl)
         return result
 
     # ── helpers ──────────────────────────────────────────────────
