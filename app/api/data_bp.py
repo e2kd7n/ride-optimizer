@@ -143,7 +143,10 @@ def trigger_analysis():
             else:
                 jobs.analysis.update(status='done', phase='done', result=result,
                                      label=f"Done — {result.get('activities_count', 0):,} activities")
-            container.reset_initialisation()
+            # analysis_service itself already reflects the fresh results (same
+            # instance, mutated in place by run_full_analysis) — only the
+            # services that derive their state from it need rebuilding (#461).
+            container.refresh_services('commute', 'planner')
         except Exception as e:
             logger.error(f"Background analysis failed: {e}", exc_info=True)
             jobs.analysis.update(status='error', phase='error',
@@ -243,7 +246,11 @@ def trigger_fetch():
                     force_refresh=False,
                     skip_strava_fetch=True,
                 )
-                container.reset_initialisation()
+                # Only CommuteService/PlannerService derive their state from
+                # analysis_service's route groups / long rides — no need to
+                # tear down WeatherService/TrainerRoadService/RouteLibraryService
+                # or reconstruct AnalysisService itself (#461).
+                container.refresh_services('commute', 'planner')
                 jobs.fetch.update(
                     status='done',
                     label=f'Done — {total:,} activities, {new_count:,} new (analysis updated)',
@@ -319,7 +326,10 @@ def trigger_history_backfill():
                     pages=result['pages'],
                 )
                 analysis_service.run_full_analysis(force_refresh=False, skip_strava_fetch=True)
-                container.reset_initialisation()
+                # Same reasoning as trigger_fetch above — only Commute/Planner
+                # derive state from analysis_service's route groups / long
+                # rides (#461).
+                container.refresh_services('commute', 'planner')
                 jobs.history_backfill.update(
                     status='done',
                     label=f'Done — {new_total:,} new activities backfilled (analysis updated)',
