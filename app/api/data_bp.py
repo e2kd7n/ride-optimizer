@@ -6,6 +6,9 @@ Routes:
   POST /api/analyze/stop
   POST /api/fetch
   GET  /api/fetch/status
+  POST /api/fetch/backfill-history
+  GET  /api/fetch/backfill-history/status
+  POST /api/fetch/backfill-history/stop
   GET  /api/cache-info
   GET  /api/activities
 """
@@ -265,6 +268,92 @@ def get_fetch_status():
     return jsonify(current_app.container.jobs.fetch.snapshot())
 
 
+@bp.route('/fetch/backfill-history', methods=['POST'])
+@limiter.limit("2 per minute")
+def trigger_history_backfill():
+    """
+    Page backward through the account's full Strava history (issue #486).
+
+    A normal fetch only ever returns the most recent `max_activities`
+    activities. This walks backward with `before=` until it reaches the
+    start of history or catches up to what's already cached. Explicit,
+    user-triggered action — not run as part of the normal fetch/analyze flow.
+    """
+    jobs = current_app.container.jobs
+    if not jobs.history_backfill.try_start({
+        'status': 'running',
+        'new_total': 0,
+        'pages': 0,
+        'label': 'Starting full history backfill…',
+        'started_at': datetime.now().isoformat(),
+    }):
+        return jsonify({'status': 'already_running'}), 409
+
+    container = current_app.container
+    container.initialise()
+
+    analysis_service = container.analysis_service
+    if analysis_service is None:
+        jobs.history_backfill.reset({'status': 'idle'})
+        return jsonify({'status': 'error', 'message': 'Analysis is currently unavailable'}), 503
+
+    jobs.history_backfill_stop.clear()
+
+    def _progress(new_total, pages, oldest_seen):
+        label = f'Paging back through history… {new_total:,} new activities found ({pages} pages)'
+        if oldest_seen:
+            label += f', now at {oldest_seen.date()}'
+        jobs.history_backfill.update(new_total=new_total, pages=pages, label=label)
+
+    def _run():
+        try:
+            result = analysis_service.data_fetcher.backfill_full_history(
+                progress_callback=_progress,
+                stop_check=jobs.history_backfill_stop.is_set,
+            )
+            new_total = result['new_total']
+            if new_total > 0:
+                jobs.history_backfill.update(
+                    label=f'Backfill done — {new_total:,} new activities. Running incremental analysis…',
+                    new_total=new_total,
+                    pages=result['pages'],
+                )
+                analysis_service.run_full_analysis(force_refresh=False, skip_strava_fetch=True)
+                container.reset_initialisation()
+                jobs.history_backfill.update(
+                    status='done',
+                    label=f'Done — {new_total:,} new activities backfilled (analysis updated)',
+                )
+            else:
+                jobs.history_backfill.update(
+                    status='done',
+                    label='Done — cache already had full history, nothing new found',
+                )
+        except Exception as e:
+            logger.error(f"Background history backfill failed: {e}", exc_info=True)
+            jobs.history_backfill.update(status='error', label=f'Error: {e}')
+        finally:
+            jobs.history_backfill_stop.clear()
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({'status': 'started'})
+
+
+@bp.route('/fetch/backfill-history/status')
+def get_history_backfill_status():
+    return jsonify(current_app.container.jobs.history_backfill.snapshot())
+
+
+@bp.route('/fetch/backfill-history/stop', methods=['POST'])
+def stop_history_backfill():
+    jobs = current_app.container.jobs
+    if jobs.history_backfill.get('status') != 'running':
+        return jsonify({'status': 'not_running'}), 400
+    jobs.history_backfill_stop.set()
+    jobs.history_backfill.update(label='Stopping…')
+    return jsonify({'status': 'stopping'})
+
+
 @bp.route('/cache-info')
 def get_cache_info():
     cache_path = Path('data/cache/activities.json')
@@ -321,20 +410,20 @@ def get_activities():
     now = datetime.now()
     if period == 'this_week':
         start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
-        activities = [a for a in all_activities if a.start_date and _parse_date(a.start_date) >= start]
+        activities = [a for a in all_activities if a.start_date and _activity_local_start(a) >= start]
     elif period == 'this_month':
         start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        activities = [a for a in all_activities if a.start_date and _parse_date(a.start_date) >= start]
+        activities = [a for a in all_activities if a.start_date and _activity_local_start(a) >= start]
     elif period == 'this_year':
         start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-        activities = [a for a in all_activities if a.start_date and _parse_date(a.start_date) >= start]
+        activities = [a for a in all_activities if a.start_date and _activity_local_start(a) >= start]
     elif period == 'last_30d':
         start = now - timedelta(days=30)
-        activities = [a for a in all_activities if a.start_date and _parse_date(a.start_date) >= start]
+        activities = [a for a in all_activities if a.start_date and _activity_local_start(a) >= start]
     elif period == 'last_year':
         start = now.replace(year=now.year - 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
         end = now.replace(year=now.year - 1, month=12, day=31, hour=23, minute=59, second=59, microsecond=0)
-        activities = [a for a in all_activities if a.start_date and start <= _parse_date(a.start_date) <= end]
+        activities = [a for a in all_activities if a.start_date and start <= _activity_local_start(a) <= end]
     else:
         # Copy: the shared cached list must not be sorted in place below
         activities = list(all_activities)
@@ -404,5 +493,27 @@ def _parse_date(s: str) -> datetime:
     """Parse an ISO date string, stripping timezone for naive comparison."""
     try:
         return datetime.fromisoformat(s.replace('Z', '+00:00')).replace(tzinfo=None)
+    except (ValueError, AttributeError):
+        return datetime.min
+
+
+def _activity_local_start(a) -> datetime:
+    """
+    Return an activity's start as a naive datetime in the *ride's own*
+    local time, so period filters bucket by the calendar day/month/year the
+    ride actually started in rather than the server's timezone or UTC
+    (issue #496). See app/api/stats_bp.py for the fuller rationale — this
+    mirrors that helper for the /activities list endpoint.
+    """
+    local = getattr(a, 'start_date_local', None)
+    if local:
+        try:
+            return datetime.fromisoformat(local.replace('Z', '+00:00')).replace(tzinfo=None)
+        except (ValueError, AttributeError):
+            pass
+    if not a.start_date:
+        return datetime.min
+    try:
+        return datetime.fromisoformat(a.start_date.replace('Z', '+00:00')).astimezone().replace(tzinfo=None)
     except (ValueError, AttributeError):
         return datetime.min

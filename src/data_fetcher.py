@@ -31,7 +31,8 @@ class Activity:
     name: str
     type: str
     sport_type: Optional[str] = None  # More specific type (e.g., 'GravelRide', 'Ride')
-    start_date: Optional[str] = None  # ISO format
+    start_date: Optional[str] = None  # ISO format, UTC
+    start_date_local: Optional[str] = None  # ISO format, wall-clock time at the ride's start location
     distance: float = 0.0  # meters
     moving_time: int = 0  # seconds
     elapsed_time: int = 0  # seconds
@@ -101,6 +102,7 @@ class Activity:
             type=str(activity.type) if activity.type else "Unknown",
             sport_type=str(getattr(activity.sport_type, 'root', activity.sport_type)) if hasattr(activity, 'sport_type') and activity.sport_type else None,
             start_date=activity.start_date.isoformat() if activity.start_date else None,
+            start_date_local=activity.start_date_local.isoformat() if getattr(activity, 'start_date_local', None) else None,
             distance=float(activity.distance) if activity.distance else 0.0,
             moving_time=to_seconds(activity.moving_time),
             elapsed_time=to_seconds(activity.elapsed_time),
@@ -150,6 +152,7 @@ class Activity:
             type=sport_type,
             sport_type=sport_type,
             start_date=ga.get('startTimeLocal'),
+            start_date_local=ga.get('startTimeLocal'),
             distance=ga.get('distance', 0.0),
             moving_time=int(ga.get('movingDuration') or ga.get('duration') or 0),
             elapsed_time=int(ga.get('duration', 0)),
@@ -746,4 +749,81 @@ class StravaDataFetcher:
 
         logger.info(f"Backfill complete: {updated} updated, {fetched} fetched from Strava")
         return {'updated': updated, 'skipped': len(by_id) - updated, 'total_cached': len(by_id)}
+
+    def backfill_full_history(self, page_size: Optional[int] = None,
+                               progress_callback=None, stop_check=None) -> Dict[str, Any]:
+        """
+        Page backward through the account's full Strava history using
+        before=, merging each page into the cache.
+
+        A normal fetch_activities() call always returns the *n most recent*
+        activities (Strava's list endpoint is newest-first), so an account
+        with more lifetime activities than `max_activities` has activities
+        that are never reachable through that path — see issue #486. This
+        walks backward in time, re-querying with `before` set to the oldest
+        start_date seen so far, until either Strava returns an empty page
+        (start of history reached) or a full page comes back with nothing
+        new to merge (caught up to activities already in the cache).
+
+        This is deliberately a separate, explicit action from the normal
+        fetch flow — for a large account it's dozens of paginated calls and
+        is slow, so it should be user-triggered, not run on every refresh.
+
+        Returns:
+            Dict with 'new_total' (activities added) and 'pages' (API calls made).
+        """
+        if page_size is None:
+            page_size = self.config.get('data_fetching.backfill_page_size', 200)
+
+        oldest_seen: Optional[datetime] = None
+        total_new = 0
+        total_pages = 0
+
+        print("\n" + "="*70)
+        print("📦 FULL HISTORY BACKFILL")
+        print("="*70)
+
+        while True:
+            if stop_check and stop_check():
+                logger.info(f"Backfill stopped by request after {total_pages} pages")
+                break
+
+            try:
+                batch = list(self.client.get_activities(limit=page_size, before=oldest_seen))
+            except Exception as e:
+                logger.error(f"Backfill failed after {total_pages} pages: {e}")
+                raise
+
+            if not batch:
+                logger.info(f"Backfill reached the start of activity history after {total_pages} pages")
+                break
+
+            page_activities = [Activity.from_strava_activity(a) for a in batch]
+            stats = self.cache_activities(page_activities, merge=True)
+            total_pages += 1
+            total_new += stats['new']
+
+            page_dates = [
+                datetime.fromisoformat(a.start_date.replace('Z', '+00:00'))
+                for a in page_activities if a.start_date
+            ]
+            page_oldest = min(page_dates) if page_dates else None
+
+            if progress_callback:
+                progress_callback(total_new, total_pages, page_oldest)
+
+            if page_oldest is None or (oldest_seen is not None and page_oldest >= oldest_seen):
+                logger.warning("Backfill page had no older activity to page past — stopping")
+                break
+            oldest_seen = page_oldest
+
+            if stats['new'] == 0:
+                logger.info(f"Backfill caught up to cached activities after {total_pages} pages")
+                break
+
+            # Throttle to stay well under Strava's rate limits
+            time.sleep(2)
+
+        logger.info(f"Backfill complete: {total_new} new activities across {total_pages} pages")
+        return {'new_total': total_new, 'pages': total_pages}
 

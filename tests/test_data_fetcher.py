@@ -462,6 +462,7 @@ class TestFetchActivities:
         m.type = "Ride"
         m.sport_type = None
         m.start_date = datetime(2026, 5, 1, 8, 0, tzinfo=timezone.utc)
+        m.start_date_local = None
         m.distance = distance
         m.moving_time = 1200
         m.elapsed_time = 1300
@@ -925,4 +926,110 @@ class TestGearMethods:
         calls = []
         fetcher.backfill_gear_ids(progress_callback=lambda fetched, updated: calls.append((fetched, updated)))
         assert len(calls) >= 1
+
+
+class TestBackfillFullHistory:
+    """Test backfill_full_history() — issue #486 pagination-backward fix."""
+
+    @pytest.fixture
+    def fetcher(self, tmp_path):
+        client = Mock()
+        config = Mock()
+        config.get.side_effect = lambda key, default=None: {
+            'data_fetching.cache_duration_days': 7,
+            'data_fetching.max_activities': 500,
+            'data_fetching.backfill_page_size': 200,
+        }.get(key, default)
+        f = StravaDataFetcher(client, config, use_test_cache=False)
+        f.cache_path = tmp_path / "activities.json"
+        return f
+
+    def _make_strava_activity(self, activity_id, day):
+        m = Mock()
+        m.id = activity_id
+        m.name = f"Ride {activity_id}"
+        m.type = "Ride"
+        m.sport_type = None
+        m.start_date = datetime(2026, 1, day, 8, 0, tzinfo=timezone.utc)
+        m.start_date_local = None
+        m.distance = 5000.0
+        m.moving_time = 1200
+        m.elapsed_time = 1300
+        m.total_elevation_gain = 50.0
+        m.average_speed = 4.17
+        m.max_speed = 8.0
+        m.start_latlng = None
+        m.end_latlng = None
+        m.map = None
+        return m
+
+    @patch('src.data_fetcher.time.sleep')
+    def test_stops_on_empty_page(self, mock_sleep, fetcher):
+        # Two pages of activities, then Strava returns nothing further back.
+        page1 = [self._make_strava_activity(i, day=20 - i) for i in range(5)]
+        page2 = [self._make_strava_activity(i, day=10 - i) for i in range(5, 10)]
+        fetcher.client.get_activities.side_effect = [page1, page2, []]
+
+        result = fetcher.backfill_full_history()
+
+        assert result['new_total'] == 10
+        assert result['pages'] == 2
+        assert fetcher.client.get_activities.call_count == 3
+        cached = fetcher.load_cached_activities()
+        assert len(cached) == 10
+
+    @patch('src.data_fetcher.time.sleep')
+    def test_stops_when_page_fully_cached(self, mock_sleep, fetcher):
+        # Pre-seed the cache with an activity that the second page will re-fetch.
+        page1 = [self._make_strava_activity(1, day=20)]
+        page2 = [self._make_strava_activity(2, day=10)]  # already cached below
+        fetcher.client.get_activities.side_effect = [page1, page2]
+
+        from src.data_fetcher import Activity
+        seeded = Activity(id=2, name="Cached", type="Ride", distance=5000.0,
+                           moving_time=1200, elapsed_time=1300, total_elevation_gain=50.0,
+                           average_speed=4.0, max_speed=8.0,
+                           start_date=datetime(2026, 1, 10, 8, 0, tzinfo=timezone.utc).isoformat())
+        fetcher.cache_activities([seeded], merge=False)
+
+        result = fetcher.backfill_full_history()
+
+        # Page 1 (new activity id=1) merges; page 2 re-fetches the already-cached
+        # id=2 with nothing new, so the loop stops after 2 pages without a 3rd call.
+        assert result['pages'] == 2
+        assert fetcher.client.get_activities.call_count == 2
+        cached_ids = {a.id for a in fetcher.load_cached_activities()}
+        assert cached_ids == {1, 2}
+
+    @patch('src.data_fetcher.time.sleep')
+    def test_merges_across_pages_no_duplicates(self, mock_sleep, fetcher):
+        page1 = [self._make_strava_activity(1, day=20)]
+        page2 = [self._make_strava_activity(2, day=10)]
+        fetcher.client.get_activities.side_effect = [page1, page2, []]
+
+        fetcher.backfill_full_history()
+
+        cached = fetcher.load_cached_activities()
+        assert sorted(a.id for a in cached) == [1, 2]
+
+    @patch('src.data_fetcher.time.sleep')
+    def test_respects_stop_check(self, mock_sleep, fetcher):
+        result = fetcher.backfill_full_history(stop_check=lambda: True)
+
+        assert result == {'new_total': 0, 'pages': 0}
+        fetcher.client.get_activities.assert_not_called()
+
+    @patch('src.data_fetcher.time.sleep')
+    def test_api_error_propagates(self, mock_sleep, fetcher):
+        fetcher.client.get_activities.side_effect = RuntimeError("API down")
+        with pytest.raises(RuntimeError, match="API down"):
+            fetcher.backfill_full_history()
+
+    @patch('src.data_fetcher.time.sleep')
+    def test_progress_callback_invoked(self, mock_sleep, fetcher):
+        page1 = [self._make_strava_activity(1, day=20)]
+        fetcher.client.get_activities.side_effect = [page1, []]
+        calls = []
+        fetcher.backfill_full_history(progress_callback=lambda new_total, pages, oldest: calls.append((new_total, pages)))
+        assert calls == [(1, 1)]
 
