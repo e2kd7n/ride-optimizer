@@ -21,7 +21,7 @@
  *       grids at once — each grid's zones are found independently (tile
  *       adjacency only makes sense within a single zoom's coordinate space),
  *       then the best zones from each are merged into one route per quadrant.
- *   - optimizeFor: 'tiles' | 'distance' | 'efficiency' | 'infill' | 'frontier'
+ *   - optimizeFor: 'tiles' | 'efficiency'
  *
  * Output messages (streamed):
  *   {type: 'route', route: {direction, waypoints, stats}}  — one per generated route
@@ -52,7 +52,7 @@ const GRID_LABELS = { 14: 'squadrats', 17: 'squadratinhos' };
  * still splits into a distinct route per direction rather than collapsing
  * into a single zone/route.
  */
-function scanGrid(coverageData, start, reachRadius, optimizeFor) {
+function scanGrid(coverageData, start, reachRadius) {
     const bounds = coverageData.bounds;
     if (!bounds) throw new Error('Coverage data has no bounds');
     const zoom = coverageData.zoom || 14;
@@ -61,17 +61,7 @@ function scanGrid(coverageData, start, reachRadius, optimizeFor) {
     const visitedSet = new Set(Object.keys(coverageData.visited || {}));
     const unvisited = allTiles.filter(t => !visitedSet.has(t.key));
 
-    // #404 / #406: filter unvisited set before bucketing based on mode.
-    let candidates = unvisited;
-    if (optimizeFor === 'infill') {
-        // Infill: tiles with ≥ 2 visited 4-neighbours (interior gaps).
-        candidates = unvisited.filter(t => countVisitedNeighbours(t, visitedSet) >= 2);
-    } else if (optimizeFor === 'frontier') {
-        // Frontier: tiles with ≥ 1 visited neighbour, sorted by low surrounding density.
-        candidates = unvisited.filter(t => countVisitedNeighbours(t, visitedSet) >= 1);
-    }
-
-    const reachableTiles = candidates.filter(
+    const reachableTiles = unvisited.filter(
         t => haversineKm(start.lat, start.lon, t.lat, t.lon) <= reachRadius
     );
 
@@ -83,16 +73,6 @@ function scanGrid(coverageData, start, reachRadius, optimizeFor) {
     return { zoom, unvisited, reachableTiles, buckets, visitedSet };
 }
 
-/** Count how many of the 4 cardinal neighbours of tile `t` are in `visitedSet`. */
-function countVisitedNeighbours(t, visitedSet) {
-    return [
-        `${t.x},${t.y - 1}`,
-        `${t.x},${t.y + 1}`,
-        `${t.x - 1},${t.y}`,
-        `${t.x + 1},${t.y}`,
-    ].filter(k => visitedSet.has(k)).length;
-}
-
 function optimize({ start, end, distanceKm, mode, routeType, shape, coverageData, coverageDataSecondary, optimizeFor, corridorConstraint }) {
     const isRoundTrip = routeType === 'round_trip' || !end;
     // Default to 'loop' for round trips when the caller doesn't specify —
@@ -102,8 +82,8 @@ function optimize({ start, end, distanceKm, mode, routeType, shape, coverageData
     const reachRadius = distanceKm / (isRoundTrip ? 4 : 3);
 
     reportProgress('Scanning tile grid…');
-    const primary = scanGrid(coverageData, start, reachRadius, optimizeFor, corridorConstraint);
-    const secondary = coverageDataSecondary ? scanGrid(coverageDataSecondary, start, reachRadius, optimizeFor, corridorConstraint) : null;
+    const primary = scanGrid(coverageData, start, reachRadius);
+    const secondary = coverageDataSecondary ? scanGrid(coverageDataSecondary, start, reachRadius) : null;
     const grids = secondary ? [primary, secondary] : [primary];
 
     const totalUnvisited = grids.reduce((sum, g) => sum + g.unvisited.length, 0);
@@ -113,12 +93,6 @@ function optimize({ start, end, distanceKm, mode, routeType, shape, coverageData
 
     const totalReachable = grids.reduce((sum, g) => sum + g.reachableTiles.length, 0);
     if (totalReachable === 0) {
-        // Graceful empty-result messages for infill/frontier modes (#404/#406).
-        if (optimizeFor === 'infill') {
-            reportProgress('No infill tiles found — yard interior may already be complete');
-        } else if (optimizeFor === 'frontier') {
-            reportProgress('No frontier tiles found — yard may be fully isolated');
-        }
         const zoneCount = grids.reduce((sum, g) => sum + floodFillZones(g.unvisited).length, 0);
         return {
             totalRoutes: 0,
@@ -240,30 +214,18 @@ function estimateCorridorOverlap(zone, start, visitedSet, zoom) {
 /**
  * Order zones by the user's chosen priority before capping to the top few
  * per direction:
- *   - 'tiles'    : biggest contiguous unexplored areas first (default)
- *   - 'distance' : closest to the start point first (shortest route)
- *   - 'efficiency': most new tiles per km of travel to reach them
- *   - 'infill'   : smallest zones first (interior gaps are typically smaller)
- *   - 'frontier' : zones with lower surrounding density ranked higher
+ *   - 'tiles'      : biggest contiguous unexplored areas first (default)
+ *   - 'efficiency' : most new tiles per km of travel to reach them
  * After primary sort, a secondary overlap penalty (#410) nudges tied zones
  * toward paths that re-cover fewer visited tiles.
  */
 function scoreZones(zones, optimizeFor) {
     const scored = [...zones];
-    if (optimizeFor === 'distance') {
-        scored.sort((a, b) => a.distanceFromStart - b.distanceFromStart);
-    } else if (optimizeFor === 'efficiency') {
+    if (optimizeFor === 'efficiency') {
         scored.sort((a, b) =>
             (b.tiles.length / Math.max(b.distanceFromStart, 0.1)) -
             (a.tiles.length / Math.max(a.distanceFromStart, 0.1))
         );
-    } else if (optimizeFor === 'infill') {
-        // Smallest zones first — infill gaps are typically tight clusters.
-        scored.sort((a, b) => a.tiles.length - b.tiles.length);
-    } else if (optimizeFor === 'frontier') {
-        // Low-density neighbourhoods ranked first (#406).
-        // visitedSet is not available here, so proxy with zone size (smaller = sparser border).
-        scored.sort((a, b) => a.tiles.length - b.tiles.length);
     } else {
         scored.sort((a, b) => b.tiles.length - a.tiles.length);
     }
