@@ -6,6 +6,7 @@ management following the existing service patterns (constructor + initialize).
 """
 
 from src.secure_logger import SecureLogger
+import math
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -214,6 +215,7 @@ class ExplorationService:
         duration_min = round(summary["duration"] / 60, 1)
 
         surface_breakdown = ExplorationService._reduce_surface_extras(props.get("extras", {}))
+        is_out_and_back = ExplorationService._is_out_and_back(coordinates)
 
         return {
             "status": "success",
@@ -221,7 +223,49 @@ class ExplorationService:
             "distance_km": distance_km,
             "duration_min": duration_min,
             "surface_breakdown": surface_breakdown,
+            "is_out_and_back": is_out_and_back,
         }
+
+    # Fraction of return-leg points that must fall within OUT_AND_BACK_RADIUS_M
+    # of some outbound-leg point for the route to be flagged as out-and-back (#452).
+    OUT_AND_BACK_OVERLAP_THRESHOLD = 0.7
+    OUT_AND_BACK_RADIUS_M = 150
+
+    @staticmethod
+    def _is_out_and_back(coordinates: List[List[float]]) -> bool:
+        """Detect a route whose return leg substantially retraces its outbound leg.
+
+        Splits the polyline in half and checks what fraction of return-leg
+        points land within ~150m of some outbound-leg point. Real road
+        geometry rarely retraces exactly, so this is a proximity match against
+        the whole outbound half rather than a point-by-point mirror check —
+        that's what lets a genuine loop (distinct corridors both ways) read as
+        low-overlap even if the two halves end up near each other briefly.
+        """
+        if len(coordinates) < 4:
+            return False
+
+        mid = len(coordinates) // 2
+        outbound, return_leg = coordinates[:mid], coordinates[mid:]
+        if not outbound or not return_leg:
+            return False
+
+        # Coarse degrees-per-meter conversion is fine at the ~150m scale this
+        # threshold operates at — no need for full haversine per point pair.
+        lat_ref = coordinates[0][0]
+        deg_per_m_lat = 1 / 111_320
+        deg_per_m_lon = 1 / (111_320 * max(0.01, abs(math.cos(math.radians(lat_ref)))))
+        radius_deg_lat = ExplorationService.OUT_AND_BACK_RADIUS_M * deg_per_m_lat
+        radius_deg_lon = ExplorationService.OUT_AND_BACK_RADIUS_M * deg_per_m_lon
+
+        near_count = 0
+        for r_lat, r_lon in return_leg:
+            for o_lat, o_lon in outbound:
+                if abs(r_lat - o_lat) <= radius_deg_lat and abs(r_lon - o_lon) <= radius_deg_lon:
+                    near_count += 1
+                    break
+
+        return (near_count / len(return_leg)) >= ExplorationService.OUT_AND_BACK_OVERLAP_THRESHOLD
 
     @staticmethod
     def _reduce_surface_extras(extras: dict) -> Dict[str, Any]:

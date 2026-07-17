@@ -430,3 +430,33 @@ class TestReduceSurfaceExtras:
         sb = ExplorationService._reduce_surface_extras(extras)
         assert sb["paved_pct"] == 0
         assert sb["unpaved_pct"] == 100
+
+
+class TestIsOutAndBack:
+    """#452: flag routes whose return leg substantially retraces the outbound leg."""
+
+    def test_identical_retrace_is_out_and_back(self):
+        outbound = [[40.0 + i * 0.001, -73.0] for i in range(10)]
+        coordinates = outbound + list(reversed(outbound))
+        assert ExplorationService._is_out_and_back(coordinates) is True
+
+    def test_distinct_loop_corridors_not_out_and_back(self):
+        # Outbound heads due north, return heads due east then south — no
+        # shared corridor, so this should read as a genuine loop.
+        outbound = [[40.0 + i * 0.001, -73.0] for i in range(10)]
+        return_leg = [[40.009, -73.0 + i * 0.001] for i in range(1, 6)] + \
+                     [[40.009 - i * 0.001, -72.995] for i in range(1, 6)]
+        coordinates = outbound + return_leg
+        assert ExplorationService._is_out_and_back(coordinates) is False
+
+    def test_too_few_points_is_not_out_and_back(self):
+        assert ExplorationService._is_out_and_back([[40.0, -73.0], [40.001, -73.0]]) is False
+
+    def test_partial_overlap_below_threshold_not_flagged(self):
+        # Only the first couple of return points land near the outbound leg;
+        # most of the return leg diverges onto a different corridor.
+        outbound = [[40.0 + i * 0.001, -73.0] for i in range(10)]
+        return_leg = [[40.009, -73.0], [40.008, -73.0]] + \
+                     [[40.0 + i * 0.001, -72.9] for i in range(8)]
+        coordinates = outbound + return_leg
+        assert ExplorationService._is_out_and_back(coordinates) is False
