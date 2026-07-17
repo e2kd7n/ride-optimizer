@@ -3,23 +3,40 @@
 Extracted verbatim from launch.py (_env_path, _read_env, _write_env).
 Used by strava_bp and core_bp to persist credentials without touching
 unrelated environment keys.
+
+Runtime writes (Strava reconnect, ORS key, home/work location — anything set
+through the web UI after the container is already running) go to
+``config/runtime_overrides.env`` instead of the project's ``.env``. ``.env``
+is only injected into the container at creation time via docker-compose's
+``env_file:`` and is never bind-mounted, so writes to it from inside a
+running container are lost on the next redeploy. ``config/`` *is*
+bind-mounted and already carries the correct container-writable ownership
+(it holds ``credentials.json``), so runtime overrides persist there instead.
+``read_env()`` merges both files, with the runtime overrides taking
+precedence, so callers don't need to know which file a given key lives in.
 """
 
 from pathlib import Path
 
+RUNTIME_OVERRIDES_FILENAME = 'runtime_overrides.env'
+
 
 def env_path() -> Path:
-    """Return the canonical path to the project .env file."""
+    """Return the canonical path to the project .env file (read-only at runtime)."""
     return Path('.env')
 
 
-def read_env() -> dict:
-    """Parse .env file into a dict.  Returns ``{}`` when the file is absent."""
-    ef = env_path()
-    if not ef.exists():
+def runtime_env_path() -> Path:
+    """Return the path to the container-writable runtime overrides file."""
+    return Path('config') / RUNTIME_OVERRIDES_FILENAME
+
+
+def _parse_env_file(path: Path) -> dict:
+    """Parse a key=value env file into a dict.  Returns ``{}`` when absent."""
+    if not path.exists():
         return {}
     result: dict = {}
-    for line in ef.read_text(encoding='utf-8').splitlines():
+    for line in path.read_text(encoding='utf-8').splitlines():
         line = line.strip()
         if line and not line.startswith('#') and '=' in line:
             key, _, value = line.partition('=')
@@ -27,9 +44,16 @@ def read_env() -> dict:
     return result
 
 
+def read_env() -> dict:
+    """Return .env merged with runtime overrides (overrides take precedence)."""
+    merged = _parse_env_file(env_path())
+    merged.update(_parse_env_file(runtime_env_path()))
+    return merged
+
+
 def write_env(data: dict) -> None:
-    """Write *data* key=value pairs to .env, preserving existing unrelated keys."""
-    ef = env_path()
+    """Write *data* key=value pairs to the runtime overrides file under config/."""
+    ef = runtime_env_path()
     existing: dict = {}
     lines_out: list = []
 

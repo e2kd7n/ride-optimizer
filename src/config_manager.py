@@ -93,6 +93,12 @@ class ConfigManager:
             yaml.YAMLError: If config file has invalid YAML syntax
         """
         load_dotenv()
+        # Runtime overrides written via the Settings UI (write_env() in
+        # app/credentials/env_helpers.py) live under config/, not .env — .env
+        # is only injected at container creation and isn't bind-mounted, so
+        # in-container writes to it don't survive a redeploy. override=True
+        # so a value saved through the UI wins over a stale .env entry.
+        load_dotenv(Path('config') / 'runtime_overrides.env', override=True)
 
         if not self.config_file.exists():
             raise FileNotFoundError(f"Configuration file not found: {self.config_file}")
