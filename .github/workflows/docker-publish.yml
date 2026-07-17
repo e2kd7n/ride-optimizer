@@ -107,7 +107,12 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          # amd64 disabled (#516) — only the Pi4 (arm64) actually deploys this
+          # image; local dev runs bare `python launch.py`, not the container.
+          # Re-enable by uncommenting below if an amd64 deployment target
+          # (self-hosted x86 server, local podman-compose testing) shows up.
+          # platforms: linux/amd64,linux/arm64
+          platforms: linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
