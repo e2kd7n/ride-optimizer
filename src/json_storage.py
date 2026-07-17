@@ -62,6 +62,33 @@ if sys.platform == 'win32':
                 time.sleep(0.01)
 
 
+    def _win32_replace_retrying(temp_path: Path, filepath: Path) -> None:
+        """
+        ``temp_path.replace(filepath)``, retrying transient PermissionError.
+
+        Even while holding the sidecar lock (which excludes other JSONStorage
+        writers/readers of *this* file), Windows can still momentarily deny
+        ``MoveFileEx`` onto an existing destination if some other handle —
+        Windows Search Indexer, antivirus real-time scanning, an Explorer
+        preview — briefly opened the destination without FILE_SHARE_DELETE.
+        POSIX rename has no such failure mode, which is why this retry only
+        exists on the Windows path. Observed empirically: a tight loop of
+        cross-process update() calls in tests/test_json_storage.py hit this
+        roughly 1 time in 15-20 without a retry, silently dropping a write
+        (the exception was caught and logged by _write_locked, which then
+        returned False).
+        """
+        deadline = time.monotonic() + 2.0
+        while True:
+            try:
+                temp_path.replace(filepath)
+                return
+            except PermissionError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.01)
+
+
 def secure_chmod(path) -> None:
     """
     Best-effort chmod to 0o600 (owner read/write only).
@@ -319,7 +346,10 @@ class JSONStorage:
             os.chmod(temp_path, 0o600)
 
             # Atomic rename (replaces old file)
-            temp_path.replace(filepath)
+            if sys.platform == 'win32':
+                _win32_replace_retrying(temp_path, filepath)
+            else:
+                temp_path.replace(filepath)
 
             logger.debug(f"Successfully wrote {filepath.name}")
             return True
