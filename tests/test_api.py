@@ -214,13 +214,13 @@ class TestExplorationTilesAPI:
 
     def test_bounded_request_with_zoom(self, client):
         response = client.get(
-            '/api/exploration/tiles?south=41.0&west=-88.0&north=42.0&east=-87.0&zoom=17'
+            '/api/exploration/tiles?south=41.0&west=-88.0&north=41.4&east=-87.6&zoom=17'
         )
         assert response.status_code == 200
         data = response.get_json()
         assert data['status'] == 'success'
         assert data['zoom'] == 17
-        assert data['bounds'] == [41.0, -88.0, 42.0, -87.0]
+        assert data['bounds'] == [41.0, -88.0, 41.4, -87.6]
 
 
 @pytest.mark.unit
@@ -283,6 +283,111 @@ class TestExplorationVerifyTilesAPI:
             'tiles': [{'x': 1, 'y': 1, 'zoom': 14}],
         })
         assert response.status_code == 400
+
+
+@pytest.mark.unit
+class TestExplorationBboxValidation:
+    """Tests for #481 — bbox sanity checks on /api/exploration/tiles and /api/exploration/roads."""
+
+    def test_tiles_inverted_bounds_rejected(self, client):
+        response = client.get(
+            '/api/exploration/tiles?south=42.0&west=-88.0&north=41.0&east=-87.0'
+        )
+        assert response.status_code == 400
+
+    def test_tiles_oversized_bbox_rejected(self, client):
+        response = client.get(
+            '/api/exploration/tiles?south=30.0&west=-100.0&north=45.0&east=-70.0'
+        )
+        assert response.status_code == 400
+
+    def test_tiles_bbox_within_limit_accepted(self, client):
+        response = client.get(
+            '/api/exploration/tiles?south=41.0&west=-88.0&north=41.4&east=-87.6'
+        )
+        assert response.status_code == 200
+
+    def test_roads_inverted_bounds_rejected(self, client):
+        response = client.get(
+            '/api/exploration/roads?south=42.0&west=-88.0&north=41.0&east=-87.0'
+        )
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data['status'] == 'error'
+
+    def test_roads_oversized_bbox_rejected(self, client):
+        response = client.get(
+            '/api/exploration/roads?south=30.0&west=-100.0&north=45.0&east=-70.0'
+        )
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data['status'] == 'error'
+        assert 'too large' in data['message'].lower()
+
+    def test_roads_missing_bounds_rejected(self, client):
+        response = client.get('/api/exploration/roads?south=41.0&west=-88.0')
+        assert response.status_code == 400
+
+
+@pytest.mark.unit
+class TestExplorationRouteWaypointValidation:
+    """Tests for #482 — per-waypoint validation and count cap on /api/exploration/route."""
+
+    def test_too_few_waypoints_rejected(self, client):
+        response = client.post('/api/exploration/route', json={'waypoints': [[40.0, -74.0]]})
+        assert response.status_code == 400
+
+    def test_missing_waypoints_rejected(self, client):
+        response = client.post('/api/exploration/route', json={})
+        assert response.status_code == 400
+
+    def test_non_pair_waypoint_rejected(self, client):
+        response = client.post('/api/exploration/route', json={
+            'waypoints': [[1, 2], 'x'],
+        })
+        assert response.status_code == 400
+
+    def test_null_coordinate_rejected(self, client):
+        response = client.post('/api/exploration/route', json={
+            'waypoints': [[None, None], [1, 2]],
+        })
+        assert response.status_code == 400
+
+    def test_out_of_range_latitude_rejected(self, client):
+        response = client.post('/api/exploration/route', json={
+            'waypoints': [[95.0, -74.0], [40.0, -73.0]],
+        })
+        assert response.status_code == 400
+
+    def test_out_of_range_longitude_rejected(self, client):
+        response = client.post('/api/exploration/route', json={
+            'waypoints': [[40.0, -200.0], [41.0, -73.0]],
+        })
+        assert response.status_code == 400
+
+    def test_non_numeric_coordinate_rejected(self, client):
+        response = client.post('/api/exploration/route', json={
+            'waypoints': [["a", "b"], [41.0, -73.0]],
+        })
+        assert response.status_code == 400
+
+    def test_too_many_waypoints_rejected(self, client):
+        response = client.post('/api/exploration/route', json={
+            'waypoints': [[40.0 + i * 0.001, -74.0] for i in range(51)],
+        })
+        assert response.status_code == 400
+        data = response.get_json()
+        assert 'too large' in data['message'].lower()
+
+    def test_valid_waypoints_pass_validation(self, client):
+        """Without an ORS API key configured, valid waypoints still get past
+        input validation and fail later with a config error, not a 400."""
+        response = client.post('/api/exploration/route', json={
+            'waypoints': [[40.0, -74.0], [40.1, -74.1]],
+        })
+        assert response.status_code == 500
+        data = response.get_json()
+        assert 'not configured' in data['message'].lower()
 
 
 @pytest.mark.unit

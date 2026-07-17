@@ -12,12 +12,14 @@ from src.coverage_tracker import (
     TileCoverage,
     lat_lon_to_tile,
     tile_to_bounds,
+    _bbox_cache_key,
     _haversine_m,
     _interpolate_points,
     _segment_tiles,
     _activity_tiles,
     TILE_ZOOM,
     SQUADRATINHO_ZOOM,
+    MAX_ROAD_NETWORK_CACHES,
 )
 
 
@@ -382,3 +384,85 @@ class TestCoverageTracker:
         ]
         result = tracker.get_tile_coverage_all()
         assert result.visited_count == 0
+
+
+# ── road_network cache keying / eviction (#481) ──────────────────
+
+class TestBboxCacheKey:
+    def test_different_bounds_give_different_keys(self):
+        k1 = _bbox_cache_key((40.0, -75.0, 41.0, -74.0))
+        k2 = _bbox_cache_key((10.0, 10.0, 11.0, 11.0))
+        assert k1 != k2
+
+    def test_same_bounds_give_same_key(self):
+        k1 = _bbox_cache_key((40.0, -75.0, 41.0, -74.0))
+        k2 = _bbox_cache_key((40.0, -75.0, 41.0, -74.0))
+        assert k1 == k2
+
+    def test_rounding_collapses_near_identical_bounds(self):
+        k1 = _bbox_cache_key((40.000001, -75.0, 41.0, -74.0))
+        k2 = _bbox_cache_key((40.000002, -75.0, 41.0, -74.0))
+        assert k1 == k2
+
+
+class TestRoadNetworkCacheEviction:
+    @pytest.fixture
+    def mock_config(self):
+        config = MagicMock()
+        config.get = MagicMock(side_effect=lambda key, default=None: default)
+        return config
+
+    @pytest.fixture
+    def tracker(self, mock_config, tmp_path):
+        t = CoverageTracker(mock_config)
+        t.cache_dir = tmp_path
+        return t
+
+    def test_get_road_coverage_keys_cache_by_bbox(self, tracker):
+        """Different bboxes must not collide on a single fixed cache filename (#481)."""
+        tracker._activities_cache = []
+
+        import pandas as pd
+        edges_df = pd.DataFrame({"geometry": [], "length": []})
+
+        def fake_save_graphml(G, path):
+            Path(path).write_text("fake-graph")
+
+        mock_ox = MagicMock()
+        mock_ox.graph_from_bbox.return_value = MagicMock()
+        mock_ox.save_graphml.side_effect = fake_save_graphml
+        mock_ox.load_graphml.side_effect = OSError("no cache yet")
+        mock_ox.graph_to_gdfs.side_effect = lambda G, nodes=False, edges=True: edges_df
+
+        mock_shapely_geometry = MagicMock(LineString=MagicMock(), Point=MagicMock())
+        mock_shapely_strtree = MagicMock(STRtree=MagicMock())
+
+        with patch.dict("sys.modules", {
+            "osmnx": mock_ox,
+            "shapely": MagicMock(),
+            "shapely.geometry": mock_shapely_geometry,
+            "shapely.strtree": mock_shapely_strtree,
+        }):
+            r1 = tracker.get_road_coverage((40.0, -75.0, 41.0, -74.0))
+            r2 = tracker.get_road_coverage((10.0, 10.0, 11.0, 11.0))
+
+        assert r1.get("status") == "success"
+        assert r2.get("status") == "success"
+        cache_files = list(tracker.cache_dir.glob("road_network_*.graphml"))
+        assert len(cache_files) == 2
+
+    def test_evict_old_road_network_caches_caps_count(self, tracker):
+        for i in range(MAX_ROAD_NETWORK_CACHES + 5):
+            p = tracker.cache_dir / f"road_network_fake{i}.graphml"
+            p.write_text("x")
+        tracker._evict_old_road_network_caches()
+        remaining = list(tracker.cache_dir.glob("road_network_*.graphml"))
+        assert len(remaining) == MAX_ROAD_NETWORK_CACHES
+
+    def test_invalidate_caches_removes_all_bbox_keyed_graphs(self, tracker):
+        for i in range(3):
+            (tracker.cache_dir / f"road_network_fake{i}.graphml").write_text("x")
+        (tracker.cache_dir / "road_network.graphml").write_text("legacy")
+        tracker.invalidate_caches()
+        remaining = list(tracker.cache_dir.glob("road_network*.graphml"))
+        assert remaining == []

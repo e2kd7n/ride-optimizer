@@ -25,6 +25,7 @@ TILE_ZOOM = 14              # "squadrat" granularity (squadrat.at / squadrat.com
 SQUADRATINHO_ZOOM = 17      # "squadratinho" granularity — each squadrat = 8x8 squadratinhos
 INTERPOLATION_INTERVAL_M = 80
 EARTH_RADIUS_M = 6_371_000
+MAX_ROAD_NETWORK_CACHES = 20  # cap on retained road_network_<hash>.graphml files
 
 
 @dataclass
@@ -56,6 +57,13 @@ class TileCoverage:
             "computed_at": self.computed_at,
             "zoom": self.zoom,
         }
+
+
+def _bbox_cache_key(bounds: Tuple[float, float, float, float]) -> str:
+    """Stable short hash for a (rounded) bbox, used to key per-bbox caches."""
+    rounded = tuple(round(v, 5) for v in bounds)
+    raw = ",".join(str(v) for v in rounded)
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
 
 
 def lat_lon_to_tile(lat: float, lon: float, zoom: int = TILE_ZOOM) -> Tuple[int, int]:
@@ -451,7 +459,7 @@ class CoverageTracker:
             return {"status": "error", "message": "Road coverage requires osmnx and shapely"}
 
         south, west, north, east = bounds
-        graph_cache = self.cache_dir / "road_network.graphml"
+        graph_cache = self.cache_dir / f"road_network_{_bbox_cache_key(bounds)}.graphml"
 
         if graph_cache.exists():
             try:
@@ -471,6 +479,8 @@ class CoverageTracker:
                     simplify=True,
                 )
                 ox.save_graphml(G, graph_cache)
+                secure_chmod(graph_cache)
+                self._evict_old_road_network_caches()
             except Exception as exc:
                 logger.error("Failed to fetch road network: %s", exc)
                 return {"status": "error", "message": str(exc)}
@@ -558,6 +568,20 @@ class CoverageTracker:
         except OSError as exc:
             logger.warning("Failed to write tile cache: %s", exc)
 
+    def _evict_old_road_network_caches(self) -> None:
+        """Keep at most MAX_ROAD_NETWORK_CACHES road_network_*.graphml files,
+        evicting the least-recently-modified ones beyond that cap."""
+        caches = sorted(
+            self.cache_dir.glob("road_network_*.graphml"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        for p in caches[MAX_ROAD_NETWORK_CACHES:]:
+            try:
+                p.unlink()
+            except OSError:
+                pass
+
     def invalidate_caches(self) -> None:
         """Remove all coverage caches (call after new activities are fetched)."""
         self._activities_cache = None
@@ -566,10 +590,16 @@ class CoverageTracker:
                 p.unlink()
             except OSError:
                 pass
-        graph_cache = self.cache_dir / "road_network.graphml"
-        if graph_cache.exists():
+        for p in self.cache_dir.glob("road_network_*.graphml"):
             try:
-                graph_cache.unlink()
+                p.unlink()
+            except OSError:
+                pass
+        # Legacy unkeyed cache filename from before bbox-keyed caching (#481).
+        legacy_cache = self.cache_dir / "road_network.graphml"
+        if legacy_cache.exists():
+            try:
+                legacy_cache.unlink()
             except OSError:
                 pass
         logger.info("Coverage caches invalidated")
