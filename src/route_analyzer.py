@@ -1267,8 +1267,12 @@ class RouteAnalyzer:
                 tqdm.write("\n✓ Non-interactive mode: auto-approving background geocoding\n")
         
         tqdm.write("\n✓ Starting background geocoding...")
-        if self.interactive:
+        if self.interactive and sys.platform == 'darwin':
             tqdm.write("  A new terminal window will open to show progress.\n")
+        elif self.interactive:
+            progress_file = self.cache_dir / 'geocoding_progress.txt'
+            tqdm.write(f"  Progress terminal windows are only supported on macOS; "
+                       f"track progress in {progress_file}\n")
         else:
             tqdm.write("  Running quietly in the background (non-interactive mode).\n")
 
