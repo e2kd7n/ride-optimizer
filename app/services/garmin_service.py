@@ -104,7 +104,53 @@ class GarminService:
         activities: List[Activity] = []
         for ga in raw:
             try:
-                activities.append(Activity.from_garmin_activity(ga))
+                activity = Activity.from_garmin_activity(ga)
+                # The activity list endpoint only returns start/end lat-lng,
+                # not a GPS track. Without a track, coverage_tracker has
+                # nothing to decode and these rides silently contribute zero
+                # tiles to Explore page coverage. Fetch and encode the full
+                # polyline per activity so it lands in the same
+                # polyline-bearing shape Strava activities use.
+                activity.polyline = self._fetch_polyline(activity.id)
+                activities.append(activity)
             except Exception as e:
                 logger.debug(f"Skipping Garmin activity: {e}")
         return activities
+
+    def _fetch_polyline(self, activity_id: int) -> Optional[str]:
+        """Fetch an activity's GPS track from Garmin Connect and encode it
+        as a Google-encoded polyline (the same format Strava's summary
+        polyline uses), so downstream consumers like coverage_tracker don't
+        need to know which provider an activity came from.
+
+        Returns None (rather than raising) on any failure — a missing track
+        should not block the rest of the sync.
+        """
+        try:
+            import garth
+            details = garth.connectapi(
+                f'/activity-service/activity/{activity_id}/details',
+                params={'maxPolylineSize': 4000},
+            )
+        except Exception as e:
+            logger.debug(f"Failed to fetch GPS track for Garmin activity {activity_id}: {e}")
+            return None
+
+        if not isinstance(details, dict):
+            return None
+
+        points = (details.get('geoPolylineDTO') or {}).get('polyline') or []
+        coords = [
+            (p['lat'], p['lon'])
+            for p in points
+            if isinstance(p, dict) and p.get('lat') is not None and p.get('lon') is not None
+        ]
+        if not coords:
+            return None
+
+        try:
+            import polyline as polyline_codec
+            return polyline_codec.encode(coords)
+        except Exception as e:
+            logger.debug(f"Failed to encode GPS track for Garmin activity {activity_id}: {e}")
+            return None
