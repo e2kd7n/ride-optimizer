@@ -125,7 +125,10 @@ def strava_callback():
         })
         logger.info("Strava OAuth complete — credentials saved")
 
-        current_app.container.reset_initialisation()
+        # New credentials only change what Strava-backed services can fetch —
+        # WeatherService/TrainerRoadService/RouteLibraryService don't depend
+        # on Strava auth, so a full container reset is unnecessary (#461).
+        current_app.container.refresh_services('analysis', 'commute', 'planner')
 
         setup_redirect = session.pop('setup_redirect', False)
         if setup_redirect:
@@ -147,7 +150,9 @@ def strava_disconnect():
         creds_path = current_app.container.credentials_path
         if creds_path.exists():
             creds_path.unlink()
-        current_app.container.reset_initialisation()
+        # See connect handler above — only Strava-backed services need to be
+        # rebuilt after a credentials change (#461).
+        current_app.container.refresh_services('analysis', 'commute', 'planner')
         logger.info("Strava credentials removed — integration disconnected")
         return jsonify({'success': True})
     except Exception as exc:
