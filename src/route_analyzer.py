@@ -1502,8 +1502,11 @@ end tell
                         stderr=subprocess.DEVNULL,
                         check=False
                     )
-                except Exception:
-                    pass  # Ignore errors in background thread
+                except Exception as e:
+                    # Not critical — geocoding_progress.txt is already being written
+                    # unconditionally by _geocode_routes_background, so the user can
+                    # still monitor progress by hand even if the terminal never opens.
+                    logger.debug(f"Could not open geocoding monitor terminal: {e}")
             
             # Start in a daemon thread so it doesn't block exit
             terminal_thread = threading.Thread(target=start_terminal, daemon=True)
