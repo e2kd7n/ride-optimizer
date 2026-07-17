@@ -64,7 +64,7 @@ from src.location_finder import LocationFinder
 from src.route_analyzer import RouteAnalyzer
 from src.optimizer import RouteOptimizer
 from src.visualizer import RouteVisualizer
-from src.report_generator import ReportGenerator
+from legacy.report_generator import ReportGenerator
 from src.long_ride_analyzer import LongRideAnalyzer
 
 # Configure logging - suppress timestamps for cleaner output during analysis
