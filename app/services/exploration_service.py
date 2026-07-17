@@ -69,6 +69,13 @@ class ExplorationService:
     ) -> Dict[str, Any]:
         return self._tracker.get_road_coverage(bounds)
 
+    def get_roadless_tiles(
+        self,
+        bounds: Tuple[float, float, float, float],
+        zoom: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        return self._tracker.get_roadless_tiles(bounds, zoom=zoom)
+
     def invalidate_caches(self):
         self._tracker.invalidate_caches()
 

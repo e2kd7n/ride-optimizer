@@ -386,6 +386,102 @@ class TestCoverageTracker:
         assert result.visited_count == 0
 
 
+# ── roadless-tile detection (#525) ───────────────────────────────
+
+class TestGetRoadlessTiles:
+    @pytest.fixture
+    def mock_config(self):
+        config = MagicMock()
+        config.get = MagicMock(side_effect=lambda key, default=None: default)
+        return config
+
+    @pytest.fixture
+    def tracker(self, mock_config, tmp_path):
+        t = CoverageTracker(mock_config)
+        t.cache_dir = tmp_path
+        return t
+
+    # Small bbox that spans exactly a 2x2 tile block at TILE_ZOOM.
+    _x0, _y0 = lat_lon_to_tile(40.7, -74.0, TILE_ZOOM)
+    _south, _west, _, _ = tile_to_bounds(_x0, _y0 + 1, TILE_ZOOM)
+    _, _, _north, _east = tile_to_bounds(_x0 + 1, _y0, TILE_ZOOM)
+    BOUNDS = (_south, _west, _north, _east)
+
+    def _patched_modules(self, edge_geoms):
+        import pandas as pd
+
+        edges_df = pd.DataFrame({"geometry": edge_geoms})
+
+        mock_ox = MagicMock()
+        mock_ox.graph_from_bbox.return_value = MagicMock()
+        mock_ox.load_graphml.side_effect = OSError("no cache yet")
+        mock_ox.graph_to_gdfs.side_effect = lambda G, nodes=False, edges=True: edges_df
+
+        # box(minx, miny, maxx, maxy) — identity passthrough so tests can
+        # inspect exactly what bounds were queried for a given tile.
+        mock_box_fn = MagicMock(side_effect=lambda minx, miny, maxx, maxy: (minx, miny, maxx, maxy))
+
+        class _FakeTree:
+            def __init__(self, geoms):
+                self._geoms = geoms
+
+            def query(self, box_):
+                return list(range(len(self._geoms)))
+
+        mock_shapely_geometry = MagicMock(box=mock_box_fn)
+        mock_shapely_strtree = MagicMock(STRtree=_FakeTree)
+
+        return {
+            "osmnx": mock_ox,
+            "shapely": MagicMock(),
+            "shapely.geometry": mock_shapely_geometry,
+            "shapely.strtree": mock_shapely_strtree,
+        }
+
+    def test_graceful_without_osmnx(self, tracker):
+        with patch.dict("sys.modules", {"osmnx": None, "shapely": None, "shapely.geometry": None, "shapely.strtree": None}):
+            result = tracker.get_roadless_tiles(self.BOUNDS, zoom=TILE_ZOOM)
+        assert result["status"] == "error"
+
+    def test_no_roads_marks_every_tile_roadless(self, tracker):
+        with patch.dict("sys.modules", self._patched_modules(edge_geoms=[])):
+            result = tracker.get_roadless_tiles(self.BOUNDS, zoom=TILE_ZOOM)
+
+        assert result["status"] == "success"
+        south, west, north, east = self.BOUNDS
+        min_tx, min_ty = lat_lon_to_tile(north, west, TILE_ZOOM)
+        max_tx, max_ty = lat_lon_to_tile(south, east, TILE_ZOOM)
+        expected_count = (max_tx - min_tx + 1) * (max_ty - min_ty + 1)
+        assert len(result["roadless"]) == expected_count
+
+    def test_tile_with_road_is_excluded_from_roadless(self, tracker):
+        # A geometry that intersects every query box it's asked about —
+        # every tile in bounds counts as reachable.
+        road_geom = MagicMock()
+        road_geom.intersects.return_value = True
+
+        with patch.dict("sys.modules", self._patched_modules(edge_geoms=[road_geom])):
+            result = tracker.get_roadless_tiles(self.BOUNDS, zoom=TILE_ZOOM)
+
+        assert result["status"] == "success"
+        assert result["roadless"] == []
+
+    def test_tile_far_from_any_road_stays_roadless(self, tracker):
+        # A geometry that never intersects any query box — every tile in
+        # bounds counts as unreachable, same as the no-roads case.
+        far_geom = MagicMock()
+        far_geom.intersects.return_value = False
+
+        with patch.dict("sys.modules", self._patched_modules(edge_geoms=[far_geom])):
+            result = tracker.get_roadless_tiles(self.BOUNDS, zoom=TILE_ZOOM)
+
+        south, west, north, east = self.BOUNDS
+        min_tx, min_ty = lat_lon_to_tile(north, west, TILE_ZOOM)
+        max_tx, max_ty = lat_lon_to_tile(south, east, TILE_ZOOM)
+        expected_count = (max_tx - min_tx + 1) * (max_ty - min_ty + 1)
+        assert len(result["roadless"]) == expected_count
+
+
 # ── road_network cache keying / eviction (#481) ──────────────────
 
 class TestBboxCacheKey:

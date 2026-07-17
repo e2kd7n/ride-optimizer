@@ -15,7 +15,11 @@
  *       round trip, whether outbound/return should be biased toward
  *       different corridors (loop) or deliberately retrace the same one
  *       (out_and_back). Ignored when routeType is 'point_to_point'.
- *   - coverageData: {visited: {"x,y": {...}}, total_in_bounds, bounds, zoom}
+ *   - coverageData: {visited: {"x,y": {...}}, total_in_bounds, bounds, zoom,
+ *       roadless?: [{x, y}]} — roadless (#525) lists tiles with no nearby
+ *       bike-network road, i.e. not bikeable or walkable (open water and
+ *       other unreachable terrain); excluded from new-tile targeting.
+ *       Absent/empty when the roadless lookup wasn't available.
  *   - coverageDataSecondary: same shape as coverageData, at a different zoom | null
  *       When present ("Both" grid mode), routes are optimized against both
  *       grids at once — each grid's zones are found independently (tile
@@ -67,7 +71,11 @@ function scanGrid(coverageData, start, reachRadius, areaBounds) {
 
     const allTiles = buildTileSet(bounds, zoom);
     const visitedSet = new Set(Object.keys(coverageData.visited || {}));
-    const unvisited = allTiles.filter(t => !visitedSet.has(t.key));
+    // #525: exclude tiles with no bike-network road nearby — not bikeable
+    // or walkable (open water and other unreachable terrain) — from "new
+    // tile" targeting. Best-effort: empty/absent when the roadless lookup failed.
+    const roadlessSet = new Set((coverageData.roadless || []).map(t => `${t.x},${t.y}`));
+    const unvisited = allTiles.filter(t => !visitedSet.has(t.key) && !roadlessSet.has(t.key));
 
     let reachableTiles = unvisited.filter(
         t => haversineKm(start.lat, start.lon, t.lat, t.lon) <= reachRadius

@@ -7,6 +7,7 @@ Routes:
   POST /api/planner/analyze
   GET  /api/exploration/tiles
   GET  /api/exploration/roads
+  GET  /api/exploration/roadless-tiles
   POST /api/exploration/invalidate
   POST /api/exploration/route
   POST /api/exploration/verify-tiles
@@ -193,6 +194,41 @@ def exploration_roads():
         return jsonify({'status': 'error', 'message': bbox_error}), 400
 
     result = svc.get_road_coverage((south, west, north, east))
+    status_code = 200 if result.get('status') == 'success' else 500
+    return jsonify(result), status_code
+
+
+@bp.route('/exploration/roadless-tiles')
+@limiter.limit("20 per minute")
+def exploration_roadless_tiles():
+    """Tiles within a bounding box with no bike-network road nearby (requires
+    osmnx) — used to keep the route generator from targeting non-bikeable,
+    non-walkable tiles (open water and other unreachable terrain) as
+    "new tile" candidates (#525)."""
+    from src.coverage_tracker import TILE_ZOOM, SQUADRATINHO_ZOOM
+
+    svc = current_app.container.get_exploration_service()
+
+    south = request.args.get('south', type=float)
+    west = request.args.get('west', type=float)
+    north = request.args.get('north', type=float)
+    east = request.args.get('east', type=float)
+
+    if any(v is None for v in (south, west, north, east)):
+        return jsonify({'status': 'error', 'message': 'south, west, north, east are required'}), 400
+
+    bbox_error = _validate_bbox(south, west, north, east)
+    if bbox_error:
+        return jsonify({'status': 'error', 'message': bbox_error}), 400
+
+    zoom = request.args.get('zoom', type=int)
+    if zoom is not None and zoom not in (TILE_ZOOM, SQUADRATINHO_ZOOM):
+        return jsonify({
+            'status': 'error',
+            'message': f'zoom must be {TILE_ZOOM} (squadrat) or {SQUADRATINHO_ZOOM} (squadratinho)',
+        }), 400
+
+    result = svc.get_roadless_tiles((south, west, north, east), zoom=zoom)
     status_code = 200 if result.get('status') == 'success' else 500
     return jsonify(result), status_code
 
