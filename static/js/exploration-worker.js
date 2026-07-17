@@ -26,9 +26,13 @@
  *       target area. When present, further restricts reachable tiles to
  *       those inside the box, in addition to (not instead of) the reach
  *       radius derived from distanceKm.
+ *   - windDirectionDeg/windSpeedKph: number | null (#453) — current wind, if
+ *       available. Used only as a tie-break between otherwise-equal-yield
+ *       tour orientations (headwind out, tailwind back) for round trips with
+ *       ≥2 zones; ignored for point-to-point routes or when unavailable.
  *
  * Output messages (streamed):
- *   {type: 'route', route: {direction, waypoints, stats}}  — one per generated route
+ *   {type: 'route', route: {direction, waypoints, windLabel, stats}}  — one per generated route
  *   {type: 'done', totalRoutes, stats}                     — sent once, after all routes
  *   {type: 'error', message}                                — fatal error
  */
@@ -86,7 +90,7 @@ function scanGrid(coverageData, start, reachRadius, areaBounds) {
     return { zoom, unvisited, reachableTiles, buckets, visitedSet };
 }
 
-function optimize({ start, end, distanceKm, mode, routeType, shape, coverageData, coverageDataSecondary, optimizeFor, corridorConstraint, areaBounds }) {
+function optimize({ start, end, distanceKm, mode, routeType, shape, coverageData, coverageDataSecondary, optimizeFor, corridorConstraint, areaBounds, windDirectionDeg, windSpeedKph }) {
     const isRoundTrip = routeType === 'round_trip' || !end;
     // Default to 'loop' for round trips when the caller doesn't specify —
     // matches the pre-#489 behaviour of drawing from whichever quadrant the
@@ -113,10 +117,13 @@ function optimize({ start, end, distanceKm, mode, routeType, shape, coverageData
         };
     }
 
-    // Per grid, top candidate zones per quadrant. When merging two grids,
-    // cap each grid's contribution so the combined waypoint count per route
-    // stays reasonable (TSP brute-force applies up to 8 points).
-    const perGridCap = secondary ? 4 : 6;
+    // Per grid, candidate zone pool per quadrant. When merging two grids,
+    // cap each grid's contribution so the combined pool the insertion
+    // construction searches over stays a reasonable size.
+    const perGridCap = secondary ? 8 : 12;
+    // Seeds each quadrant's running claimed-tiles set (#451) with the real
+    // ride history, keyed by zoom since tile coordinate spaces differ per grid.
+    const visitedSetsByZoom = new Map(grids.map(g => [g.zoom, g.visitedSet]));
 
     let totalRoutes = 0;
     QUADRANTS.forEach((dir, i) => {
@@ -131,7 +138,7 @@ function optimize({ start, end, distanceKm, mode, routeType, shape, coverageData
         const scanDirs = effectiveShape === 'loop' ? [dir, nextQuadrant(dir)] : [dir];
         const zoneCap = effectiveShape === 'out_and_back' ? 1 : perGridCap;
 
-        const gridCandidates = grids.map(g => {
+        const pool = grids.flatMap(g => {
             const bucketTiles = scanDirs.flatMap(d => g.buckets[d]);
             const dirZones = floodFillZones(bucketTiles).map(z => ({
                 ...z,
@@ -139,39 +146,52 @@ function optimize({ start, end, distanceKm, mode, routeType, shape, coverageData
             }));
             const scored = scoreZones(dirZones, optimizeFor);
             const penalised = applyOverlapPenalty(scored, start, g.visitedSet, g.zoom);
-            return {
+            return penalised.slice(0, zoneCap).map(z => ({
+                ...z,
                 zoom: g.zoom,
-                candidates: penalised.slice(0, zoneCap),
-            };
-        });
-
-        const allCandidates = gridCandidates.flatMap(
-            gc => gc.candidates.map(z => ({ ...z, zoom: gc.zoom }))
-        );
-        if (allCandidates.length === 0) return;
-
-        // For each zone find the corner that claims the most tiles at once,
-        // inset ~5 m toward the zone centroid so GPS uncertainty is absorbed.
-        const points = allCandidates.map(z =>
-            bestCornerPoint(z.tiles, z.zoom, start.lat, start.lon)
-        );
-        const ordered = solveTSP(start, points, end);
-
-        const breakdown = gridCandidates
-            .filter(gc => gc.candidates.length > 0)
-            .map(gc => ({
-                zoom: gc.zoom,
-                label: GRID_LABELS[gc.zoom] || `zoom ${gc.zoom}`,
-                count: gc.candidates.reduce((sum, z) => sum + z.tiles.length, 0),
+                point: bestCornerPoint(z.tiles, g.zoom, start.lat, start.lon),
             }));
+        });
+        if (pool.length === 0) return;
+
+        const selected = constructInsertionTour(start, end, pool, distanceKm, optimizeFor, visitedSetsByZoom);
+
+        // #453: once outbound/return phases exist (≥2 zones, round trip),
+        // prefer whichever traversal direction faces the wind on the way out
+        // and rides it on the way back. Reversing the visit order doesn't
+        // change which zones/tiles are claimed — only which end of the tour
+        // is "outbound" — so this is a pure tie-break, never a factor in
+        // which zones got selected above.
+        let windLabel = null;
+        if (isRoundTrip && selected.length > 1 && windDirectionDeg != null && windSpeedKph != null) {
+            const forwardBearing = bearingDeg(start.lat, start.lon, selected[0].point.lat, selected[0].point.lon);
+            const reverseBearing = bearingDeg(start.lat, start.lon, selected[selected.length - 1].point.lat, selected[selected.length - 1].point.lon);
+            const forwardHeadwind = headwindComponent(windSpeedKph, windDirectionDeg, forwardBearing);
+            const reverseHeadwind = headwindComponent(windSpeedKph, windDirectionDeg, reverseBearing);
+            if (reverseHeadwind > forwardHeadwind) selected.reverse();
+            const chosenHeadwind = Math.max(forwardHeadwind, reverseHeadwind);
+            if (chosenHeadwind > 0) {
+                windLabel = `↰ headwind out, tailwind back · ${Math.round(windSpeedKph)} km/h`;
+            }
+        }
+        const ordered = selected.map(z => z.point);
+
+        const byZoom = new Map();
+        for (const z of selected) {
+            if (!byZoom.has(z.zoom)) byZoom.set(z.zoom, []);
+            byZoom.get(z.zoom).push(z);
+        }
+        const breakdown = [...byZoom.entries()].map(([zoom, zones]) => ({
+            zoom,
+            label: GRID_LABELS[zoom] || `zoom ${zoom}`,
+            count: zones.reduce((sum, z) => sum + z.tiles.length, 0),
+        }));
 
         // Collect per-zoom new tile lists for map highlighting.
-        const newTilesByZoom = gridCandidates
-            .filter(gc => gc.candidates.length > 0)
-            .map(gc => ({
-                zoom: gc.zoom,
-                tiles: gc.candidates.flatMap(z => z.tiles.map(t => ({ x: t.x, y: t.y }))),
-            }));
+        const newTilesByZoom = [...byZoom.entries()].map(([zoom, zones]) => ({
+            zoom,
+            tiles: zones.flatMap(z => z.tiles.map(t => ({ x: t.x, y: t.y }))),
+        }));
 
         totalRoutes++;
         self.postMessage({
@@ -180,10 +200,11 @@ function optimize({ start, end, distanceKm, mode, routeType, shape, coverageData
                 direction: dir,
                 shape: effectiveShape,
                 waypoints: ordered,
+                windLabel,
                 newTilesByZoom,
                 stats: {
                     waypoints: ordered.length,
-                    zones: allCandidates.length,
+                    zones: selected.length,
                     unvisited: breakdown.reduce((sum, b) => sum + b.count, 0),
                     breakdown: secondary ? breakdown : null,
                     distanceKm: routeDistance(start, ordered, end),
@@ -203,25 +224,46 @@ function optimize({ start, end, distanceKm, mode, routeType, shape, coverageData
 // 0 disables the penalty entirely; raise to 1.0+ to strongly avoid overlap.
 const OVERLAP_PENALTY_WEIGHT = 0.5;
 
+function latLonToTileXY(lat, lon, zoom) {
+    const n = Math.pow(2, zoom);
+    const x = Math.floor((lon + 180) / 360 * n);
+    const y = Math.floor((1 - Math.asinh(Math.tan(lat * Math.PI / 180)) / Math.PI) / 2 * n);
+    return { x, y };
+}
+
+/**
+ * Sample the tile keys a straight-line corridor between two points crosses,
+ * at ~1 sample per 250m. Shared by the historical overlap estimate below and
+ * by the in-progress-tour overlap tracking in constructInsertionTour (#451).
+ */
+function sampleCorridorTileKeys(latA, lonA, latB, lonB, zoom) {
+    const distKm = haversineKm(latA, lonA, latB, lonB);
+    const steps = Math.max(2, Math.round(distKm * 4));
+    const keys = [];
+    for (let i = 1; i < steps; i++) {
+        const t = i / steps;
+        const { x, y } = latLonToTileXY(latA + (latB - latA) * t, lonA + (lonB - lonA) * t, zoom);
+        keys.push(`${x},${y}`);
+    }
+    return keys;
+}
+
+function countKeysInSet(keys, set) {
+    let count = 0;
+    for (const k of keys) if (set.has(k)) count++;
+    return count;
+}
+
 /**
  * Estimate how many visited tiles lie along the straight-line corridor from
  * `start` to the zone centroid by sampling the tile grid at intervals.
  * Uses only the already-loaded visitedSet — no extra API calls.
  */
 function estimateCorridorOverlap(zone, start, visitedSet, zoom) {
-    const steps = Math.max(2, Math.round(zone.distanceFromStart * 4)); // ~1 sample per 250m
-    const dlat = (zone.centroid.lat - start.lat) / steps;
-    const dlon = (zone.centroid.lon - start.lon) / steps;
-    let overlap = 0;
-    for (let i = 1; i < steps; i++) {
-        const lat = start.lat + dlat * i;
-        const lon = start.lon + dlon * i;
-        const n = Math.pow(2, zoom);
-        const x = Math.floor((lon + 180) / 360 * n);
-        const y = Math.floor((1 - Math.asinh(Math.tan(lat * Math.PI / 180)) / Math.PI) / 2 * n);
-        if (visitedSet.has(`${x},${y}`)) overlap++;
-    }
-    return overlap;
+    return countKeysInSet(
+        sampleCorridorTileKeys(start.lat, start.lon, zone.centroid.lat, zone.centroid.lon, zoom),
+        visitedSet
+    );
 }
 
 /**
@@ -263,6 +305,19 @@ function bearingDeg(lat1, lon1, lat2, lon2) {
     const y = Math.sin(dLambda) * Math.cos(phi2);
     const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLambda);
     return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+/**
+ * Headwind component (positive) / tailwind (negative) of `windSpeed` for a
+ * bearing of `travelBearing`, given wind blowing FROM `windDirection` (#453).
+ * Mirrors WindImpactCalculator.calculate_wind_component (src/weather_fetcher.py)
+ * so client and server agree on what counts as a headwind.
+ */
+function headwindComponent(windSpeed, windDirection, travelBearing) {
+    let relative = (windDirection - travelBearing) % 360;
+    if (relative > 180) relative -= 360;
+    if (relative < -180) relative += 360;
+    return windSpeed * Math.cos(relative * Math.PI / 180);
 }
 
 function quadrantFor(bearing) {
@@ -421,6 +476,114 @@ function floodFillZones(tiles) {
         zones.push({ tiles: zone, centroid });
     }
     return zones;
+}
+
+// ── Reward-weighted cheapest-insertion tour construction (#450) ─
+
+// How far over the target distance the constructed tour may run before a
+// candidate insertion is rejected for blowing the budget.
+const INSERTION_DISTANCE_TOLERANCE = 1.15;
+// A candidate must add at least this many new tiles per km of extra travel
+// to be worth inserting at all — below this, further zones stop being added
+// even if the distance budget has room left.
+const MIN_TILES_PER_KM = 0.15;
+
+/**
+ * Build a tour by greedy cheapest insertion instead of distance-minimizing
+ * TSP (#450). Minimizing distance is the wrong objective when the goal is
+ * maximizing distinct tiles per distance budget: when candidates sit roughly
+ * along one ray from `start`, the distance-optimal tour is "farthest zone,
+ * straight back," which retraces already-claimed tiles on the return leg.
+ *
+ * Seeds the tour with the single farthest candidate, then repeatedly inserts
+ * whichever remaining candidate scores highest — tiles gained per km of
+ * extra travel the insertion costs — at whichever position in the tour is
+ * cheapest, stopping once no candidate clears the minimum tiles/km floor or
+ * the next insertion would exceed the distance budget.
+ *
+ * `visitedSetsByZoom` (Map<zoom, Set<tileKey>>) seeds a running "claimed
+ * tiles" set per zoom (#451): after each insertion, the tiles along that
+ * leg's approach/departure corridor are added to the running set, so a later
+ * candidate whose approach path would retrace a corridor an earlier leg in
+ * *this same tour* already claimed is penalised the same way retracing
+ * historically-ridden tiles already is — not just against ride history.
+ */
+function constructInsertionTour(start, end, candidates, distanceKm, optimizeFor, visitedSetsByZoom) {
+    if (candidates.length === 0) return [];
+
+    const budgetKm = distanceKm * INSERTION_DISTANCE_TOLERANCE;
+    const closePoint = end || start;
+
+    const claimedByZoom = new Map();
+    const claimedSetFor = (zoom) => {
+        if (!claimedByZoom.has(zoom)) {
+            claimedByZoom.set(zoom, new Set(visitedSetsByZoom?.get(zoom) || []));
+        }
+        return claimedByZoom.get(zoom);
+    };
+    const claimLeg = (fromPoint, toPoint, zoom) => {
+        const claimed = claimedSetFor(zoom);
+        for (const k of sampleCorridorTileKeys(fromPoint.lat, fromPoint.lon, toPoint.lat, toPoint.lon, zoom)) {
+            claimed.add(k);
+        }
+    };
+    const legOverlap = (fromPoint, toPoint, zoom) =>
+        countKeysInSet(sampleCorridorTileKeys(fromPoint.lat, fromPoint.lon, toPoint.lat, toPoint.lon, zoom), claimedSetFor(zoom));
+
+    const remaining = [...candidates];
+    let seedIdx = 0;
+    for (let i = 1; i < remaining.length; i++) {
+        if (remaining[i].distanceFromStart > remaining[seedIdx].distanceFromStart) seedIdx = i;
+    }
+    const seed = remaining.splice(seedIdx, 1)[0];
+    let tour = [seed];
+    claimLeg(start, seed.point, seed.zoom);
+    claimLeg(seed.point, closePoint, seed.zoom);
+
+    // 'efficiency' weighs candidates strictly by tiles gained per km of
+    // insertion cost. 'tiles' (default) still needs cost to compare
+    // candidates and enforce the budget, but favors raw new-tile count more
+    // strongly by discounting cost's influence on the score.
+    const costExponent = optimizeFor === 'efficiency' ? 1 : 0.4;
+
+    while (remaining.length > 0) {
+        let best = null;
+        for (let i = 0; i < remaining.length; i++) {
+            const cand = remaining[i];
+            for (let pos = 0; pos <= tour.length; pos++) {
+                const prev = pos === 0 ? start : tour[pos - 1].point;
+                const next = pos === tour.length ? closePoint : tour[pos].point;
+                const insertCost = haversineKm(prev.lat, prev.lon, cand.point.lat, cand.point.lon) +
+                    haversineKm(cand.point.lat, cand.point.lon, next.lat, next.lon) -
+                    haversineKm(prev.lat, prev.lon, next.lat, next.lon);
+
+                const overlap = legOverlap(prev, cand.point, cand.zoom) + legOverlap(cand.point, next, cand.zoom);
+                const effectiveTiles = Math.max(cand.tiles.length - OVERLAP_PENALTY_WEIGHT * overlap, 0.1);
+
+                const tilesPerKm = effectiveTiles / Math.max(insertCost, 0.01);
+                if (tilesPerKm < MIN_TILES_PER_KM) continue;
+
+                const score = effectiveTiles / Math.pow(Math.max(insertCost, 0.01), costExponent);
+                if (!best || score > best.score) {
+                    best = { i, pos, score, prev, next };
+                }
+            }
+        }
+        if (!best) break;
+
+        const trial = [...tour];
+        trial.splice(best.pos, 0, remaining[best.i]);
+        if (routeDistance(start, trial.map(z => z.point), end) > budgetKm) break;
+
+        const chosen = remaining[best.i];
+        claimLeg(best.prev, chosen.point, chosen.zoom);
+        claimLeg(chosen.point, best.next, chosen.zoom);
+
+        tour = trial;
+        remaining.splice(best.i, 1);
+    }
+
+    return tour;
 }
 
 // ── TSP (brute-force for ≤8 points) ─────────────────────────────

@@ -30,6 +30,32 @@ let _skipNextMapClick = false;
 // { NE: [zoneList, ...], SE: [...], ... }
 let _phase1Candidates = {};
 
+// #453: current wind, fetched once per session and reused across route
+// generations rather than re-fetched per click.
+let _sessionWind = undefined; // undefined = not yet fetched, null = unavailable
+
+/**
+ * Fetch current wind conditions once per session for the worker's
+ * headwind-out/tailwind-back tie-break (#453). Failure is silent — the
+ * worker falls back to its current (non-wind-aware) behavior when wind is
+ * unavailable, matching the acceptance criteria.
+ */
+async function getSessionWind() {
+    if (_sessionWind !== undefined) return _sessionWind;
+    try {
+        const res = await api.getWeather();
+        const current = res && res.current;
+        if (current && current.wind_direction_deg != null && current.wind_speed_kph != null) {
+            _sessionWind = { windDirectionDeg: current.wind_direction_deg, windSpeedKph: current.wind_speed_kph };
+        } else {
+            _sessionWind = null;
+        }
+    } catch {
+        _sessionWind = null;
+    }
+    return _sessionWind;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     initMap();
     initWorker();
@@ -714,6 +740,7 @@ async function generateRoute() {
     const shape = document.getElementById('route-type-select').value; // 'loop' | 'out_and_back' | 'point_to_point'
     const routeType = shape === 'point_to_point' ? 'point_to_point' : 'round_trip';
     const endPos = (routeType === 'point_to_point' && endMarker) ? endMarker.getLatLng() : null;
+    const wind = await getSessionWind();
 
     explorationWorker.postMessage({
         start: { lat: startPos.lat, lon: startPos.lng },
@@ -726,6 +753,8 @@ async function generateRoute() {
         coverageDataSecondary: mode === 'both' ? coverageDataSecondary : null,
         optimizeFor,
         areaBounds: selectedAreaBounds,
+        windDirectionDeg: wind ? wind.windDirectionDeg : null,
+        windSpeedKph: wind ? wind.windSpeedKph : null,
     });
 }
 
@@ -828,6 +857,7 @@ async function generateWorkoutCombo() {
     };
 
     statusEl.textContent = 'Generating workout-combo routes…';
+    const wind = await getSessionWind();
     explorationWorker.postMessage({
         start: { lat: startLat, lon: startLon },
         end: null,
@@ -839,6 +869,8 @@ async function generateWorkoutCombo() {
         coverageDataSecondary: mode === 'both' ? coverageDataSecondary : null,
         optimizeFor,
         corridorConstraint: { coordinates: coords, maxDetourKm: 1.5 },
+        windDirectionDeg: wind ? wind.windDirectionDeg : null,
+        windSpeedKph: wind ? wind.windSpeedKph : null,
     });
 }
 
@@ -909,7 +941,7 @@ function addRouteListItem(route, index, targetDistanceKm, extraLabel = '') {
     badge.innerHTML = `
         <div class="d-flex align-items-center gap-2 w-100">
             <span class="swatch"></span>
-            <span class="route-label">${routeDirLabel(route)} · ${distanceLabel} · ${newTilesLabel(route.stats)}${extraLabel ? ' ' + extraLabel : ''}</span>
+            <span class="route-label">${routeDirLabel(route)} · ${distanceLabel} · ${newTilesLabel(route.stats)}${extraLabel ? ' ' + extraLabel : ''}${route.windLabel ? ' · ' + route.windLabel : ''}</span>
             <button class="btn btn-xs btn-outline-primary ms-auto plot-road-btn" data-direction="${dir}"
                     aria-label="Plot road route for ${DIRECTION_LABELS[dir]}">
                 <i class="bi bi-map" aria-hidden="true"></i> Plot road route
@@ -1186,11 +1218,18 @@ async function plotRoadRoute(direction, route, targetDistanceKm, color, badgeEl)
             ? `${sb.paved_pct}% paved · ${sb.unpaved_pct}% unpaved · ${sb.unknown_pct}% unknown`
             : '';
         const tilesText = claimed == null ? '' : `· ${claimed.length} new tile${claimed.length === 1 ? '' : 's'}`;
+        // #452: distinguish a route that efficiently covers new tiles both
+        // ways from one where ORS genuinely found no alternate road for the
+        // return leg — both look identical on the map/card otherwise.
+        const outAndBackBadge = v.result.is_out_and_back
+            ? '<span class="badge bg-secondary-subtle text-secondary-emphasis" title="No alternate road found nearby for the return leg">Out-and-back</span>'
+            : '';
         const dataKey = `${direction}-${suffix}`;
         return `
             <div class="d-flex align-items-center gap-2 flex-wrap mt-4px">
                 <span class="text-muted small">${label} ${v.distLabel} · ${v.result.duration_min} min
                     ${surfText ? `· ${surfText}` : ''} ${tilesText}</span>
+                ${outAndBackBadge}
                 <button class="btn btn-xs btn-outline-secondary export-gpx-btn ms-auto"
                         data-variant="${dataKey}"
                         aria-label="Export GPX ${label}">

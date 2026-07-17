@@ -78,6 +78,11 @@ def get_weather():
                 'description': weather_data.get('conditions', 'Unknown'),
                 'wind_speed': round(wind_speed_mph),
                 'wind_direction': weather_data.get('wind_direction_cardinal', 'N'),
+                # Numeric form for wind-relative calculations (#453) — the
+                # cardinal/mph fields above are display-only and too coarse
+                # (16-point compass, rounded mph) for headwind/tailwind math.
+                'wind_direction_deg': weather_data.get('wind_direction_deg'),
+                'wind_speed_kph': weather_data.get('wind_speed_kph'),
                 'humidity': weather_data.get('humidity', 0),
                 'precipitation_probability': weather_data.get('precipitation_mm', 0),
                 'comfort_score': int(weather_data.get('comfort_score', 0.5) * 100)
