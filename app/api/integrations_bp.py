@@ -231,7 +231,11 @@ def location_save():
     # concurrent edit leaving config.yaml briefly invalid) shouldn't be reported as a lost save.
     try:
         ConfigManager.get_instance().reload()
-        current_app.container.reset_initialisation()
+        # Only CommuteService reads home/work location at init time (via
+        # _load_commute_data() pulling fresh config) — no need to rebuild
+        # WeatherService/TrainerRoadService/RouteLibraryService/AnalysisService/
+        # PlannerService too (#461).
+        current_app.container.refresh_services('commute')
     except Exception as exc:
         logger.error("Location saved but config reload failed: %s", exc, exc_info=True)
         return jsonify({'success': True, 'warning': 'Saved, but the app may need a restart to pick up the change.'})

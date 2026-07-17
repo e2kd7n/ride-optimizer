@@ -111,8 +111,46 @@ class ServiceContainer:
         logger.info("Services initialized successfully")
 
     def reset_initialisation(self) -> None:
-        """Allow re-initialisation after an analysis/fetch job completes."""
+        """Force a full re-initialisation of every service on the next initialise() call.
+
+        Prefer refresh_services() below when only specific services are
+        affected by an action — this nukes and rebuilds all six services,
+        which is heavier than necessary for e.g. a location change that only
+        affects CommuteService (issue #461).
+        """
         self._initialised = False
+
+    def refresh_services(self, *names: str) -> None:
+        """Re-run init for only the named services, in place, without touching
+        the other (unaffected) services or forcing a full container rebuild.
+
+        Valid names: 'weather', 'trainerroad', 'route_library', 'analysis',
+        'commute', 'planner'. Unknown names are logged and skipped.
+
+        If the container hasn't completed its first initialise() yet, this is
+        a no-op — the next request's initialise() call will build every
+        service fresh anyway, so there's nothing useful to refresh early.
+        """
+        if not self._initialised:
+            return
+
+        dispatch = {
+            'weather': self._init_weather,
+            'trainerroad': self._init_trainerroad,
+            'route_library': self._init_route_library,
+            'analysis': self._init_analysis,
+            'commute': self._init_commute,
+            'planner': self._init_planner,
+        }
+        for name in names:
+            init_fn = dispatch.get(name)
+            if init_fn is None:
+                logger.warning("refresh_services: unknown service name %r", name)
+                continue
+            try:
+                init_fn()
+            except Exception as exc:
+                logger.error("refresh_services: failed to refresh '%s': %s", name, exc, exc_info=True)
 
     # ------------------------------------------------------------------
     # Private per-service init helpers
