@@ -15,6 +15,22 @@ import shutil
 from src.json_storage import JSONStorage, get_storage
 
 
+def _mp_increment_worker(data_dir: str, n_iterations: int) -> None:
+    """Top-level (picklable) worker for the cross-process update() test.
+
+    Must be module-level so ``multiprocessing`` can pickle it for the
+    ``spawn`` start method Windows uses (a closure/method wouldn't pickle).
+    """
+    storage = JSONStorage(data_dir=data_dir)
+
+    def increment(data):
+        data['count'] += 1
+        return data
+
+    for _ in range(n_iterations):
+        storage.update('mp_shared.json', increment)
+
+
 class TestJSONStorage:
     """Test suite for JSONStorage class."""
     
@@ -286,5 +302,36 @@ class TestJSONStorageConcurrency:
             t.join()
 
         assert storage.read('shared.json') == {'count': n_threads * n_iterations}
+
+    def test_concurrent_updates_across_processes_lose_no_increments(self, temp_dir):
+        """Test update() serializes across OS processes, not just threads.
+
+        This is issue #465: on Windows, the in-process threading.Lock in
+        _locked() can't exclude a *different* process, so cross-process
+        safety depends entirely on the OS-level lock (fcntl on POSIX,
+        msvcrt on Windows) actually being taken on the sidecar file. Uses
+        real subprocesses (not threads) so this would have caught the
+        pre-fix Windows gap, where that OS-level lock was a no-op.
+        """
+        import multiprocessing
+
+        storage = JSONStorage(data_dir=temp_dir)
+        storage.write('mp_shared.json', {'count': 0})
+
+        n_processes, n_iterations = 4, 15
+        procs = [
+            multiprocessing.Process(
+                target=_mp_increment_worker, args=(temp_dir, n_iterations)
+            )
+            for _ in range(n_processes)
+        ]
+        for p in procs:
+            p.start()
+        for p in procs:
+            p.join(timeout=60)
+            assert p.exitcode == 0
+
+        result = JSONStorage(data_dir=temp_dir).read('mp_shared.json')
+        assert result == {'count': n_processes * n_iterations}
 
 

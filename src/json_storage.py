@@ -11,12 +11,15 @@ Provides thread-safe JSON file operations with:
 import json
 import os
 import sys
+import time
 from src.secure_logger import SecureLogger
 import threading
 from contextlib import contextmanager
 
 if sys.platform != 'win32':
     import fcntl
+else:
+    import msvcrt
 from pathlib import Path
 from typing import Any, Callable
 from datetime import datetime
@@ -35,6 +38,55 @@ _THREAD_LOCKS_GUARD = threading.Lock()
 # were being re-read and re-parsed on every API request (#461).
 _READ_CACHE: dict[str, tuple] = {}
 _READ_CACHE_GUARD = threading.Lock()
+
+
+if sys.platform == 'win32':
+    def _msvcrt_lock_blocking(fd: int) -> None:
+        """
+        Lock byte 0 of *fd*, blocking indefinitely until acquired.
+
+        msvcrt.locking's own LK_LOCK mode is *not* an indefinite block like
+        fcntl.flock: per the msvcrt docs it retries only 10 times, roughly a
+        second apart, then raises OSError — under real contention (e.g. a
+        writer that briefly holds the lock across a slow fsync+rename) that
+        cap can be hit, and a caller not expecting a raise there would drop
+        the write it was about to make. Poll with the non-blocking LK_NBLCK
+        mode ourselves instead, so this call has the same "block until
+        acquired" contract as fcntl.flock(LOCK_EX).
+        """
+        while True:
+            try:
+                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+                return
+            except OSError:
+                time.sleep(0.01)
+
+
+    def _win32_replace_retrying(temp_path: Path, filepath: Path) -> None:
+        """
+        ``temp_path.replace(filepath)``, retrying transient PermissionError.
+
+        Even while holding the sidecar lock (which excludes other JSONStorage
+        writers/readers of *this* file), Windows can still momentarily deny
+        ``MoveFileEx`` onto an existing destination if some other handle —
+        Windows Search Indexer, antivirus real-time scanning, an Explorer
+        preview — briefly opened the destination without FILE_SHARE_DELETE.
+        POSIX rename has no such failure mode, which is why this retry only
+        exists on the Windows path. Observed empirically: a tight loop of
+        cross-process update() calls in tests/test_json_storage.py hit this
+        roughly 1 time in 15-20 without a retry, silently dropping a write
+        (the exception was caught and logged by _write_locked, which then
+        returned False).
+        """
+        deadline = time.monotonic() + 2.0
+        while True:
+            try:
+                temp_path.replace(filepath)
+                return
+            except PermissionError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.01)
 
 
 def secure_chmod(path) -> None:
@@ -122,13 +174,32 @@ class JSONStorage:
     @contextmanager
     def _locked(self, filepath: Path):
         """
-        Exclusive per-file lock: a threading.Lock within the process plus
-        flock on a sidecar ``<name>.lock`` file across processes (POSIX only;
-        cron jobs and gunicorn workers are separate processes).
+        Exclusive per-file lock: a threading.Lock within the process plus an
+        OS-level lock on a sidecar ``<name>.lock`` file across processes
+        (cron jobs and gunicorn workers are separate processes on the Pi).
 
-        The flock goes on a sidecar file rather than the data file because
+        The OS lock goes on a sidecar file rather than the data file because
         atomic writes replace the data file's inode on rename — a lock held
         on the old inode would not exclude writers that open the new one.
+
+        Cross-process locking mechanism differs by platform:
+        - POSIX (production/Pi): fcntl.flock on the sidecar file.
+        - Windows (local dev): msvcrt.locking on the sidecar file. Windows
+          has no flock-a-whole-file primitive, so this locks a single byte
+          at offset 0 instead — sufficient since the sidecar file's only
+          purpose is to be lockable, not to hold data.
+
+        Note on why this is needed at all despite gunicorn.conf.py defaulting
+        GUNICORN_WORKERS to 1: a single worker already makes the POSIX fcntl
+        path's cross-process guarantee somewhat academic in production (one
+        process, so the threading.Lock above would suffice there too) — but
+        gunicorn itself requires fork() and doesn't run on Windows at all, so
+        this path is exercised only by local Windows dev (`python launch.py`)
+        plus the test suite. There, cross-process safety isn't about worker
+        count but about guarding against e.g. a second `launch.py` accidentally
+        left running, or a test process racing the dev server — hence a real
+        OS-level lock rather than relying solely on the in-process
+        threading.Lock, which cannot exclude a different process.
         """
         with _THREAD_LOCKS_GUARD:
             tlock = _THREAD_LOCKS.setdefault(str(filepath), threading.Lock())
@@ -138,11 +209,24 @@ class JSONStorage:
                 secure_chmod(lock_path)
                 if sys.platform != 'win32':
                     fcntl.flock(lf.fileno(), fcntl.LOCK_EX)
+                else:
+                    # msvcrt.locking locks nbytes starting at the current
+                    # file position, and requires those bytes to already
+                    # exist in the file — so make sure there's at least one
+                    # byte to lock before seeking to it.
+                    if os.fstat(lf.fileno()).st_size == 0:
+                        lf.write(' ')
+                        lf.flush()
+                    lf.seek(0)
+                    _msvcrt_lock_blocking(lf.fileno())
                 try:
                     yield
                 finally:
                     if sys.platform != 'win32':
                         fcntl.flock(lf.fileno(), fcntl.LOCK_UN)
+                    else:
+                        lf.seek(0)
+                        msvcrt.locking(lf.fileno(), msvcrt.LK_UNLCK, 1)
 
     def read(self, filename: str, default: Any = None) -> Any:
         """
@@ -166,6 +250,15 @@ class JSONStorage:
             with open(filepath, 'r') as f:
                 if sys.platform != 'win32':
                     fcntl.flock(f.fileno(), fcntl.LOCK_SH)
+                else:
+                    # msvcrt has no shared-lock mode, so this is exclusive —
+                    # slightly more conservative than POSIX LOCK_SH, but reads
+                    # are quick and this only blocks other readers/writers of
+                    # this exact fd's lock byte, not the sidecar lock used by
+                    # write()/update() (see _locked()'s docstring).
+                    if os.fstat(f.fileno()).st_size > 0:
+                        _msvcrt_lock_blocking(f.fileno())
+                        f.seek(0)
                 try:
                     data = json.load(f)
                     logger.debug(f"Successfully read {filename}")
@@ -173,6 +266,9 @@ class JSONStorage:
                 finally:
                     if sys.platform != 'win32':
                         fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                    elif os.fstat(f.fileno()).st_size > 0:
+                        f.seek(0)
+                        msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
                     
         except json.JSONDecodeError as e:
             logger.error(f"Invalid JSON in {filename}: {e}")
@@ -250,7 +346,10 @@ class JSONStorage:
             os.chmod(temp_path, 0o600)
 
             # Atomic rename (replaces old file)
-            temp_path.replace(filepath)
+            if sys.platform == 'win32':
+                _win32_replace_retrying(temp_path, filepath)
+            else:
+                temp_path.replace(filepath)
 
             logger.debug(f"Successfully wrote {filepath.name}")
             return True
