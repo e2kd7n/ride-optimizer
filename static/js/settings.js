@@ -536,15 +536,15 @@
                     statusEl.innerHTML = `<span class="badge bg-success"><i class="bi bi-check-circle"></i> intervals.icu connected</span> <span class="text-muted small">${s.athlete_name || s.athlete_id}</span>`;
                     athleteInput.value = s.athlete_id || '';
                     athleteInput.placeholder = s.athlete_id || 'e.g. i12345';
-                    disconnectBtn.style.display = '';
+                    disconnectBtn.classList.toggle('d-none', false);
                 } else {
                     statusEl.innerHTML = '<span class="badge bg-secondary"><i class="bi bi-x-circle"></i> Not connected</span>';
-                    disconnectBtn.style.display = 'none';
+                    disconnectBtn.classList.toggle('d-none', true);
                 }
                 setCardExpanded('icu-card-toggle', 'icu-card-body', !!s.connected);
             } catch (e) {
                 statusEl.innerHTML = '<span class="text-muted small">Not configured</span>';
-                disconnectBtn.style.display = 'none';
+                disconnectBtn.classList.toggle('d-none', true);
                 setCardExpanded('icu-card-toggle', 'icu-card-body', false);
             }
 
@@ -611,15 +611,15 @@
                 const s = await window.apiClient.fetch('/ors/status');
                 if (s.configured) {
                     statusEl.innerHTML = '<span class="badge bg-success"><i class="bi bi-check-circle"></i> ORS configured</span>';
-                    disconnectBtn.style.display = '';
+                    disconnectBtn.classList.toggle('d-none', false);
                 } else {
                     statusEl.innerHTML = '<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle"></i> Not configured</span>';
-                    disconnectBtn.style.display = 'none';
+                    disconnectBtn.classList.toggle('d-none', true);
                 }
                 setCardExpanded('ors-card-toggle', 'ors-card-body', !!s.configured);
             } catch (e) {
                 statusEl.innerHTML = '<span class="text-muted small">Status unknown</span>';
-                disconnectBtn.style.display = 'none';
+                disconnectBtn.classList.toggle('d-none', true);
                 setCardExpanded('ors-card-toggle', 'ors-card-body', false);
             }
 
@@ -691,16 +691,18 @@
                     statusEl.innerHTML = '<span class="badge bg-success"><i class="bi bi-check-circle"></i> Garmin connected</span>';
                     const nameEl = document.getElementById('garmin-display-name');
                     if (nameEl && s.display_name) nameEl.textContent = s.display_name;
-                    connectForm.style.display = 'none';
-                    connectedState.style.display = '';
                 } else {
                     statusEl.innerHTML = '<span class="badge bg-secondary"><i class="bi bi-x-circle"></i> Not connected</span>';
-                    connectForm.style.display = '';
-                    connectedState.style.display = 'none';
                 }
             } catch (e) {
                 statusEl.innerHTML = '<span class="text-muted small">Not configured</span>';
             }
+            // classList, not style.display: the connected-state container is
+            // hidden via d-none (!important), which inline styles can't
+            // override — the connected UI (incl. disconnect) never showed.
+            // Outside the try so a failed status check still shows the form.
+            connectForm.classList.toggle('d-none', connected);
+            connectedState.classList.toggle('d-none', !connected);
             setCardExpanded('garmin-card-toggle', 'garmin-card-body', connected);
 
             document.getElementById('garmin-connect-btn').addEventListener('click', async () => {
@@ -810,8 +812,6 @@
                 connected = !!s.connected;
                 if (s.connected) {
                     statusBadge.innerHTML = '<span class="badge bg-success"><i class="bi bi-check-circle"></i> Connected</span>';
-                    connectForm.style.display = 'none';
-                    connectedState.style.display = '';
 
                     if (s.last_sync) {
                         const hours = Math.round((Date.now() - new Date(s.last_sync)) / 3600000);
@@ -826,12 +826,13 @@
                     loadTrainerRoadWorkouts();
                 } else {
                     statusBadge.innerHTML = '<span class="badge bg-secondary">Not connected</span>';
-                    connectForm.style.display = '';
-                    connectedState.style.display = 'none';
                 }
             } catch (e) {
                 statusBadge.innerHTML = '<span class="text-muted small">Not configured</span>';
             }
+            // classList, not style.display — see Garmin note above.
+            connectForm.classList.toggle('d-none', connected);
+            connectedState.classList.toggle('d-none', !connected);
             setCardExpanded('tr-card-toggle', 'tr-card-body', connected);
             if (requiresNote) requiresNote.style.display = connected ? 'none' : '';
 
@@ -955,17 +956,19 @@
                 if (s.connected) {
                     const exp = new Date(s.expires_at * 1000).toLocaleDateString();
                     statusEl.innerHTML = `<span class="badge bg-success"><i class="bi bi-check-circle"></i> Strava connected</span> <span class="text-muted small">token expires ${exp}</span>`;
-                    connectBtn.style.display = 'none';
-                    disconnectBtn.style.display = '';
                 } else {
                     const reason = s.reason === 'token_expired' ? 'token expired' : 'not connected';
                     statusEl.innerHTML = `<span class="badge bg-danger"><i class="bi bi-x-circle"></i> Strava ${reason}</span>`;
-                    connectBtn.style.display = '';
-                    disconnectBtn.style.display = 'none';
                 }
             } catch (e) {
                 statusEl.innerHTML = '<span class="text-warning small"><i class="bi bi-exclamation-triangle"></i> Could not check Strava status</span>';
             }
+            // classList, not style.display: these buttons are hidden via
+            // Bootstrap's d-none (!important), which inline styles can't
+            // override — style.display kept them invisible forever. Outside
+            // the try so a failed status check still offers Connect.
+            connectBtn.classList.toggle('d-none', connected);
+            disconnectBtn.classList.toggle('d-none', !connected);
             setCardExpanded('strava-card-toggle', 'strava-card-body', connected);
 
             disconnectBtn.addEventListener('click', async () => {
