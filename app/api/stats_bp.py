@@ -53,6 +53,15 @@ def _seconds_to_hours(s):
     return s / 3600.0
 
 
+def _default_speed_mph():
+    """Configured fallback average speed (#490), for callers converting a
+    duration target to a distance budget when the rider has no ride history
+    to average — e.g. the Explore page's duration-based route target."""
+    from src.config_manager import ConfigManager
+    default_kmh = ConfigManager.get_instance().get('exploration.default_speed_kmh', 18)
+    return round(default_kmh * 0.621371, 1)
+
+
 def _activity_local_start(a):
     """
     Return an activity's start as a naive datetime in the *ride's own*
@@ -247,7 +256,8 @@ def get_stats():
     all_activities = _load_activities_for_stats()
     if not all_activities:
         return jsonify({'status': 'no_data',
-                        'message': 'No activities cached. Fetch activities from Strava first.'})
+                        'message': 'No activities cached. Fetch activities from Strava first.',
+                        'default_speed_mph': _default_speed_mph()})
 
     activities = _filter_activities_by_period(all_activities, period)
 
@@ -295,6 +305,7 @@ def get_stats():
             'period': period,
             'total_activities_in_cache': len(all_activities),
             'summary': _compute_summary(activities),
+            'default_speed_mph': _default_speed_mph(),
             'records': _compute_records(activities),
             'by_type': by_type,
             'by_week': by_week,

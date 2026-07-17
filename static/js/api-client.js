@@ -191,6 +191,14 @@ class APIClient {
     }
 
     /**
+     * Get cached-activity summary stats, including avg_speed_mph — used to
+     * convert a rider's duration target into a distance budget (#490).
+     */
+    async getStats() {
+        return this.fetch('/stats');
+    }
+
+    /**
      * Get all routes with optional filters
      */
     async getRoutes(filters = {}) {

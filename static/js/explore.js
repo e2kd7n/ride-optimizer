@@ -10,8 +10,6 @@
 
 const api = new APIClient('/api');
 let map = null;
-let tileLayer = null;
-let tileLayerSecondary = null;
 let newTilesLayer = null;   // green highlight for tiles a route will claim
 let routeLayer = null;
 let waypointMarkers = null;
@@ -21,17 +19,23 @@ let coverageData = null;
 let coverageDataSecondary = null;
 let explorationWorker = null;
 
+// #491: rider-drawn target area — [south, west, north, east] | null.
+let selectedAreaBounds = null;
+let isDrawingArea = false;
+let drawAreaRect = null;
+let _drawStartLatLng = null;
+let _skipNextMapClick = false;
+
 // Phase-1 candidate lists per direction, for iterative refinement.
 // { NE: [zoneList, ...], SE: [...], ... }
 let _phase1Candidates = {};
 
-const ZOOM_LABELS = { 14: 'Squadrats', 17: 'Squadratinhos' };
-
 document.addEventListener('DOMContentLoaded', () => {
     initMap();
     initWorker();
-    document.getElementById('load-coverage-btn').addEventListener('click', loadCoverage);
-    document.getElementById('coverage-type-select').addEventListener('change', loadCoverage);
+    document.getElementById('coverage-type-select').addEventListener('change', () => {
+        if (startMarker) loadCoverage();
+    });
     document.getElementById('clear-cache-btn').addEventListener('click', clearCache);
     document.getElementById('generate-route-btn').addEventListener('click', generateRoute);
     document.getElementById('workout-combo-btn').addEventListener('click', generateWorkoutCombo);
@@ -46,9 +50,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.key === 'Enter') { e.preventDefault(); searchEndLocation(); }
     });
     initDistanceSlider();
+    initDurationSlider();
+    document.getElementById('target-type-select').addEventListener('change', onTargetTypeChange);
+    document.getElementById('draw-area-btn').addEventListener('click', toggleDrawArea);
+    document.getElementById('clear-area-btn').addEventListener('click', clearArea);
     initTooltips();
     updateWorkflowState();
-    loadCoverage();
 });
 
 // ── Bootstrap tooltips (#360 help icon) ────────────────────────
@@ -77,6 +84,72 @@ function updateDistanceDisplay(kmValue) {
         window.formatDistance ? window.formatDistance(parseFloat(kmValue), 1) : `${kmValue} km`;
 }
 
+// ── Duration-based target (#490) ────────────────────────────────
+//
+// Duration is converted to a distance budget using the rider's own
+// historical average speed (GET /api/stats → summary.avg_speed_mph),
+// falling back to a configured default (exploration.default_speed_kmh in
+// config.yaml, surfaced as default_speed_mph) when there's no ride history
+// to average. The worker pipeline is unaware of duration — it only ever
+// receives a computed distanceKm, same as the distance-slider path.
+
+let _avgSpeedKmhPromise = null;
+
+async function getAvgSpeedKmh() {
+    if (!_avgSpeedKmhPromise) {
+        _avgSpeedKmhPromise = (async () => {
+            const FALLBACK_KMH = 18;
+            try {
+                const stats = await api.getStats();
+                const summaryMph = stats.data && stats.data.summary && stats.data.summary.avg_speed_mph;
+                const defaultMph = (stats.data && stats.data.default_speed_mph) || stats.default_speed_mph;
+                const mph = (summaryMph && summaryMph > 0) ? summaryMph : defaultMph;
+                return (mph && mph > 0) ? mph * 1.60934 : FALLBACK_KMH;
+            } catch (e) {
+                return FALLBACK_KMH;
+            }
+        })();
+    }
+    return _avgSpeedKmhPromise;
+}
+
+function onTargetTypeChange() {
+    const isDuration = document.getElementById('target-type-select').value === 'duration';
+    document.getElementById('distance-target-group').classList.toggle('d-none', isDuration);
+    document.getElementById('duration-target-group').classList.toggle('d-none', !isDuration);
+    if (isDuration) updateDurationHint();
+}
+
+function initDurationSlider() {
+    const slider = document.getElementById('duration-slider');
+    document.getElementById('duration-value').textContent = slider.value;
+    slider.addEventListener('input', () => {
+        document.getElementById('duration-value').textContent = slider.value;
+        updateDurationHint();
+    });
+}
+
+async function updateDurationHint() {
+    const hintEl = document.getElementById('duration-speed-hint');
+    hintEl.textContent = 'Estimating distance from your average speed…';
+    const minutes = parseFloat(document.getElementById('duration-slider').value);
+    const speedKmh = await getAvgSpeedKmh();
+    const distanceKm = (minutes / 60) * speedKmh;
+    const distanceLabel = window.formatDistance ? window.formatDistance(distanceKm, 1) : `${distanceKm.toFixed(1)} km`;
+    const speedLabel = window.formatSpeed ? window.formatSpeed(speedKmh, 1) : `${speedKmh.toFixed(1)} km/h`;
+    hintEl.textContent = `≈ ${distanceLabel} at your average ${speedLabel}`;
+}
+
+/** Resolve the current distance-slider or duration-slider control into a distanceKm target for the worker. */
+async function resolveTargetDistanceKm() {
+    if (document.getElementById('target-type-select').value === 'duration') {
+        const minutes = parseFloat(document.getElementById('duration-slider').value);
+        const speedKmh = await getAvgSpeedKmh();
+        return (minutes / 60) * speedKmh;
+    }
+    return parseFloat(document.getElementById('distance-slider').value);
+}
+
 // ── Map setup ───────────────────────────────────────────────────
 
 function initMap() {
@@ -85,16 +158,51 @@ function initMap() {
         attribution: '&copy; OpenStreetMap contributors',
         maxZoom: 18,
     }).addTo(map);
-    tileLayer = L.layerGroup().addTo(map);
-    tileLayerSecondary = L.layerGroup().addTo(map);
-    newTilesLayer = L.layerGroup().addTo(map);  // above coverage, below routes
+    newTilesLayer = L.layerGroup().addTo(map);  // below routes
     // FeatureGroup, not LayerGroup — routeLayer.getBounds() (used to fit the
     // map after routes are generated) only exists on FeatureGroup in Leaflet
     // 1.9.4; LayerGroup lacks it despite otherwise sharing the same API.
     routeLayer = L.featureGroup().addTo(map);
     waypointMarkers = L.layerGroup().addTo(map);
 
+    // #491: click-and-drag to draw a target-area rectangle. Only active
+    // while "Draw area" is toggled on; otherwise these are no-ops and the
+    // map behaves as before (pan/click-to-set-start).
+    map.on('mousedown', (e) => {
+        if (!isDrawingArea) return;
+        _drawStartLatLng = e.latlng;
+        if (drawAreaRect) { map.removeLayer(drawAreaRect); drawAreaRect = null; }
+        drawAreaRect = L.rectangle(L.latLngBounds(e.latlng, e.latlng), {
+            color: '#0d6efd', weight: 2, fillOpacity: 0.08, dashArray: '4,4',
+        }).addTo(map);
+    });
+    map.on('mousemove', (e) => {
+        if (!isDrawingArea || !_drawStartLatLng || !drawAreaRect) return;
+        drawAreaRect.setBounds(L.latLngBounds(_drawStartLatLng, e.latlng));
+    });
+    map.on('mouseup', (e) => {
+        if (!isDrawingArea || !_drawStartLatLng) return;
+        const drawnBounds = L.latLngBounds(_drawStartLatLng, e.latlng);
+        _drawStartLatLng = null;
+        _skipNextMapClick = true; // the browser fires 'click' right after this mouseup
+
+        if (!drawnBounds.isValid() || drawnBounds.getNorthEast().equals(drawnBounds.getSouthWest())) {
+            // Degenerate rectangle (no drag distance) — treat as a cancel.
+            if (drawAreaRect) { map.removeLayer(drawAreaRect); drawAreaRect = null; }
+        } else {
+            selectedAreaBounds = [
+                drawnBounds.getSouth(), drawnBounds.getWest(),
+                drawnBounds.getNorth(), drawnBounds.getEast(),
+            ];
+            document.getElementById('clear-area-btn').classList.remove('d-none');
+            document.getElementById('area-status').textContent = 'Area selected — routes stay within it';
+        }
+        setDrawAreaMode(false);
+    });
+
     map.on('click', (e) => {
+        if (_skipNextMapClick) { _skipNextMapClick = false; return; }
+        if (isDrawingArea) return;
         clearHighlight();
         const routeType = document.getElementById('route-type-select').value;
         // In point-to-point mode: first click sets end if unset, else update start.
@@ -106,6 +214,29 @@ function initMap() {
     });
 }
 
+/** Enter or exit rectangle-draw mode (#491), disabling map panning while active
+ *  so a click-drag draws a box instead of moving the map. */
+function setDrawAreaMode(active) {
+    isDrawingArea = active;
+    document.getElementById('draw-area-btn').classList.toggle('active', active);
+    map.dragging[active ? 'disable' : 'enable']();
+    map.getContainer().style.cursor = active ? 'crosshair' : '';
+    if (active) {
+        document.getElementById('area-status').textContent = 'Click and drag on the map to draw an area…';
+    }
+}
+
+function toggleDrawArea() {
+    setDrawAreaMode(!isDrawingArea);
+}
+
+function clearArea() {
+    if (drawAreaRect) { map.removeLayer(drawAreaRect); drawAreaRect = null; }
+    selectedAreaBounds = null;
+    document.getElementById('clear-area-btn').classList.add('d-none');
+    document.getElementById('area-status').textContent = '';
+}
+
 function setStart(lat, lon, label = null) {
     if (startMarker) map.removeLayer(startMarker);
     startMarker = L.marker([lat, lon], {
@@ -114,6 +245,9 @@ function setStart(lat, lon, label = null) {
     }).addTo(map).bindPopup('Start').openPopup();
     document.getElementById('start-display').textContent = label || `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
     updateWorkflowState();
+    // #488: coverage loads silently against the new start point instead of
+    // requiring a separate "Load Coverage" step.
+    loadCoverage();
 }
 
 function setEnd(lat, lon, label = null) {
@@ -166,9 +300,8 @@ function updateWorkflowState() {
     const isPtp = document.getElementById('route-type-select').value === 'point_to_point';
     const ready = coverageReady && startReady && (!isPtp || !!endMarker);
 
-    document.getElementById('workflow-step-1').classList.toggle('workflow-step-done', coverageReady);
-    document.getElementById('workflow-step-2').classList.toggle('workflow-step-done', startReady);
-    document.getElementById('workflow-step-3').classList.toggle('workflow-step-done', ready);
+    document.getElementById('workflow-step-1').classList.toggle('workflow-step-done', startReady);
+    document.getElementById('workflow-step-2').classList.toggle('workflow-step-done', ready);
 
     if (!explorationWorker) return; // unsupported-worker state already disables the button with its own message
 
@@ -185,8 +318,8 @@ function updateWorkflowState() {
     const statusEl = document.getElementById('worker-status');
     if (!ready) {
         const missing = [];
-        if (!coverageReady) missing.push('load your coverage');
         if (!startReady) missing.push('set a start point');
+        if (startReady && !coverageReady) missing.push('wait for coverage to finish loading');
         if (isPtp && !endMarker) missing.push('set an end point');
         statusEl.textContent = `Next: ${missing.join(' and ')} to generate routes.`;
     } else {
@@ -214,8 +347,8 @@ async function searchLocation() {
             if (typeof showToast === 'function') showToast(result.message || 'Location not found', 'warning');
             return;
         }
-        setStart(result.lat, result.lon, result.display_name);
         map.setView([result.lat, result.lon], 12);
+        setStart(result.lat, result.lon, result.display_name);
     } catch (e) {
         statusEl.textContent = previousText;
         if (typeof showToast === 'function') showToast(e.message || 'Location search failed', 'error');
@@ -267,8 +400,8 @@ async function useMyLocation() {
     navigator.geolocation.getCurrentPosition(
         (position) => {
             const { latitude, longitude } = position.coords;
-            setStart(latitude, longitude);
             map.setView([latitude, longitude], 13);
+            setStart(latitude, longitude);
             btn.disabled = false;
         },
         (err) => {
@@ -329,9 +462,10 @@ async function loadCoverage() {
         coverageData = results[0];
         coverageDataSecondary = results[1] || null;
 
-        renderStats(coverageData, coverageDataSecondary);
-        renderTiles(coverageData, coverageDataSecondary);
-        fitToCoverage(coverageData);
+        // #488: coverage is loaded to feed the route generator, not to browse
+        // on the map — clear any stale "new tile" highlight from a previous
+        // start point/grid rather than rendering the full visited-tile grid.
+        newTilesLayer.clearLayers();
         statusEl.textContent = `Updated ${new Date(coverageData.computed_at + 'Z').toLocaleTimeString()}`;
     } catch (e) {
         statusEl.textContent = `Error: ${e.message}`;
@@ -341,143 +475,12 @@ async function loadCoverage() {
     }
 }
 
-/**
- * Riders' visited tiles can span disconnected regions (home turf plus the
- * occasional trip elsewhere). Fitting to the bounds of ALL of them zooms out
- * to a near-world view. Instead, bucket tiles into coarse cells, find the
- * cell with the most tiles, and fit to that cluster (plus its neighbors so a
- * cluster split across a cell boundary isn't cropped).
- */
-function findDensityCluster(visited, zoom) {
-    if (!visited || typeof visited !== 'object') return null;
-    const n = Math.pow(2, zoom || 14);
-    const points = Object.keys(visited).map((key) => {
-        const [x, y] = key.split(',').map(Number);
-        const lon = (x + 0.5) / n * 360 - 180;
-        const lat = Math.atan(Math.sinh(Math.PI * (1 - 2 * (y + 0.5) / n))) * 180 / Math.PI;
-        return { lat, lon };
-    });
-    if (points.length === 0) return null;
-
-    const BUCKET_DEG = 0.5; // ~55km cells
-    const buckets = new Map();
-    for (const p of points) {
-        const bx = Math.floor(p.lon / BUCKET_DEG);
-        const by = Math.floor(p.lat / BUCKET_DEG);
-        const key = `${bx},${by}`;
-        buckets.set(key, (buckets.get(key) || 0) + 1);
-    }
-
-    let best = null;
-    for (const [key, count] of buckets) {
-        if (!best || count > best.count) {
-            const [bx, by] = key.split(',').map(Number);
-            best = { bx, by, count };
-        }
-    }
-    if (!best) return null;
-
-    const minLat = (best.by - 1) * BUCKET_DEG;
-    const maxLat = (best.by + 2) * BUCKET_DEG;
-    const minLon = (best.bx - 1) * BUCKET_DEG;
-    const maxLon = (best.bx + 2) * BUCKET_DEG;
-
-    let south = Infinity, west = Infinity, north = -Infinity, east = -Infinity;
-    for (const p of points) {
-        if (p.lat >= minLat && p.lat <= maxLat && p.lon >= minLon && p.lon <= maxLon) {
-            south = Math.min(south, p.lat);
-            west = Math.min(west, p.lon);
-            north = Math.max(north, p.lat);
-            east = Math.max(east, p.lon);
-        }
-    }
-    if (!isFinite(south)) return null;
-    return [[south, west], [north, east]];
-}
-
-function fitToCoverage(data) {
-    if (map.getZoom() >= 10) return; // user already navigated (search, click, or "Use location") — don't override
-
-    const cluster = findDensityCluster(data.visited, data.zoom);
-    if (cluster) {
-        map.fitBounds(cluster, { padding: [20, 20], maxZoom: 13 });
-        return;
-    }
-    if (!data.bounds) return;
-    const [south, west, north, east] = data.bounds;
-    map.fitBounds([[south, west], [north, east]], { padding: [20, 20], maxZoom: 13 });
-}
-
-function renderStats(primary, secondary) {
-    const labelEls = document.querySelectorAll('#coverage-stats .stat-label');
-    if (secondary) {
-        document.getElementById('stat-tiles-visited').textContent =
-            `${primary.visited_count.toLocaleString()} / ${secondary.visited_count.toLocaleString()}`;
-        document.getElementById('stat-coverage-pct').textContent =
-            `${primary.coverage_pct}% / ${secondary.coverage_pct}%`;
-        document.getElementById('stat-total-tiles').textContent =
-            `${primary.total_in_bounds.toLocaleString()} / ${secondary.total_in_bounds.toLocaleString()}`;
-        labelEls.forEach(el => {
-            if (!el.dataset.baseLabel) el.dataset.baseLabel = el.textContent;
-            el.textContent = `${el.dataset.baseLabel} (Sq / Sqi)`;
-        });
-    } else {
-        document.getElementById('stat-tiles-visited').textContent = primary.visited_count.toLocaleString();
-        document.getElementById('stat-coverage-pct').textContent = primary.coverage_pct + '%';
-        document.getElementById('stat-total-tiles').textContent = primary.total_in_bounds.toLocaleString();
-        labelEls.forEach(el => {
-            if (el.dataset.baseLabel) el.textContent = el.dataset.baseLabel;
-        });
-    }
-}
-
-// Squadrats-matching colors: visited = warm orange fill, outline slightly darker
-const TILE_STYLE_VISITED   = { color: '#c8813a', weight: 0.5, fillColor: '#e8a84c', fillOpacity: 0.55 };
-const TILE_STYLE_SECONDARY = { color: '#c8813a', weight: 0.5, fillColor: '#e8a84c', fillOpacity: 0.55 };
-const TILE_STYLE_BOTH_PRIMARY = { color: '#c8813a', weight: 1,   fillColor: '#e8a84c', fillOpacity: 0.35 };
 // New tiles a route will claim: bright Squadrats-green
 const TILE_STYLE_NEW = { color: '#2e7d32', weight: 0.5, fillColor: '#4caf50', fillOpacity: 0.65 };
 
-function renderTiles(primary, secondary) {
-    tileLayer.clearLayers();
-    tileLayerSecondary.clearLayers();
-    newTilesLayer.clearLayers();
-
-    // In single-grid mode show a solid orange fill. In "both" mode the
-    // squadrat grid gets a lighter orange outline so the squadratinho
-    // grid can show on top with full fill.
-    const primaryStyle = secondary ? TILE_STYLE_BOTH_PRIMARY : TILE_STYLE_VISITED;
-
-    drawTileGrid(tileLayer, primary.visited, primary.zoom, primaryStyle);
-    if (secondary) {
-        drawTileGrid(tileLayerSecondary, secondary.visited, secondary.zoom, TILE_STYLE_SECONDARY);
-    }
-}
-
-function drawTileGrid(layerGroup, visited, zoom, style) {
-    if (!visited || typeof visited !== 'object') return;
-    const n = Math.pow(2, zoom || 14);
-
-    for (const key of Object.keys(visited)) {
-        const [x, y] = key.split(',').map(Number);
-        const west = x / n * 360 - 180;
-        const east = (x + 1) / n * 360 - 180;
-        const northRad = Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n)));
-        const southRad = Math.atan(Math.sinh(Math.PI * (1 - 2 * (y + 1) / n)));
-        const north = northRad * 180 / Math.PI;
-        const south = southRad * 180 / Math.PI;
-
-        const rect = L.rectangle([[south, west], [north, east]], {
-            ...style,
-            interactive: false,
-        });
-        layerGroup.addLayer(rect);
-    }
-}
-
 /**
  * Render green highlight rectangles for the new (unvisited) tiles a route
- * will claim, using the same tile-boundary math as drawTileGrid.
+ * will claim, computing each tile's lat/lon boundary from its zoom-level key.
  * newTilesByZoom: [{zoom, tiles: [{x, y}]}]
  *
  * When `direction` is given, any rectangles previously rendered for that
@@ -648,7 +651,7 @@ async function generateRoute() {
     Object.keys(_newTileRectsByDirection).forEach(k => delete _newTileRectsByDirection[k]);
 
     const startPos = startMarker.getLatLng();
-    const distanceKm = parseFloat(document.getElementById('distance-slider').value);
+    const distanceKm = await resolveTargetDistanceKm();
     const optimizeFor = document.getElementById('optimize-for-select').value;
 
     let routeCount = 0;
@@ -722,6 +725,7 @@ async function generateRoute() {
         coverageData,
         coverageDataSecondary: mode === 'both' ? coverageDataSecondary : null,
         optimizeFor,
+        areaBounds: selectedAreaBounds,
     });
 }
 

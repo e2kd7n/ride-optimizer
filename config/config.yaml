@@ -8,6 +8,7 @@ ors:
 exploration:
   ors_timeout_seconds: 15
   route_cache_ttl_seconds: 600
+  default_speed_kmh: 18  # Fallback for duration→distance conversion (#490) when the rider has no cached ride history to average
 
   oauth_callback_host: "localhost"  # Host for OAuth callback server
   oauth_callback_port: 8000  # Port for OAuth callback server
