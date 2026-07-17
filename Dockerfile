@@ -36,6 +36,7 @@ COPY launch.py wsgi.py gunicorn.conf.py ./
 COPY app/ ./app/
 COPY src/ ./src/
 COPY static/ ./static/
+COPY templates/ ./templates/
 COPY config/ ./config/
 COPY cron/ ./cron/
 COPY .env.example .

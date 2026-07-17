@@ -141,9 +141,18 @@ def main():
                 f"Analysis ended with status '{state}': "
                 f"{snapshot.get('label') or snapshot.get('result')}")
 
+        # The endpoint marks the job 'done' even when run_full_analysis
+        # caught an error internally and returned an error payload (e.g.
+        # Strava auth failure) — surface that as a real failure instead of
+        # logging a bogus "completed successfully" with 0 activities.
+        if result.get('status') == 'error':
+            raise RuntimeError(
+                f"Analysis reported an error: {result.get('message', result)}")
+
+        errors = result.get('errors') or []
         job_record = _record_job(
             storage,
-            'completed' if result.get('success', True) else 'degraded',
+            'degraded' if errors else 'completed',
             start_time, result=result)
 
         status = storage.read('status.json', default={})
