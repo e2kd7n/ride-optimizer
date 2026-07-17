@@ -156,3 +156,123 @@ def similarity_score(coords1: np.ndarray,
     dist_km = combined_distance_km(coords1, coords2)
     dist_m = dist_km * 1000
     return 1.0 / (1.0 + dist_m / scale_m)
+
+
+# ---------------------------------------------------------------------------
+# Degree-space variants used by the commute route grouper (RouteAnalyzer).
+#
+# RouteAnalyzer compares routes that are all within a few km of each other
+# (a single commute corridor), so it works directly in raw lat/lon degrees
+# with a flat 111km/degree conversion rather than round-tripping through
+# coords_to_km's latitude-corrected km scaling used by the long-ride/loop
+# comparisons above. It also pre-filters using bbox/centroid/path-length
+# values cached once per Route (see Route.compute_geometry) instead of
+# recomputing them from full coordinate arrays on every candidate pair --
+# that caching matters for the O(n^2) inner loop over hundreds of commute
+# activities, so it is kept as a distinct entry point rather than forced
+# through passes_prefilter/combined_distance_km above.
+# ---------------------------------------------------------------------------
+
+def passes_prefilter_deg(bbox1, centroid1, path_length_deg1,
+                         bbox2, centroid2, path_length_deg2,
+                         length_ratio_max: float = 2.0,
+                         centroid_max_deg: float = 0.02,
+                         bbox_overlap_min: float = 0.3) -> bool:
+    """
+    Fast geometric pre-filter over precomputed degree-space route geometry.
+    Returns False if routes are obviously dissimilar. Any missing geometry
+    (None) skips the filter entirely -- callers can't reject what they can't
+    measure.
+    """
+    if (bbox1 is None or bbox2 is None
+            or path_length_deg1 is None or path_length_deg2 is None):
+        return True
+
+    # 1) Path length ratio — reject if one route is far longer than the other
+    shorter = min(path_length_deg1, path_length_deg2)
+    longer = max(path_length_deg1, path_length_deg2)
+    if shorter > 0 and longer / shorter > length_ratio_max:
+        return False
+
+    # 2) Centroid distance — reject if centroids are far apart
+    cdist_deg = ((centroid1[0] - centroid2[0]) ** 2 + (centroid1[1] - centroid2[1]) ** 2) ** 0.5
+    if cdist_deg > centroid_max_deg:
+        return False
+
+    # 3) Bounding box overlap ratio — reject if boxes barely intersect
+    min_lat1, min_lon1, max_lat1, max_lon1 = bbox1
+    min_lat2, min_lon2, max_lat2, max_lon2 = bbox2
+
+    inter_lat = max(0, min(max_lat1, max_lat2) - max(min_lat1, min_lat2))
+    inter_lon = max(0, min(max_lon1, max_lon2) - max(min_lon1, min_lon2))
+    intersection = inter_lat * inter_lon
+
+    if intersection == 0:
+        return False
+
+    area1 = (max_lat1 - min_lat1) * (max_lon1 - min_lon1)
+    area2 = (max_lat2 - min_lat2) * (max_lon2 - min_lon2)
+    smaller_area = min(area1, area2)
+    if smaller_area > 0 and intersection / smaller_area < bbox_overlap_min:
+        return False
+
+    return True
+
+
+def frechet_similarity_deg(coords1: np.ndarray, coords2: np.ndarray,
+                           distance_threshold_m: float = 300.0) -> float:
+    """
+    Fréchet-distance similarity for raw lat/lon-degree coordinates, using a
+    flat 111km/degree conversion (adequate over the few-km span of a single
+    commute corridor). Raises if similaritymeasures isn't installed --
+    callers fall back to hausdorff_percentile_similarity_deg.
+    """
+    if not FRECHET_AVAILABLE:
+        raise RuntimeError("similaritymeasures is not available")
+    dist_deg = frechet_dist(coords1, coords2)
+    normalized_dist_m = dist_deg * 111000
+    return 1 / (1 + normalized_dist_m / distance_threshold_m)
+
+
+def hausdorff_percentile_similarity_deg(coords1: np.ndarray, coords2: np.ndarray,
+                                        percentile: float = 95.0,
+                                        distance_threshold_m: float = 200.0) -> float:
+    """
+    Percentile-based (outlier-tolerant) Hausdorff similarity for raw
+    lat/lon-degree coordinates. Using the Nth percentile of nearest-neighbor
+    deviations instead of the max tolerates GPS glitches/brief detours while
+    still catching real route differences.
+    """
+    distances_1_to_2 = cdist(coords1, coords2).min(axis=1)
+    distances_2_to_1 = cdist(coords2, coords1).min(axis=1)
+    percentile_dist = max(
+        np.percentile(distances_1_to_2, percentile),
+        np.percentile(distances_2_to_1, percentile),
+    )
+    normalized_dist_m = percentile_dist * 111000
+    return 1 / (1 + normalized_dist_m / distance_threshold_m)
+
+
+def commute_similarity_score(coords1: np.ndarray, coords2: np.ndarray,
+                             percentile: float = 95.0,
+                             frechet_available: bool = FRECHET_AVAILABLE,
+                             disagreement_penalty: float = 0.7,
+                             disagreement_floor: float = 0.50) -> float:
+    """
+    Combined Fréchet+Hausdorff similarity score for commute route grouping.
+
+    Fréchet is the primary metric (order-sensitive, robust to GPS sampling
+    differences); percentile Hausdorff is a secondary spatial-disagreement
+    check -- if Hausdorff indicates the routes are spatially far apart even
+    though Fréchet looks close, the Fréchet score is penalized.
+    """
+    if frechet_available:
+        try:
+            frechet_sim = frechet_similarity_deg(coords1, coords2)
+            hausdorff_sim = hausdorff_percentile_similarity_deg(coords1, coords2, percentile)
+            if hausdorff_sim < disagreement_floor:
+                return frechet_sim * disagreement_penalty
+            return frechet_sim
+        except Exception:
+            pass
+    return hausdorff_percentile_similarity_deg(coords1, coords2, percentile)

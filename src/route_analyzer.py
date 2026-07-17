@@ -29,6 +29,10 @@ from .data_fetcher import Activity
 from .location_finder import Location
 from .route_namer import RouteNamer, check_rate_limit_file
 from .json_storage import secure_chmod
+from .route_comparison import (
+    passes_prefilter_deg, frechet_similarity_deg,
+    hausdorff_percentile_similarity_deg, commute_similarity_score,
+)
 
 logger = SecureLogger(__name__)
 
@@ -56,7 +60,7 @@ def _similarity_worker(args):
     Returns list of (original_idx, cache_key, similarity_score).
     """
     import numpy as np
-    from scipy.spatial.distance import cdist
+    from .route_comparison import commute_similarity_score
 
     pivot_coords, candidates, frechet_available, hausdorff_percentile = args
     pivot = np.array(pivot_coords)
@@ -64,25 +68,11 @@ def _similarity_worker(args):
 
     for (original_idx, cache_key, candidate_coords) in candidates:
         candidate = np.array(candidate_coords)
-
-        def hausdorff_sim(c1, c2):
-            d12 = cdist(c1, c2).min(axis=1)
-            d21 = cdist(c2, c1).min(axis=1)
-            pct = max(np.percentile(d12, hausdorff_percentile),
-                      np.percentile(d21, hausdorff_percentile))
-            return 1 / (1 + pct * 111000 / 200)
-
-        try:
-            if frechet_available:
-                import similaritymeasures as sm
-                frechet_sim = 1 / (1 + sm.frechet_dist(pivot, candidate) * 111000 / 300)
-                h_sim = hausdorff_sim(pivot, candidate)
-                score = frechet_sim * 0.7 if h_sim < 0.50 else frechet_sim
-            else:
-                score = hausdorff_sim(pivot, candidate)
-        except Exception:
-            score = hausdorff_sim(pivot, candidate)
-
+        score = commute_similarity_score(
+            pivot, candidate,
+            percentile=hausdorff_percentile,
+            frechet_available=frechet_available,
+        )
         results.append((original_idx, cache_key, score))
 
     return results
@@ -423,41 +413,20 @@ class RouteAnalyzer:
                                  length_ratio_max: float = 2.0,
                                  centroid_max_deg: float = 0.02,
                                  bbox_overlap_min: float = 0.3) -> bool:
-        """Fast geometric pre-filter — returns False if routes are obviously dissimilar."""
-        if (route1.bbox is None or route2.bbox is None
-                or route1.path_length_deg is None or route2.path_length_deg is None):
-            return True  # no geometry available, can't reject
+        """Fast geometric pre-filter — returns False if routes are obviously dissimilar.
 
-        # 1) Path length ratio — reject if one route is far longer than the other
-        shorter = min(route1.path_length_deg, route2.path_length_deg)
-        longer = max(route1.path_length_deg, route2.path_length_deg)
-        if shorter > 0 and longer / shorter > length_ratio_max:
-            return False
-
-        # 2) Centroid distance — reject if centroids are far apart
-        c1, c2 = route1.centroid, route2.centroid
-        cdist_deg = ((c1[0] - c2[0]) ** 2 + (c1[1] - c2[1]) ** 2) ** 0.5
-        if cdist_deg > centroid_max_deg:
-            return False
-
-        # 3) Bounding box overlap ratio — reject if boxes barely intersect
-        min_lat1, min_lon1, max_lat1, max_lon1 = route1.bbox
-        min_lat2, min_lon2, max_lat2, max_lon2 = route2.bbox
-
-        inter_lat = max(0, min(max_lat1, max_lat2) - max(min_lat1, min_lat2))
-        inter_lon = max(0, min(max_lon1, max_lon2) - max(min_lon1, min_lon2))
-        intersection = inter_lat * inter_lon
-
-        if intersection == 0:
-            return False
-
-        area1 = (max_lat1 - min_lat1) * (max_lon1 - min_lon1)
-        area2 = (max_lat2 - min_lat2) * (max_lon2 - min_lon2)
-        smaller_area = min(area1, area2)
-        if smaller_area > 0 and intersection / smaller_area < bbox_overlap_min:
-            return False
-
-        return True
+        Delegates to the shared route_comparison.passes_prefilter_deg, using
+        Route's precomputed bbox/centroid/path_length_deg (see
+        Route.compute_geometry) rather than recomputing geometry from full
+        coordinate arrays on every candidate pair.
+        """
+        return passes_prefilter_deg(
+            route1.bbox, route1.centroid, route1.path_length_deg,
+            route2.bbox, route2.centroid, route2.path_length_deg,
+            length_ratio_max=length_ratio_max,
+            centroid_max_deg=centroid_max_deg,
+            bbox_overlap_min=bbox_overlap_min,
+        )
     def extract_routes(self, direction: str = 'both') -> List[Route]:
         """
         Extract routes between home and work.
@@ -615,66 +584,33 @@ class RouteAnalyzer:
         Returns:
             Similarity score (0-1)
         """
-        from scipy.spatial.distance import cdist
-        
         # Get percentile from config (default 95.0 = ignore worst 5% of deviations)
         percentile = self.config.get('route_analysis.outlier_tolerance_percentile', 95.0)
-        
-        # Distance from each point in coords1 to nearest point in coords2
-        distances_1_to_2 = cdist(coords1, coords2).min(axis=1)
-        
-        # Distance from each point in coords2 to nearest point in coords1
-        distances_2_to_1 = cdist(coords2, coords1).min(axis=1)
-        
-        # Use percentile instead of max to tolerate outliers
-        percentile_dist_1 = np.percentile(distances_1_to_2, percentile)
-        percentile_dist_2 = np.percentile(distances_2_to_1, percentile)
-        
-        # Take the larger of the two percentile distances
-        percentile_dist = max(percentile_dist_1, percentile_dist_2)
-        
-        # Convert degrees to meters (approximate)
-        # At Chicago's latitude (~42°), 1 degree ≈ 111km latitude, ~82km longitude
-        # Using 111km as conservative estimate
-        normalized_dist = percentile_dist * 111000
-        
-        # Convert to similarity score (0-1)
-        # Routes are considered similar if percentile deviation is within 200m
-        distance_threshold = 200  # meters
-        similarity = 1 / (1 + normalized_dist / distance_threshold)
-        
-        return similarity
-    
+
+        # Delegates to the shared route_comparison implementation (also used by
+        # _similarity_worker, the ProcessPoolExecutor path) so both the sequential
+        # and parallel grouping paths stay on identical math.
+        return hausdorff_percentile_similarity_deg(coords1, coords2, percentile=percentile)
+
     def _calculate_frechet_similarity(self, coords1: np.ndarray, coords2: np.ndarray) -> float:
         """
         Calculate similarity using Fréchet distance.
-        
+
         Fréchet distance considers the order of points, like walking a dog on a leash.
         It's better at detecting routes that follow the same path vs routes that are
         spatially close but follow different paths.
-        
+
         Args:
             coords1: First route coordinates
             coords2: Second route coordinates
-            
+
         Returns:
             Similarity score (0-1)
         """
         try:
-            # Calculate Fréchet distance
-            # Note: similaritymeasures expects (n, 2) arrays
-            frechet_dist = similaritymeasures.frechet_dist(coords1, coords2)
-            
-            # Convert degrees to meters
-            normalized_dist = frechet_dist * 111000
-            
-            # Convert to similarity score
-            # Fréchet distance is typically larger than Hausdorff, so use larger threshold
-            distance_threshold = 300  # meters - allow more variation for path-based comparison
-            similarity = 1 / (1 + normalized_dist / distance_threshold)
-            
-            return similarity
-            
+            # Delegates to the shared route_comparison implementation (also used by
+            # _similarity_worker, the ProcessPoolExecutor path).
+            return frechet_similarity_deg(coords1, coords2)
         except Exception as e:
             logger.warning(f"Fréchet distance calculation failed: {e}, falling back to Hausdorff")
             return self._calculate_hausdorff_similarity(coords1, coords2)
@@ -1147,111 +1083,6 @@ class RouteAnalyzer:
             f"{expensive_comparisons} expensive)"
         )
 
-        return groups
-
-    @staticmethod
-    def _group_routes_by_similarity_static(routes: List[Route], direction: str,
-                                          similarity_threshold: float,
-                                          similarity_cache: Dict[str, float]) -> List[RouteGroup]:
-        """
-        Static method for parallel route grouping.
-        
-        This is a static method so it can be pickled for multiprocessing.
-        
-        Args:
-            routes: List of routes to group
-            direction: Route direction
-            similarity_threshold: Similarity threshold for grouping
-            similarity_cache: Cached similarity calculations
-            
-        Returns:
-            List of RouteGroup objects
-        """
-        if not routes:
-            return []
-        
-        groups = []
-        ungrouped = routes.copy()
-        group_id = 0
-        
-        # Helper function to calculate similarity (simplified for static context)
-        def calc_similarity(route1: Route, route2: Route) -> float:
-            # Check cache first
-            cache_key = f"{route1.activity_id}_{route2.activity_id}"
-            if cache_key in similarity_cache:
-                return similarity_cache[cache_key]
-            
-            # Calculate similarity using the same thresholds/logic as the instance path
-            coords1 = np.array(route1.coordinates)
-            coords2 = np.array(route2.coordinates)
-            
-            def calc_hausdorff_similarity() -> float:
-                from scipy.spatial.distance import cdist
-                distances_1_to_2 = cdist(coords1, coords2).min(axis=1)
-                distances_2_to_1 = cdist(coords2, coords1).min(axis=1)
-                percentile_dist_1 = np.percentile(distances_1_to_2, 95.0)
-                percentile_dist_2 = np.percentile(distances_2_to_1, 95.0)
-                percentile_dist = max(percentile_dist_1, percentile_dist_2)
-                normalized_dist = percentile_dist * 111000
-                distance_threshold = 200
-                return 1 / (1 + normalized_dist / distance_threshold)
-            
-            if FRECHET_AVAILABLE:
-                try:
-                    frechet_dist = similaritymeasures.frechet_dist(coords1, coords2)
-                    normalized_dist = frechet_dist * 111000
-                    frechet_similarity = 1 / (1 + normalized_dist / 300)
-                    hausdorff_similarity = calc_hausdorff_similarity()
-                    if hausdorff_similarity < 0.50:
-                        return frechet_similarity * 0.7
-                    return frechet_similarity
-                except (ValueError, IndexError, TypeError) as e:
-                    logger.debug(f"Fréchet distance calculation failed, falling back to Hausdorff: {e}")
-            
-            return calc_hausdorff_similarity()
-        
-        while ungrouped:
-            # Start new group with first ungrouped route
-            current = ungrouped.pop(0)
-            group = [current]
-            
-            # Find similar routes
-            to_remove = []
-            for i, route in enumerate(ungrouped):
-                if not RouteAnalyzer._passes_geometric_filter(current, route):
-                    continue
-                similarity = calc_similarity(current, route)
-                if similarity >= similarity_threshold:
-                    group.append(route)
-                    to_remove.append(i)
-            
-            # Remove grouped routes
-            for i in reversed(to_remove):
-                ungrouped.pop(i)
-            
-            # Select representative route (median by duration)
-            sorted_routes = sorted(group, key=lambda r: r.duration)
-            representative = sorted_routes[len(sorted_routes) // 2]
-            
-            # Create route group
-            route_id = f"{direction}_{group_id}"
-            route_name = f"Route {group_id}"
-            
-            route_group = RouteGroup(
-                id=route_id,
-                direction=direction,
-                routes=group,
-                representative_route=representative,
-                frequency=len(group),
-                name=route_name
-            )
-            
-            groups.append(route_group)
-            group_id += 1
-        
-        # Sort by frequency
-        groups.sort(key=lambda g: g.frequency, reverse=True)
-        
         return groups
 
     def _select_representative_route(self, routes: List[Route]) -> Route:

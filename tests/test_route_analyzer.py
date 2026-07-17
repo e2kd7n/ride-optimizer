@@ -1001,51 +1001,6 @@ class TestMergeNewRoutes:
         assert len(result) >= 1
 
 
-# ---------------------------------------------------------------------------
-# _group_routes_by_similarity_static tests
-# ---------------------------------------------------------------------------
-
-class TestGroupRoutesBySimilarityStatic:
-    def test_empty_returns_empty(self):
-        result = RouteAnalyzer._group_routes_by_similarity_static(
-            [], "home_to_work", 0.70, {}
-        )
-        assert result == []
-
-    def test_single_route_creates_one_group(self):
-        route = _make_route(1)
-        result = RouteAnalyzer._group_routes_by_similarity_static(
-            [route], "home_to_work", 0.70, {}
-        )
-        assert len(result) == 1
-        assert result[0].frequency == 1
-
-    def test_identical_routes_grouped(self):
-        routes = [_make_route(i) for i in range(1, 4)]
-        result = RouteAnalyzer._group_routes_by_similarity_static(
-            routes, "home_to_work", 0.70, {}
-        )
-        assert len(result) == 1
-        assert result[0].frequency == 3
-
-    def test_distinct_routes_separate_groups(self):
-        r1 = _make_route(1, coords=[(41.88 + i * 0.001, -87.63) for i in range(6)])
-        r2 = _make_route(2, coords=[(42.88 + i * 0.001, -88.63) for i in range(6)])
-        result = RouteAnalyzer._group_routes_by_similarity_static(
-            [r1, r2], "home_to_work", 0.70, {}
-        )
-        assert len(result) == 2
-
-    def test_cache_key_used_for_similarity(self):
-        r1 = _make_route(1)
-        r2 = _make_route(2)
-        # Pre-populate cache with a high similarity score
-        cache = {"1_2": 0.99, "2_1": 0.99}
-        result = RouteAnalyzer._group_routes_by_similarity_static(
-            [r1, r2], "home_to_work", 0.70, cache
-        )
-        assert len(result) == 1  # Both merged due to cached high similarity
-
 
 # ---------------------------------------------------------------------------
 # calculate_route_metrics zero-duration edge case

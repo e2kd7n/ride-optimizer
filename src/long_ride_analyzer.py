@@ -6,7 +6,6 @@ Analyzes non-commute cycling activities for recreational ride recommendations.
 
 import json
 from .secure_logger import SecureLogger
-import math
 from pathlib import Path
 from typing import List, Tuple, Dict, Any, Optional
 from dataclasses import dataclass
@@ -17,12 +16,13 @@ from functools import partial
 import numpy as np
 from geopy.distance import geodesic
 import polyline
-from similaritymeasures import frechet_dist
-from scipy.spatial.distance import directed_hausdorff
 
 from .data_fetcher import Activity
 from .route_namer import RouteNamer
-from .route_comparison import coords_to_km, extent_point
+from .route_comparison import (
+    coords_to_km, passes_prefilter, combined_distance_km,
+    LONG_RIDE_THRESHOLDS,
+)
 from .weather_fetcher import WeatherFetcher
 from .json_storage import secure_chmod
 
@@ -215,10 +215,6 @@ class LongRideAnalyzer:
     def _coords_to_km(coords: np.ndarray) -> np.ndarray:
         return coords_to_km(coords)
 
-    @staticmethod
-    def _extent_point(coords_km: np.ndarray) -> np.ndarray:
-        return extent_point(coords_km)
-
     def consolidate_similar_named_groups(self, name_groups: Dict[str, List[Activity]],
                                         similarity_threshold: float = 2.0,
                                         on_progress=None) -> Dict[str, List[Activity]]:
@@ -287,7 +283,13 @@ class LongRideAnalyzer:
                     if cache_key in self._similarity_cache:
                         combined_distance = self._similarity_cache[cache_key]
                     else:
-                        # Pre-filter: skip if average distances differ by more than 25%
+                        # Pre-filter: skip if average recorded distances differ by more
+                        # than 25%. Uses Strava's recorded activity.distance rather than
+                        # coordinate-derived path length -- summary polylines are
+                        # simplified (Douglas-Peucker), so path length from decoded
+                        # points can undercount the real distance. Cheaper and more
+                        # accurate than the length-ratio check inside passes_prefilter,
+                        # so it stays as a first-pass filter ahead of it.
                         dists1 = [a.distance for a in name_groups[name1] if a.distance]
                         dists2 = [a.distance for a in name_groups[name2] if a.distance]
                         if dists1 and dists2:
@@ -301,31 +303,15 @@ class LongRideAnalyzer:
                         coords1_km = group_representatives[name1]
                         coords2_km = group_representatives[name2]
 
-                        # Pre-filter: centroid distance — loops going different places have
-                        # centroids far apart even when they share a start/end point
-                        centroid_dist = float(np.linalg.norm(
-                            coords1_km.mean(axis=0) - coords2_km.mean(axis=0)
-                        ))
-                        if centroid_dist > 5.0:
+                        # Shared geometric pre-filter (centroid + extent-point distance;
+                        # length-ratio and bbox-overlap checks are no-ops here since
+                        # LONG_RIDE_THRESHOLDS already applied the distance-based ratio
+                        # check above and bbox_overlap_min is 0).
+                        if not passes_prefilter(coords1_km, coords2_km, LONG_RIDE_THRESHOLDS):
                             self._similarity_cache[cache_key] = float('inf')
                             continue
 
-                        # Pre-filter: extent point distance — the farthest-from-start point
-                        # of each route must be close; routes apexing in different directions
-                        # will fail even if their centroids are coincidentally similar
-                        extent_dist = float(np.linalg.norm(
-                            self._extent_point(coords1_km) - self._extent_point(coords2_km)
-                        ))
-                        if extent_dist > 10.0:
-                            self._similarity_cache[cache_key] = float('inf')
-                            continue
-
-                        frechet_distance = frechet_dist(coords1_km, coords2_km)
-                        hausdorff_dist = max(
-                            directed_hausdorff(coords1_km, coords2_km)[0],
-                            directed_hausdorff(coords2_km, coords1_km)[0]
-                        )
-                        combined_distance = (frechet_distance + hausdorff_dist) / 2
+                        combined_distance = combined_distance_km(coords1_km, coords2_km)
                         self._similarity_cache[cache_key] = combined_distance
 
                     # If routes are similar, merge them
@@ -452,39 +438,20 @@ class LongRideAnalyzer:
 
         try:
             raw_coords = np.array(polyline.decode(activity_polyline))
-            # Scale to km using the same approach as _coords_to_km
-            mean_lat = float(np.mean(raw_coords[:, 0]))
-            lat_km = 111.32
-            lon_km = 111.32 * math.cos(math.radians(mean_lat))
-            route_coords = raw_coords.copy().astype(float)
-            route_coords[:, 0] *= lat_km
-            route_coords[:, 1] *= lon_km
+            route_coords = coords_to_km(raw_coords)
 
             best_match = None
             best_distance = float('inf')
 
             for group_name, rep_coords_km in group_representatives.items():
                 try:
-                    # Centroid pre-filter
-                    centroid_dist = float(np.linalg.norm(
-                        route_coords.mean(axis=0) - rep_coords_km.mean(axis=0)
-                    ))
-                    if centroid_dist > 5.0:
+                    # Shared geometric pre-filter (length-ratio, centroid, extent-point;
+                    # bbox-overlap is a no-op since LONG_RIDE_THRESHOLDS.bbox_overlap_min
+                    # is 0), same thresholds used by consolidate_similar_named_groups.
+                    if not passes_prefilter(route_coords, rep_coords_km, LONG_RIDE_THRESHOLDS):
                         continue
 
-                    # Extent point pre-filter
-                    extent_dist = float(np.linalg.norm(
-                        LongRideAnalyzer._extent_point(route_coords) - LongRideAnalyzer._extent_point(rep_coords_km)
-                    ))
-                    if extent_dist > 10.0:
-                        continue
-
-                    frechet_distance = frechet_dist(route_coords, rep_coords_km)
-                    hausdorff_dist = max(
-                        directed_hausdorff(route_coords, rep_coords_km)[0],
-                        directed_hausdorff(rep_coords_km, route_coords)[0]
-                    )
-                    combined_distance = (frechet_distance + hausdorff_dist) / 2
+                    combined_distance = combined_distance_km(route_coords, rep_coords_km)
 
                     if combined_distance < best_distance:
                         best_distance = combined_distance
