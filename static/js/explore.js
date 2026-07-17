@@ -485,8 +485,27 @@ async function loadCoverage() {
         }, tileZoom)
         : api.getTileCoverage(null, tileZoom);
 
+    // #525: roadless tiles (no bike-network road nearby — not bikeable or
+    // walkable, e.g. open water or other unreachable terrain) get excluded
+    // from "new tile" targeting so routes stop chasing coverage credit in
+    // places a rider can't actually go. Best-effort only — a full-history
+    // load has no bounds to query against, and osmnx may be unavailable, so
+    // failures here just mean no exclusion rather than blocking coverage
+    // entirely.
+    const fetchRoadless = (tileZoom) => mapZoom >= 10
+        ? api.getRoadlessTiles({
+            south: bounds.getSouth(),
+            west: bounds.getWest(),
+            north: bounds.getNorth(),
+            east: bounds.getEast(),
+        }, tileZoom).catch(() => null)
+        : Promise.resolve(null);
+
     try {
-        const results = await Promise.all(zooms.map(fetchOne));
+        const [results, roadlessResults] = await Promise.all([
+            Promise.all(zooms.map(fetchOne)),
+            Promise.all(zooms.map(fetchRoadless)),
+        ]);
         const failed = results.find(d => d.status !== 'success');
         if (failed) {
             statusEl.textContent = failed.message || 'Failed to load coverage';
@@ -495,6 +514,14 @@ async function loadCoverage() {
 
         coverageData = results[0];
         coverageDataSecondary = results[1] || null;
+        coverageData.roadless = (roadlessResults[0] && roadlessResults[0].status === 'success')
+            ? roadlessResults[0].roadless
+            : [];
+        if (coverageDataSecondary) {
+            coverageDataSecondary.roadless = (roadlessResults[1] && roadlessResults[1].status === 'success')
+                ? roadlessResults[1].roadless
+                : [];
+        }
 
         // #488: coverage is loaded to feed the route generator, not to browse
         // on the map — clear any stale "new tile" highlight from a previous

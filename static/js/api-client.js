@@ -332,6 +332,15 @@ class APIClient {
         return this.fetch(`/exploration/roads?${params}`);
     }
 
+    async getRoadlessTiles(bounds, zoom) {
+        const params = new URLSearchParams({
+            south: bounds.south, west: bounds.west,
+            north: bounds.north, east: bounds.east,
+        });
+        if (zoom) params.set('zoom', zoom);
+        return this.fetch(`/exploration/roadless-tiles?${params}`);
+    }
+
     async invalidateCoverageCache() {
         return this.fetch('/exploration/invalidate', { method: 'POST' });
     }

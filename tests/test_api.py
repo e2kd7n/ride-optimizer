@@ -360,6 +360,33 @@ class TestExplorationBboxValidation:
         response = client.get('/api/exploration/roads?south=41.0&west=-88.0')
         assert response.status_code == 400
 
+    def test_roadless_tiles_inverted_bounds_rejected(self, client):
+        response = client.get(
+            '/api/exploration/roadless-tiles?south=42.0&west=-88.0&north=41.0&east=-87.0'
+        )
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data['status'] == 'error'
+
+    def test_roadless_tiles_oversized_bbox_rejected(self, client):
+        response = client.get(
+            '/api/exploration/roadless-tiles?south=30.0&west=-100.0&north=45.0&east=-70.0'
+        )
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data['status'] == 'error'
+        assert 'too large' in data['message'].lower()
+
+    def test_roadless_tiles_missing_bounds_rejected(self, client):
+        response = client.get('/api/exploration/roadless-tiles?south=41.0&west=-88.0')
+        assert response.status_code == 400
+
+    def test_roadless_tiles_invalid_zoom_rejected(self, client):
+        response = client.get(
+            '/api/exploration/roadless-tiles?south=41.0&west=-88.0&north=41.4&east=-87.6&zoom=5'
+        )
+        assert response.status_code == 400
+
 
 @pytest.mark.unit
 class TestExplorationRouteWaypointValidation:

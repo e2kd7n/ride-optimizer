@@ -441,6 +441,37 @@ class CoverageTracker:
     # Road coverage (Phase 1B — osmnx-based map matching)
     # ------------------------------------------------------------------
 
+    def _get_or_fetch_road_graph(self, bounds: Tuple[float, float, float, float]):
+        """Load the cached bike-network graph for `bounds`, fetching from OSM
+        via osmnx if no cache exists yet. Shared by road coverage and
+        roadless-tile detection so both cache/evict against the same files.
+
+        Returns the graph, or raises whatever osmnx raises on fetch failure.
+        """
+        import osmnx as ox
+
+        south, west, north, east = bounds
+        graph_cache = self.cache_dir / f"road_network_{_bbox_cache_key(bounds)}.graphml"
+
+        if graph_cache.exists():
+            try:
+                G = ox.load_graphml(graph_cache)
+                logger.info("Loaded cached road network from %s", graph_cache)
+                return G
+            except Exception:
+                pass
+
+        logger.info("Fetching road network from OSM for bounds %s", bounds)
+        G = ox.graph_from_bbox(
+            bbox=(north, south, east, west),
+            network_type="bike",
+            simplify=True,
+        )
+        ox.save_graphml(G, graph_cache)
+        secure_chmod(graph_cache)
+        self._evict_old_road_network_caches()
+        return G
+
     def get_road_coverage(
         self,
         bounds: Tuple[float, float, float, float],
@@ -459,31 +490,12 @@ class CoverageTracker:
             return {"status": "error", "message": "Road coverage requires osmnx and shapely"}
 
         south, west, north, east = bounds
-        graph_cache = self.cache_dir / f"road_network_{_bbox_cache_key(bounds)}.graphml"
 
-        if graph_cache.exists():
-            try:
-                G = ox.load_graphml(graph_cache)
-                logger.info("Loaded cached road network from %s", graph_cache)
-            except Exception:
-                G = None
-        else:
-            G = None
-
-        if G is None:
-            logger.info("Fetching road network from OSM for bounds %s", bounds)
-            try:
-                G = ox.graph_from_bbox(
-                    bbox=(north, south, east, west),
-                    network_type="bike",
-                    simplify=True,
-                )
-                ox.save_graphml(G, graph_cache)
-                secure_chmod(graph_cache)
-                self._evict_old_road_network_caches()
-            except Exception as exc:
-                logger.error("Failed to fetch road network: %s", exc)
-                return {"status": "error", "message": str(exc)}
+        try:
+            G = self._get_or_fetch_road_graph(bounds)
+        except Exception as exc:
+            logger.error("Failed to fetch road network: %s", exc)
+            return {"status": "error", "message": str(exc)}
 
         edges = ox.graph_to_gdfs(G, nodes=False, edges=True)
         snap_tolerance = self.config.get("exploration.snap_tolerance_meters", 30)
@@ -536,6 +548,75 @@ class CoverageTracker:
                 "unridden_edges": total - ridden_count,
                 "coverage_pct": round(ridden_count / max(total, 1) * 100, 1),
             },
+            "bounds": bounds,
+            "computed_at": datetime.utcnow().isoformat(),
+        }
+
+    def get_roadless_tiles(
+        self,
+        bounds: Tuple[float, float, float, float],
+        zoom: Optional[int] = None,
+    ) -> dict:
+        """Find tiles within `bounds` that have no bike-network road passing
+        through (or within snap tolerance of) them.
+
+        The exploration route generator uses this to exclude tiles that
+        aren't bikeable or walkable — open water, but also unmapped or
+        genuinely roadless terrain — from "new tile" scoring, so routes stop
+        being pulled toward tiles they have no way to enter (#525).
+
+        Requires osmnx and shapely. Falls back gracefully if unavailable.
+        """
+        try:
+            import osmnx as ox
+            from shapely.geometry import box
+            from shapely.strtree import STRtree
+        except ImportError:
+            logger.warning("osmnx/shapely not installed — roadless-tile detection unavailable")
+            return {"status": "error", "message": "Roadless-tile detection requires osmnx and shapely"}
+
+        zoom = zoom or self.zoom
+
+        try:
+            G = self._get_or_fetch_road_graph(bounds)
+        except Exception as exc:
+            logger.error("Failed to fetch road network: %s", exc)
+            return {"status": "error", "message": str(exc)}
+
+        edges = ox.graph_to_gdfs(G, nodes=False, edges=True)
+        edge_geoms = list(edges["geometry"].dropna())
+
+        snap_tolerance = self.config.get("exploration.snap_tolerance_meters", 30)
+        snap_deg = snap_tolerance / 111_000
+
+        south, west, north, east = bounds
+        min_tx, min_ty = lat_lon_to_tile(north, west, zoom)
+        max_tx, max_ty = lat_lon_to_tile(south, east, zoom)
+
+        roadless: List[Dict[str, int]] = []
+
+        if not edge_geoms:
+            # No road network at all in bounds — every tile is unreachable.
+            for tx in range(min_tx, max_tx + 1):
+                for ty in range(min_ty, max_ty + 1):
+                    roadless.append({"x": tx, "y": ty})
+        else:
+            tree = STRtree(edge_geoms)
+            for tx in range(min_tx, max_tx + 1):
+                for ty in range(min_ty, max_ty + 1):
+                    t_south, t_west, t_north, t_east = tile_to_bounds(tx, ty, zoom)
+                    # Buffer the tile by snap tolerance so a road running just
+                    # outside a tile's edge still counts it reachable.
+                    query_box = box(t_west - snap_deg, t_south - snap_deg, t_east + snap_deg, t_north + snap_deg)
+                    candidates = tree.query(query_box)
+                    has_road = any(edge_geoms[i].intersects(query_box) for i in candidates)
+                    if not has_road:
+                        roadless.append({"x": tx, "y": ty})
+
+        return {
+            "status": "success",
+            "zoom": zoom,
+            "roadless": roadless,
             "bounds": bounds,
             "computed_at": datetime.utcnow().isoformat(),
         }
