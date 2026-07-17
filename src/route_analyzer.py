@@ -1364,8 +1364,84 @@ end tell
           1. Terrain character (flat / rolling / hilly) if routes differ in terrain
           2. Distance bracket (short / long) if terrain alone doesn't differentiate
           3. Ordinal (#2, #3) as final fallback
+
+        Each pass is applied recursively/exhaustively: if a pass splits a clashing
+        group into sub-buckets but one of those sub-buckets still contains more
+        than one route (e.g. 5 near-identical routes median-split into 'short'
+        and 'long' but one bucket still has 3 members), the remaining passes are
+        applied *within that bucket* rather than being skipped for the whole
+        group. A final verification pass guarantees no two groups in the same
+        direction end up sharing a name, regardless of how they got there.
         """
         from collections import defaultdict
+
+        def _terrain_label(g: RouteGroup) -> str:
+            """Derive a terrain label from elevation_gain / distance."""
+            rep = g.representative_route
+            dist_m = rep.distance or 0
+            elev_m = rep.elevation_gain or 0
+            if dist_m <= 0:
+                return 'flat'
+            gain_per_km = elev_m / (dist_m / 1000.0)
+            if gain_per_km > 30:
+                return 'hilly'
+            if gain_per_km > 15:
+                return 'rolling'
+            return 'flat'
+
+        def _ordinal_fallback(base_name: str, bucket: List[RouteGroup]) -> None:
+            """Pass 3: keep the first group's name intact; suffix the rest."""
+            if len(bucket) <= 1:
+                return
+            for idx, g in enumerate(bucket[1:], start=2):
+                g.name = f"{base_name} #{idx}"
+
+        def _disambiguate_distance(base_name: str, bucket: List[RouteGroup]) -> None:
+            """Pass 2: distance bracket disambiguation, falling through to
+            ordinal numbering *per resulting bucket* if a bracket still clashes."""
+            if len(bucket) <= 1:
+                return
+
+            distances = [g.representative_route.distance or 0 for g in bucket]
+            if len(set(distances)) > 1:
+                median_dist = sorted(distances)[len(distances) // 2]
+
+                def _dist_label(d: float) -> str:
+                    return 'short' if d < median_dist else 'long'
+
+                dist_labels = [_dist_label(d) for d in distances]
+                if len(set(dist_labels)) > 1:
+                    sub_buckets: Dict[str, List[RouteGroup]] = defaultdict(list)
+                    for g, label in zip(bucket, dist_labels):
+                        new_name = f"{base_name} — {label}"
+                        g.name = new_name
+                        sub_buckets[new_name].append(g)
+                    for new_name, sub_bucket in sub_buckets.items():
+                        if len(sub_bucket) > 1:
+                            _ordinal_fallback(new_name, sub_bucket)
+                    return
+
+            _ordinal_fallback(base_name, bucket)
+
+        def _disambiguate(base_name: str, bucket: List[RouteGroup]) -> None:
+            """Pass 1: terrain disambiguation, falling through to distance-bracket
+            disambiguation *per resulting bucket* if a terrain label still clashes."""
+            if len(bucket) <= 1:
+                return
+
+            terrain_labels = [_terrain_label(g) for g in bucket]
+            if len(set(terrain_labels)) > 1:
+                sub_buckets: Dict[str, List[RouteGroup]] = defaultdict(list)
+                for g, label in zip(bucket, terrain_labels):
+                    new_name = f"{base_name} — {label}"
+                    g.name = new_name
+                    sub_buckets[new_name].append(g)
+                for new_name, sub_bucket in sub_buckets.items():
+                    if len(sub_bucket) > 1:
+                        _disambiguate_distance(new_name, sub_bucket)
+                return
+
+            _disambiguate_distance(base_name, bucket)
 
         # Build name → [group] map
         by_name: Dict[str, List[RouteGroup]] = defaultdict(list)
@@ -1376,46 +1452,28 @@ end tell
         for name, clashing in by_name.items():
             if len(clashing) <= 1:
                 continue
+            _disambiguate(name, clashing)
 
-            # ---- Pass 1: terrain disambiguation ----
-            def _terrain_label(g: RouteGroup) -> str:
-                """Derive a terrain label from elevation_gain / distance."""
-                rep = g.representative_route
-                dist_m = rep.distance or 0
-                elev_m = rep.elevation_gain or 0
-                if dist_m <= 0:
-                    return 'flat'
-                gain_per_km = elev_m / (dist_m / 1000.0)
-                if gain_per_km > 30:
-                    return 'hilly'
-                if gain_per_km > 15:
-                    return 'rolling'
-                return 'flat'
-
-            terrain_labels = [_terrain_label(g) for g in clashing]
-            if len(set(terrain_labels)) > 1:
-                for g, label in zip(clashing, terrain_labels):
-                    g.name = f"{name} — {label}"
+        # ---- Final verification pass ----
+        # Ordinal numbering is the guaranteed last resort, so after all passes
+        # no two groups sharing a direction should still have identical names.
+        # Enforce that invariant directly rather than trusting it held, so a
+        # future change to the passes above can't silently regress into
+        # duplicate names again.
+        seen_names: set = set()
+        for g in all_groups_for_direction:
+            if not g.name:
                 continue
-
-            # ---- Pass 2: distance bracket disambiguation ----
-            distances = [g.representative_route.distance or 0 for g in clashing]
-            median_dist = sorted(distances)[len(distances) // 2]
-
-            if len(set(distances)) > 1:
-                def _dist_label(d: float) -> str:
-                    return 'short' if d < median_dist else 'long'
-
-                dist_labels = [_dist_label(d) for d in distances]
-                if len(set(dist_labels)) > 1:
-                    for g, label in zip(clashing, dist_labels):
-                        g.name = f"{name} — {label}"
-                    continue
-
-            # ---- Pass 3: ordinal fallback ----
-            # Keep the first group's name intact; suffix the rest
-            for idx, g in enumerate(clashing[1:], start=2):
-                g.name = f"{name} #{idx}"
+            if g.name not in seen_names:
+                seen_names.add(g.name)
+                continue
+            idx = 2
+            candidate = f"{g.name} #{idx}"
+            while candidate in seen_names:
+                idx += 1
+                candidate = f"{g.name} #{idx}"
+            g.name = candidate
+            seen_names.add(candidate)
 
     def _geocode_routes_background(self, groups: List[RouteGroup]) -> None:
         """
