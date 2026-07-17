@@ -43,6 +43,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.key === 'Enter') { e.preventDefault(); searchEndLocation(); }
     });
     initDistanceSlider();
+    initDurationSlider();
+    document.getElementById('target-type-select').addEventListener('change', onTargetTypeChange);
     initTooltips();
     updateWorkflowState();
 });
@@ -71,6 +73,72 @@ function initDistanceSlider() {
 function updateDistanceDisplay(kmValue) {
     document.getElementById('distance-value').textContent =
         window.formatDistance ? window.formatDistance(parseFloat(kmValue), 1) : `${kmValue} km`;
+}
+
+// ── Duration-based target (#490) ────────────────────────────────
+//
+// Duration is converted to a distance budget using the rider's own
+// historical average speed (GET /api/stats → summary.avg_speed_mph),
+// falling back to a configured default (exploration.default_speed_kmh in
+// config.yaml, surfaced as default_speed_mph) when there's no ride history
+// to average. The worker pipeline is unaware of duration — it only ever
+// receives a computed distanceKm, same as the distance-slider path.
+
+let _avgSpeedKmhPromise = null;
+
+async function getAvgSpeedKmh() {
+    if (!_avgSpeedKmhPromise) {
+        _avgSpeedKmhPromise = (async () => {
+            const FALLBACK_KMH = 18;
+            try {
+                const stats = await api.getStats();
+                const summaryMph = stats.data && stats.data.summary && stats.data.summary.avg_speed_mph;
+                const defaultMph = (stats.data && stats.data.default_speed_mph) || stats.default_speed_mph;
+                const mph = (summaryMph && summaryMph > 0) ? summaryMph : defaultMph;
+                return (mph && mph > 0) ? mph * 1.60934 : FALLBACK_KMH;
+            } catch (e) {
+                return FALLBACK_KMH;
+            }
+        })();
+    }
+    return _avgSpeedKmhPromise;
+}
+
+function onTargetTypeChange() {
+    const isDuration = document.getElementById('target-type-select').value === 'duration';
+    document.getElementById('distance-target-group').classList.toggle('d-none', isDuration);
+    document.getElementById('duration-target-group').classList.toggle('d-none', !isDuration);
+    if (isDuration) updateDurationHint();
+}
+
+function initDurationSlider() {
+    const slider = document.getElementById('duration-slider');
+    document.getElementById('duration-value').textContent = slider.value;
+    slider.addEventListener('input', () => {
+        document.getElementById('duration-value').textContent = slider.value;
+        updateDurationHint();
+    });
+}
+
+async function updateDurationHint() {
+    const hintEl = document.getElementById('duration-speed-hint');
+    hintEl.textContent = 'Estimating distance from your average speed…';
+    const minutes = parseFloat(document.getElementById('duration-slider').value);
+    const speedKmh = await getAvgSpeedKmh();
+    const distanceKm = (minutes / 60) * speedKmh;
+    const distanceLabel = window.formatDistance ? window.formatDistance(distanceKm, 1) : `${distanceKm.toFixed(1)} km`;
+    const speedLabel = window.formatSpeed ? window.formatSpeed(speedKmh, 1) : `${speedKmh.toFixed(1)} km/h`;
+    hintEl.textContent = `≈ ${distanceLabel} at your average ${speedLabel}`;
+}
+
+/** Resolve the current distance-slider or duration-slider control into a distanceKm target for the worker. */
+async function resolveTargetDistanceKm() {
+    if (document.getElementById('target-type-select').value === 'duration') {
+        const minutes = parseFloat(document.getElementById('duration-slider').value);
+        const speedKmh = await getAvgSpeedKmh();
+        return (minutes / 60) * speedKmh;
+    }
+    return parseFloat(document.getElementById('distance-slider').value);
 }
 
 // ── Map setup ───────────────────────────────────────────────────
@@ -514,7 +582,7 @@ async function generateRoute() {
     Object.keys(_newTileRectsByDirection).forEach(k => delete _newTileRectsByDirection[k]);
 
     const startPos = startMarker.getLatLng();
-    const distanceKm = parseFloat(document.getElementById('distance-slider').value);
+    const distanceKm = await resolveTargetDistanceKm();
     const optimizeFor = document.getElementById('optimize-for-select').value;
 
     let routeCount = 0;

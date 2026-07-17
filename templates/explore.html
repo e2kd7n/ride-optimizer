@@ -102,12 +102,28 @@
                                 <div class="small text-muted mt-1" id="end-display">Click map or search to set</div>
                             </div>
                             <div class="mb-2">
+                                <label class="form-label small mb-0" for="target-type-select">Target</label>
+                                <select class="form-select form-select-sm" id="target-type-select" aria-label="Route target — distance or duration">
+                                    <option value="distance" selected>Distance</option>
+                                    <option value="duration">Duration</option>
+                                </select>
+                            </div>
+                            <div class="mb-2" id="distance-target-group">
                                 <label class="form-label small mb-0" for="distance-slider">Distance (<span id="distance-unit-label"></span>)</label>
                                 <div class="d-flex align-items-center gap-2">
                                     <input type="range" class="form-range" id="distance-slider" min="10" max="150" value="40" step="5"
                                            aria-label="Target route distance">
                                     <span class="small fw-bold tabular-nums" id="distance-value">40</span>
                                 </div>
+                            </div>
+                            <div class="mb-2 d-none" id="duration-target-group">
+                                <label class="form-label small mb-0" for="duration-slider">Duration (minutes)</label>
+                                <div class="d-flex align-items-center gap-2">
+                                    <input type="range" class="form-range" id="duration-slider" min="15" max="360" value="90" step="15"
+                                           aria-label="Target route duration in minutes">
+                                    <span class="small fw-bold tabular-nums" id="duration-value">90</span>
+                                </div>
+                                <div class="small text-muted mt-1" id="duration-speed-hint"></div>
                             </div>
                             <div class="mb-2">
                                 <label class="form-label small mb-0" for="optimize-for-select">Optimize for</label>
