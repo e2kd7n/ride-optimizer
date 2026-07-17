@@ -47,9 +47,11 @@ fi
 echo "Backing up existing crontab..."
 crontab -l > "$PROJECT_ROOT/cron/crontab.backup.$(date +%Y%m%d_%H%M%S)" 2>/dev/null || true
 
-# Install new crontab (append to existing)
+# Install new crontab (append to existing). The trailing echo guarantees a
+# final newline — crontab refuses files without one ("missing newline before
+# EOF"), which silently broke installs when the template lacked it.
 echo "Installing cron jobs..."
-(crontab -l 2>/dev/null || true; echo ""; cat "$CRONTAB_FILE") | crontab -
+(crontab -l 2>/dev/null || true; echo ""; cat "$CRONTAB_FILE"; echo "") | crontab -
 
 echo ""
 echo "=========================================="
