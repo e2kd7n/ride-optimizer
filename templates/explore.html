@@ -34,35 +34,9 @@
                 <div class="card mb-3">
                     <div class="card-body py-3 px-3">
 
-                        <!-- Step 1: Coverage -->
+                        <!-- Step 1: Start point (coverage loads silently in the background once this is set — #488) -->
                         <span class="workflow-step small mb-2 d-flex" id="workflow-step-1">
-                            <span class="workflow-step-num">1</span> Load your coverage
-                        </span>
-                        <div class="control-step d-flex flex-wrap gap-2 align-items-center">
-                            <label class="form-label small mb-0 me-1" for="coverage-type-select">Coverage</label>
-                            <i class="bi bi-question-circle text-muted me-1" tabindex="0" role="img"
-                               data-bs-toggle="tooltip" data-bs-placement="top"
-                               title="Squadrats = zoom-14 tiles (~1.2 km² each). Squadratinhos = zoom-17 tiles (~0.15 km² each). Covering more tiles means you've ridden more unique roads."
-                               aria-label="What are Squadrats and Squadratinhos?"></i>
-                            <select class="form-select form-select-sm max-w-180px" id="coverage-type-select" aria-label="Coverage grid granularity — also controls which grid the route generator targets">
-                                <option value="14" selected>Squadrats</option>
-                                <option value="17">Squadratinhos</option>
-                                <option value="both">Both</option>
-                            </select>
-                            <button class="btn btn-sm btn-primary" id="load-coverage-btn">
-                                <i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Load Coverage
-                            </button>
-                            <button class="btn btn-sm btn-outline-danger" id="clear-cache-btn">
-                                <i class="bi bi-trash" aria-hidden="true"></i> Clear Cache
-                            </button>
-                            <span class="text-muted small" id="coverage-status"></span>
-                        </div>
-
-                        <hr>
-
-                        <!-- Step 2: Start point -->
-                        <span class="workflow-step small mb-2 d-flex" id="workflow-step-2">
-                            <span class="workflow-step-num">2</span> Set a start point
+                            <span class="workflow-step-num">1</span> Set a start point
                         </span>
                         <div class="control-step">
                             <label class="form-label small mb-0" for="location-search-input">Search, or click the map</label>
@@ -80,13 +54,29 @@
                                 </button>
                             </div>
                             <div class="small text-muted mt-1" id="start-display">Click map or search to set</div>
+                            <div class="d-flex flex-wrap gap-2 align-items-center mt-2">
+                                <label class="form-label small mb-0 me-1" for="coverage-type-select">Coverage grid</label>
+                                <i class="bi bi-question-circle text-muted me-1" tabindex="0" role="img"
+                                   data-bs-toggle="tooltip" data-bs-placement="top"
+                                   title="Squadrats = zoom-14 tiles (~1.2 km² each). Squadratinhos = zoom-17 tiles (~0.15 km² each). Covering more tiles means you've ridden more unique roads."
+                                   aria-label="What are Squadrats and Squadratinhos?"></i>
+                                <select class="form-select form-select-sm max-w-180px" id="coverage-type-select" aria-label="Coverage grid granularity — also controls which grid the route generator targets">
+                                    <option value="14" selected>Squadrats</option>
+                                    <option value="17">Squadratinhos</option>
+                                    <option value="both">Both</option>
+                                </select>
+                                <button class="btn btn-sm btn-outline-danger" id="clear-cache-btn">
+                                    <i class="bi bi-trash" aria-hidden="true"></i> Clear Cache
+                                </button>
+                            </div>
+                            <span class="text-muted small" id="coverage-status"></span>
                         </div>
 
                         <hr>
 
-                        <!-- Step 3: Generate -->
-                        <span class="workflow-step small mb-2 d-flex" id="workflow-step-3">
-                            <span class="workflow-step-num">3</span> Generate routes
+                        <!-- Step 2: Generate -->
+                        <span class="workflow-step small mb-2 d-flex" id="workflow-step-2">
+                            <span class="workflow-step-num">2</span> Generate routes
                         </span>
                         <div class="control-step">
                             <div class="mb-2">
@@ -112,6 +102,27 @@
                                 <div class="small text-muted mt-1" id="end-display">Click map or search to set</div>
                             </div>
                             <div class="mb-2">
+                                <label class="form-label small mb-0">Target area <span class="text-muted">(optional)</span></label>
+                                <div class="d-flex flex-wrap gap-2 align-items-center">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" id="draw-area-btn"
+                                            aria-label="Draw a target area on the map — click and drag">
+                                        <i class="bi bi-bounding-box" aria-hidden="true"></i> Draw area
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary d-none" id="clear-area-btn"
+                                            aria-label="Clear the drawn target area">
+                                        <i class="bi bi-x-lg" aria-hidden="true"></i> Clear
+                                    </button>
+                                    <span class="text-muted small" id="area-status"></span>
+                                </div>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small mb-0" for="target-type-select">Target</label>
+                                <select class="form-select form-select-sm" id="target-type-select" aria-label="Route target — distance or duration">
+                                    <option value="distance" selected>Distance</option>
+                                    <option value="duration">Duration</option>
+                                </select>
+                            </div>
+                            <div class="mb-2" id="distance-target-group">
                                 <label class="form-label small mb-0" for="distance-slider">Distance (<span id="distance-unit-label"></span>)</label>
                                 <div class="d-flex align-items-center gap-2">
                                     <input type="range" class="form-range" id="distance-slider" min="10" max="150" value="40" step="5"
@@ -119,14 +130,20 @@
                                     <span class="small fw-bold tabular-nums" id="distance-value">40</span>
                                 </div>
                             </div>
+                            <div class="mb-2 d-none" id="duration-target-group">
+                                <label class="form-label small mb-0" for="duration-slider">Duration (minutes)</label>
+                                <div class="d-flex align-items-center gap-2">
+                                    <input type="range" class="form-range" id="duration-slider" min="15" max="360" value="90" step="15"
+                                           aria-label="Target route duration in minutes">
+                                    <span class="small fw-bold tabular-nums" id="duration-value">90</span>
+                                </div>
+                                <div class="small text-muted mt-1" id="duration-speed-hint"></div>
+                            </div>
                             <div class="mb-2">
                                 <label class="form-label small mb-0" for="optimize-for-select">Optimize for</label>
                                 <select class="form-select form-select-sm" id="optimize-for-select" aria-label="Route optimization priority">
                                     <option value="tiles" selected>Most new tiles</option>
-                                    <option value="distance">Shortest route</option>
                                     <option value="efficiency">Efficiency (new tiles/km)</option>
-                                    <option value="infill" title="Target unvisited tiles surrounded by visited tiles — patches interior gaps in your yard">Yard — infill gaps</option>
-                                    <option value="frontier" title="Target tiles on the edge of your visited footprint — expands into sparse areas">Yard — expand frontier</option>
                                 </select>
                             </div>
                             <div class="mb-2">
@@ -183,10 +200,6 @@
                         <!-- Coverage legend (#360) -->
                         <div class="d-flex flex-wrap gap-3 small text-muted mt-2 px-1" id="coverage-legend">
                             <span class="d-inline-flex align-items-center gap-1">
-                                <span class="legend-swatch legend-swatch-caution"></span>
-                                Visited tile
-                            </span>
-                            <span class="d-inline-flex align-items-center gap-1">
                                 <span class="legend-swatch legend-swatch-good"></span>
                                 New tile this route adds
                             </span>
@@ -194,28 +207,6 @@
                                 <span class="legend-line-swatch"></span>
                                 Dashed = quick preview, solid = real road route (colored by direction)
                             </span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Coverage stats (#367: below the map) -->
-                <div class="row g-2 mb-2" id="coverage-stats">
-                    <div class="col-4">
-                        <div class="card coverage-stat">
-                            <div class="stat-value tabular-nums" id="stat-tiles-visited">—</div>
-                            <div class="stat-label">Tiles Visited</div>
-                        </div>
-                    </div>
-                    <div class="col-4">
-                        <div class="card coverage-stat">
-                            <div class="stat-value tabular-nums" id="stat-coverage-pct">—</div>
-                            <div class="stat-label">Coverage</div>
-                        </div>
-                    </div>
-                    <div class="col-4">
-                        <div class="card coverage-stat">
-                            <div class="stat-value tabular-nums" id="stat-total-tiles">—</div>
-                            <div class="stat-label">Total in View</div>
                         </div>
                     </div>
                 </div>
