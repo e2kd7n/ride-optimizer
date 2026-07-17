@@ -109,23 +109,9 @@ if __name__ == '__main__':
 
     time.sleep(2)
 
-    url = f'http://localhost:{port}'
-    try:
-        import platform
-        system = platform.system()
-        if system == 'Darwin':
-            os.system(f'open -a "Google Chrome" {url} 2>/dev/null || open {url}')
-        elif system == 'Windows':
-            os.system(f'start chrome {url} 2>nul || start {url}')
-        elif system == 'Linux':
-            os.system(f'google-chrome {url} 2>/dev/null || xdg-open {url}')
-        else:
-            import webbrowser
-            webbrowser.open(url)
-        logger.info(f"Browser opened at {url}")
-    except Exception as e:
-        logger.warning(f"Could not open browser: {e}")
-        logger.info(f"Please open your browser manually to: {url}")
+    # open_browser() validates the port/URL before shelling out (#460 — this
+    # replaces a duplicate, unvalidated os.system() reimplementation).
+    open_browser(port)
 
     logger.info("Launch complete. Server running in background.")
     sys.exit(0)
