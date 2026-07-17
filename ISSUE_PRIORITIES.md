@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-07-16 23:38:10 UTC / 2026-07-16 23:38:10 GMT
+**Last Updated:** 2026-07-17 12:53:06 UTC / 2026-07-17 12:53:06 GMT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -8,9 +8,41 @@ This file reflects the current state of GitHub issues organized by release miles
 
 ## 📍 Release Context
 
-- **Current Release:** none (deployed, milestone fully closed)
-- **Next Release:** unknown (in development)
+- **Current Release:** v0.19.0 (deployed, milestone fully closed)
+- **Next Release:** v0.18.0 (in development)
 - **Future Releases:** 
+
+---
+
+## 🎯 v0.18.0 (Next Release - IN DEVELOPMENT)
+
+**Priority within this release determines work order. Complete P0/P1 issues before moving to future releases.**
+
+### 🔴 P0 - CRITICAL
+- #477 - route_analyzer.py::_open_geocoding_terminal is macOS-only, silently no-ops on Windows/Linux
+- #459 - Lost-update races in read-modify-write JSON flows (plan storage, TrainerRoad cache)
+
+### 🔴 P1 - HIGH
+- #493 - Explore: plotted road routes can claim zero of their highlighted new tiles — never verified against the actual route
+- #489 - Explore: replace implicit round-trip with explicit route shape (Loop / Out-and-back / Point-to-point)
+
+### 🟡 P2 - MEDIUM
+- #492 - Epic: Explore Route Generator — Shape/Duration/Area Targeting, Trim Coverage-Browser Scope
+- #491 - Explore: let rider draw/select a target area instead of only start-point + radius
+- #490 - Explore: add duration-based route target alongside distance
+- #488 - Explore: fold full-map coverage browsing into route-generation feedback; drop standalone browse mode
+- #487 - Explore: audit and prune optimizeFor strategy sprawl (tiles/distance/efficiency/infill/frontier)
+- #481 - /api/exploration/roads: unbounded bbox can OOM the Pi via osmnx, and road_network.graphml cache ignores requested bounds (wrong results after panning)
+- #451 - Exploration route generator: extend overlap penalty to tiles claimed within the in-progress tour
+
+### 🟢 P3 - LOW
+- #482 - /api/exploration/route: waypoints not validated (500s on malformed input, no count cap → ORS quota burn) and route memo cache grows unbounded
+- #453 - Exploration route generator: wind-aware outbound/return orientation (headwind out, tailwind back)
+- #452 - Exploration route generator: detect and label unavoidable out-and-back routes
+- #430 - Coverage tracker should include Garmin activities, not just Strava
+
+### 📋 P4 - FUTURE
+**No P4 issues** ✅
 
 ---
 
@@ -18,23 +50,7 @@ This file reflects the current state of GitHub issues organized by release miles
 
 These issues need to be assigned to a release milestone and prioritized.
 
-### 🔴 P0 - CRITICAL
-None
-
-### 🔴 P1 - HIGH
-- #486 - Activity fetch caps at 500 most-recent activities — no pagination backfill for full Strava history
-
-### 🟡 P2 - MEDIUM
-None
-
-### 🟢 P3 - LOW
-- #496 - Reports stats bucket activities by UTC calendar day, not local day — late-night rides can land in the wrong day/month
-
-### 📋 P4 - FUTURE
-None
-
-### ⚠️ Unprioritized (No P-label)
-- #498 - Pi memory pressure: app swaps heavily — eliminate duplicate host stack, cap parallelism, stop re-parsing large JSON
+**All issues are assigned to releases** ✅
 
 ---
 
