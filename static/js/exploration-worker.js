@@ -5,12 +5,16 @@
  * Generates one route per compass quadrant (NE/SE/SW/NW) that has reachable
  * unvisited tiles, streaming each as it finishes rather than waiting for all.
  *
- * Input message: {start, end?, distanceKm, mode, routeType, coverageData, coverageDataSecondary?, optimizeFor}
+ * Input message: {start, end?, distanceKm, mode, routeType, shape, coverageData, coverageDataSecondary?, optimizeFor}
  *   - start: {lat, lon}
  *   - end: {lat, lon} | null (null = round-trip back to start)
  *   - distanceKm: target route distance
  *   - mode: 'tiles' | 'roads'
  *   - routeType: 'round_trip' | 'point_to_point'
+ *   - shape: 'loop' | 'out_and_back' | 'point_to_point' (#489) — for a
+ *       round trip, whether outbound/return should be biased toward
+ *       different corridors (loop) or deliberately retrace the same one
+ *       (out_and_back). Ignored when routeType is 'point_to_point'.
  *   - coverageData: {visited: {"x,y": {...}}, total_in_bounds, bounds, zoom}
  *   - coverageDataSecondary: same shape as coverageData, at a different zoom | null
  *       When present ("Both" grid mode), routes are optimized against both
@@ -89,8 +93,12 @@ function countVisitedNeighbours(t, visitedSet) {
     ].filter(k => visitedSet.has(k)).length;
 }
 
-function optimize({ start, end, distanceKm, mode, routeType, coverageData, coverageDataSecondary, optimizeFor, corridorConstraint }) {
+function optimize({ start, end, distanceKm, mode, routeType, shape, coverageData, coverageDataSecondary, optimizeFor, corridorConstraint }) {
     const isRoundTrip = routeType === 'round_trip' || !end;
+    // Default to 'loop' for round trips when the caller doesn't specify —
+    // matches the pre-#489 behaviour of drawing from whichever quadrant the
+    // road network happens to support.
+    const effectiveShape = !isRoundTrip ? 'point_to_point' : (shape === 'out_and_back' ? 'out_and_back' : 'loop');
     const reachRadius = distanceKm / (isRoundTrip ? 4 : 3);
 
     reportProgress('Scanning tile grid…');
@@ -127,8 +135,18 @@ function optimize({ start, end, distanceKm, mode, routeType, coverageData, cover
     QUADRANTS.forEach((dir, i) => {
         reportProgress(`Optimizing ${dir} route (${i + 1}/${QUADRANTS.length})…`);
 
+        // #489: 'loop' pulls zones from this quadrant AND its clockwise
+        // neighbour so outbound/return legs are biased toward different
+        // corridors instead of both living in one compass slice.
+        // 'out_and_back' deliberately keeps a single quadrant and takes only
+        // its single best zone, accepting the retrace rather than fighting
+        // the road network for a loop that may not exist there.
+        const scanDirs = effectiveShape === 'loop' ? [dir, nextQuadrant(dir)] : [dir];
+        const zoneCap = effectiveShape === 'out_and_back' ? 1 : perGridCap;
+
         const gridCandidates = grids.map(g => {
-            const dirZones = floodFillZones(g.buckets[dir]).map(z => ({
+            const bucketTiles = scanDirs.flatMap(d => g.buckets[d]);
+            const dirZones = floodFillZones(bucketTiles).map(z => ({
                 ...z,
                 distanceFromStart: haversineKm(start.lat, start.lon, z.centroid.lat, z.centroid.lon),
             }));
@@ -136,7 +154,7 @@ function optimize({ start, end, distanceKm, mode, routeType, coverageData, cover
             const penalised = applyOverlapPenalty(scored, start, g.visitedSet, g.zoom);
             return {
                 zoom: g.zoom,
-                candidates: penalised.slice(0, perGridCap),
+                candidates: penalised.slice(0, zoneCap),
             };
         });
 
@@ -173,6 +191,7 @@ function optimize({ start, end, distanceKm, mode, routeType, coverageData, cover
             type: 'route',
             route: {
                 direction: dir,
+                shape: effectiveShape,
                 waypoints: ordered,
                 newTilesByZoom,
                 stats: {
@@ -276,6 +295,13 @@ function quadrantFor(bearing) {
     if (bearing < 180) return 'SE';
     if (bearing < 270) return 'SW';
     return 'NW';
+}
+
+/** Clockwise-adjacent quadrant, used to pull a loop's return leg from a
+ *  different corridor than its outbound leg (#489). */
+function nextQuadrant(dir) {
+    const i = QUADRANTS.indexOf(dir);
+    return QUADRANTS[(i + 1) % QUADRANTS.length];
 }
 
 // ── Tile utilities ──────────────────────────────────────────────

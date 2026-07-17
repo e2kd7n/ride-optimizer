@@ -528,6 +528,7 @@ function _paletteFor(dirOrIndex) {
 }
 
 const DIRECTION_LABELS = { NE: 'Northeast', SE: 'Southeast', SW: 'Southwest', NW: 'Northwest' };
+const SHAPE_LABELS = { loop: 'Loop', out_and_back: 'Out-and-back', point_to_point: 'Point-to-point' };
 
 // Per-direction Phase-1 polyline references, keyed by direction ('NE', etc.)
 const _phase1Polylines = {};
@@ -707,7 +708,8 @@ async function generateRoute() {
         statusEl.textContent = 'Worker error: ' + err.message;
     };
 
-    const routeType = document.getElementById('route-type-select').value;
+    const shape = document.getElementById('route-type-select').value; // 'loop' | 'out_and_back' | 'point_to_point'
+    const routeType = shape === 'point_to_point' ? 'point_to_point' : 'round_trip';
     const endPos = (routeType === 'point_to_point' && endMarker) ? endMarker.getLatLng() : null;
 
     explorationWorker.postMessage({
@@ -716,6 +718,7 @@ async function generateRoute() {
         distanceKm,
         mode: 'tiles',
         routeType,
+        shape,
         coverageData,
         coverageDataSecondary: mode === 'both' ? coverageDataSecondary : null,
         optimizeFor,
@@ -827,6 +830,7 @@ async function generateWorkoutCombo() {
         distanceKm,
         mode: 'tiles',
         routeType: 'round_trip',
+        shape: 'loop',
         coverageData,
         coverageDataSecondary: mode === 'both' ? coverageDataSecondary : null,
         optimizeFor,
@@ -865,11 +869,20 @@ function renderRoute(route, index) {
         weight: 3,
         dashArray: '8, 8',
         opacity: 0.8,
-    }).bindPopup(`${DIRECTION_LABELS[route.direction]} — ${distanceLabel}, ${newTilesLabel(route.stats)}`);
+    }).bindPopup(`${routeDirLabel(route)} — ${distanceLabel}, ${newTilesLabel(route.stats)}`);
     line.on('click', (e) => { L.DomEvent.stopPropagation(e); highlightRoute(route.direction); });
     routeLayer.addLayer(line);
     addArrows(coords, palette.light);
     _phase1Polylines[route.direction] = line;
+}
+
+/** Direction label with an explicit shape tag (#489) so riders can see which
+ *  shape a route actually got — loop and out-and-back both look like a
+ *  "round trip" otherwise, with no way to tell them apart in the UI. */
+function routeDirLabel(route) {
+    const shapeTag = route.shape && SHAPE_LABELS[route.shape] && route.shape !== 'point_to_point'
+        ? ` (${SHAPE_LABELS[route.shape]})` : '';
+    return `${DIRECTION_LABELS[route.direction]}${shapeTag}`;
 }
 
 function newTilesLabel(stats) {
@@ -892,7 +905,7 @@ function addRouteListItem(route, index, targetDistanceKm, extraLabel = '') {
     badge.innerHTML = `
         <div class="d-flex align-items-center gap-2 w-100">
             <span class="swatch"></span>
-            <span class="route-label">${DIRECTION_LABELS[dir]} · ${distanceLabel} · ${newTilesLabel(route.stats)}${extraLabel ? ' ' + extraLabel : ''}</span>
+            <span class="route-label">${routeDirLabel(route)} · ${distanceLabel} · ${newTilesLabel(route.stats)}${extraLabel ? ' ' + extraLabel : ''}</span>
             <button class="btn btn-xs btn-outline-primary ms-auto plot-road-btn" data-direction="${dir}"
                     aria-label="Plot road route for ${DIRECTION_LABELS[dir]}">
                 <i class="bi bi-map" aria-hidden="true"></i> Plot road route
@@ -935,12 +948,20 @@ function displace(lat, lon, distKm, bearingDeg) {
  *
  * Strategy when too short: insert a displacement point pushed out along the
  * route's main bearing so the road router must travel farther out-and-back.
- * Strategy when too long: drop the lowest-priority waypoint.
+ * Strategy when too long: drop a padding waypoint first if one exists,
+ * falling back to the furthest tile-claiming waypoint only when no padding
+ * is left to sacrifice (#493 Phase B) — a purely distance-driven drop can
+ * otherwise discard the exact corner waypoint a route claimed a tile
+ * through while unrelated padding sits untouched.
  */
 async function refineRoute(baseWaypoints, targetKm, surfacePref, candidateList, dirBearing, roadFilters = {}) {
     const TOLERANCE = 0.15;
     const MAX_ITERATIONS = 6;
     let waypoints = baseWaypoints.map(w => [...w]); // deep copy
+    // Parallel to waypoints.slice(1, -1) (the inner/droppable waypoints):
+    // true = tile-claiming corner from bestCornerPoint/candidates, false =
+    // padding inserted purely to hit the distance target.
+    let loadBearing = waypoints.slice(1, -1).map(() => true);
     let result = null;
     let candidates = candidateList.slice();
 
@@ -970,8 +991,18 @@ async function refineRoute(baseWaypoints, targetKm, surfacePref, candidateList, 
         if (Math.abs(ratio - 1) <= TOLERANCE) break; // within 15% — done
 
         if (ratio > 1 + TOLERANCE && waypoints.length > 3) {
-            // Too long: drop the furthest (last inner) waypoint.
-            waypoints = [waypoints[0], ...waypoints.slice(1, -2), waypoints[waypoints.length - 1]];
+            // Too long: drop a padding waypoint if one exists; only fall
+            // back to the furthest load-bearing (tile-claiming) waypoint
+            // once padding is exhausted.
+            let dropIdx = loadBearing.indexOf(false);
+            if (dropIdx === -1) dropIdx = loadBearing.length - 1; // furthest inner waypoint
+            waypoints = [
+                waypoints[0],
+                ...waypoints.slice(1, 1 + dropIdx),
+                ...waypoints.slice(2 + dropIdx, -1),
+                waypoints[waypoints.length - 1],
+            ];
+            loadBearing = [...loadBearing.slice(0, dropIdx), ...loadBearing.slice(dropIdx + 1)];
         } else if (ratio < 1 - TOLERANCE) {
             // Too short: try adding next candidate zone first, then fall back
             // to pushing a displacement waypoint out along the route bearing.
@@ -984,6 +1015,7 @@ async function refineRoute(baseWaypoints, targetKm, surfacePref, candidateList, 
                     [wp.lat, wp.lon],
                     waypoints[waypoints.length - 1],
                 ];
+                loadBearing.push(true); // new candidate corner claims a tile
             } else {
                 // No more candidates — insert a padding point pushed out by
                 // half the deficit distance along the main quadrant bearing.
@@ -996,6 +1028,7 @@ async function refineRoute(baseWaypoints, targetKm, surfacePref, candidateList, 
                     padPt,
                     ...waypoints.slice(1),
                 ];
+                loadBearing.unshift(false); // pure padding, not tile-claiming
             }
         } else {
             break;
@@ -1170,7 +1203,7 @@ async function plotRoadRoute(direction, route, targetDistanceKm, color, badgeEl)
         const tilesSuffix = verified
             ? ` · ${unionMap.size} new tile${unionMap.size === 1 ? '' : 's'}${unionMap.size === 0 ? ' reached' : ''}`
             : '';
-        labelEl.textContent = `${DIRECTION_LABELS[direction]} · ${parts.join(' / ')}${tilesSuffix}`;
+        labelEl.textContent = `${routeDirLabel(route)} · ${parts.join(' / ')}${tilesSuffix}`;
     }
 
     infoEl.innerHTML =
