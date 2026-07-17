@@ -102,6 +102,20 @@
                                 <div class="small text-muted mt-1" id="end-display">Click map or search to set</div>
                             </div>
                             <div class="mb-2">
+                                <label class="form-label small mb-0">Target area <span class="text-muted">(optional)</span></label>
+                                <div class="d-flex flex-wrap gap-2 align-items-center">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" id="draw-area-btn"
+                                            aria-label="Draw a target area on the map — click and drag">
+                                        <i class="bi bi-bounding-box" aria-hidden="true"></i> Draw area
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary d-none" id="clear-area-btn"
+                                            aria-label="Clear the drawn target area">
+                                        <i class="bi bi-x-lg" aria-hidden="true"></i> Clear
+                                    </button>
+                                    <span class="text-muted small" id="area-status"></span>
+                                </div>
+                            </div>
+                            <div class="mb-2">
                                 <label class="form-label small mb-0" for="target-type-select">Target</label>
                                 <select class="form-select form-select-sm" id="target-type-select" aria-label="Route target — distance or duration">
                                     <option value="distance" selected>Distance</option>

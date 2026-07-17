@@ -22,6 +22,10 @@
  *       adjacency only makes sense within a single zoom's coordinate space),
  *       then the best zones from each are merged into one route per quadrant.
  *   - optimizeFor: 'tiles' | 'efficiency'
+ *   - areaBounds: [south, west, north, east] | null (#491) — rider-drawn
+ *       target area. When present, further restricts reachable tiles to
+ *       those inside the box, in addition to (not instead of) the reach
+ *       radius derived from distanceKm.
  *
  * Output messages (streamed):
  *   {type: 'route', route: {direction, waypoints, stats}}  — one per generated route
@@ -52,7 +56,7 @@ const GRID_LABELS = { 14: 'squadrats', 17: 'squadratinhos' };
  * still splits into a distinct route per direction rather than collapsing
  * into a single zone/route.
  */
-function scanGrid(coverageData, start, reachRadius) {
+function scanGrid(coverageData, start, reachRadius, areaBounds) {
     const bounds = coverageData.bounds;
     if (!bounds) throw new Error('Coverage data has no bounds');
     const zoom = coverageData.zoom || 14;
@@ -61,9 +65,18 @@ function scanGrid(coverageData, start, reachRadius) {
     const visitedSet = new Set(Object.keys(coverageData.visited || {}));
     const unvisited = allTiles.filter(t => !visitedSet.has(t.key));
 
-    const reachableTiles = unvisited.filter(
+    let reachableTiles = unvisited.filter(
         t => haversineKm(start.lat, start.lon, t.lat, t.lon) <= reachRadius
     );
+    // #491: rider-drawn target area, additional to (not instead of) the
+    // reach radius — a drawn box narrows which reachable tiles count,
+    // it doesn't override how far the route is allowed to travel.
+    if (areaBounds) {
+        const [south, west, north, east] = areaBounds;
+        reachableTiles = reachableTiles.filter(
+            t => t.lat >= south && t.lat <= north && t.lon >= west && t.lon <= east
+        );
+    }
 
     const buckets = { NE: [], SE: [], SW: [], NW: [] };
     for (const t of reachableTiles) {
@@ -73,7 +86,7 @@ function scanGrid(coverageData, start, reachRadius) {
     return { zoom, unvisited, reachableTiles, buckets, visitedSet };
 }
 
-function optimize({ start, end, distanceKm, mode, routeType, shape, coverageData, coverageDataSecondary, optimizeFor, corridorConstraint }) {
+function optimize({ start, end, distanceKm, mode, routeType, shape, coverageData, coverageDataSecondary, optimizeFor, corridorConstraint, areaBounds }) {
     const isRoundTrip = routeType === 'round_trip' || !end;
     // Default to 'loop' for round trips when the caller doesn't specify —
     // matches the pre-#489 behaviour of drawing from whichever quadrant the
@@ -82,8 +95,8 @@ function optimize({ start, end, distanceKm, mode, routeType, shape, coverageData
     const reachRadius = distanceKm / (isRoundTrip ? 4 : 3);
 
     reportProgress('Scanning tile grid…');
-    const primary = scanGrid(coverageData, start, reachRadius);
-    const secondary = coverageDataSecondary ? scanGrid(coverageDataSecondary, start, reachRadius) : null;
+    const primary = scanGrid(coverageData, start, reachRadius, areaBounds);
+    const secondary = coverageDataSecondary ? scanGrid(coverageDataSecondary, start, reachRadius, areaBounds) : null;
     const grids = secondary ? [primary, secondary] : [primary];
 
     const totalUnvisited = grids.reduce((sum, g) => sum + g.unvisited.length, 0);

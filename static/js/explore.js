@@ -19,6 +19,13 @@ let coverageData = null;
 let coverageDataSecondary = null;
 let explorationWorker = null;
 
+// #491: rider-drawn target area — [south, west, north, east] | null.
+let selectedAreaBounds = null;
+let isDrawingArea = false;
+let drawAreaRect = null;
+let _drawStartLatLng = null;
+let _skipNextMapClick = false;
+
 // Phase-1 candidate lists per direction, for iterative refinement.
 // { NE: [zoneList, ...], SE: [...], ... }
 let _phase1Candidates = {};
@@ -45,6 +52,8 @@ document.addEventListener('DOMContentLoaded', () => {
     initDistanceSlider();
     initDurationSlider();
     document.getElementById('target-type-select').addEventListener('change', onTargetTypeChange);
+    document.getElementById('draw-area-btn').addEventListener('click', toggleDrawArea);
+    document.getElementById('clear-area-btn').addEventListener('click', clearArea);
     initTooltips();
     updateWorkflowState();
 });
@@ -156,7 +165,44 @@ function initMap() {
     routeLayer = L.featureGroup().addTo(map);
     waypointMarkers = L.layerGroup().addTo(map);
 
+    // #491: click-and-drag to draw a target-area rectangle. Only active
+    // while "Draw area" is toggled on; otherwise these are no-ops and the
+    // map behaves as before (pan/click-to-set-start).
+    map.on('mousedown', (e) => {
+        if (!isDrawingArea) return;
+        _drawStartLatLng = e.latlng;
+        if (drawAreaRect) { map.removeLayer(drawAreaRect); drawAreaRect = null; }
+        drawAreaRect = L.rectangle(L.latLngBounds(e.latlng, e.latlng), {
+            color: '#0d6efd', weight: 2, fillOpacity: 0.08, dashArray: '4,4',
+        }).addTo(map);
+    });
+    map.on('mousemove', (e) => {
+        if (!isDrawingArea || !_drawStartLatLng || !drawAreaRect) return;
+        drawAreaRect.setBounds(L.latLngBounds(_drawStartLatLng, e.latlng));
+    });
+    map.on('mouseup', (e) => {
+        if (!isDrawingArea || !_drawStartLatLng) return;
+        const drawnBounds = L.latLngBounds(_drawStartLatLng, e.latlng);
+        _drawStartLatLng = null;
+        _skipNextMapClick = true; // the browser fires 'click' right after this mouseup
+
+        if (!drawnBounds.isValid() || drawnBounds.getNorthEast().equals(drawnBounds.getSouthWest())) {
+            // Degenerate rectangle (no drag distance) — treat as a cancel.
+            if (drawAreaRect) { map.removeLayer(drawAreaRect); drawAreaRect = null; }
+        } else {
+            selectedAreaBounds = [
+                drawnBounds.getSouth(), drawnBounds.getWest(),
+                drawnBounds.getNorth(), drawnBounds.getEast(),
+            ];
+            document.getElementById('clear-area-btn').classList.remove('d-none');
+            document.getElementById('area-status').textContent = 'Area selected — routes stay within it';
+        }
+        setDrawAreaMode(false);
+    });
+
     map.on('click', (e) => {
+        if (_skipNextMapClick) { _skipNextMapClick = false; return; }
+        if (isDrawingArea) return;
         clearHighlight();
         const routeType = document.getElementById('route-type-select').value;
         // In point-to-point mode: first click sets end if unset, else update start.
@@ -166,6 +212,29 @@ function initMap() {
             setStart(e.latlng.lat, e.latlng.lng);
         }
     });
+}
+
+/** Enter or exit rectangle-draw mode (#491), disabling map panning while active
+ *  so a click-drag draws a box instead of moving the map. */
+function setDrawAreaMode(active) {
+    isDrawingArea = active;
+    document.getElementById('draw-area-btn').classList.toggle('active', active);
+    map.dragging[active ? 'disable' : 'enable']();
+    map.getContainer().style.cursor = active ? 'crosshair' : '';
+    if (active) {
+        document.getElementById('area-status').textContent = 'Click and drag on the map to draw an area…';
+    }
+}
+
+function toggleDrawArea() {
+    setDrawAreaMode(!isDrawingArea);
+}
+
+function clearArea() {
+    if (drawAreaRect) { map.removeLayer(drawAreaRect); drawAreaRect = null; }
+    selectedAreaBounds = null;
+    document.getElementById('clear-area-btn').classList.add('d-none');
+    document.getElementById('area-status').textContent = '';
 }
 
 function setStart(lat, lon, label = null) {
@@ -656,6 +725,7 @@ async function generateRoute() {
         coverageData,
         coverageDataSecondary: mode === 'both' ? coverageDataSecondary : null,
         optimizeFor,
+        areaBounds: selectedAreaBounds,
     });
 }
 
