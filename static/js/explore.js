@@ -638,17 +638,62 @@ function clearHighlight() {
 }
 
 /**
- * Draw small arrowhead triangles at the midpoint of each segment in `coords`.
+ * Draw small arrowhead triangles along `coords`, spaced adaptively rather
+ * than at a fixed interval: an arrow is placed once at least MIN_SPACING
+ * has passed AND either MAX_SPACING is reached or the route has turned
+ * enough to need a fresh direction cue. A long straight stretch of road
+ * only gets an occasional arrow; a winding stretch gets one each time it
+ * bends meaningfully, but never closer together than MIN_SPACING (dense
+ * GPS/routing points would otherwise produce an overlapping arrow cluster).
  * Each arrow is a filled L.polygon added to routeLayer.
  * `coords` is an array of [lat, lng] pairs.
  */
 function addArrows(coords, color) {
     const ARROW_SIZE_DEG = 0.0004; // ~40m half-length at mid-latitudes
+    const MIN_SPACING_METERS = 800;
+    const MAX_SPACING_METERS = 6000;
+    const TURN_THRESHOLD_DEG = 30; // accumulated heading change that forces a new arrow
+    const EARTH_RADIUS_M = 6371000;
+
+    function segmentLengthMeters(lat1, lng1, lat2, lng2) {
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLng = (lng2 - lng1) * Math.PI / 180 * Math.cos(lat1 * Math.PI / 180);
+        return EARTH_RADIUS_M * Math.sqrt(dLat * dLat + dLng * dLng);
+    }
+
+    function bearingDeg(lat1, lng1, lat2, lng2) {
+        const dLat = lat2 - lat1;
+        const dLng = (lng2 - lng1) * Math.cos(lat1 * Math.PI / 180);
+        return Math.atan2(dLng, dLat) * 180 / Math.PI;
+    }
+
+    function angleDiffDeg(a, b) {
+        let diff = (a - b) % 360;
+        if (diff > 180) diff -= 360;
+        if (diff < -180) diff += 360;
+        return Math.abs(diff);
+    }
+
+    let distSinceLastArrow = MIN_SPACING_METERS; // force an arrow near the start
+    let headingSinceLastArrow = null; // bearing at the last-placed arrow
+
     for (let i = 0; i < coords.length - 1; i++) {
         const [lat1, lng1] = coords[i];
         const [lat2, lng2] = coords[i + 1];
-        // Skip degenerate segments
-        if (lat1 === lat2 && lng1 === lng2) continue;
+        const segLen = segmentLengthMeters(lat1, lng1, lat2, lng2);
+        if (segLen === 0) continue;
+
+        distSinceLastArrow += segLen;
+        const bearing = bearingDeg(lat1, lng1, lat2, lng2);
+        const turned = headingSinceLastArrow !== null &&
+            angleDiffDeg(bearing, headingSinceLastArrow) >= TURN_THRESHOLD_DEG;
+
+        const dueToDistance = distSinceLastArrow >= MAX_SPACING_METERS;
+        const dueToTurn = distSinceLastArrow >= MIN_SPACING_METERS && turned;
+        if (!dueToDistance && !dueToTurn) continue;
+
+        distSinceLastArrow = 0;
+        headingSinceLastArrow = bearing;
 
         // Midpoint
         const midLat = (lat1 + lat2) / 2;
