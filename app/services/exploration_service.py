@@ -50,7 +50,7 @@ class ExplorationService:
     ) -> Dict[str, Any]:
         try:
             result = self._tracker.get_tile_coverage(bounds, zoom=zoom)
-            return {"status": "success", **result.to_dict()}
+            return {"status": "success", **result.to_dict(), "water_tiles": self._water_tiles_for(bounds, zoom)}
         except Exception as exc:
             logger.error("Tile coverage failed: %s", exc, exc_info=True)
             return {"status": "error", "message": str(exc)}
@@ -58,10 +58,25 @@ class ExplorationService:
     def get_tile_coverage_all(self, zoom: Optional[int] = None) -> Dict[str, Any]:
         try:
             result = self._tracker.get_tile_coverage_all(zoom=zoom)
-            return {"status": "success", **result.to_dict()}
+            water_tiles = self._water_tiles_for(result.bounds, zoom) if result.bounds else []
+            return {"status": "success", **result.to_dict(), "water_tiles": water_tiles}
         except Exception as exc:
             logger.error("Full tile coverage failed: %s", exc, exc_info=True)
             return {"status": "error", "message": str(exc)}
+
+    def _water_tiles_for(
+        self,
+        bounds: Tuple[float, float, float, float],
+        zoom: Optional[int],
+    ) -> List[str]:
+        """Best-effort over-water tile lookup (#525) — never lets a water-layer
+        failure block tile coverage, since the caller only uses this to skip
+        tiles when generating new routes, not to render coverage itself."""
+        try:
+            return self._tracker.get_water_tiles(bounds, zoom=zoom).get("water_tiles", [])
+        except Exception as exc:
+            logger.warning("Water-tile lookup failed: %s", exc)
+            return []
 
     def get_road_coverage(
         self,

@@ -26,6 +26,19 @@ SQUADRATINHO_ZOOM = 17      # "squadratinho" granularity — each squadrat = 8x8
 INTERPOLATION_INTERVAL_M = 80
 EARTH_RADIUS_M = 6_371_000
 MAX_ROAD_NETWORK_CACHES = 20  # cap on retained road_network_<hash>.graphml files
+MAX_WATER_TILE_CACHES = 20    # cap on retained water_tiles_<zoom>_<hash>.json files
+
+# OSM tags whose features count as "water" for the over-water tile filter (#525).
+WATER_TAGS = {
+    "natural": ["water", "bay", "strait"],
+    "waterway": "riverbank",
+    "landuse": "reservoir",
+    "place": "sea",
+}
+# A tile must be at least this fraction covered by water geometry before it's
+# excluded from new-tile scoring — a tile that merely touches a lake shore
+# still has rideable land in it and shouldn't be filtered out.
+WATER_TILE_FRACTION_THRESHOLD = 0.5
 
 
 @dataclass
@@ -541,6 +554,104 @@ class CoverageTracker:
         }
 
     # ------------------------------------------------------------------
+    # Water-tile filtering (#525) — excludes over-water tiles from
+    # new-tile scoring so route generation isn't pulled toward lakes/bays
+    # for tile-coverage credit.
+    # ------------------------------------------------------------------
+
+    def get_water_tiles(
+        self,
+        bounds: Tuple[float, float, float, float],
+        zoom: Optional[int] = None,
+    ) -> dict:
+        """
+        Find tiles within `bounds` that are predominantly open water.
+
+        Requires osmnx and shapely. Degrades gracefully (empty result, not
+        an error) when unavailable or when the OSM fetch fails — an unknown
+        water layer should never block tile coverage / route generation,
+        it just means water tiles aren't filtered out.
+        """
+        zoom = zoom or self.zoom
+        cache_path = self.cache_dir / f"water_tiles_{zoom}_{_bbox_cache_key(bounds)}.json"
+        cached = self._load_water_tile_cache(cache_path)
+        if cached is not None:
+            return cached
+
+        try:
+            import osmnx as ox
+            from shapely.geometry import box
+            from shapely.ops import unary_union
+        except ImportError:
+            logger.warning("osmnx/shapely not installed — water-tile filtering unavailable")
+            return {"status": "success", "water_tiles": []}
+
+        south, west, north, east = bounds
+        try:
+            water_gdf = ox.features_from_bbox(bbox=(north, south, east, west), tags=WATER_TAGS)
+        except Exception as exc:
+            logger.warning("Failed to fetch water features for bounds %s: %s", bounds, exc)
+            return {"status": "success", "water_tiles": []}
+
+        water_geoms = [g for g in water_gdf.geometry if g is not None and not g.is_empty]
+        if not water_geoms:
+            result = {"status": "success", "water_tiles": []}
+            self._save_water_tile_cache(cache_path, result)
+            return result
+
+        water_union = unary_union(water_geoms)
+
+        min_tx, min_ty = lat_lon_to_tile(north, west, zoom)
+        max_tx, max_ty = lat_lon_to_tile(south, east, zoom)
+
+        water_tiles: List[str] = []
+        for tx in range(min_tx, max_tx + 1):
+            for ty in range(min_ty, max_ty + 1):
+                t_south, t_west, t_north, t_east = tile_to_bounds(tx, ty, zoom)
+                tile_poly = box(t_west, t_south, t_east, t_north)
+                if not water_union.intersects(tile_poly):
+                    continue
+                overlap_area = tile_poly.intersection(water_union).area
+                if overlap_area / tile_poly.area >= WATER_TILE_FRACTION_THRESHOLD:
+                    water_tiles.append(f"{tx},{ty}")
+
+        result = {"status": "success", "water_tiles": water_tiles}
+        self._save_water_tile_cache(cache_path, result)
+        self._evict_old_water_tile_caches()
+        return result
+
+    def _load_water_tile_cache(self, path: Path) -> Optional[dict]:
+        if not path.exists():
+            return None
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return None
+
+    def _save_water_tile_cache(self, path: Path, result: dict) -> None:
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(result, f)
+            secure_chmod(path)
+        except OSError as exc:
+            logger.warning("Failed to write water-tile cache: %s", exc)
+
+    def _evict_old_water_tile_caches(self) -> None:
+        """Keep at most MAX_WATER_TILE_CACHES water_tiles_*.json files,
+        evicting the least-recently-modified ones beyond that cap."""
+        caches = sorted(
+            self.cache_dir.glob("water_tiles_*.json"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        for p in caches[MAX_WATER_TILE_CACHES:]:
+            try:
+                p.unlink()
+            except OSError:
+                pass
+
+    # ------------------------------------------------------------------
     # Cache helpers
     # ------------------------------------------------------------------
 
@@ -591,6 +702,13 @@ class CoverageTracker:
             except OSError:
                 pass
         for p in self.cache_dir.glob("road_network_*.graphml"):
+            try:
+                p.unlink()
+            except OSError:
+                pass
+        # Water tiles depend only on OSM geometry, not ride history, but are
+        # cleared alongside everything else for a clean-slate invalidate.
+        for p in self.cache_dir.glob("water_tiles_*.json"):
             try:
                 p.unlink()
             except OSError:

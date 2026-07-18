@@ -15,7 +15,9 @@
  *       round trip, whether outbound/return should be biased toward
  *       different corridors (loop) or deliberately retrace the same one
  *       (out_and_back). Ignored when routeType is 'point_to_point'.
- *   - coverageData: {visited: {"x,y": {...}}, total_in_bounds, bounds, zoom}
+ *   - coverageData: {visited: {"x,y": {...}}, total_in_bounds, bounds, zoom,
+ *       water_tiles: ["x,y", ...]} — water_tiles (#525) are predominantly
+ *       over-water tiles, excluded from candidate generation same as visited.
  *   - coverageDataSecondary: same shape as coverageData, at a different zoom | null
  *       When present ("Both" grid mode), routes are optimized against both
  *       grids at once — each grid's zones are found independently (tile
@@ -67,7 +69,11 @@ function scanGrid(coverageData, start, reachRadius, areaBounds) {
 
     const allTiles = buildTileSet(bounds, zoom);
     const visitedSet = new Set(Object.keys(coverageData.visited || {}));
-    const unvisited = allTiles.filter(t => !visitedSet.has(t.key));
+    // #525: over-water tiles (lakes, bays, ocean) aren't reachable by bike or
+    // foot — exclude them from "new tile" candidates entirely rather than
+    // letting them pull generated routes toward water for coverage credit.
+    const waterSet = new Set(coverageData.water_tiles || []);
+    const unvisited = allTiles.filter(t => !visitedSet.has(t.key) && !waterSet.has(t.key));
 
     let reachableTiles = unvisited.filter(
         t => haversineKm(start.lat, start.lon, t.lat, t.lon) <= reachRadius

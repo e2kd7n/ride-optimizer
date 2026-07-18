@@ -81,6 +81,37 @@ class TestExplorationService:
             service.invalidate_caches()
             mock_inv.assert_called_once()
 
+    def test_get_tile_coverage_includes_water_tiles(self, service):
+        """#525: bounded coverage carries water_tiles so the client can skip
+        over-water tiles when generating routes."""
+        service._tracker._activities_cache = []
+        with patch.object(service._tracker, "get_water_tiles", return_value={"status": "success", "water_tiles": ["1,2"]}):
+            result = service.get_tile_coverage((40.0, -74.0, 41.0, -73.0))
+        assert result["water_tiles"] == ["1,2"]
+
+    def test_get_tile_coverage_all_includes_water_tiles(self, service):
+        service._tracker._activities_cache = []
+        with patch.object(service._tracker, "get_tile_coverage_all", return_value=TileCoverage(
+            visited={}, total_in_bounds=1, bounds=(40.0, -74.0, 41.0, -73.0), zoom=TILE_ZOOM,
+        )):
+            with patch.object(service._tracker, "get_water_tiles", return_value={"status": "success", "water_tiles": ["3,4"]}):
+                result = service.get_tile_coverage_all()
+        assert result["water_tiles"] == ["3,4"]
+
+    def test_get_tile_coverage_all_no_bounds_skips_water_lookup(self, service):
+        """No activities means no bounds to query — water lookup must not
+        be attempted with a None bbox."""
+        service._tracker._activities_cache = []
+        result = service.get_tile_coverage_all()
+        assert result["water_tiles"] == []
+
+    def test_water_tile_lookup_failure_does_not_break_coverage(self, service):
+        service._tracker._activities_cache = []
+        with patch.object(service._tracker, "get_water_tiles", side_effect=RuntimeError("boom")):
+            result = service.get_tile_coverage((40.0, -74.0, 41.0, -73.0))
+        assert result["status"] == "success"
+        assert result["water_tiles"] == []
+
 
 # ── verify_tile_claims (#493) ────────────────────────────────────
 

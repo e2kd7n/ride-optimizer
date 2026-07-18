@@ -20,6 +20,7 @@ from src.coverage_tracker import (
     TILE_ZOOM,
     SQUADRATINHO_ZOOM,
     MAX_ROAD_NETWORK_CACHES,
+    MAX_WATER_TILE_CACHES,
 )
 
 
@@ -466,3 +467,119 @@ class TestRoadNetworkCacheEviction:
         tracker.invalidate_caches()
         remaining = list(tracker.cache_dir.glob("road_network*.graphml"))
         assert remaining == []
+
+
+# ── get_water_tiles (#525) ────────────────────────────────────────
+
+class _FakeGeom:
+    """Minimal stand-in for a shapely geometry, just enough to exercise the
+    intersects/intersection/area calls get_water_tiles makes."""
+
+    def __init__(self, area, overlap_fraction):
+        self.area = area
+        self._overlap_fraction = overlap_fraction
+        self.is_empty = False
+
+    def intersects(self, other):
+        return self._overlap_fraction > 0
+
+    def intersection(self, other):
+        return _FakeGeom(self.area * self._overlap_fraction, 1.0)
+
+
+class TestWaterTiles:
+    @pytest.fixture
+    def mock_config(self):
+        config = MagicMock()
+        config.get = MagicMock(side_effect=lambda key, default=None: default)
+        return config
+
+    @pytest.fixture
+    def tracker(self, mock_config, tmp_path):
+        t = CoverageTracker(mock_config)
+        t.cache_dir = tmp_path
+        return t
+
+    BOUNDS = (40.700, -74.010, 40.710, -74.000)
+
+    def _mock_modules(self, mock_ox, tile_overlap_fraction=1.0):
+        mock_shapely_geometry = MagicMock(box=lambda w, s, e, n: _FakeGeom(1.0, tile_overlap_fraction))
+        mock_shapely_ops = MagicMock(unary_union=lambda geoms: geoms[0])
+        return {
+            "osmnx": mock_ox,
+            "shapely": MagicMock(),
+            "shapely.geometry": mock_shapely_geometry,
+            "shapely.ops": mock_shapely_ops,
+        }
+
+    def test_graceful_without_osmnx(self, tracker):
+        with patch.dict("sys.modules", {"osmnx": None, "shapely": None, "shapely.geometry": None, "shapely.ops": None}):
+            result = tracker.get_water_tiles(self.BOUNDS)
+        assert result == {"status": "success", "water_tiles": []}
+
+    def test_graceful_on_fetch_failure(self, tracker):
+        mock_ox = MagicMock()
+        mock_ox.features_from_bbox.side_effect = RuntimeError("network down")
+        with patch.dict("sys.modules", self._mock_modules(mock_ox)):
+            result = tracker.get_water_tiles(self.BOUNDS)
+        assert result == {"status": "success", "water_tiles": []}
+
+    def test_no_water_features_returns_empty(self, tracker):
+        mock_gdf = MagicMock()
+        mock_gdf.geometry = []
+        mock_ox = MagicMock()
+        mock_ox.features_from_bbox.return_value = mock_gdf
+        with patch.dict("sys.modules", self._mock_modules(mock_ox)):
+            result = tracker.get_water_tiles(self.BOUNDS)
+        assert result == {"status": "success", "water_tiles": []}
+
+    def test_predominantly_water_tiles_are_excluded(self, tracker):
+        zoom = 14
+        min_tx, min_ty = lat_lon_to_tile(self.BOUNDS[2], self.BOUNDS[1], zoom)
+        max_tx, max_ty = lat_lon_to_tile(self.BOUNDS[0], self.BOUNDS[3], zoom)
+        expected_tiles = (max_tx - min_tx + 1) * (max_ty - min_ty + 1)
+
+        mock_gdf = MagicMock()
+        mock_gdf.geometry = [_FakeGeom(1.0, 1.0)]
+        mock_ox = MagicMock()
+        mock_ox.features_from_bbox.return_value = mock_gdf
+
+        with patch.dict("sys.modules", self._mock_modules(mock_ox, tile_overlap_fraction=0.75)):
+            result = tracker.get_water_tiles(self.BOUNDS, zoom=zoom)
+
+        assert result["status"] == "success"
+        assert len(result["water_tiles"]) == expected_tiles
+
+    def test_below_threshold_tiles_not_excluded(self, tracker):
+        mock_gdf = MagicMock()
+        mock_gdf.geometry = [_FakeGeom(1.0, 1.0)]
+        mock_ox = MagicMock()
+        mock_ox.features_from_bbox.return_value = mock_gdf
+
+        with patch.dict("sys.modules", self._mock_modules(mock_ox, tile_overlap_fraction=0.3)):
+            result = tracker.get_water_tiles(self.BOUNDS)
+
+        assert result["water_tiles"] == []
+
+    def test_result_is_cached_on_disk(self, tracker):
+        cache_path = tracker.cache_dir / f"water_tiles_{TILE_ZOOM}_{_bbox_cache_key(self.BOUNDS)}.json"
+        cache_path.write_text(json.dumps({"status": "success", "water_tiles": ["1,2"]}))
+
+        mock_ox = MagicMock()
+        with patch.dict("sys.modules", {"osmnx": mock_ox}):
+            result = tracker.get_water_tiles(self.BOUNDS)
+
+        assert result == {"status": "success", "water_tiles": ["1,2"]}
+        mock_ox.features_from_bbox.assert_not_called()
+
+    def test_evict_old_water_tile_caches_caps_count(self, tracker):
+        for i in range(MAX_WATER_TILE_CACHES + 5):
+            (tracker.cache_dir / f"water_tiles_fake{i}.json").write_text("{}")
+        tracker._evict_old_water_tile_caches()
+        remaining = list(tracker.cache_dir.glob("water_tiles_*.json"))
+        assert len(remaining) == MAX_WATER_TILE_CACHES
+
+    def test_invalidate_caches_removes_water_tile_caches(self, tracker):
+        (tracker.cache_dir / "water_tiles_fake.json").write_text("{}")
+        tracker.invalidate_caches()
+        assert list(tracker.cache_dir.glob("water_tiles_*.json")) == []
