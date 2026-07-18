@@ -1079,6 +1079,16 @@ async function refineRoute(baseWaypoints, targetKm, surfacePref, candidateList, 
         }
     }
 
+    // #526 — if candidates and displacement padding were exhausted without
+    // ever getting close to the target (e.g. the padding direction runs
+    // into water or a road-network dead end), don't silently hand back a
+    // route that's a small fraction of the requested distance. Over-length
+    // stuck results are still returned above (getting a longer ride than
+    // asked isn't nearly as broken as a near-zero-length one).
+    if (result && result.distance_km / targetKm < 1 - TOLERANCE) {
+        return null;
+    }
+
     return result;
 }
 
