@@ -10,6 +10,7 @@ Routes:
   POST /api/exploration/invalidate
   POST /api/exploration/route
   POST /api/exploration/verify-tiles
+  POST /api/exploration/new-tiles
   GET  /api/geocode
 """
 
@@ -287,6 +288,35 @@ def exploration_verify_tiles():
         return jsonify({'status': 'error', 'message': f'zoom must be one of {allowed_zooms}'}), 400
 
     result = svc.verify_tile_claims(coordinates, tiles)
+    return jsonify(result), 200
+
+
+@bp.route('/exploration/new-tiles', methods=['POST'])
+@limiter.limit("30 per minute")
+def exploration_new_tiles():
+    """Find every tile a route's real polyline crosses that isn't already
+    covered by a past activity (#493 follow-up).
+
+    Unlike /exploration/verify-tiles, which only checks a fixed candidate
+    list picked before the road route was known, this derives new tiles
+    directly from the routed coordinates — so tiles picked up incidentally
+    (a detour to hit a distance target, a road-snap that wanders outside
+    the planned corner) are still counted.
+    """
+    svc = current_app.container.get_exploration_service()
+    data = request.get_json(silent=True) or {}
+
+    coordinates = data.get('coordinates')
+    if not isinstance(coordinates, list) or len(coordinates) < 1:
+        return jsonify({'status': 'error', 'message': 'coordinates must be a non-empty list of [lat, lon] pairs'}), 400
+    if len(coordinates) > 5000:
+        return jsonify({'status': 'error', 'message': 'coordinates list too large (max 5000)'}), 400
+    try:
+        coordinates = [(float(c[0]), float(c[1])) for c in coordinates]
+    except (TypeError, ValueError, IndexError):
+        return jsonify({'status': 'error', 'message': 'coordinates must be [lat, lon] number pairs'}), 400
+
+    result = svc.find_new_tiles(coordinates)
     return jsonify(result), 200
 
 

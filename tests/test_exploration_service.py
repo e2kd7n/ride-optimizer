@@ -135,6 +135,70 @@ class TestVerifyTileClaims:
         assert {"x": 0, "y": 0, "zoom": SQUADRATINHO_ZOOM} not in result["claimed"]
 
 
+# ── find_new_tiles (#493 follow-up) ──────────────────────────────
+
+
+class TestFindNewTiles:
+    """Phase-2 distance refinement can carry a road route well outside the
+    handful of tiles Phase-1 planned for (a detour to hit a distance target,
+    a road-snap that wanders past the planned corner). find_new_tiles derives
+    ground truth from the routed coordinates directly instead of checking a
+    fixed candidate list, so those incidental tiles still get counted."""
+
+    def test_fresh_route_reports_new_tiles_at_both_zooms(self, service):
+        service._tracker._activities_cache = []
+        x, y = 4825, 6160
+        south, west, north, east = tile_to_bounds(x, y, zoom=TILE_ZOOM)
+        inside_lon = west + (east - west) * 0.5
+        coordinates = [(south, inside_lon), (north, inside_lon)]
+
+        result = service.find_new_tiles(coordinates)
+
+        assert result["status"] == "success"
+        by_zoom = {entry["zoom"]: entry["tiles"] for entry in result["newTilesByZoom"]}
+        assert TILE_ZOOM in by_zoom
+        assert {"x": x, "y": y} in by_zoom[TILE_ZOOM]
+        assert SQUADRATINHO_ZOOM in by_zoom  # the same line also crosses squadratinhos
+
+    def test_already_ridden_tile_excluded(self, service):
+        import polyline as codec
+
+        x, y = 4825, 6160
+        south, west, north, east = tile_to_bounds(x, y, zoom=TILE_ZOOM)
+        inside_lon = west + (east - west) * 0.5
+        coordinates = [(south, inside_lon), (north, inside_lon)]
+
+        service._tracker._activities_cache = [{
+            "id": 1,
+            "polyline": codec.encode(coordinates),
+            "start_date": "2026-01-01",
+            "type": "Ride",
+        }]
+
+        result = service.find_new_tiles(coordinates)
+
+        assert result["status"] == "success"
+        by_zoom = {entry["zoom"]: entry["tiles"] for entry in result["newTilesByZoom"]}
+        assert {"x": x, "y": y} not in by_zoom.get(TILE_ZOOM, [])
+
+    def test_detour_far_outside_planned_area_still_counted(self, service):
+        """The exact bug reported in #493 follow-up: a road-route detour
+        (e.g. inserted by refineRoute to hit a distance target) lands in a
+        tile nobody planned for. Unlike verify_tile_claims (which only
+        checks a supplied candidate list), find_new_tiles must still report
+        it since it derives tiles straight from the coordinates."""
+        service._tracker._activities_cache = []
+        x, y = 100, 200  # nowhere near any "planned" candidate
+        south, west, north, east = tile_to_bounds(x, y, zoom=TILE_ZOOM)
+        inside_lon = west + (east - west) * 0.5
+        coordinates = [(south, inside_lon), (north, inside_lon)]
+
+        result = service.find_new_tiles(coordinates)
+
+        by_zoom = {entry["zoom"]: entry["tiles"] for entry in result["newTilesByZoom"]}
+        assert {"x": x, "y": y} in by_zoom[TILE_ZOOM]
+
+
 # ── Surface-preference → ORS profile mapping ────────────────────
 
 
