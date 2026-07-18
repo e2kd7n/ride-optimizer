@@ -286,6 +286,38 @@ class TestExplorationVerifyTilesAPI:
 
 
 @pytest.mark.unit
+class TestExplorationNewTilesAPI:
+    """Tests for /api/exploration/new-tiles (#493 follow-up) — derives new
+    tiles straight from a route's real coordinates, not a planned candidate
+    list, so it still counts tiles a distance-refinement detour picks up."""
+
+    def test_fresh_route_reports_new_tile(self, client):
+        from src.coverage_tracker import tile_to_bounds
+        x, y, zoom = 4825, 6160, 14
+        south, west, north, east = tile_to_bounds(x, y, zoom=zoom)
+        inside_lon = west + (east - west) * 0.5
+
+        response = client.post('/api/exploration/new-tiles', json={
+            'coordinates': [[south, inside_lon], [north, inside_lon]],
+        })
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['status'] == 'success'
+        by_zoom = {entry['zoom']: entry['tiles'] for entry in data['newTilesByZoom']}
+        assert {'x': x, 'y': y} in by_zoom[zoom]
+
+    def test_missing_coordinates_rejected(self, client):
+        response = client.post('/api/exploration/new-tiles', json={})
+        assert response.status_code == 400
+
+    def test_oversized_coordinates_rejected(self, client):
+        response = client.post('/api/exploration/new-tiles', json={
+            'coordinates': [[40.0, -74.0]] * 5001,
+        })
+        assert response.status_code == 400
+
+
+@pytest.mark.unit
 class TestExplorationBboxValidation:
     """Tests for #481 — bbox sanity checks on /api/exploration/tiles and /api/exploration/roads."""
 

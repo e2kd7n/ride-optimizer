@@ -1085,31 +1085,31 @@ async function refineRoute(baseWaypoints, targetKm, surfacePref, candidateList, 
 /** Bearing (degrees) from the start toward the quadrant centre. */
 const QUADRANT_BEARING = { NE: 45, SE: 135, SW: 225, NW: 315 };
 
-/** Flatten a worker's newTilesByZoom into a flat [{x, y, zoom}] list (#493). */
-function flattenNewTiles(newTilesByZoom) {
+/**
+ * Ask the backend which tiles a route's real road-route coordinates
+ * actually cross that aren't already covered (#493 follow-up). Derived
+ * straight from the routed polyline rather than a pre-planned candidate
+ * list, so detours added purely to hit a distance target still count.
+ * Returns null (not []) on failure so callers can distinguish "verified,
+ * claims nothing" from "couldn't verify" and fall back to leaving the
+ * Phase-1 preview alone rather than wrongly clearing it on a network hiccup.
+ */
+async function findNewTilesForRoute(coordinates) {
+    try {
+        const res = await api.findNewTiles({ coordinates });
+        return (res && res.status === 'success') ? flattenNewTilesByZoom(res.newTilesByZoom) : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+/** Flatten a {zoom, tiles: [{x, y}]}[] list into a flat [{x, y, zoom}] list. */
+function flattenNewTilesByZoom(newTilesByZoom) {
     const out = [];
     for (const { zoom, tiles } of newTilesByZoom || []) {
         for (const { x, y } of tiles) out.push({ x, y, zoom });
     }
     return out;
-}
-
-/**
- * Ask the backend which of the planned tiles a route's real coordinates
- * actually cross (#493), using the same exact tile-crossing math used to
- * score recorded activities. Returns null (not []) on failure so callers
- * can distinguish "verified, claims nothing" from "couldn't verify" and
- * fall back to leaving the Phase-1 preview alone rather than wrongly
- * clearing it because of a network hiccup.
- */
-async function verifyClaimedTiles(coordinates, tiles) {
-    if (!tiles.length) return [];
-    try {
-        const res = await api.verifyTileClaims({ coordinates, tiles });
-        return (res && res.status === 'success') ? res.claimed : null;
-    } catch (e) {
-        return null;
-    }
 }
 
 async function plotRoadRoute(direction, route, targetDistanceKm, color, badgeEl) {
@@ -1192,15 +1192,14 @@ async function plotRoadRoute(direction, route, targetDistanceKm, color, badgeEl)
     _phase2Polylines[direction] = (long || short).line;
 
     // #493 — the Phase-1 green highlight is only a speculative claim (a
-    // straight-line "corner" the router was aimed at, which may get snapped
-    // to a road that never enters the tile, or dropped entirely while
-    // refineRoute trims waypoints to hit the distance target). Re-check the
-    // planned tiles against each variant's *actual* road-route coordinates
-    // before trusting the claim.
-    const plannedTiles = flattenNewTiles(route.newTilesByZoom);
+    // straight-line "corner" the router was aimed at). The real road route
+    // can snap away from that corner entirely, or pick up a detour added
+    // purely to hit the distance target (refineRoute), so checking only the
+    // planned corners under-reports what the route actually claims. Derive
+    // new tiles straight from each variant's real road-route coordinates.
     const [shortClaimed, longClaimed] = await Promise.all([
-        short ? verifyClaimedTiles(shortResult.coordinates, plannedTiles) : Promise.resolve(null),
-        long  ? verifyClaimedTiles(longResult.coordinates,  plannedTiles) : Promise.resolve(null),
+        short ? findNewTilesForRoute(shortResult.coordinates) : Promise.resolve(null),
+        long  ? findNewTilesForRoute(longResult.coordinates)  : Promise.resolve(null),
     ]);
     const verified = shortClaimed !== null || longClaimed !== null;
 

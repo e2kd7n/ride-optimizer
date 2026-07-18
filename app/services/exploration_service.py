@@ -115,6 +115,46 @@ class ExplorationService:
 
         return {"status": "success", "claimed": claimed}
 
+    def find_new_tiles(self, coordinates: List[Tuple[float, float]]) -> Dict[str, Any]:
+        """Find every tile a route's real polyline crosses that isn't
+        already covered by a past activity, at both squadrat and
+        squadratinho granularity.
+
+        Phase-1 route planning only aims at a handful of candidate tiles
+        chosen from a straight-line heuristic; Phase-2 distance refinement
+        (`refineRoute` in explore.js) can then snap the route to roads or
+        insert padding waypoints that carry it well outside that planned
+        set (#493 follow-up). Checking the planned list alone under-reports
+        new tiles whenever the real route diverges from the plan, so this
+        instead derives ground truth straight from the routed coordinates.
+        """
+        from src.coverage_tracker import TILE_ZOOM, SQUADRATINHO_ZOOM
+
+        new_tiles_by_zoom: List[Dict[str, Any]] = []
+        for zoom in (TILE_ZOOM, SQUADRATINHO_ZOOM):
+            crossed = self._tracker.tiles_crossed_by_path(coordinates, zoom)
+            # Use the all-activities coverage (one cache file per zoom, shared
+            # across every route) rather than a per-request bounds query —
+            # bounds computed from each route's own coordinates would give
+            # get_tile_coverage() a near-unique cache key on every call,
+            # writing an unbounded number of never-expiring cache files.
+            # Let a coverage lookup failure propagate rather than treating it
+            # as "nothing visited" — that would report already-ridden tiles
+            # as new. Callers (exploration_verify_tiles route, explore.js)
+            # already treat a failed request as "couldn't verify" and leave
+            # the Phase-1 preview alone rather than trusting a false claim.
+            coverage = self._tracker.get_tile_coverage_all(zoom=zoom)
+            visited = {tuple(int(v) for v in key.split(",")) for key in coverage.visited}
+
+            new_tiles = crossed - visited
+            if new_tiles:
+                new_tiles_by_zoom.append({
+                    "zoom": zoom,
+                    "tiles": [{"x": x, "y": y} for x, y in sorted(new_tiles)],
+                })
+
+        return {"status": "success", "newTilesByZoom": new_tiles_by_zoom}
+
     # ── ORS road routing ─────────────────────────────────────────
 
     def compute_route(

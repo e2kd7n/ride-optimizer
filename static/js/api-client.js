@@ -361,6 +361,20 @@ class APIClient {
     }
 
     /**
+     * Find every tile a route's actual road-route coordinates cross that
+     * isn't already covered by a past activity (#493 follow-up) — unlike
+     * verifyTileClaims, this isn't limited to a pre-planned candidate list,
+     * so tiles picked up incidentally (distance-refinement detours,
+     * road-snap drift) are still counted.
+     */
+    async findNewTiles({ coordinates } = {}) {
+        return this.fetch('/exploration/new-tiles', {
+            method: 'POST',
+            body: JSON.stringify({ coordinates }),
+        });
+    }
+
+    /**
      * Forward-geocode a city/state or postal code to coordinates.
      */
     async geocodeLocation(query) {
