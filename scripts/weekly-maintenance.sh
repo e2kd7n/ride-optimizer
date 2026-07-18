@@ -253,7 +253,11 @@ fi
 
 # 10. Send maintenance summary notification
 log_section "Sending Maintenance Summary"
-SECURITY_VULNS=$(grep -c "security" "$MAINTENANCE_LOG" 2>/dev/null || echo 0)
+# grep -c exits 1 (not just nonzero output) when the count is zero, so
+# `|| echo 0` would fire *in addition* to the "0" grep already printed,
+# yielding "0\n0" and crashing send_maintenance_summary.py's int() parse.
+SECURITY_VULNS=$(grep -c "security" "$MAINTENANCE_LOG" 2>/dev/null)
+SECURITY_VULNS=${SECURITY_VULNS:-0}
 ISSUES_CLOSED=$(gh issue list --state closed --search "closed:>=$(date -u -d '7 days ago' +%Y-%m-%d 2>/dev/null || date -u -v-7d +%Y-%m-%d 2>/dev/null || echo '2000-01-01')" --json number --jq 'length' 2>/dev/null || echo 0)
 CACHE_SIZE=$(du -sm "$PROJECT_ROOT/cache" 2>/dev/null | cut -f1 || echo 0)
 
