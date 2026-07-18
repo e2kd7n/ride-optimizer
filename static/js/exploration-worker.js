@@ -193,6 +193,15 @@ function optimize({ start, end, distanceKm, mode, routeType, shape, coverageData
             tiles: zones.flatMap(z => z.tiles.map(t => ({ x: t.x, y: t.y }))),
         }));
 
+        // Leftover pool zones that Phase 1 didn't select (budget-capped or
+        // below the tiles/km bar) — passed through so Phase 2 (explore.js
+        // refineRoute) can pull one in if the plotted road route comes back
+        // short of the distance target, instead of only being able to pad
+        // with a straight-line displacement that may not follow any road.
+        const leftoverCandidates = pool
+            .filter(z => !selected.includes(z))
+            .map(z => ({ lat: z.point.lat, lon: z.point.lon }));
+
         totalRoutes++;
         self.postMessage({
             type: 'route',
@@ -210,6 +219,7 @@ function optimize({ start, end, distanceKm, mode, routeType, shape, coverageData
                     distanceKm: routeDistance(start, ordered, end),
                 },
             },
+            candidates: leftoverCandidates,
         });
     });
 
