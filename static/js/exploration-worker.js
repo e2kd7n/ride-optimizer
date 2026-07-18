@@ -25,7 +25,10 @@
  *       grids at once — each grid's zones are found independently (tile
  *       adjacency only makes sense within a single zoom's coordinate space),
  *       then the best zones from each are merged into one route per quadrant.
- *   - optimizeFor: 'tiles' | 'efficiency'
+ *   - optimizeFor: 'tiles' | 'efficiency' | 'frontier' | 'infill'
+ *       'frontier' favors zones bordering mostly unexplored territory,
+ *       pushing coverage outward; 'infill' favors zones tucked inside
+ *       already-ridden coverage, closing gaps near home first.
  *   - areaBounds: [south, west, north, east] | null (#491) — rider-drawn
  *       target area. When present, further restricts reachable tiles to
  *       those inside the box, in addition to (not instead of) the reach
@@ -152,7 +155,7 @@ function optimize({ start, end, distanceKm, mode, routeType, shape, coverageData
                 ...z,
                 distanceFromStart: haversineKm(start.lat, start.lon, z.centroid.lat, z.centroid.lon),
             }));
-            const scored = scoreZones(dirZones, optimizeFor);
+            const scored = scoreZones(dirZones, optimizeFor, g.visitedSet);
             const penalised = applyOverlapPenalty(scored, start, g.visitedSet, g.zoom);
             return penalised.slice(0, zoneCap).map(z => ({
                 ...z,
@@ -289,20 +292,61 @@ function estimateCorridorOverlap(zone, start, visitedSet, zoom) {
  * per direction:
  *   - 'tiles'      : biggest contiguous unexplored areas first (default)
  *   - 'efficiency' : most new tiles per km of travel to reach them
+ *   - 'frontier'   : zones bordering mostly unexplored territory first —
+ *                    pushes the edge of ridden coverage outward rather than
+ *                    circling back into already-explored ground
+ *   - 'infill'     : zones tucked inside already-ridden coverage first —
+ *                    closes small unclaimed pockets near home before
+ *                    reaching for new frontier
+ * `visitedSet` (this grid's ridden-tile lookup) is only needed for
+ * 'frontier'/'infill', which score zones by how much of their border
+ * touches already-visited tiles.
  * After primary sort, a secondary overlap penalty (#410) nudges tied zones
  * toward paths that re-cover fewer visited tiles.
  */
-function scoreZones(zones, optimizeFor) {
+function scoreZones(zones, optimizeFor, visitedSet) {
     const scored = [...zones];
     if (optimizeFor === 'efficiency') {
         scored.sort((a, b) =>
             (b.tiles.length / Math.max(b.distanceFromStart, 0.1)) -
             (a.tiles.length / Math.max(a.distanceFromStart, 0.1))
         );
+    } else if (optimizeFor === 'frontier') {
+        scored.sort((a, b) => {
+            const diff = visitedBorderRatio(a, visitedSet) - visitedBorderRatio(b, visitedSet);
+            return diff !== 0 ? diff : b.tiles.length - a.tiles.length;
+        });
+    } else if (optimizeFor === 'infill') {
+        scored.sort((a, b) => {
+            const diff = visitedBorderRatio(b, visitedSet) - visitedBorderRatio(a, visitedSet);
+            return diff !== 0 ? diff : a.distanceFromStart - b.distanceFromStart;
+        });
     } else {
         scored.sort((a, b) => b.tiles.length - a.tiles.length);
     }
     return scored;
+}
+
+/**
+ * Fraction of a zone's border (edges touching tiles outside the zone) that
+ * touches already-visited tiles, vs. unvisited/unknown ground. High ratio =
+ * the zone is a pocket enclosed by ridden coverage (infill candidate); low
+ * ratio = the zone opens mostly onto unexplored ground (frontier candidate).
+ */
+function visitedBorderRatio(zone, visitedSet) {
+    if (!visitedSet) return 0;
+    const tileSet = new Set(zone.tiles.map(t => t.key));
+    let borderTiles = 0;
+    let visitedBorderTiles = 0;
+    for (const t of zone.tiles) {
+        for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
+            const nk = `${t.x + dx},${t.y + dy}`;
+            if (tileSet.has(nk)) continue;
+            borderTiles++;
+            if (visitedSet.has(nk)) visitedBorderTiles++;
+        }
+    }
+    return borderTiles === 0 ? 0 : visitedBorderTiles / borderTiles;
 }
 
 /**
