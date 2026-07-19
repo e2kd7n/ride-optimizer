@@ -485,11 +485,10 @@ async function loadCoverage() {
         }, tileZoom)
         : api.getTileCoverage(null, tileZoom);
 
-    // #525: roadless tiles (no bike-network road nearby — not bikeable or
-    // walkable, e.g. open water or other unreachable terrain) get excluded
-    // from "new tile" targeting so routes stop chasing coverage credit in
-    // places a rider can't actually go. Best-effort only — a full-history
-    // load has no bounds to query against, and osmnx may be unavailable, so
+    // #525: roadless tiles (open water, e.g. lakes) get excluded from
+    // "new tile" targeting so routes stop chasing coverage credit in places
+    // a rider can't actually go. Best-effort only — a full-history load has
+    // no bounds to query against, and the Overpass lookup can fail, so
     // failures here just mean no exclusion rather than blocking coverage
     // entirely.
     const fetchRoadless = (tileZoom) => mapZoom >= 10
@@ -1093,6 +1092,13 @@ async function refineRoute(baseWaypoints, targetKm, surfacePref, candidateList, 
     let result = null;
     let candidates = candidateList.slice();
 
+    // The specific reason the last attempt failed, so callers can tell "ORS
+    // isn't configured" apart from "rate limited" or "no routable path" —
+    // swallowing this into a bare null previously made every failure show
+    // as the same generic "Road routing unavailable" message even when ORS
+    // was configured and working, just hitting an unrelated error.
+    let failureMessage = null;
+
     // Build OSRM exclude list from road filter checkboxes (#411).
     const excludeClasses = [];
     if (roadFilters.noMotorways) excludeClasses.push('motorway', 'trunk');
@@ -1106,13 +1112,16 @@ async function refineRoute(baseWaypoints, targetKm, surfacePref, candidateList, 
                 exclude: excludeClasses.length ? excludeClasses.join(',') : undefined,
             });
         } catch (err) {
-            return null;
+            failureMessage = (err && err.message) || null;
+            return { route: null, message: failureMessage };
         }
 
         if (!result || result.status !== 'success') {
-            // Surface over-restriction message (#411).
-            if (result && result.status === 'no_route') return null;
-            return null;
+            // Surface over-restriction message (#411), and whatever specific
+            // reason the backend gave (e.g. "Road routing is not configured
+            // (ORS_API_KEY missing)" vs. a rate limit or unroutable error).
+            failureMessage = (result && result.message) || null;
+            return { route: null, message: failureMessage };
         }
 
         const ratio = result.distance_km / targetKm;
@@ -1170,10 +1179,10 @@ async function refineRoute(baseWaypoints, targetKm, surfacePref, candidateList, 
     // stuck results are still returned above (getting a longer ride than
     // asked isn't nearly as broken as a near-zero-length one).
     if (result && result.distance_km / targetKm < 1 - TOLERANCE) {
-        return null;
+        return { route: null, message: 'Route came back far short of the target distance' };
     }
 
-    return result;
+    return { route: result, message: null };
 }
 
 /** Bearing (degrees) from the start toward the quadrant centre. */
@@ -1238,15 +1247,24 @@ async function plotRoadRoute(direction, route, targetDistanceKm, color, badgeEl)
 
     // Run both variants in parallel.
     infoEl.textContent = 'Computing short and long variants…';
-    const [shortResult, longResult] = await Promise.all([
+    const [shortOutcome, longOutcome] = await Promise.all([
         refineRoute(baseWaypoints, shortTarget,  surfacePref, candidates, bearing, roadFilters),
         refineRoute(baseWaypoints, longTarget,   surfacePref, candidates, bearing, roadFilters),
     ]);
+    const shortResult = shortOutcome.route;
+    const longResult = longOutcome.route;
 
     if (!shortResult && !longResult) {
+        // Prefer the backend's specific reason (e.g. "Road routing is not
+        // configured (ORS_API_KEY missing)", a rate-limit message, or "no
+        // routable path near waypoints") over a generic "unavailable" —
+        // that generic message previously showed even when ORS was
+        // correctly configured but a different request-specific error
+        // occurred, misleading users into thinking it wasn't set up.
+        const backendMsg = shortOutcome.message || longOutcome.message;
         const errMsg = roadFilters.noMotorways || roadFilters.noUnpaved
             ? 'No route found with current road filters — try relaxing exclusions'
-            : 'Road routing unavailable';
+            : (backendMsg || 'Road routing unavailable');
         if (typeof showToast === 'function') showToast(errMsg, 'warning');
         infoEl.textContent = errMsg;
         plotBtn.disabled = false;
