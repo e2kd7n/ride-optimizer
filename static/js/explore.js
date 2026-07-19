@@ -536,23 +536,35 @@ async function loadCoverage() {
     }
 }
 
-// New tiles a route will claim: bright Squadrats-green
+// Confirmed new tiles a route will claim (Phase 2, exact road-route crossing): bright Squadrats-green
 const TILE_STYLE_NEW = { color: '#2e7d32', weight: 0.5, fillColor: '#4caf50', fillOpacity: 0.65 };
+// Phase-1 candidate target zone (flood-filled unvisited area a route is aimed at, NOT a claim
+// yet — the straight-line preview only touches one corner of it): muted outline, no solid fill,
+// so it reads as "search area" rather than "tiles this route will claim."
+const TILE_STYLE_CANDIDATE = { color: '#8a8f98', weight: 1, fillColor: '#8a8f98', fillOpacity: 0.12, dashArray: '3,3' };
 
 /**
- * Render green highlight rectangles for the new (unvisited) tiles a route
- * will claim, computing each tile's lat/lon boundary from its zoom-level key.
+ * Render highlight rectangles for a set of tiles, computing each tile's
+ * lat/lon boundary from its zoom-level key.
  * newTilesByZoom: [{zoom, tiles: [{x, y}]}]
  *
+ * `phase` selects the visual treatment: 'candidate' (Phase 1 — a flood-filled
+ * target zone the route is merely aimed at) or 'claimed' (Phase 2 — tiles the
+ * real routed line actually crosses, verified via find_new_tiles). The two
+ * must never look the same — otherwise a candidate zone the route hasn't
+ * actually touched reads as an already-claimed tile.
+ *
  * When `direction` is given, any rectangles previously rendered for that
- * direction are removed first — this lets Phase 2 (#493) replace a
- * direction's speculative Phase-1 highlight with the set of tiles the real
- * road route actually crosses, without disturbing the other 3 directions.
+ * direction are removed first — this lets Phase 2 (#493, #529) replace a
+ * direction's speculative Phase-1 candidate highlight with the set of tiles
+ * the real road route actually crosses, without disturbing the other 3
+ * directions.
  */
-function renderNewTiles(newTilesByZoom, direction = null) {
+function renderNewTiles(newTilesByZoom, direction = null, phase = 'claimed') {
     if (direction && _newTileRectsByDirection[direction]) {
         _newTileRectsByDirection[direction].forEach(r => newTilesLayer.removeLayer(r));
     }
+    const style = phase === 'candidate' ? TILE_STYLE_CANDIDATE : TILE_STYLE_NEW;
     const rects = [];
     for (const { zoom, tiles } of newTilesByZoom || []) {
         const n = Math.pow(2, zoom);
@@ -562,7 +574,7 @@ function renderNewTiles(newTilesByZoom, direction = null) {
             const north = Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n)))       * 180 / Math.PI;
             const south = Math.atan(Math.sinh(Math.PI * (1 - 2 * (y + 1) / n))) * 180 / Math.PI;
             const rect = L.rectangle([[south, west], [north, east]], {
-                ...TILE_STYLE_NEW,
+                ...style,
                 interactive: false,
             });
             newTilesLayer.addLayer(rect);
@@ -784,8 +796,8 @@ async function generateRoute() {
             // Phase 1 result: render dashed preview and add badge with "Plot road route" button.
             renderRoute(msg.route, routeCount);
             addRouteListItem(msg.route, routeCount, distanceKm);
-            // Highlight the new tiles this route will claim.
-            renderNewTiles(msg.route.newTilesByZoom, msg.route.direction);
+            // Highlight the candidate target zone this route is aimed at (not a claim yet).
+            renderNewTiles(msg.route.newTilesByZoom, msg.route.direction, 'candidate');
             // Store Phase-1 candidate data for iterative refinement.
             if (msg.candidates) {
                 _phase1Candidates[msg.route.direction] = msg.candidates;
@@ -904,7 +916,7 @@ async function generateWorkoutCombo() {
             renderRoute(msg.route, routeCount);
             // Label as workout combo.
             addRouteListItem(msg.route, routeCount, distanceKm, '· Workout combo');
-            renderNewTiles(msg.route.newTilesByZoom, msg.route.direction);
+            renderNewTiles(msg.route.newTilesByZoom, msg.route.direction, 'candidate');
             if (msg.candidates) _phase1Candidates[msg.route.direction] = msg.candidates;
             routeCount++;
             statusEl.textContent = `Found ${routeCount} workout-combo route${routeCount > 1 ? 's' : ''} so far…`;
@@ -1297,7 +1309,7 @@ async function plotRoadRoute(direction, route, targetDistanceKm, color, badgeEl)
             if (!byZoom.has(t.zoom)) byZoom.set(t.zoom, []);
             byZoom.get(t.zoom).push({ x: t.x, y: t.y });
         }
-        renderNewTiles([...byZoom.entries()].map(([zoom, tiles]) => ({ zoom, tiles })), direction);
+        renderNewTiles([...byZoom.entries()].map(([zoom, tiles]) => ({ zoom, tiles })), direction, 'claimed');
     }
 
     function variantRow(v, label, suffix, claimed) {
