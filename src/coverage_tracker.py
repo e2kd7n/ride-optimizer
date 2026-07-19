@@ -16,6 +16,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 import numpy as np
 import polyline as polyline_codec
+import requests
 
 from src.json_storage import secure_chmod
 
@@ -26,6 +27,8 @@ SQUADRATINHO_ZOOM = 17      # "squadratinho" granularity — each squadrat = 8x8
 INTERPOLATION_INTERVAL_M = 80
 EARTH_RADIUS_M = 6_371_000
 MAX_ROAD_NETWORK_CACHES = 20  # cap on retained road_network_<hash>.graphml files
+MAX_WATER_POLYGON_CACHES = 20  # cap on retained water_<hash>.json files
+_OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 
 
 @dataclass
@@ -443,8 +446,7 @@ class CoverageTracker:
 
     def _get_or_fetch_road_graph(self, bounds: Tuple[float, float, float, float]):
         """Load the cached bike-network graph for `bounds`, fetching from OSM
-        via osmnx if no cache exists yet. Shared by road coverage and
-        roadless-tile detection so both cache/evict against the same files.
+        via osmnx if no cache exists yet. Used by road coverage (#481).
 
         Returns the graph, or raises whatever osmnx raises on fetch failure.
         """
@@ -552,66 +554,114 @@ class CoverageTracker:
             "computed_at": datetime.utcnow().isoformat(),
         }
 
+    def _get_or_fetch_water_polygons(
+        self, bounds: Tuple[float, float, float, float]
+    ) -> List[List[Tuple[float, float]]]:
+        """Load cached open-water polygons for `bounds`, querying Overpass
+        (OSM `natural=water` ways/relations) if no cache exists yet.
+
+        Returns a list of polygons, each a list of (lat, lon) ring points.
+        Pure-Python/`requests` only — no osmnx/shapely — so this works
+        without a full bike-network graph fetch.
+        """
+        cache_file = self.cache_dir / f"water_{_bbox_cache_key(bounds)}.json"
+        if cache_file.exists():
+            try:
+                with open(cache_file, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, OSError):
+                pass
+
+        south, west, north, east = bounds
+        query = (
+            "[out:json][timeout:25];"
+            "("
+            f'way["natural"="water"]({south},{west},{north},{east});'
+            f'relation["natural"="water"]({south},{west},{north},{east});'
+            ");"
+            "out geom;"
+        )
+        # Overpass rejects requests with no/default User-Agent (406).
+        headers = {"User-Agent": "ride-optimizer (exploration water-tile lookup)"}
+        response = requests.post(_OVERPASS_URL, data={"data": query}, headers=headers, timeout=30)
+        response.raise_for_status()
+        elements = response.json().get("elements", [])
+
+        polygons: List[List[Tuple[float, float]]] = []
+        for element in elements:
+            if element.get("type") == "way" and element.get("geometry"):
+                ring = [(pt["lat"], pt["lon"]) for pt in element["geometry"]]
+                if len(ring) >= 3:
+                    polygons.append(ring)
+            elif element.get("type") == "relation":
+                for member in element.get("members", []):
+                    if member.get("role") == "outer" and member.get("geometry"):
+                        ring = [(pt["lat"], pt["lon"]) for pt in member["geometry"]]
+                        if len(ring) >= 3:
+                            polygons.append(ring)
+
+        try:
+            with open(cache_file, "w", encoding="utf-8") as f:
+                json.dump(polygons, f)
+            secure_chmod(cache_file)
+            self._evict_old_water_polygon_caches()
+        except OSError as exc:
+            logger.warning("Failed to write water polygon cache: %s", exc)
+
+        return polygons
+
+    @staticmethod
+    def _point_in_polygon(lat: float, lon: float, polygon: List[Tuple[float, float]]) -> bool:
+        """Ray-casting point-in-polygon test (no shapely required)."""
+        inside = False
+        n = len(polygon)
+        j = n - 1
+        for i in range(n):
+            yi, xi = polygon[i]
+            yj, xj = polygon[j]
+            if (yi > lat) != (yj > lat):
+                x_at_lat = (xj - xi) * (lat - yi) / (yj - yi) + xi
+                if lon < x_at_lat:
+                    inside = not inside
+            j = i
+        return inside
+
     def get_roadless_tiles(
         self,
         bounds: Tuple[float, float, float, float],
         zoom: Optional[int] = None,
     ) -> dict:
-        """Find tiles within `bounds` that have no bike-network road passing
-        through (or within snap tolerance of) them.
+        """Find tiles within `bounds` that fall inside open water (lakes,
+        reservoirs, and similar bodies tagged `natural=water` in OSM).
 
         The exploration route generator uses this to exclude tiles that
-        aren't bikeable or walkable — open water, but also unmapped or
-        genuinely roadless terrain — from "new tile" scoring, so routes stop
-        being pulled toward tiles they have no way to enter (#525).
-
-        Requires osmnx and shapely. Falls back gracefully if unavailable.
+        aren't bikeable or walkable from "new tile" scoring, so routes stop
+        being pulled toward tiles they have no way to enter (#525). Queries
+        Overpass directly with a pure-Python point-in-polygon test — no
+        osmnx/shapely dependency — so it doesn't need a full bike-network
+        graph fetch. This only catches open water, not genuinely roadless
+        (but dry) terrain that the old osmnx-graph-absence check also caught.
         """
-        try:
-            import osmnx as ox
-            from shapely.geometry import box
-            from shapely.strtree import STRtree
-        except ImportError:
-            logger.warning("osmnx/shapely not installed — roadless-tile detection unavailable")
-            return {"status": "error", "message": "Roadless-tile detection requires osmnx and shapely"}
-
         zoom = zoom or self.zoom
 
         try:
-            G = self._get_or_fetch_road_graph(bounds)
+            polygons = self._get_or_fetch_water_polygons(bounds)
         except Exception as exc:
-            logger.error("Failed to fetch road network: %s", exc)
+            logger.error("Failed to fetch water polygons: %s", exc)
             return {"status": "error", "message": str(exc)}
-
-        edges = ox.graph_to_gdfs(G, nodes=False, edges=True)
-        edge_geoms = list(edges["geometry"].dropna())
-
-        snap_tolerance = self.config.get("exploration.snap_tolerance_meters", 30)
-        snap_deg = snap_tolerance / 111_000
 
         south, west, north, east = bounds
         min_tx, min_ty = lat_lon_to_tile(north, west, zoom)
         max_tx, max_ty = lat_lon_to_tile(south, east, zoom)
 
         roadless: List[Dict[str, int]] = []
-
-        if not edge_geoms:
-            # No road network at all in bounds — every tile is unreachable.
-            for tx in range(min_tx, max_tx + 1):
-                for ty in range(min_ty, max_ty + 1):
+        for tx in range(min_tx, max_tx + 1):
+            for ty in range(min_ty, max_ty + 1):
+                t_south, t_west, t_north, t_east = tile_to_bounds(tx, ty, zoom)
+                center_lat = (t_south + t_north) / 2
+                center_lon = (t_west + t_east) / 2
+                if any(self._point_in_polygon(center_lat, center_lon, poly) for poly in polygons):
                     roadless.append({"x": tx, "y": ty})
-        else:
-            tree = STRtree(edge_geoms)
-            for tx in range(min_tx, max_tx + 1):
-                for ty in range(min_ty, max_ty + 1):
-                    t_south, t_west, t_north, t_east = tile_to_bounds(tx, ty, zoom)
-                    # Buffer the tile by snap tolerance so a road running just
-                    # outside a tile's edge still counts it reachable.
-                    query_box = box(t_west - snap_deg, t_south - snap_deg, t_east + snap_deg, t_north + snap_deg)
-                    candidates = tree.query(query_box)
-                    has_road = any(edge_geoms[i].intersects(query_box) for i in candidates)
-                    if not has_road:
-                        roadless.append({"x": tx, "y": ty})
 
         return {
             "status": "success",
@@ -663,6 +713,20 @@ class CoverageTracker:
             except OSError:
                 pass
 
+    def _evict_old_water_polygon_caches(self) -> None:
+        """Keep at most MAX_WATER_POLYGON_CACHES water_*.json files,
+        evicting the least-recently-modified ones beyond that cap."""
+        caches = sorted(
+            self.cache_dir.glob("water_*.json"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        for p in caches[MAX_WATER_POLYGON_CACHES:]:
+            try:
+                p.unlink()
+            except OSError:
+                pass
+
     def invalidate_caches(self) -> None:
         """Remove all coverage caches (call after new activities are fetched)."""
         self._activities_cache = None
@@ -676,6 +740,7 @@ class CoverageTracker:
                 p.unlink()
             except OSError:
                 pass
+        # Water polygons don't change with new activities — not evicted here.
         # Legacy unkeyed cache filename from before bbox-keyed caching (#481).
         legacy_cache = self.cache_dir / "road_network.graphml"
         if legacy_cache.exists():
