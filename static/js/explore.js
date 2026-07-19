@@ -10,6 +10,8 @@
 
 const api = new APIClient('/api');
 let map = null;
+let tileLayer = null;          // visited-tile coverage grid (primary zoom)
+let tileLayerSecondary = null; // visited-tile coverage grid (secondary zoom, "both" mode)
 let newTilesLayer = null;   // green highlight for tiles a route will claim
 let routeLayer = null;
 let waypointMarkers = null;
@@ -192,7 +194,9 @@ function initMap() {
         attribution: '&copy; OpenStreetMap contributors',
         maxZoom: 18,
     }).addTo(map);
-    newTilesLayer = L.layerGroup().addTo(map);  // below routes
+    tileLayer = L.layerGroup().addTo(map);
+    tileLayerSecondary = L.layerGroup().addTo(map);
+    newTilesLayer = L.layerGroup().addTo(map);  // above coverage, below routes
     // FeatureGroup, not LayerGroup — routeLayer.getBounds() (used to fit the
     // map after routes are generated) only exists on FeatureGroup in Leaflet
     // 1.9.4; LayerGroup lacks it despite otherwise sharing the same API.
@@ -522,16 +526,69 @@ async function loadCoverage() {
                 : [];
         }
 
-        // #488: coverage is loaded to feed the route generator, not to browse
-        // on the map — clear any stale "new tile" highlight from a previous
-        // start point/grid rather than rendering the full visited-tile grid.
+        // Clear any stale "new tile" highlight from a previous start point/grid,
+        // then draw the visited-tile grid so coverage is visible on the map
+        // (not just fed silently to the route generator) — #488 had dropped
+        // this rendering step entirely.
         newTilesLayer.clearLayers();
+        renderTiles(coverageData, coverageDataSecondary);
         statusEl.textContent = `Updated ${new Date(coverageData.computed_at + 'Z').toLocaleTimeString()}`;
     } catch (e) {
         statusEl.textContent = `Error: ${e.message}`;
     } finally {
         clearTimeout(slowHintTimer);
         updateWorkflowState();
+    }
+}
+
+// Already-visited tiles: brand cobalt accent (--accent, FAIR_WEATHER_BRAND_BOOK.md),
+// kept visually distinct from the bright Squadrats-green used for newly-claimed
+// tiles (TILE_STYLE_NEW below) so "already have this" and "this route would
+// claim it" never look alike.
+const TILE_STYLE_VISITED      = { color: '#0B6FA6', weight: 0.5, fillColor: '#0B6FA6', fillOpacity: 0.3 };
+// "Both" mode (squadrats + squadratinhos together): the coarser primary grid
+// (zoom 14) gets an outline-only treatment so the finer secondary grid (zoom
+// 17) can render with full fill on top of it without the two blending together.
+const TILE_STYLE_BOTH_PRIMARY = { color: '#0B6FA6', weight: 1,   fillColor: '#0B6FA6', fillOpacity: 0.12 };
+// Secondary (squadratinho) grid in "both" mode: lighter accent tint (--accent
+// dark-theme value, reused here as the "light" tone) so it reads as a distinct
+// layer from the primary grid underneath it.
+const TILE_STYLE_SECONDARY    = { color: '#4FB3E8', weight: 0.5, fillColor: '#4FB3E8', fillOpacity: 0.35 };
+
+/**
+ * Render the visited-tile coverage grid. In single-grid mode tiles get a
+ * solid cobalt fill; in "both" mode the squadrat (primary) grid gets a
+ * lighter outline-only style so the squadratinho (secondary) grid can show
+ * on top with full fill.
+ */
+function renderTiles(primary, secondary) {
+    tileLayer.clearLayers();
+    tileLayerSecondary.clearLayers();
+
+    const primaryStyle = secondary ? TILE_STYLE_BOTH_PRIMARY : TILE_STYLE_VISITED;
+    drawTileGrid(tileLayer, primary.visited, primary.zoom, primaryStyle);
+    if (secondary) {
+        drawTileGrid(tileLayerSecondary, secondary.visited, secondary.zoom, TILE_STYLE_SECONDARY);
+    }
+}
+
+/** Draw one zoom level's visited tiles as rectangles, computing each tile's
+ *  lat/lon boundary from its `x,y` grid key (same math as renderNewTiles). */
+function drawTileGrid(layerGroup, visited, zoom, style) {
+    if (!visited || typeof visited !== 'object') return;
+    const n = Math.pow(2, zoom || 14);
+
+    for (const key of Object.keys(visited)) {
+        const [x, y] = key.split(',').map(Number);
+        const west  = x / n * 360 - 180;
+        const east  = (x + 1) / n * 360 - 180;
+        const north = Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n)))       * 180 / Math.PI;
+        const south = Math.atan(Math.sinh(Math.PI * (1 - 2 * (y + 1) / n))) * 180 / Math.PI;
+        const rect = L.rectangle([[south, west], [north, east]], {
+            ...style,
+            interactive: false,
+        });
+        layerGroup.addLayer(rect);
     }
 }
 
@@ -1048,7 +1105,7 @@ function addRouteListItem(route, index, targetDistanceKm, extraLabel = '') {
         highlightRoute(dir);
     });
     badge.querySelector('.plot-road-btn').addEventListener('click', () => {
-        plotRoadRoute(dir, route, targetDistanceKm, color, badge);
+        plotRoadRoute(dir, route, targetDistanceKm, badge);
     });
 }
 
@@ -1215,7 +1272,7 @@ function flattenNewTilesByZoom(newTilesByZoom) {
     return out;
 }
 
-async function plotRoadRoute(direction, route, targetDistanceKm, color, badgeEl) {
+async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
     const plotBtn = badgeEl.querySelector('.plot-road-btn');
     const infoEl = badgeEl.querySelector('.route-phase2-info');
 
@@ -1282,23 +1339,27 @@ async function plotRoadRoute(direction, route, targetDistanceKm, color, badgeEl)
         delete _phase2Polylines[direction];
     }
 
-    // Render each variant on the map and build badge rows.
+    // Render each variant on the map and build badge rows. Short and long
+    // reuse the direction's tonal pair (base/light, #409) so the two variants
+    // read as visually distinct lines instead of only differing by opacity,
+    // which was too subtle to tell apart on the map.
+    const palette = _paletteFor(direction);
     let badgeRows = '';
 
-    function renderVariant(result, label, opacity) {
+    function renderVariant(result, label, variantColor, opacity) {
         if (!result) return null;
         const latlngs = result.coordinates.map(([lat, lon]) => [lat, lon]);
-        const line = L.polyline(latlngs, { color, weight: 4, opacity });
+        const line = L.polyline(latlngs, { color: variantColor, weight: 4, opacity });
         const distLabel = window.formatDistance ? window.formatDistance(result.distance_km, 1) : `${result.distance_km} km`;
         line.bindPopup(`${DIRECTION_LABELS[direction]} ${label} — ${distLabel}, ${result.duration_min} min`);
         line.on('click', (e) => { L.DomEvent.stopPropagation(e); highlightRoute(direction); });
         routeLayer.addLayer(line);
-        addArrows(latlngs, color);
+        addArrows(latlngs, variantColor);
         return { line, result, distLabel };
     }
 
-    const short = renderVariant(shortResult, '(−)', 0.7);
-    const long  = renderVariant(longResult,  '(+)', 1.0);
+    const short = renderVariant(shortResult, '(−)', palette.light, 0.9);
+    const long  = renderVariant(longResult,  '(+)', palette.base,  1.0);
 
     // Store last (long preferred) as phase-2 ref for cleanup.
     _phase2Polylines[direction] = (long || short).line;
