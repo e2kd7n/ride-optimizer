@@ -149,6 +149,13 @@ function optimize({ start, end, distanceKm, mode, routeType, shape, coverageData
         const scanDirs = effectiveShape === 'loop' ? [dir, nextQuadrant(dir)] : [dir];
         const zoneCap = effectiveShape === 'out_and_back' ? 1 : perGridCap;
 
+        // A 'loop' pulls the neighbour quadrant's tiles in alongside this
+        // quadrant's own, so a quadrant with zero reachable tiles of its own
+        // (e.g. it's entirely open water) would otherwise still produce a
+        // route built entirely out of the neighbour's tiles — but labelled
+        // with this quadrant's compass direction. Skip it instead.
+        if (effectiveShape === 'loop' && grids.every(g => g.buckets[dir].length === 0)) return;
+
         const pool = grids.flatMap(g => {
             const bucketTiles = scanDirs.flatMap(d => g.buckets[d]);
             const dirZones = floodFillZones(bucketTiles).map(z => ({
