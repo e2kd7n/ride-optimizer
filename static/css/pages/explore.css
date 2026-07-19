@@ -87,3 +87,9 @@
             border-top: 2px dashed var(--ink-soft);
             flex-shrink: 0;
         }
+        /* Candidate target zone (#529) — matches TILE_STYLE_CANDIDATE in explore.js */
+        .legend-swatch-candidate {
+            background: rgba(138, 143, 152, 0.12);
+            border-color: #8a8f98;
+            border-style: dashed;
+        }
