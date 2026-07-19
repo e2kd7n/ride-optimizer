@@ -10,6 +10,8 @@
 
 const api = new APIClient('/api');
 let map = null;
+let tileLayer = null;          // visited-tile coverage grid (primary zoom)
+let tileLayerSecondary = null; // visited-tile coverage grid (secondary zoom, "both" mode)
 let newTilesLayer = null;   // green highlight for tiles a route will claim
 let routeLayer = null;
 let waypointMarkers = null;
@@ -192,7 +194,9 @@ function initMap() {
         attribution: '&copy; OpenStreetMap contributors',
         maxZoom: 18,
     }).addTo(map);
-    newTilesLayer = L.layerGroup().addTo(map);  // below routes
+    tileLayer = L.layerGroup().addTo(map);
+    tileLayerSecondary = L.layerGroup().addTo(map);
+    newTilesLayer = L.layerGroup().addTo(map);  // above coverage, below routes
     // FeatureGroup, not LayerGroup — routeLayer.getBounds() (used to fit the
     // map after routes are generated) only exists on FeatureGroup in Leaflet
     // 1.9.4; LayerGroup lacks it despite otherwise sharing the same API.
@@ -485,11 +489,10 @@ async function loadCoverage() {
         }, tileZoom)
         : api.getTileCoverage(null, tileZoom);
 
-    // #525: roadless tiles (no bike-network road nearby — not bikeable or
-    // walkable, e.g. open water or other unreachable terrain) get excluded
-    // from "new tile" targeting so routes stop chasing coverage credit in
-    // places a rider can't actually go. Best-effort only — a full-history
-    // load has no bounds to query against, and osmnx may be unavailable, so
+    // #525: roadless tiles (open water, e.g. lakes) get excluded from
+    // "new tile" targeting so routes stop chasing coverage credit in places
+    // a rider can't actually go. Best-effort only — a full-history load has
+    // no bounds to query against, and the Overpass lookup can fail, so
     // failures here just mean no exclusion rather than blocking coverage
     // entirely.
     const fetchRoadless = (tileZoom) => mapZoom >= 10
@@ -523,10 +526,12 @@ async function loadCoverage() {
                 : [];
         }
 
-        // #488: coverage is loaded to feed the route generator, not to browse
-        // on the map — clear any stale "new tile" highlight from a previous
-        // start point/grid rather than rendering the full visited-tile grid.
+        // Clear any stale "new tile" highlight from a previous start point/grid,
+        // then draw the visited-tile grid so coverage is visible on the map
+        // (not just fed silently to the route generator) — #488 had dropped
+        // this rendering step entirely.
         newTilesLayer.clearLayers();
+        renderTiles(coverageData, coverageDataSecondary);
         statusEl.textContent = `Updated ${new Date(coverageData.computed_at + 'Z').toLocaleTimeString()}`;
     } catch (e) {
         statusEl.textContent = `Error: ${e.message}`;
@@ -536,23 +541,86 @@ async function loadCoverage() {
     }
 }
 
-// New tiles a route will claim: bright Squadrats-green
-const TILE_STYLE_NEW = { color: '#2e7d32', weight: 0.5, fillColor: '#4caf50', fillOpacity: 0.65 };
+// Already-visited tiles: brand cobalt accent (--accent, FAIR_WEATHER_BRAND_BOOK.md),
+// kept visually distinct from the bright Squadrats-green used for newly-claimed
+// tiles (TILE_STYLE_NEW below) so "already have this" and "this route would
+// claim it" never look alike.
+const TILE_STYLE_VISITED      = { color: '#0B6FA6', weight: 0.5, fillColor: '#0B6FA6', fillOpacity: 0.3 };
+// "Both" mode (squadrats + squadratinhos together): the coarser primary grid
+// (zoom 14) gets an outline-only treatment so the finer secondary grid (zoom
+// 17) can render with full fill on top of it without the two blending together.
+const TILE_STYLE_BOTH_PRIMARY = { color: '#0B6FA6', weight: 1,   fillColor: '#0B6FA6', fillOpacity: 0.12 };
+// Secondary (squadratinho) grid in "both" mode: lighter accent tint (--accent
+// dark-theme value, reused here as the "light" tone) so it reads as a distinct
+// layer from the primary grid underneath it.
+const TILE_STYLE_SECONDARY    = { color: '#4FB3E8', weight: 0.5, fillColor: '#4FB3E8', fillOpacity: 0.35 };
 
 /**
- * Render green highlight rectangles for the new (unvisited) tiles a route
- * will claim, computing each tile's lat/lon boundary from its zoom-level key.
+ * Render the visited-tile coverage grid. In single-grid mode tiles get a
+ * solid cobalt fill; in "both" mode the squadrat (primary) grid gets a
+ * lighter outline-only style so the squadratinho (secondary) grid can show
+ * on top with full fill.
+ */
+function renderTiles(primary, secondary) {
+    tileLayer.clearLayers();
+    tileLayerSecondary.clearLayers();
+
+    const primaryStyle = secondary ? TILE_STYLE_BOTH_PRIMARY : TILE_STYLE_VISITED;
+    drawTileGrid(tileLayer, primary.visited, primary.zoom, primaryStyle);
+    if (secondary) {
+        drawTileGrid(tileLayerSecondary, secondary.visited, secondary.zoom, TILE_STYLE_SECONDARY);
+    }
+}
+
+/** Draw one zoom level's visited tiles as rectangles, computing each tile's
+ *  lat/lon boundary from its `x,y` grid key (same math as renderNewTiles). */
+function drawTileGrid(layerGroup, visited, zoom, style) {
+    if (!visited || typeof visited !== 'object') return;
+    const n = Math.pow(2, zoom || 14);
+
+    for (const key of Object.keys(visited)) {
+        const [x, y] = key.split(',').map(Number);
+        const west  = x / n * 360 - 180;
+        const east  = (x + 1) / n * 360 - 180;
+        const north = Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n)))       * 180 / Math.PI;
+        const south = Math.atan(Math.sinh(Math.PI * (1 - 2 * (y + 1) / n))) * 180 / Math.PI;
+        const rect = L.rectangle([[south, west], [north, east]], {
+            ...style,
+            interactive: false,
+        });
+        layerGroup.addLayer(rect);
+    }
+}
+
+// Confirmed new tiles a route will claim (Phase 2, exact road-route crossing): bright Squadrats-green
+const TILE_STYLE_NEW = { color: '#2e7d32', weight: 0.5, fillColor: '#4caf50', fillOpacity: 0.65 };
+// Phase-1 candidate target zone (flood-filled unvisited area a route is aimed at, NOT a claim
+// yet — the straight-line preview only touches one corner of it): muted outline, no solid fill,
+// so it reads as "search area" rather than "tiles this route will claim."
+const TILE_STYLE_CANDIDATE = { color: '#8a8f98', weight: 1, fillColor: '#8a8f98', fillOpacity: 0.12, dashArray: '3,3' };
+
+/**
+ * Render highlight rectangles for a set of tiles, computing each tile's
+ * lat/lon boundary from its zoom-level key.
  * newTilesByZoom: [{zoom, tiles: [{x, y}]}]
  *
+ * `phase` selects the visual treatment: 'candidate' (Phase 1 — a flood-filled
+ * target zone the route is merely aimed at) or 'claimed' (Phase 2 — tiles the
+ * real routed line actually crosses, verified via find_new_tiles). The two
+ * must never look the same — otherwise a candidate zone the route hasn't
+ * actually touched reads as an already-claimed tile.
+ *
  * When `direction` is given, any rectangles previously rendered for that
- * direction are removed first — this lets Phase 2 (#493) replace a
- * direction's speculative Phase-1 highlight with the set of tiles the real
- * road route actually crosses, without disturbing the other 3 directions.
+ * direction are removed first — this lets Phase 2 (#493, #529) replace a
+ * direction's speculative Phase-1 candidate highlight with the set of tiles
+ * the real road route actually crosses, without disturbing the other 3
+ * directions.
  */
-function renderNewTiles(newTilesByZoom, direction = null) {
+function renderNewTiles(newTilesByZoom, direction = null, phase = 'claimed') {
     if (direction && _newTileRectsByDirection[direction]) {
         _newTileRectsByDirection[direction].forEach(r => newTilesLayer.removeLayer(r));
     }
+    const style = phase === 'candidate' ? TILE_STYLE_CANDIDATE : TILE_STYLE_NEW;
     const rects = [];
     for (const { zoom, tiles } of newTilesByZoom || []) {
         const n = Math.pow(2, zoom);
@@ -562,7 +630,7 @@ function renderNewTiles(newTilesByZoom, direction = null) {
             const north = Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n)))       * 180 / Math.PI;
             const south = Math.atan(Math.sinh(Math.PI * (1 - 2 * (y + 1) / n))) * 180 / Math.PI;
             const rect = L.rectangle([[south, west], [north, east]], {
-                ...TILE_STYLE_NEW,
+                ...style,
                 interactive: false,
             });
             newTilesLayer.addLayer(rect);
@@ -784,8 +852,8 @@ async function generateRoute() {
             // Phase 1 result: render dashed preview and add badge with "Plot road route" button.
             renderRoute(msg.route, routeCount);
             addRouteListItem(msg.route, routeCount, distanceKm);
-            // Highlight the new tiles this route will claim.
-            renderNewTiles(msg.route.newTilesByZoom, msg.route.direction);
+            // Highlight the candidate target zone this route is aimed at (not a claim yet).
+            renderNewTiles(msg.route.newTilesByZoom, msg.route.direction, 'candidate');
             // Store Phase-1 candidate data for iterative refinement.
             if (msg.candidates) {
                 _phase1Candidates[msg.route.direction] = msg.candidates;
@@ -904,7 +972,7 @@ async function generateWorkoutCombo() {
             renderRoute(msg.route, routeCount);
             // Label as workout combo.
             addRouteListItem(msg.route, routeCount, distanceKm, '· Workout combo');
-            renderNewTiles(msg.route.newTilesByZoom, msg.route.direction);
+            renderNewTiles(msg.route.newTilesByZoom, msg.route.direction, 'candidate');
             if (msg.candidates) _phase1Candidates[msg.route.direction] = msg.candidates;
             routeCount++;
             statusEl.textContent = `Found ${routeCount} workout-combo route${routeCount > 1 ? 's' : ''} so far…`;
@@ -1037,7 +1105,7 @@ function addRouteListItem(route, index, targetDistanceKm, extraLabel = '') {
         highlightRoute(dir);
     });
     badge.querySelector('.plot-road-btn').addEventListener('click', () => {
-        plotRoadRoute(dir, route, targetDistanceKm, color, badge);
+        plotRoadRoute(dir, route, targetDistanceKm, badge);
     });
 }
 
@@ -1081,6 +1149,13 @@ async function refineRoute(baseWaypoints, targetKm, surfacePref, candidateList, 
     let result = null;
     let candidates = candidateList.slice();
 
+    // The specific reason the last attempt failed, so callers can tell "ORS
+    // isn't configured" apart from "rate limited" or "no routable path" —
+    // swallowing this into a bare null previously made every failure show
+    // as the same generic "Road routing unavailable" message even when ORS
+    // was configured and working, just hitting an unrelated error.
+    let failureMessage = null;
+
     // Build OSRM exclude list from road filter checkboxes (#411).
     const excludeClasses = [];
     if (roadFilters.noMotorways) excludeClasses.push('motorway', 'trunk');
@@ -1094,13 +1169,16 @@ async function refineRoute(baseWaypoints, targetKm, surfacePref, candidateList, 
                 exclude: excludeClasses.length ? excludeClasses.join(',') : undefined,
             });
         } catch (err) {
-            return null;
+            failureMessage = (err && err.message) || null;
+            return { route: null, message: failureMessage };
         }
 
         if (!result || result.status !== 'success') {
-            // Surface over-restriction message (#411).
-            if (result && result.status === 'no_route') return null;
-            return null;
+            // Surface over-restriction message (#411), and whatever specific
+            // reason the backend gave (e.g. "Road routing is not configured
+            // (ORS_API_KEY missing)" vs. a rate limit or unroutable error).
+            failureMessage = (result && result.message) || null;
+            return { route: null, message: failureMessage };
         }
 
         const ratio = result.distance_km / targetKm;
@@ -1158,10 +1236,10 @@ async function refineRoute(baseWaypoints, targetKm, surfacePref, candidateList, 
     // stuck results are still returned above (getting a longer ride than
     // asked isn't nearly as broken as a near-zero-length one).
     if (result && result.distance_km / targetKm < 1 - TOLERANCE) {
-        return null;
+        return { route: null, message: 'Route came back far short of the target distance' };
     }
 
-    return result;
+    return { route: result, message: null };
 }
 
 /** Bearing (degrees) from the start toward the quadrant centre. */
@@ -1194,7 +1272,7 @@ function flattenNewTilesByZoom(newTilesByZoom) {
     return out;
 }
 
-async function plotRoadRoute(direction, route, targetDistanceKm, color, badgeEl) {
+async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
     const plotBtn = badgeEl.querySelector('.plot-road-btn');
     const infoEl = badgeEl.querySelector('.route-phase2-info');
 
@@ -1226,15 +1304,24 @@ async function plotRoadRoute(direction, route, targetDistanceKm, color, badgeEl)
 
     // Run both variants in parallel.
     infoEl.textContent = 'Computing short and long variants…';
-    const [shortResult, longResult] = await Promise.all([
+    const [shortOutcome, longOutcome] = await Promise.all([
         refineRoute(baseWaypoints, shortTarget,  surfacePref, candidates, bearing, roadFilters),
         refineRoute(baseWaypoints, longTarget,   surfacePref, candidates, bearing, roadFilters),
     ]);
+    const shortResult = shortOutcome.route;
+    const longResult = longOutcome.route;
 
     if (!shortResult && !longResult) {
+        // Prefer the backend's specific reason (e.g. "Road routing is not
+        // configured (ORS_API_KEY missing)", a rate-limit message, or "no
+        // routable path near waypoints") over a generic "unavailable" —
+        // that generic message previously showed even when ORS was
+        // correctly configured but a different request-specific error
+        // occurred, misleading users into thinking it wasn't set up.
+        const backendMsg = shortOutcome.message || longOutcome.message;
         const errMsg = roadFilters.noMotorways || roadFilters.noUnpaved
             ? 'No route found with current road filters — try relaxing exclusions'
-            : 'Road routing unavailable';
+            : (backendMsg || 'Road routing unavailable');
         if (typeof showToast === 'function') showToast(errMsg, 'warning');
         infoEl.textContent = errMsg;
         plotBtn.disabled = false;
@@ -1252,23 +1339,27 @@ async function plotRoadRoute(direction, route, targetDistanceKm, color, badgeEl)
         delete _phase2Polylines[direction];
     }
 
-    // Render each variant on the map and build badge rows.
+    // Render each variant on the map and build badge rows. Short and long
+    // reuse the direction's tonal pair (base/light, #409) so the two variants
+    // read as visually distinct lines instead of only differing by opacity,
+    // which was too subtle to tell apart on the map.
+    const palette = _paletteFor(direction);
     let badgeRows = '';
 
-    function renderVariant(result, label, opacity) {
+    function renderVariant(result, label, variantColor, opacity) {
         if (!result) return null;
         const latlngs = result.coordinates.map(([lat, lon]) => [lat, lon]);
-        const line = L.polyline(latlngs, { color, weight: 4, opacity });
+        const line = L.polyline(latlngs, { color: variantColor, weight: 4, opacity });
         const distLabel = window.formatDistance ? window.formatDistance(result.distance_km, 1) : `${result.distance_km} km`;
         line.bindPopup(`${DIRECTION_LABELS[direction]} ${label} — ${distLabel}, ${result.duration_min} min`);
         line.on('click', (e) => { L.DomEvent.stopPropagation(e); highlightRoute(direction); });
         routeLayer.addLayer(line);
-        addArrows(latlngs, color);
+        addArrows(latlngs, variantColor);
         return { line, result, distLabel };
     }
 
-    const short = renderVariant(shortResult, '(−)', 0.7);
-    const long  = renderVariant(longResult,  '(+)', 1.0);
+    const short = renderVariant(shortResult, '(−)', palette.light, 0.9);
+    const long  = renderVariant(longResult,  '(+)', palette.base,  1.0);
 
     // Store last (long preferred) as phase-2 ref for cleanup.
     _phase2Polylines[direction] = (long || short).line;
@@ -1297,7 +1388,7 @@ async function plotRoadRoute(direction, route, targetDistanceKm, color, badgeEl)
             if (!byZoom.has(t.zoom)) byZoom.set(t.zoom, []);
             byZoom.get(t.zoom).push({ x: t.x, y: t.y });
         }
-        renderNewTiles([...byZoom.entries()].map(([zoom, tiles]) => ({ zoom, tiles })), direction);
+        renderNewTiles([...byZoom.entries()].map(([zoom, tiles]) => ({ zoom, tiles })), direction, 'claimed');
     }
 
     function variantRow(v, label, suffix, claimed) {
