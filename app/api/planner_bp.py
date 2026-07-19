@@ -201,10 +201,9 @@ def exploration_roads():
 @bp.route('/exploration/roadless-tiles')
 @limiter.limit("20 per minute")
 def exploration_roadless_tiles():
-    """Tiles within a bounding box with no bike-network road nearby (requires
-    osmnx) — used to keep the route generator from targeting non-bikeable,
-    non-walkable tiles (open water and other unreachable terrain) as
-    "new tile" candidates (#525)."""
+    """Tiles within a bounding box that fall inside open water (OSM
+    `natural=water`) — used to keep the route generator from targeting
+    non-bikeable tiles as "new tile" candidates (#525)."""
     from src.coverage_tracker import TILE_ZOOM, SQUADRATINHO_ZOOM
 
     svc = current_app.container.get_exploration_service()
