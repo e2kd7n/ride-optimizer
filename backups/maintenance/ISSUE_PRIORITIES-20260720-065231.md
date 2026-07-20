@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-05-23 16:16:38 UTC / 2026-05-23 11:16:38 CDT
+**Last Updated:** 2026-07-17 23:18:44 UTC / 2026-07-17 23:18:44 GMT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -8,13 +8,13 @@ This file reflects the current state of GitHub issues organized by release miles
 
 ## 📍 Release Context
 
-- **Current Release:** v0.12.0 (deployed)
-- **Next Release:** v0.13.0 (in development)
-- **Future Releases:** v0.14.0,v0.15.0
+- **Current Release:** v0.19.0 (deployed, milestone fully closed)
+- **Next Release:** v0.18.0 (in development)
+- **Future Releases:** 
 
 ---
 
-## 🎯 v0.13.0 (Next Release - IN DEVELOPMENT)
+## 🎯 v0.18.0 (Next Release - IN DEVELOPMENT)
 
 **Priority within this release determines work order. Complete P0/P1 issues before moving to future releases.**
 
@@ -28,64 +28,10 @@ This file reflects the current state of GitHub issues organized by release miles
 **No P2 issues** ✅
 
 ### 🟢 P3 - LOW
-- #145 - 🌤️ EPIC: Weather Dashboard & Forecast Integration
-- #54 - Weather Dashboard Implementation (Epic)
+- #514 - Offload background analysis batch jobs to Pi Zero W cluster (ClusterHAT)
 
 ### 📋 P4 - FUTURE
-- #47 - Add Side-by-Side Route Comparison Feature
-- #37 - Add real-time route suggestions
-
----
-
-## 📅 v0.14.0 (Future Release)
-
-### 🔴 P1 - HIGH
-- #208 - Create test data fixtures for integration testing
-- #163 - Test Coverage: data_fetcher.py (49% → 80%)
-- #162 - Test Coverage: long_ride_analyzer.py (13% → 50%)
-- #161 - Test Coverage: route_analyzer.py (20% → 50%)
-- #118 - Re-enable geocoding after rate limit expires
-
-### 🟡 P2 - MEDIUM
-- #300 - Test coverage gaps: wire up broken test files and fix pre-existing mock failures
-- #272 - Add Hourly Weather Forecast
-- #227 - Improve Test Coverage for New Features
-- #209 - Implement graceful degradation for unavailable services
-- #207 - Implement dependency injection pattern for better testability
-- #192 - Establish PR review requirements
-- #187 - Testing: Increase Route Namer coverage 15% → 50%
-- #186 - Testing: Increase Route Analyzer coverage 20% → 50%
-- #185 - Testing: Increase Data Fetcher coverage 49% → 80%
-- #184 - Testing: Increase Long Ride Analyzer coverage 13% → 50%
-- #183 - Code Quality: Add debug logging for exception handlers
-- #182 - Code Quality: Replace 4 bare except statements with specific exceptions
-- #165 - Test Coverage: route_namer.py (15% → 50%)
-- #136 - Implement settings and preferences page for home/work locations, units, time windows, and planner defaults
-
-### 🟢 P3 - LOW
-- #200 - Route naming improvements (Start → Main → End format)
-- #199 - Design: Test on real iOS/Android devices
-- #196 - Design: Ensure touch targets ≥44x44px with 8px spacing
-- #195 - Design: Verify mobile-first responsive design (320px viewport)
-- #170 - Design: Test keyboard navigation and screen reader support
-- #120 - [LOW PRIORITY] Debug and fix Bootstrap tab switching functionality
-
-### 📋 P4 - FUTURE
-- #203 - Implement GDPR-compliant data deletion endpoint
-
----
-
-## 📅 v0.15.0 (Future Release)
-
-### 🔴 P1 - HIGH
-- #172 - Add Marshmallow validation schemas for planner endpoints
-
-### 🟡 P2 - MEDIUM
-- #193 - Long Rides: Implement skeleton loaders and error states
-- #180 - Add planner-specific API client methods
-- #141 - Add repeat-a-past-ride flow and saved plan support
-- #107 - Add interactive map showing all long ride routes
-- #106 - Add average speed and elevation gain metrics
+**No P4 issues** ✅
 
 ---
 
@@ -97,30 +43,29 @@ These issues need to be assigned to a release milestone and prioritized.
 None
 
 ### 🔴 P1 - HIGH
-- #260 - Implement guided FTUE for Strava API key setup with in-app configuration
-- #254 - Implement Animated GIF Tutorials for Key Features
+None
 
 ### 🟡 P2 - MEDIUM
-- #194 - Long Rides: Add accessibility features (WCAG 2.1 AA)
+None
 
 ### 🟢 P3 - LOW
-None
+- #516 - Re-enable amd64 in docker-publish.yml if a non-Pi deployment target appears
 
 ### 📋 P4 - FUTURE
 None
 
 ### ⚠️ Unprioritized (No P-label)
-None
+- #526 - Add HTTPS/TLS to Pi deployment (required for geolocation and other secure-context APIs)
+- #525 - Explore tab: exclude over-water tiles from new-tile scoring/generation
+- #519 - Recommend routes based on scheduled TrainerRoad outdoor workouts, not just basic commute patterns
+- #518 - Indoor-workout weather trigger: only checks cold + rain — add max forecast temp and air quality
 
 ---
 
 ## 📝 Workspace TODOs & Tasks
 Code comments and inline tasks found in the workspace that may need attention.
 
-Found **2** code comments requiring attention:
-
-- `app/static/js/map-filters.js` - 100:                // TODO: Highlight route on map (requires map layer access)
-- `static/js/dashboard.js` - 7:// NOTE: Initialization is handled by inline script in index.html
+**No TODO/FIXME comments found in code** ✅
 
 ## 📖 Priority System (Release-Aware)
 
@@ -186,7 +131,11 @@ gh issue edit <issue_num> --add-label "P1-high"
 
 ### 3. Regenerate This File
 ```bash
+# macOS / Linux / WSL — output written directly to ISSUE_PRIORITIES.md
 ./scripts/update-issue-priorities.sh
+
+# Windows (PowerShell) — same command, no redirect needed
+wsl bash ./scripts/update-issue-priorities.sh
 ```
 
 ### 4. Commit and Communicate

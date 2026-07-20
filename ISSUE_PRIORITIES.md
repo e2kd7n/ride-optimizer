@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-07-17 23:18:44 UTC / 2026-07-17 23:18:44 GMT
+**Last Updated:** 2026-07-20 11:53:49 UTC / 2026-07-20 11:53:49 GMT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -49,12 +49,13 @@ None
 None
 
 ### 🟢 P3 - LOW
-- #516 - Re-enable amd64 in docker-publish.yml if a non-Pi deployment target appears
+None
 
 ### 📋 P4 - FUTURE
 None
 
 ### ⚠️ Unprioritized (No P-label)
+- #529 - Explore: Phase-1 candidate-zone highlight rendered as 'claimed' tiles, misleading users
 - #526 - Add HTTPS/TLS to Pi deployment (required for geolocation and other secure-context APIs)
 - #525 - Explore tab: exclude over-water tiles from new-tile scoring/generation
 - #519 - Recommend routes based on scheduled TrainerRoad outdoor workouts, not just basic commute patterns
