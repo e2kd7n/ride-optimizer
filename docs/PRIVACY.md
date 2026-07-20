@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Last Updated:** May 14, 2026  
+**Last Updated:** July 18, 2026  
 **Effective Date:** May 14, 2026
 
 ## Introduction
@@ -66,18 +66,16 @@ We use collected information to:
 
 ### Encryption
 
-- **OAuth tokens**: Encrypted using Fernet symmetric encryption (AES-128)
-- **Cache data**: Encrypted with separate encryption keys
-- **Encryption keys**: Auto-generated and stored in `config/` directory with 0600 permissions
+- **OAuth tokens**: Encrypted using Fernet symmetric encryption (AES-128), key auto-generated and stored in `config/.token_encryption_key` with 0600 permissions
+- **Cache data**: **Not encrypted.** This is a deliberate design choice, not a gap — the app relies on OS file permissions (0600, owner read/write only) rather than at-rest encryption for cache files. An earlier `SecureCacheStorage` encrypted-cache module was built but never fully adopted, then removed as unused dead code (`GHSA-ffw6-3927-gq93`); every cache writer is required to set 0600 permissions instead, either automatically via the app's `JSONStorage` helper or via an explicit permissions call for the few writers that bypass it.
 - **In transit**: All API communications use HTTPS/TLS
 
 ### File Permissions
 
-All sensitive files are automatically set to owner-only access (0600):
+All sensitive files are automatically set to owner-only access (0600) — on Linux/the Pi (the production environment); this cannot be enforced on a Windows dev checkout, so a passing local permissions check is not proof it works in production:
 - `config/credentials.json` - OAuth tokens
 - `config/.token_encryption_key` - Token encryption key
-- `config/.cache_encryption_key` - Cache encryption key
-- `cache/activities_cache.json` - Encrypted activity data
+- `cache/activities_cache.json` - Activity data cache (unencrypted, 0600-protected)
 
 ### PII Protection in Logs
 

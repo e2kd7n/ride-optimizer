@@ -6,82 +6,91 @@ Please also refer to CLAUDE.md for direction. In the event of a conflict - expla
 
 ## ⚠️ CRITICAL ARCHITECTURE RULES ⚠️
 
-
+> **Updated 2026-07-18.** The architecture below superseded an earlier `static/`-only
+> UI (see "The Epic #237 Mistake" historical note below) when pages were migrated to
+> Jinja templates under `templates/` (#470). If you find an older doc, plan, or issue
+> that says "the web app uses `static/` files, `templates/` is deprecated" — that is
+> now backwards. Trust this file and `CLAUDE.md` over anything else.
 
 ### Product Vision: WEB APPLICATION (NOT CLI Tool)
 
 **THE PRODUCT IS A WEB APPLICATION. Period.**
 
-- ✅ **Active System:** `launch.py` (CLI entry, port 8083) + `app/api/*_bp.py` + `static/` files + `app/services/`
-- ❌ **Deprecated System:** `main.py` + `templates/` (archived to `archive/deprecated_cli_system/`)
+- ✅ **Active System:** `launch.py` (CLI entry, port 8083) → `app/factory.py` → `app/api/*_bp.py` + `templates/*.html` (Jinja-rendered pages) + `static/js`, `static/css` + `app/services/`
+- ❌ **Deprecated System:** `main.py` (CLI-only data analysis; do not extend for web features)
 
 ### Where to Make Changes
 
 #### ✅ FOR WEB APP UI/UX WORK (CORRECT):
 ```
-static/dashboard.html       # Home page
-static/routes.html          # Routes library
-static/commute.html         # Commute recommendations
-static/planner.html         # Long ride planner
+templates/index.html        # Home page
+templates/routes.html       # Routes library
+templates/route-detail.html # Route detail
+templates/compare.html      # Route comparison
+templates/explore.html      # Explore / new-tile routing
+templates/reports.html      # Reports
+templates/settings.html     # Settings
+templates/weather.html      # Weather
+templates/partials/         # Shared navbar/bottom-nav/theme-init markup (#470)
+static/commute.html         # Commute recommendations (standalone, no shared nav)
+static/setup.html           # First-run setup (standalone)
 static/css/main.css         # Styles
 static/js/*.js              # Client-side logic
 app/api/*_bp.py             # API route handlers (9 Blueprints)
 app/services/*.py           # Business logic
 app/container.py            # ServiceContainer (wave-parallel init)
-launch.py                   # CLI entry point only (133 lines)
+launch.py                   # CLI entry point only
 ```
 
 #### ❌ NEVER EDIT THESE FOR UI/UX (WRONG):
 ```
-archive/deprecated_cli_system/templates/*  # DEPRECATED - archived
-main.py                                     # CLI tool - not for UI work
+main.py                     # CLI tool - not for UI work
 ```
 
-### The Epic #237 Mistake (May 2026)
+### The Epic #237 Mistake (May 2026) — historical, architecture has since changed
 
 **What Happened:**
 - Epic #237 (UI/UX Redesign, 14 issues, 40-60 hours) was implemented in `templates/report_template.html`
-- This is the DEPRECATED CLI system
-- The web app uses `static/` files
+- At the time, that was the DEPRECATED CLI system — the web app used `static/` files
 - Result: All work was wasted and needs to be redone
 
 **Cost:** 40-60 hours of misdirected development
 
 **Root Cause:** Insufficient deprecation warnings (now fixed)
 
-**Prevention:**
-1. Templates archived to `archive/deprecated_cli_system/`
-2. Strong warnings added to `main.py`
-3. This section added to AGENTS.md
-4. Issue #257 created to port Epic #237 to correct system
+**Note:** This incident is why earlier revisions of this doc warned "never edit `templates/`."
+That warning is now **obsolete** — `templates/` was later adopted (#470) as the real, live
+location for page markup, and the pre-#470 `static/dashboard.html` / `static/routes.html` /
+`static/planner.html` pages it replaced no longer exist. Don't apply the old warning to
+today's `templates/` directory.
 
 ### Architecture Decision Tree
 
 **If implementing a UI/UX feature:**
-1. Is it for the web app? → Edit `static/` files
-2. Is it for API endpoints? → Edit the relevant `app/api/*_bp.py` Blueprint
-3. Is it for business logic? → Edit `app/services/`
-4. Is it for CLI data analysis? → Edit `main.py` (but NOT templates)
-
-**If you see "templates/" in an issue:**
-- STOP and ask for clarification
-- The issue may be misdirected
-- Templates are deprecated for UI work
+1. Is it a full page? → Edit the matching file in `templates/` (or `static/commute.html` / `static/setup.html` for the two pages that don't use shared nav)
+2. Is it client-side behavior/styling? → Edit `static/js/*.js` / `static/css/main.css`
+3. Is it for API endpoints? → Edit the relevant `app/api/*_bp.py` Blueprint
+4. Is it for business logic? → Edit `app/services/`
+5. Is it for CLI data analysis? → Edit `main.py` and `src/*.py`
 
 ### Web App Architecture (ACTIVE)
 
 > **Blueprint refactor complete (Epic #413).** All route handlers live in `app/api/` Blueprints.
+> **Factory consolidation complete (#460):** `app/factory.py::create_app()` is the only
+> app factory — the older `app/__init__.py::create_app()` / `app/config.py` pair was deleted.
 
 ```
 User Browser
     ↓
-launch.py (133 lines — CLI entry point only)
+launch.py (CLI entry point only)
     ↓
 app/factory.py (create_app)
     ↓
-app/container.py (ServiceContainer, wave-parallel init)
+app/container.py (ServiceContainer, wave-parallel init; refresh_services(*names)
+                   does a granular re-init of just the affected service(s) — #461)
     ↓
-app/api/*_bp.py (9 Blueprints — all routes)
+Page routes (registered directly in app/factory.py, Jinja-rendered from templates/)
+app/api/*_bp.py (9 Blueprints — all JSON API routes)
     weather_bp.py      /api/weather/*
     commute_bp.py      /api/commute, /api/recommendation, /api/workout-options
     routes_bp.py       /api/routes/*
@@ -91,13 +100,14 @@ app/api/*_bp.py (9 Blueprints — all routes)
     data_bp.py         /api/analyze/*, /api/fetch/*, /api/activities
     stats_bp.py        /api/stats/*
     core_bp.py         /api/status, /api/settings/*, /api/plans/*, /api/user/*
+    maps_api.py        /api/maps/* (registered separately, not counted in the 9)
     ↓
 app/services/*.py (business logic — unchanged)
     ↓
 data/*.json (cached data)
 ```
 
-### CLI Tool Architecture (DEPRECATED FOR UI)
+### CLI Tool Architecture (data-analysis only, not for UI)
 ```
 User Terminal
     ↓
@@ -105,7 +115,8 @@ main.py --analyze
     ↓
 Uses: src/*.py (analysis logic)
     ↓
-Generates: archive/deprecated_cli_system/templates/report_template.html
+Generates via: legacy/report_generator.py (moved out of src/, #467/#508 —
+               PDF/QR export; requires manually-installed weasyprint/qrcode extras)
     ↓
 Outputs: output/report.html (static file)
 ```
@@ -172,7 +183,7 @@ After marking any task complete:
 - **Credential validation is mandatory**: App exits immediately if `STRAVA_CLIENT_ID` or `STRAVA_CLIENT_SECRET` are missing/invalid in `.env`
 - **Encrypted storage**: Tokens stored in `config/credentials.json` are encrypted using Fernet (key auto-generated in `config/.token_encryption_key`). Cache files under `cache/`/`data/` are **not** encrypted — `SecureCacheStorage` was removed as unused dead code (`GHSA-ffw6-3927-gq93`); the deliberate baseline for caches is 0o600 file permissions, not encryption. Don't assume a cache file is protected beyond that.
 - **Security audit logging**: All auth events logged to `logs/security_audit.log` (separate from main logs)
-- **File permissions**: Cache and credential files automatically set to 0600 (owner read/write only) — on Linux/the Pi; Windows dev checkouts can't enforce this, so don't treat a passing local permissions check as proof it works in production.
+- **File permissions**: Cache and credential files automatically set to 0600 (owner read/write only) — on Linux/the Pi; Windows dev checkouts can't enforce the permission bits, so don't treat a passing local permissions check as proof it works in production. Cross-process write locking (`JSONStorage`'s POSIX `fcntl.flock`) does have a Windows equivalent now (`msvcrt.locking`, plus a rename retry for transient antivirus/indexer `PermissionError`s — #504) — that part works cross-platform even though the permission bits don't.
 
 ### Cache Behavior (Non-Standard)
 - **Cache merging by default**: `--fetch` merges with existing cache, NOT replaces (use `--replace-cache` to clear)
@@ -181,6 +192,7 @@ After marking any task complete:
 - **Cache file permissions**: Every cache writer must end up at 0o600 — automatic via `JSONStorage`, or via an explicit `secure_chmod()` call (`src/json_storage.py`) for bare `json.dump()` writers. No cache encryption layer exists by design (see Security & Authentication above).
 
 ### Route Analysis Algorithm
+- **Shared comparison math**: `route_analyzer.py` and `long_ride_analyzer.py` both delegate similarity math to `src/route_comparison.py` (#507) — change Fréchet/Hausdorff comparison logic there, not in either caller.
 - **Fréchet distance primary**: Uses `similaritymeasures` library for route matching (NOT Hausdorff alone)
 - **Dual validation**: Fréchet (300m threshold) + Hausdorff (0.50 threshold) for route similarity
 - **Percentile-based outlier tolerance**: Uses 95th percentile in Hausdorff to ignore GPS glitches
