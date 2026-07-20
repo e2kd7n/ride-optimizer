@@ -26,7 +26,10 @@ plans/
 ├── v0.9.0/          # Long Rides (March 30, 2026) [formerly v2.4.0]
 ├── v0.10.0/         # APScheduler + Docker (March 30, 2026) [formerly v2.5.0]
 ├── v0.11.0/         # Architecture Simplification (Superseded by v0.12.0)
-├── v0.12.0/         # Production Readiness (May 2026) - CURRENT
+├── v0.12.0/         # Production Readiness (May 2026) - COMPLETE
+├── v0.13.0/         # E2E Testing & Quality
+├── v0.16.0/         # launch.py Blueprint Refactor - COMPLETE, now the live architecture
+├── v0.17.0/         # Design Review — LATEST planning folder
 └── README.md        # This file
 ```
 
@@ -209,10 +212,10 @@ This release was superseded by v0.12.0 which focuses on production readiness wit
 
 ---
 
-## Release v0.12.0 - Production Readiness (CURRENT)
+## Release v0.12.0 - Production Readiness (COMPLETE)
 
 **Target Date:** May 2026 (2.5 weeks)
-**Status:** 🟢 CURRENT RELEASE - ACTIVE DEVELOPMENT
+**Status:** ✅ COMPLETE — superseded by v0.13.0 through v0.17.0 as the latest planning folder; see those directories and `AGENTS.md`/`CLAUDE.md` for the current architecture
 
 ### Planning Documents
 - **PRODUCTION_READINESS_ROADMAP.md** - Comprehensive production readiness roadmap
@@ -282,21 +285,22 @@ This release was superseded by v0.12.0 which focuses on production readiness wit
 
 ---
 
-## Release v0.16.0 - `launch.py` Blueprint Refactor (IN PLANNING)
+## Release v0.16.0 - `launch.py` Blueprint Refactor (COMPLETE)
 
 **Target Date:** TBD
-**Status:** 📝 IN PLANNING
+**Status:** ✅ COMPLETE — this is now the live architecture (see `CLAUDE.md`/`AGENTS.md`)
 
 ### Planning Documents
 - **LAUNCH_PY_BLUEPRINT_REFACTOR.md** - Full refactor plan: Blueprint layout, parallel service init, thread-safe job state
 
-### Key Features
-- Split 3,404-line `launch.py` into 9 focused Blueprints under `app/api/`
-- `app/factory.py` app factory + `app/container.py` service container
-- Wave-parallel service initialisation via `ThreadPoolExecutor` (3 services in parallel on cold start)
+### Key Features (shipped)
+- Split the old monolithic `launch.py` into 9 focused Blueprints under `app/api/`
+- `app/factory.py` app factory + `app/container.py` service container — later consolidated
+  further (#460) to remove a second, older `app/__init__.py::create_app()` factory entirely
+- Wave-parallel service initialisation via `ThreadPoolExecutor` (3 services in parallel on cold start), plus `refresh_services(*names)` (#461) for granular per-service re-init
 - Thread-safe `JobState` + `JobRegistry` replacing module-level globals
 - Extracted infrastructure: `_IntervalsCredStore`, env helpers, process management
-- `launch.py` reduced to ~120-line CLI entry point
+- `launch.py` reduced to a thin CLI entry point (start/stop/status/foreground)
 
 ---
 
@@ -416,6 +420,6 @@ The following analysis documents have been archived after completion:
 
 ---
 
-*Last Updated: May 14, 2026*
+*Last Updated: July 18, 2026*
 *Organization Structure: Release-based planning document archive*
 *Version Numbering: Aligned with semantic versioning (0.x.x for pre-production)*

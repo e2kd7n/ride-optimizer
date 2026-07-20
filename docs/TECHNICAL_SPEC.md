@@ -2,61 +2,83 @@
 
 ## Architecture Overview
 
-### Smart Static Web Platform
+### Server-Rendered Multi-Page Flask App
 
-The application uses a **Smart Static architecture** optimized for single-user deployment:
+> **Updated 2026-07-18.** This section previously described a "Smart Static" architecture
+> (JS-rendered `static/*.html`, no Jinja templates) that predates the current app. That
+> architecture was superseded when most pages moved to Jinja templates (#470) and route
+> handlers moved into Blueprints (Epic #413). See `CLAUDE.md` / `AGENTS.md` for the
+> authoritative, actively-maintained description — the summary below is kept in sync with them.
 
 **Components:**
-- **Static Frontend** (`static/*.html`, `static/js/*.js`) - Client-side rendering with vanilla JavaScript
-- **Minimal Flask API** (`launch.py`) - JSON endpoints for data retrieval
-- **Service Layer** (`app/services/`) - Business logic and data processing
-- **Core Analysis** (`src/`) - Route analysis, weather, and optimization algorithms
-- **JSON Storage** (`data/*.json`) - Persistent data storage without database
+- **Frontend** (`templates/` + `static/`) — eight pages (`index`, `compare`, `explore`, `reports`, `route-detail`, `routes`, `settings`, `weather`) are Jinja-rendered from `templates/`, sharing navbar/bottom-nav/theme-init markup via `templates/partials/`; `commute.html`, `setup.html`, and the `test-error-handling.html` dev harness remain plain static files. No client-side JS framework or build step — vanilla JS in `static/js/*.js`.
+- **Flask app** (`app/factory.py::create_app()`) — the single app factory; registers Blueprints, page routes, CSRF protection, rate limiting, and security headers/CSP.
+- **API Blueprints** (`app/api/*_bp.py`) — nine Blueprints (`weather_bp`, `commute_bp`, `routes_bp`, `planner_bp`, `strava_bp`, `integrations_bp`, `data_bp`, `stats_bp`, `core_bp`) plus `maps_api`, all registered from `app/factory.py`.
+- **Service Layer** (`app/services/`) — business logic and data processing, initialized by `app/container.py::ServiceContainer` in parallel waves, with `refresh_services(*names)` for granular re-init.
+- **Core Analysis** (`src/`) — route analysis, weather, and optimization algorithms.
+- **JSON Storage** (`data/*.json`) — persistent data storage without a database.
 
 **Design Principles:**
-- No server-side templates (Jinja2 deprecated)
-- No sessions or authentication middleware
+- Sessions used for CSRF/CSP nonce plumbing, not user auth (still single-user, no login)
 - CORS enabled for API endpoints
-- Lazy service initialization on first request
-- Optimized for Raspberry Pi deployment
+- Lazy service initialization; `folium` is imported lazily inside functions that build maps rather than at module load, to keep it out of `sys.modules` at Flask startup on the Pi
+- Optimized for Raspberry Pi deployment (gunicorn `gthread` worker, arm64-only container image)
 
 ### Web Application Structure
 
 ```
 ride-optimizer/
-├── launch.py                 # Flask API server (port 8083)
-├── static/                   # Static HTML pages
-│   ├── dashboard.html        # Main dashboard
-│   ├── commute.html          # Commute recommendations
-│   ├── planner.html          # Long ride planner
-│   └── js/                   # Client-side JavaScript
-│       ├── api-client.js     # API communication
-│       ├── dashboard.js      # Dashboard logic
-│       ├── commute.js        # Commute page logic
-│       └── map-renderer.js   # Map visualization
-├── app/                      # Application package
-│   ├── services/             # Business logic services
-│   │   ├── analysis_service.py
-│   │   ├── commute_service.py
-│   │   ├── weather_service.py
-│   │   ├── planner_service.py
-│   │   └── route_library_service.py
-│   ├── models/               # Data models
-│   └── scheduler/            # Background jobs
-├── src/                      # Core analysis modules
-│   ├── auth.py               # Strava OAuth
-│   ├── data_fetcher.py       # Activity fetching
-│   ├── route_analyzer.py     # Route grouping
-│   ├── weather_fetcher.py    # Weather API
+├── launch.py                 # CLI entry point (start/stop/status/foreground)
+├── wsgi.py                   # WSGI entry point for gunicorn
+├── templates/                 # Jinja-rendered pages (the live UI)
+│   ├── index.html
+│   ├── routes.html
+│   ├── route-detail.html
+│   ├── compare.html
+│   ├── explore.html
+│   ├── reports.html
+│   ├── settings.html
+│   ├── weather.html
+│   └── partials/              # Shared navbar/bottom-nav/theme-init
+├── static/                    # Remaining standalone pages + all JS/CSS
+│   ├── commute.html
+│   ├── setup.html
+│   ├── css/main.css
+│   └── js/                    # Client-side JavaScript
+│       ├── api-client.js      # API communication
+│       ├── routes.js
+│       ├── commute.js
+│       └── map-renderer.js
+├── app/                       # Application package
+│   ├── factory.py              # create_app() — the only app factory
+│   ├── container.py             # ServiceContainer (wave-parallel init)
+│   ├── api/                    # Blueprints — all route handlers
+│   │   ├── weather_bp.py / commute_bp.py / routes_bp.py / planner_bp.py
+│   │   ├── strava_bp.py / integrations_bp.py / data_bp.py / stats_bp.py
+│   │   ├── core_bp.py / maps_api.py / activity_cache.py
+│   └── services/                # Business logic services
+│       ├── analysis_service.py, commute_service.py, weather_service.py
+│       ├── planner_service.py, route_library_service.py
+│       ├── exploration_service.py, geocoding_service.py, settings_service.py
+│       ├── trainerroad_service.py, garmin_service.py
+├── src/                       # Core analysis modules
+│   ├── auth.py                # Strava OAuth
+│   ├── data_fetcher.py        # Activity fetching, full-history backfill
+│   ├── route_analyzer.py      # Route grouping
+│   ├── route_comparison.py    # Shared Fréchet/Hausdorff math (used by
+│   │                           #  route_analyzer.py and long_ride_analyzer.py)
+│   ├── weather_fetcher.py     # Weather API
 │   └── ...
-└── data/                     # JSON storage
+├── legacy/                    # CLI-only, non-production code
+│   └── report_generator.py    # PDF/QR reports for deprecated main.py path
+└── data/                      # JSON storage
     ├── route_groups.json
     ├── favorite_routes.json
     ├── weather_cache.json
     └── status.json
 ```
 
-### API Endpoints (`launch.py`)
+### API Endpoints (`app/api/*_bp.py`)
 
 #### Core Data Endpoints
 
@@ -859,18 +881,37 @@ def test_full_workflow():
 
 ### Core Requirements
 
+> Kept in sync with `requirements.txt`; last checked 2026-07-18. `weasyprint`/`qrcode[pil]`
+> were dropped as hard dependencies (#498 Phase 2) — their sole consumer, `legacy/report_generator.py`,
+> already degrades gracefully without them, so they're now manual-install extras for CLI PDF export
+> only. `flask-sqlalchemy`/`sqlalchemy` were removed as unused dead weight from the same cleanup.
+
 ```
 stravalib>=0.10.0
 pandas>=1.5.0
 numpy>=1.23.0
 scikit-learn>=1.1.0
 geopy>=2.3.0
-folium>=0.14.0
+folium>=0.14.0          # lazily imported per-function, not at module load
 jinja2>=3.1.0
 pyyaml>=6.0
 python-dotenv>=0.21.0
 polyline>=2.0.0
-requests>=2.28.0
+requests>=2.33.0
+scipy>=1.9.0
+similaritymeasures>=0.5.0
+cryptography>=41.0.0
+tqdm>=4.65.0
+defusedxml>=0.7.1
+gunicorn>=21.2.0
+flask>=3.0.0
+flask-cors>=4.0.0
+flask-wtf>=1.2.0
+flask-limiter>=3.5.0
+icalendar>=5.0.0
+marshmallow>=3.20.0
+garth>=0.4.0             # Garmin Connect integration
+psutil>=5.9.0            # server_control process management
 ```
 
 ### Development Requirements
@@ -1989,5 +2030,8 @@ showToast('Failed to load weather data', 'error')
 
 ---
 
-*Last Updated: 2026-05-14*
+*Last Updated: 2026-07-18*
 *Version: 2.5.0+*
+*Note: Sections 1-12 and 14-19 below describe the `src/`-level analysis engine and CLI
+tool, which are largely unchanged by the web-app architecture work referenced above; only
+the Architecture Overview and Dependencies sections were revised in this pass.*

@@ -130,4 +130,4 @@ When adding new documentation:
 
 ---
 
-**Last Updated:** 2026-06-13
+**Last Updated:** 2026-07-18
