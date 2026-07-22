@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-07-20 12:00:31 UTC / 2026-07-20 12:00:31 GMT
+**Last Updated:** 2026-07-21 12:18:35 UTC / 2026-07-21 07:18:35 CDT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -8,30 +8,9 @@ This file reflects the current state of GitHub issues organized by release miles
 
 ## 📍 Release Context
 
-- **Current Release:** v0.19.0 (deployed, milestone fully closed)
-- **Next Release:** v0.18.0 (in development)
+- **Current Release:** none (deployed, milestone fully closed)
+- **Next Release:** unknown (in development)
 - **Future Releases:** 
-
----
-
-## 🎯 v0.18.0 (Next Release - IN DEVELOPMENT)
-
-**Priority within this release determines work order. Complete P0/P1 issues before moving to future releases.**
-
-### 🔴 P0 - CRITICAL
-**No P0 issues** ✅
-
-### 🔴 P1 - HIGH
-**No P1 issues** ✅
-
-### 🟡 P2 - MEDIUM
-**No P2 issues** ✅
-
-### 🟢 P3 - LOW
-- #514 - Offload background analysis batch jobs to Pi Zero W cluster (ClusterHAT)
-
-### 📋 P4 - FUTURE
-**No P4 issues** ✅
 
 ---
 
@@ -39,27 +18,7 @@ This file reflects the current state of GitHub issues organized by release miles
 
 These issues need to be assigned to a release milestone and prioritized.
 
-### 🔴 P0 - CRITICAL
-None
-
-### 🔴 P1 - HIGH
-None
-
-### 🟡 P2 - MEDIUM
-None
-
-### 🟢 P3 - LOW
-None
-
-### 📋 P4 - FUTURE
-None
-
-### ⚠️ Unprioritized (No P-label)
-- #529 - Explore: Phase-1 candidate-zone highlight rendered as 'claimed' tiles, misleading users
-- #526 - Add HTTPS/TLS to Pi deployment (required for geolocation and other secure-context APIs)
-- #525 - Explore tab: exclude over-water tiles from new-tile scoring/generation
-- #519 - Recommend routes based on scheduled TrainerRoad outdoor workouts, not just basic commute patterns
-- #518 - Indoor-workout weather trigger: only checks cold + rain — add max forecast temp and air quality
+**All issues are assigned to releases** ✅
 
 ---
 
@@ -132,11 +91,15 @@ gh issue edit <issue_num> --add-label "P1-high"
 
 ### 3. Regenerate This File
 ```bash
-# macOS / Linux / WSL — output written directly to ISSUE_PRIORITIES.md
+# macOS / Linux / Git Bash — output written directly to ISSUE_PRIORITIES.md
 ./scripts/update-issue-priorities.sh
 
-# Windows (PowerShell) — same command, no redirect needed
-wsl bash ./scripts/update-issue-priorities.sh
+# Windows (PowerShell) — run via Git Bash, not WSL:
+# WSL's git can't resolve a worktree's .git file when it holds a Windows-style
+# absolute gitdir path (as git-for-windows writes), so it fails with
+# 'fatal: not a git repository'. Git Bash's git is git-for-windows and handles
+# this correctly.
+bash ./scripts/update-issue-priorities.sh
 ```
 
 ### 4. Commit and Communicate
