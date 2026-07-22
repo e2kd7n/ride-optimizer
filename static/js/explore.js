@@ -1053,7 +1053,7 @@ function renderRoute(route, index) {
         weight: 3,
         dashArray: '8, 8',
         opacity: 0.8,
-    }).bindPopup(`${routeDirLabel(route)} — ${distanceLabel}, ${newTilesLabel(route.stats)}`);
+    }).bindPopup(`${routeDirLabel(route)} — ${distanceLabel}`);
     line.on('click', (e) => { L.DomEvent.stopPropagation(e); highlightRoute(route.direction); });
     routeLayer.addLayer(line);
     addArrows(coords, palette.light);
@@ -1069,13 +1069,6 @@ function routeDirLabel(route) {
     return `${DIRECTION_LABELS[route.direction]}${shapeTag}`;
 }
 
-function newTilesLabel(stats) {
-    if (stats.breakdown && stats.breakdown.length > 0) {
-        return stats.breakdown.map(b => `${b.count} new ${b.label}`).join(' + ');
-    }
-    return `${stats.unvisited} new tiles`;
-}
-
 function addRouteListItem(route, index, targetDistanceKm, extraLabel = '') {
     const palette = _paletteFor(route.direction);
     const color = palette.base;
@@ -1089,7 +1082,7 @@ function addRouteListItem(route, index, targetDistanceKm, extraLabel = '') {
     badge.innerHTML = `
         <div class="d-flex align-items-center gap-2 w-100">
             <span class="swatch"></span>
-            <span class="route-label">${routeDirLabel(route)} · ${distanceLabel} · ${newTilesLabel(route.stats)}${extraLabel ? ' ' + extraLabel : ''}${route.windLabel ? ' · ' + route.windLabel : ''}</span>
+            <span class="route-label">${routeDirLabel(route)} · ${distanceLabel}${extraLabel ? ' ' + extraLabel : ''}${route.windLabel ? ' · ' + route.windLabel : ''}</span>
             <button class="btn btn-xs btn-outline-primary ms-auto plot-road-btn" data-direction="${dir}"
                     aria-label="Plot road route for ${DIRECTION_LABELS[dir]}">
                 <i class="bi bi-map" aria-hidden="true"></i> Plot road route
