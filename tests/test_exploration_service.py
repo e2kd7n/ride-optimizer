@@ -1,5 +1,6 @@
 """Tests for app/services/exploration_service.py and src/ors_client.py."""
 
+import threading
 import time
 from unittest.mock import MagicMock, patch
 
@@ -419,6 +420,124 @@ class TestComputeRoute:
         with patch("src.ors_client.get_route", return_value={"_ors_unroutable": [(-87.65, 41.98)]}):
             result = service_with_key.compute_route([[41.98, -87.65], [41.99, -87.64]])
         assert result["status"] == "error"
+
+    def test_unroutable_retry_gives_up_gracefully_past_wall_clock_budget(self, service_with_key, mock_config):
+        """The unroutable-waypoint retry loop must not hang the request thread
+        indefinitely on a slow/degraded ORS endpoint (#freeze fix): once the
+        overall wall-clock budget (exploration.ors_max_wait_seconds) is spent,
+        compute_route returns a fast, clear error instead of continuing to
+        retry ORS calls one after another.
+        """
+        def _get(key, default=None):
+            if key == 'ors.api_key':
+                return 'fake-key'
+            if key == 'exploration.ors_max_wait_seconds':
+                return 0  # budget already exhausted before the first retry check
+            return default
+
+        mock_config.get = MagicMock(side_effect=_get)
+
+        # Every call reports a *different* unroutable interior waypoint so the
+        # drop-and-retry loop would otherwise keep going indefinitely.
+        side_effects = [
+            {"_ors_unroutable": [(-85.14, 41.80)]},
+            {"_ors_unroutable": [(-85.15, 41.81)]},
+            {"_ors_unroutable": [(-85.16, 41.82)]},
+        ]
+        with patch("src.ors_client.get_route", side_effect=side_effects) as mock_ors:
+            result = service_with_key.compute_route([
+                [41.98, -87.65],
+                [41.80, -85.14],
+                [41.81, -85.15],
+                [41.82, -85.16],
+                [41.99, -87.64],
+            ])
+
+        assert result["status"] == "error"
+        assert "too long" in result["message"].lower()
+        # Only the initial call happened — the budget check stopped the loop
+        # before a second retry, instead of grinding through every candidate.
+        assert mock_ors.call_count == 1
+
+    def test_concurrent_requests_are_serialized_not_run_in_parallel(self, service_with_key):
+        """Two overlapping compute_route calls for different routes must not
+        hit ORS at the same time — the second should queue behind the first
+        rather than racing it (concurrent ORS calls were the other half of
+        the thread-starvation freeze alongside the unbounded retry loop)."""
+        entered_first_call = threading.Event()
+        release_first_call = threading.Event()
+        concurrent_calls_seen = []
+        in_flight = 0
+        in_flight_lock = threading.Lock()
+
+        good_raw = {
+            "features": [{
+                "geometry": {"coordinates": [[-87.65, 41.98], [-87.64, 41.99]]},
+                "properties": {
+                    "summary": {"distance": 5000.0, "duration": 900.0},
+                    "extras": {},
+                },
+            }],
+        }
+
+        def fake_get_route(coords, profile, api_key=None, timeout=15):
+            nonlocal in_flight
+            with in_flight_lock:
+                in_flight += 1
+                concurrent_calls_seen.append(in_flight)
+            if coords[0][0] == -87.65:  # the "first" request's start waypoint
+                entered_first_call.set()
+                release_first_call.wait(timeout=5)
+            with in_flight_lock:
+                in_flight -= 1
+            return good_raw
+
+        with patch("src.ors_client.get_route", side_effect=fake_get_route):
+            first_thread = threading.Thread(
+                target=lambda: service_with_key.compute_route(
+                    [[41.98, -87.65], [41.99, -87.64]]
+                )
+            )
+            first_thread.start()
+            assert entered_first_call.wait(timeout=5), "first request never reached ORS"
+
+            # Second, distinct route — should block on the lock, not run
+            # concurrently with the first.
+            second_thread = threading.Thread(
+                target=lambda: service_with_key.compute_route(
+                    [[40.0, -80.0], [40.1, -80.1]]
+                )
+            )
+            second_thread.start()
+            second_thread_still_waiting = not second_thread.join(timeout=0.3)
+
+            release_first_call.set()
+            first_thread.join(timeout=5)
+            second_thread.join(timeout=5)
+
+        assert second_thread_still_waiting, "second request should have queued behind the first"
+        assert max(concurrent_calls_seen) == 1, "ORS calls overlapped instead of being serialized"
+
+    def test_busy_queue_returns_graceful_error_instead_of_hanging(self, service_with_key, mock_config):
+        """If the wait for the lock alone would exceed the wall-clock budget,
+        give up with a clear error rather than blocking the request thread
+        indefinitely behind whatever's already in flight."""
+        def _get(key, default=None):
+            if key == 'ors.api_key':
+                return 'fake-key'
+            if key == 'exploration.ors_max_wait_seconds':
+                return 0  # no time left to wait for the lock at all
+            return default
+
+        mock_config.get = MagicMock(side_effect=_get)
+        service_with_key._route_lock.acquire()  # simulate another request in flight
+        try:
+            result = service_with_key.compute_route([[41.98, -87.65], [41.99, -87.64]])
+        finally:
+            service_with_key._route_lock.release()
+
+        assert result["status"] == "error"
+        assert "busy" in result["message"].lower()
 
     def test_memoization_within_ttl(self, service_with_key):
         """A second identical (waypoints, profile) request within TTL does not call ORS again."""

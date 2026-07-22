@@ -7,6 +7,7 @@ management following the existing service patterns (constructor + initialize).
 
 from src.secure_logger import SecureLogger
 import math
+import threading
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -39,6 +40,13 @@ class ExplorationService:
         self._tracker = CoverageTracker(self.config)
         # Route memoization: {(waypoints_key, profile): (result_dict, expires_at)}
         self._route_cache: Dict[tuple, Tuple[dict, float]] = {}
+        # Serializes ORS "plot road route" calls (#compute_route) — only one
+        # runs at a time. Running them concurrently was the other half of the
+        # thread-starvation freeze: each already burns up to ors_max_wait_seconds
+        # of a gunicorn thread, so a handful of simultaneous requests could tie
+        # up every thread (and ORS's own per-minute quota) at once. Queueing
+        # them serially trades that for a bounded wait per request instead.
+        self._route_lock = threading.Lock()
 
     def initialize(self):
         pass
@@ -180,12 +188,19 @@ class ExplorationService:
             ``coordinates`` (list of [lat, lon]),
             ``distance_km``, ``duration_min``, ``surface_breakdown``.
         """
-        from src import ors_client
-
         profile = _SURFACE_TO_PROFILE.get(surface_preference, "cycling-regular")
         api_key = self.config.get("ors.api_key", "")
-        timeout = int(self.config.get("exploration.ors_timeout_seconds", 15))
         ttl = int(self.config.get("exploration.route_cache_ttl_seconds", 600))
+        # Hard wall-clock budget for this call, across queueing behind any
+        # in-flight request (below) AND every retry/fallback ORS attempt.
+        # Without this, the unroutable-waypoint retry loop (up to 10
+        # iterations) could each wait up to ors_timeout_seconds, tying up a
+        # gunicorn thread for minutes on a slow/degraded ORS endpoint — with
+        # only 4 threads (gunicorn.conf.py), a couple of concurrent
+        # point-to-point requests were enough to starve the whole app for
+        # every user, not just the one waiting on ORS.
+        max_wait = float(self.config.get("exploration.ors_max_wait_seconds", 40))
+        deadline = time.monotonic() + max_wait
 
         if not api_key:
             return {
@@ -202,15 +217,62 @@ class ExplorationService:
                 logger.debug("ORS cache hit for key %s", cache_key)
                 return result
 
+        # Only one "plot road route" computation runs at a time (see
+        # self._route_lock) — concurrent ORS calls were the other half of the
+        # thread-starvation freeze. Queue behind whichever request got there
+        # first rather than racing it; give up gracefully if the queue wait
+        # alone would blow the overall budget.
+        if not self._route_lock.acquire(timeout=max(0.0, deadline - time.monotonic())):
+            return {
+                "status": "error",
+                "message": "Road routing is busy with another request — try again shortly",
+            }
+        try:
+            # Another request may have computed (and cached) this exact
+            # route while we were waiting for the lock.
+            cached = self._route_cache.get(cache_key)
+            if cached is not None:
+                result, expires_at = cached
+                if time.monotonic() < expires_at:
+                    logger.debug("ORS cache hit for key %s (post-queue)", cache_key)
+                    return result
+            return self._compute_route_via_ors(waypoints, profile, api_key, ttl, deadline, max_wait, cache_key)
+        finally:
+            self._route_lock.release()
+
+    def _compute_route_via_ors(
+        self,
+        waypoints: List[Tuple[float, float]],
+        profile: str,
+        api_key: str,
+        ttl: int,
+        deadline: float,
+        max_wait: float,
+        cache_key: tuple,
+    ) -> Dict[str, Any]:
+        """Run the actual ORS call(s) for compute_route, holding self._route_lock."""
+        from src import ors_client
+
+        timeout = int(self.config.get("exploration.ors_timeout_seconds", 15))
+
+        def _budget_timeout() -> float:
+            """Per-call timeout capped to whatever's left of the overall budget."""
+            return max(0.0, min(timeout, deadline - time.monotonic()))
+
         # ORS expects [lon, lat] pairs.
         ors_coords = [[lon, lat] for lat, lon in waypoints]
         raw = ors_client.get_route(ors_coords, profile, api_key=api_key, timeout=timeout)
 
         # Preferred profile not enabled on this account — fall back to cycling-regular.
-        if raw is not None and raw.get("_ors_profile_unavailable") and profile != "cycling-regular":
+        if (
+            raw is not None
+            and raw.get("_ors_profile_unavailable")
+            and profile != "cycling-regular"
+            and time.monotonic() < deadline
+        ):
             logger.info("Profile %s unavailable, falling back to cycling-regular", profile)
             profile = "cycling-regular"
-            raw = ors_client.get_route(ors_coords, profile, api_key=api_key, timeout=timeout)
+            raw = ors_client.get_route(ors_coords, profile, api_key=api_key, timeout=_budget_timeout())
 
         # Unroutable waypoints: drop every interior bad waypoint and retry.
         # "Interior" = not the first (start) or last (end) coordinate.
@@ -218,7 +280,11 @@ class ExplorationService:
         # index, because ORS index numbering can vary across versions.
         # Retry until no interior waypoints remain to drop (guard against loops).
         _drop_attempts = 0
+        _timed_out = False
         while raw is not None and raw.get("_ors_unroutable"):
+            if time.monotonic() >= deadline:
+                _timed_out = True
+                break
             bad_coords = {(round(lon, 4), round(lat, 4)) for lon, lat in raw["_ors_unroutable"]}
             # Only drop interior points (preserve first and last).
             interior = ors_coords[1:-1]
@@ -244,8 +310,14 @@ class ExplorationService:
                 result, expires_at = cached
                 if time.monotonic() < expires_at:
                     return result
-            raw = ors_client.get_route(ors_coords, profile, api_key=api_key, timeout=timeout)
+            raw = ors_client.get_route(ors_coords, profile, api_key=api_key, timeout=_budget_timeout())
 
+        if _timed_out:
+            logger.warning("ORS route computation exceeded %.0fs budget; giving up gracefully", max_wait)
+            return {
+                "status": "error",
+                "message": "Road routing is taking too long — try again, or a shorter/simpler route",
+            }
         if raw is None:
             return {"status": "error", "message": "Road routing request failed"}
         if raw.get("_ors_rate_limited"):
