@@ -29,7 +29,8 @@ plans/
 ├── v0.12.0/         # Production Readiness (May 2026) - COMPLETE
 ├── v0.13.0/         # E2E Testing & Quality
 ├── v0.16.0/         # launch.py Blueprint Refactor - COMPLETE, now the live architecture
-├── v0.17.0/         # Design Review — LATEST planning folder
+├── v0.17.0/         # Design Review
+├── v0.19.0/         # Point-to-point distance tolerance — LATEST planning folder
 └── README.md        # This file
 ```
 
@@ -333,6 +334,21 @@ implementation queue — both were mechanical, zero-design-risk fixes. Replaced 
 "sub-task" implementation plan with a page-scoped PR plan (7 PRs instead of 20 issues run one at a time),
 five of which have no file overlap and can be implemented by parallel subagents in isolated worktrees.
 See [`DESIGN_REVIEW_EPIC.md`](v0.17.0/DESIGN_REVIEW_EPIC.md) for the full execution plan.
+
+---
+
+## Release v0.19.0 - Point-to-Point Distance Tolerance (IN PLANNING)
+
+**Status:** 📝 IN PLANNING — design written up, implementation not started
+
+### Planning Documents
+- **POINT_TO_POINT_DISTANCE_TOLERANCE.md** - Design for relaxing the ±15% distance tolerance on point-to-point Explore routes unless the requested distance is wildly longer than an efficient route between origin and destination
+
+### GitHub Issues
+- [#540](https://github.com/e2kd7n/ride-optimizer/issues/540) - Relax distance/time adherence for point-to-point routing (P2-medium)
+
+### Key Idea
+Point-to-point routes shouldn't be forced to hit the requested distance ±15% the way loop/out-and-back routes are — origin and destination already impose a natural route length. Only when the request is wildly longer than an ORS-computed efficient direct route (proposed threshold: 2x) should frontier/infill tile-collection expansion kick in.
 
 ---
 
