@@ -43,25 +43,33 @@ Pattern: `<type>/<issue-or-epic-number>-<short-description>`, or for multi-issue
 Types in use: `feat`, `fix`, `docs`, `test`, `refactor`. Epic-scale work often skips the
 type prefix and just uses `<theme>-<epic-issue-number>`.
 
-## PR & merge workflow (actual practice)
+## Merge workflow (actual practice, as of 2026-07-22)
 
-1. Branch off `main` using the naming pattern above.
-2. Open a PR via `gh pr create`, using `.github/pull_request_template.md`
-   (Summary / Changes / Test Plan / Checklist, with `Fixes #<n>` linking the issue).
+**PRs are optional, not required.** This is a solo-maintainer project with no second
+reviewer and no branch protection — direct commits/pushes to `main` are the norm for
+routine work. `PR_REVIEW_PROCESS.md` and `DEFINITION_OF_DONE.md` were rewritten
+2026-07-22 to stop mandating a PR-per-change; the earlier "MANDATORY" versions of those
+docs were written for a multi-squad structure that never matched how this repo is actually
+run, and combined with the per-session worktree convention (every Claude Code session gets
+its own branch), that mismatch was producing a PR for nearly every small task.
+
+1. Branch off `main` using the naming pattern above (or use the worktree branch a session
+   already created).
+2. For routine work: commit and push/merge straight to `main`. For something you want a
+   paper trail or CI run on first, open a PR via `gh pr create` using
+   `.github/pull_request_template.md` (Summary / Changes / Test Plan / Checklist, with
+   `Fixes #<n>` linking the issue).
 3. CI (`.github/workflows/docker-publish.yml`) runs the `test` job on every PR against
    `main`. `build-and-push` only runs on push to `main` (not on PRs) since it needs GHCR
    write access.
-4. **Merge commits are used, not squash** — confirmed from the commit graph (e.g. `fda97f1
-   Merge pull request #456`, `3754342 Merge pull request #455`, both 2-parent merges).
-   This **contradicts** `docs/guides/PR_REVIEW_PROCESS.md`, which currently states "Squash
-   merge or rebase merge (no merge commits)." A few early PRs (#324, #325) were in fact
-   squash-merged, but the pattern since has consistently been merge commits — the doc is
-   stale, not the practice.
+4. **When a PR is used, merge commits are used, not squash** — confirmed from the commit
+   graph (e.g. `fda97f1 Merge pull request #456`, `3754342 Merge pull request #455`, both
+   2-parent merges). A few early PRs (#324, #325) were in fact squash-merged, but the
+   pattern since has consistently been merge commits.
 5. **Branch protection on `main` is intentionally OFF** (`gh api repos/.../branches/main/protection`
-   → 404 "Branch not protected"), despite `PR_REVIEW_PROCESS.md` describing 1 required
-   approval + required `test` status check as enabled. It was turned on once (PR #323,
-   2026-06-17) and has since been left off by choice for this solo-maintainer project — don't
-   re-enable it without asking, and don't assume a red CI run blocks merging, since it doesn't.
+   → 404 "Branch not protected"). It was turned on once (PR #323, 2026-06-17) and has since
+   been left off by choice — don't re-enable it without asking, and don't assume a red CI
+   run blocks merging, since it doesn't.
 6. This is a solo-maintainer project. Self-review against the checklist in
    `PR_REVIEW_PROCESS.md` is the norm; there is no second human reviewer in practice.
 
@@ -102,8 +110,10 @@ When redeploying the Pi directly, always pull the GHCR image and tag it — neve
 
 ## Net takeaway
 
-If asked to "follow gitflow" on this project: create a short-lived branch off `main` named
-per the conventions above, open a PR with the template, let CI run, merge with a merge
-commit (not squash) once satisfied, and let the existing push-to-main → GHCR → Pi pipeline
-handle deployment. Don't invent a `develop` branch or a release-branch step, and don't
-re-enable branch protection — neither reflects actual practice here.
+If asked to "follow gitflow" on this project: don't. There's no `develop` branch, no
+release-branch step, and no PR requirement — those don't reflect actual practice here.
+For routine work: branch off `main` (or use the worktree branch a session already has),
+commit, and push/merge straight to `main`; let the existing push-to-main → GHCR → Pi
+pipeline handle deployment. Open a PR only when it adds value (a risky change, wanting a
+CI run first, or a paper trail worth keeping) — and when you do, use the template, merge
+with a merge commit (not squash), and don't re-enable branch protection.
