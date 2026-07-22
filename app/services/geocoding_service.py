@@ -63,9 +63,19 @@ class GeocodingService:
         self._geolocator = Nominatim(user_agent=user_agent, timeout=timeout)
 
     def geocode(self, query: str) -> Dict[str, Any]:
-        """Resolve a free-text location (city/state, postal code, address) to coordinates."""
+        """Resolve a free-text location (city/state, postal code, address) to coordinates.
+
+        Tries a US-restricted lookup first so ambiguous place names (e.g. a park
+        name that also exists as a municipality abroad) resolve within the US by
+        default; falls back to an unrestricted global lookup, which also covers
+        queries with an explicit non-US country/region in them.
+        """
         try:
-            location = self._geolocator.geocode(query, exactly_one=True, addressdetails=True)
+            location = self._geolocator.geocode(
+                query, exactly_one=True, addressdetails=True, country_codes='us'
+            )
+            if location is None:
+                location = self._geolocator.geocode(query, exactly_one=True, addressdetails=True)
         except (GeocoderTimedOut, GeocoderUnavailable, GeocoderServiceError) as exc:
             logger.warning("Geocoding service unavailable: %s", exc)
             return {"status": "error", "message": "Geocoding service unavailable, try again shortly"}
