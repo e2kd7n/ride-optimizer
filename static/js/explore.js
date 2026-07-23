@@ -1285,10 +1285,12 @@ async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
         avoidTraffic: document.getElementById('filter-avoid-traffic')?.checked || false,
     };
 
+    const isPtp = route.shape === 'point_to_point' && !!endMarker;
+    const endPos = isPtp ? endMarker.getLatLng() : startPos;
     const baseWaypoints = [
         [startPos.lat, startPos.lng],
         ...route.waypoints.map(wp => [wp.lat, wp.lon]),
-        [startPos.lat, startPos.lng],
+        [endPos.lat, endPos.lng],
     ];
 
     const candidates = (_phase1Candidates[direction] || []).slice();
