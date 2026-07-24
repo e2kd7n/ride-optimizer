@@ -2,7 +2,7 @@
 
 **Milestone:** v0.19.0
 **GitHub Issue:** [#540](https://github.com/e2kd7n/ride-optimizer/issues/540)
-**Status:** 📝 Design proposal — not yet implemented
+**Status:** ✅ Implemented — see [static/js/explore.js](../../static/js/explore.js) (`generateRoute()`, `refineRoute()`, `plotRoadRoute()`) and [static/js/exploration-worker.js](../../static/js/exploration-worker.js) (`optimize()`)
 
 ## Problem
 
@@ -23,14 +23,9 @@ Before Phase 1 candidate generation, make one `api.getExplorationRoute()` call (
 
 ### 2. Wild threshold
 
-```yaml
-exploration:
-  ptp_wild_multiplier: 2.0  # requested distance beyond efficientKm * this triggers frontier/infill expansion for point-to-point routes
-```
+`PTP_WILD_MULTIPLIER = 2.0` in `static/js/explore.js` — this tunable only affects client-side route-generation behavior (no backend logic reads it), so it's a plain JS constant rather than a `config/config.yaml` entry, matching the existing `COVERAGE_MAX_BBOX_DEGREES` precedent in the same file.
 
-Add to `config/config.yaml` under the existing `exploration:` block, next to `default_speed_kmh` etc.
-
-`targetKm > efficientKm * ptp_wild_multiplier` → "wild" (expansion mode). Otherwise → "not wild" (accept the efficient route).
+`targetKm > efficientKm * PTP_WILD_MULTIPLIER` → "wild" (expansion mode). Otherwise → "not wild" (accept the efficient route).
 
 ### 3. Behavior split (point-to-point only; loop/out-and-back unaffected)
 
@@ -44,7 +39,7 @@ Add to `config/config.yaml` under the existing `exploration:` block, next to `de
 
 ### Out of scope (noted, not fixed here)
 
-While investigating, found that `plotRoadRoute()`'s `baseWaypoints` ([static/js/explore.js:1295-1299](../../static/js/explore.js#L1295-L1299)) always closes the route back to `startPos`, even in point-to-point mode, instead of closing at `endMarker`. This looks like a separate pre-existing bug — worth its own issue, not folded into this one.
+While investigating, found that `plotRoadRoute()`'s `baseWaypoints` always closed the route back to `startPos`, even in point-to-point mode, instead of closing at `endMarker`. This was a separate pre-existing bug, fixed independently in "Fix point-to-point explore routes always closing back to start."
 
 ## Verification
 
