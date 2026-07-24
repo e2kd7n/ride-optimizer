@@ -23,6 +23,14 @@ let explorationWorker = null;
 
 // #491: rider-drawn target area — [south, west, north, east] | null.
 let selectedAreaBounds = null;
+
+// Coverage endpoints reject a bbox wider than 0.5 degrees per side
+// (app/api/planner_bp.py MAX_BBOX_DEGREES, #481) to bound Overpass/graph
+// cost. A point-to-point route between far-apart start/end pins can easily
+// exceed that on the straight-line bbox, so kept a hair under so tiled
+// corridor boxes clear the backend check with margin.
+const COVERAGE_MAX_BBOX_DEGREES = 0.45;
+const CORRIDOR_BUFFER_MILES = 3;
 let isDrawingArea = false;
 let drawAreaRect = null;
 let _drawStartLatLng = null;
@@ -307,6 +315,9 @@ function setEnd(lat, lon, label = null) {
     }).addTo(map).bindPopup('End').openPopup();
     document.getElementById('end-display').textContent = label || `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
     updateWorkflowState();
+    // Reload coverage so a far-apart end point (point-to-point) picks up
+    // corridor mode instead of leaving stale viewport-only coverage in place.
+    loadCoverage();
 }
 
 function clearEnd() {
@@ -468,6 +479,83 @@ function getCoverageMode() {
     return document.getElementById('coverage-type-select').value; // '14' | '17' | 'both'
 }
 
+function milesToDegLat(miles) {
+    return miles / 69.0;
+}
+
+function milesToDegLon(miles, atLat) {
+    return miles / (69.172 * Math.cos(atLat * Math.PI / 180));
+}
+
+/**
+ * Split the straight line between two points into a chain of overlapping
+ * boxes, each within maxSpanDeg per side and padded by bufferMiles — used
+ * when a point-to-point route's own start/end bbox is too large for the
+ * coverage endpoints to accept in one request.
+ */
+function computeCorridorBoxes(startLatLng, endLatLng, bufferMiles, maxSpanDeg) {
+    const latSpan = Math.abs(endLatLng.lat - startLatLng.lat);
+    const lonSpan = Math.abs(endLatLng.lng - startLatLng.lng);
+    const segments = Math.max(1, Math.ceil(Math.max(latSpan, lonSpan) / maxSpanDeg));
+
+    const boxes = [];
+    for (let i = 0; i < segments; i++) {
+        const lat0 = startLatLng.lat + (endLatLng.lat - startLatLng.lat) * (i / segments);
+        const lon0 = startLatLng.lng + (endLatLng.lng - startLatLng.lng) * (i / segments);
+        const lat1 = startLatLng.lat + (endLatLng.lat - startLatLng.lat) * ((i + 1) / segments);
+        const lon1 = startLatLng.lng + (endLatLng.lng - startLatLng.lng) * ((i + 1) / segments);
+
+        const padLat = milesToDegLat(bufferMiles);
+        const padLon = milesToDegLon(bufferMiles, (lat0 + lat1) / 2);
+        boxes.push({
+            south: Math.min(lat0, lat1) - padLat,
+            north: Math.max(lat0, lat1) + padLat,
+            west: Math.min(lon0, lon1) - padLon,
+            east: Math.max(lon0, lon1) + padLon,
+        });
+    }
+    return boxes;
+}
+
+/** Merge per-box tile-coverage responses into one result covering the full
+ *  corridor. `bounds` is the enclosing rectangle (start/end padded by the
+ *  corridor buffer) — the route-generation worker needs a real bounds to
+ *  enumerate candidate tiles against, same as the single-bbox path. */
+function mergeCoverageResults(results, bounds) {
+    const successes = results.filter(r => r && r.status === 'success');
+    if (successes.length === 0) {
+        return results.find(r => r) || { status: 'error', message: 'Failed to load coverage' };
+    }
+
+    const visited = {};
+    for (const r of successes) Object.assign(visited, r.visited);
+    const totalInBounds = successes.reduce((sum, r) => sum + (r.total_in_bounds || 0), 0);
+
+    return {
+        status: 'success',
+        visited,
+        total_in_bounds: totalInBounds,
+        visited_count: Object.keys(visited).length,
+        coverage_pct: totalInBounds > 0 ? Math.round((Object.keys(visited).length / totalInBounds) * 1000) / 10 : 0,
+        bounds,
+        computed_at: new Date().toISOString(),
+        zoom: successes[0].zoom,
+    };
+}
+
+function mergeRoadlessResults(results) {
+    const seen = new Set();
+    const roadless = [];
+    for (const r of results) {
+        if (!r || r.status !== 'success') continue;
+        for (const tile of r.roadless || []) {
+            const key = `${tile.x},${tile.y}`;
+            if (!seen.has(key)) { seen.add(key); roadless.push(tile); }
+        }
+    }
+    return { status: 'success', roadless };
+}
+
 async function loadCoverage() {
     const statusEl = document.getElementById('coverage-status');
     statusEl.textContent = 'Loading coverage…';
@@ -475,34 +563,70 @@ async function loadCoverage() {
         statusEl.textContent = 'Still loading — first coverage load over your full ride history can take up to a minute…';
     }, 5000);
 
-    const bounds = map.getBounds();
-    const mapZoom = map.getZoom();
     const mode = getCoverageMode();
     const zooms = mode === 'both' ? [14, 17] : [parseInt(mode, 10)];
 
-    const fetchOne = (tileZoom) => mapZoom >= 10
-        ? api.getTileCoverage({
-            south: bounds.getSouth(),
-            west: bounds.getWest(),
-            north: bounds.getNorth(),
-            east: bounds.getEast(),
-        }, tileZoom)
-        : api.getTileCoverage(null, tileZoom);
+    // A point-to-point route whose own start/end span exceeds what the
+    // coverage endpoints accept in one bbox gets a chain of corridor boxes
+    // along the direct path instead — independent of the current map
+    // viewport, since the pins may not even both be on-screen.
+    const isPtp = document.getElementById('route-type-select').value === 'point_to_point';
+    let corridorBoxes = null;
+    let corridorBounds = null;
+    if (isPtp && startMarker && endMarker) {
+        const start = startMarker.getLatLng();
+        const end = endMarker.getLatLng();
+        const latSpan = Math.abs(end.lat - start.lat);
+        const lonSpan = Math.abs(end.lng - start.lng);
+        if (latSpan > COVERAGE_MAX_BBOX_DEGREES || lonSpan > COVERAGE_MAX_BBOX_DEGREES) {
+            corridorBoxes = computeCorridorBoxes(start, end, CORRIDOR_BUFFER_MILES, COVERAGE_MAX_BBOX_DEGREES);
+            const padLat = milesToDegLat(CORRIDOR_BUFFER_MILES);
+            const padLon = milesToDegLon(CORRIDOR_BUFFER_MILES, (start.lat + end.lat) / 2);
+            corridorBounds = [
+                Math.min(start.lat, end.lat) - padLat,
+                Math.min(start.lng, end.lng) - padLon,
+                Math.max(start.lat, end.lat) + padLat,
+                Math.max(start.lng, end.lng) + padLon,
+            ];
+        }
+    }
 
-    // #525: roadless tiles (open water, e.g. lakes) get excluded from
-    // "new tile" targeting so routes stop chasing coverage credit in places
-    // a rider can't actually go. Best-effort only — a full-history load has
-    // no bounds to query against, and the Overpass lookup can fail, so
-    // failures here just mean no exclusion rather than blocking coverage
-    // entirely.
-    const fetchRoadless = (tileZoom) => mapZoom >= 10
-        ? api.getRoadlessTiles({
-            south: bounds.getSouth(),
-            west: bounds.getWest(),
-            north: bounds.getNorth(),
-            east: bounds.getEast(),
-        }, tileZoom).catch(() => null)
-        : Promise.resolve(null);
+    let fetchOne, fetchRoadless;
+    if (corridorBoxes) {
+        fetchOne = (tileZoom) => Promise.all(corridorBoxes.map(box => api.getTileCoverage(box, tileZoom)))
+            .then(results => mergeCoverageResults(results, corridorBounds));
+        // #525: roadless tiles (open water) excluded from "new tile" targeting;
+        // best-effort per box, same as the single-bbox path below.
+        fetchRoadless = (tileZoom) => Promise.all(corridorBoxes.map(box => api.getRoadlessTiles(box, tileZoom).catch(() => null)))
+            .then(mergeRoadlessResults);
+    } else {
+        const bounds = map.getBounds();
+        const mapZoom = map.getZoom();
+
+        fetchOne = (tileZoom) => mapZoom >= 10
+            ? api.getTileCoverage({
+                south: bounds.getSouth(),
+                west: bounds.getWest(),
+                north: bounds.getNorth(),
+                east: bounds.getEast(),
+            }, tileZoom)
+            : api.getTileCoverage(null, tileZoom);
+
+        // #525: roadless tiles (open water, e.g. lakes) get excluded from
+        // "new tile" targeting so routes stop chasing coverage credit in places
+        // a rider can't actually go. Best-effort only — a full-history load has
+        // no bounds to query against, and the Overpass lookup can fail, so
+        // failures here just mean no exclusion rather than blocking coverage
+        // entirely.
+        fetchRoadless = (tileZoom) => mapZoom >= 10
+            ? api.getRoadlessTiles({
+                south: bounds.getSouth(),
+                west: bounds.getWest(),
+                north: bounds.getNorth(),
+                east: bounds.getEast(),
+            }, tileZoom).catch(() => null)
+            : Promise.resolve(null);
+    }
 
     try {
         const [results, roadlessResults] = await Promise.all([
@@ -532,7 +656,10 @@ async function loadCoverage() {
         // this rendering step entirely.
         newTilesLayer.clearLayers();
         renderTiles(coverageData, coverageDataSecondary);
-        statusEl.textContent = `Updated ${new Date(coverageData.computed_at + 'Z').toLocaleTimeString()}`;
+        const updatedAt = corridorBoxes ? new Date(coverageData.computed_at) : new Date(coverageData.computed_at + 'Z');
+        statusEl.textContent = corridorBoxes
+            ? `Updated ${updatedAt.toLocaleTimeString()} (corridor: ${corridorBoxes.length} segment${corridorBoxes.length > 1 ? 's' : ''})`
+            : `Updated ${updatedAt.toLocaleTimeString()}`;
     } catch (e) {
         statusEl.textContent = `Error: ${e.message}`;
     } finally {
