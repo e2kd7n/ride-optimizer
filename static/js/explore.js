@@ -816,15 +816,35 @@ let _selectedDirection = null;
 const _BASE_STYLE_P1 = { weight: 3, opacity: 0.8 };
 const _BASE_STYLE_P2 = { weight: 4, opacity: 1.0 };
 const _DIM_OPACITY    = 0.25;
+// Neutral gray a dimmed line is recolored to, so an unselected route reads as
+// "faded out of the picture" rather than just a lower-alpha version of its
+// original hue — at _DIM_OPACITY alone, saturated palette colors (particularly
+// the blue and orange) were still clearly recognizable next to the selected
+// route instead of receding.
+const _DIM_COLOR = '#adb5bd';
+
+function _dimLine(line, dimmedWeight) {
+    if (line._origColor === undefined) line._origColor = line.options.color;
+    line.setStyle({ color: _DIM_COLOR, weight: dimmedWeight, opacity: _DIM_OPACITY });
+}
+
+function _undimLine(line, style) {
+    line.setStyle({ ...style, color: line._origColor !== undefined ? line._origColor : line.options.color });
+}
 
 function highlightRoute(dir) {
     if (_selectedDirection === dir) { clearHighlight(); return; }
     _selectedDirection = dir;
     Object.keys(_phase1Polylines).forEach(k => {
-        _phase1Polylines[k].setStyle(k === dir ? { weight: 5, opacity: 1.0 } : { opacity: _DIM_OPACITY });
+        const line = _phase1Polylines[k];
+        if (k === dir) _undimLine(line, { weight: 5, opacity: 1.0 });
+        else _dimLine(line, _BASE_STYLE_P1.weight);
     });
     Object.keys(_phase2Polylines).forEach(k => {
-        _phase2Polylines[k].setStyle(k === dir ? { weight: 6, opacity: 1.0 } : { opacity: _DIM_OPACITY });
+        _phase2Polylines[k].forEach(line => {
+            if (k === dir) _undimLine(line, { weight: 6, opacity: 1.0 });
+            else _dimLine(line, _BASE_STYLE_P2.weight);
+        });
     });
     document.querySelectorAll('.route-badge').forEach(el => {
         el.classList.toggle('route-badge--selected', el.dataset.direction === dir);
@@ -832,14 +852,22 @@ function highlightRoute(dir) {
     });
     const activeBadge = document.querySelector(`.route-badge[data-direction="${dir}"]`);
     if (activeBadge) activeBadge.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    const active = _phase2Polylines[dir] || _phase1Polylines[dir];
-    if (active) { try { map.fitBounds(active.getBounds(), { padding: [32, 32] }); } catch (_) {} }
+    const activeLines = _phase2Polylines[dir] || (_phase1Polylines[dir] ? [_phase1Polylines[dir]] : []);
+    if (activeLines.length) {
+        try {
+            const bounds = activeLines[0].getBounds();
+            for (let i = 1; i < activeLines.length; i++) bounds.extend(activeLines[i].getBounds());
+            map.fitBounds(bounds, { padding: [32, 32] });
+        } catch (_) {}
+    }
 }
 
 function clearHighlight() {
     _selectedDirection = null;
-    Object.keys(_phase1Polylines).forEach(k => _phase1Polylines[k].setStyle(_BASE_STYLE_P1));
-    Object.keys(_phase2Polylines).forEach(k => _phase2Polylines[k].setStyle(_BASE_STYLE_P2));
+    Object.keys(_phase1Polylines).forEach(k => _undimLine(_phase1Polylines[k], _BASE_STYLE_P1));
+    Object.keys(_phase2Polylines).forEach(k => {
+        _phase2Polylines[k].forEach(line => _undimLine(line, _BASE_STYLE_P2));
+    });
     document.querySelectorAll('.route-badge').forEach(el =>
         el.classList.remove('route-badge--selected', 'route-badge--dimmed'));
 }
@@ -1509,7 +1537,7 @@ async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
         delete _phase1Polylines[direction];
     }
     if (_phase2Polylines[direction]) {
-        routeLayer.removeLayer(_phase2Polylines[direction]);
+        _phase2Polylines[direction].forEach(line => routeLayer.removeLayer(line));
         delete _phase2Polylines[direction];
     }
 
@@ -1535,8 +1563,9 @@ async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
     const short = renderVariant(shortResult, '(−)', palette.light, 0.9);
     const long  = renderVariant(longResult,  '(+)', palette.base,  1.0);
 
-    // Store last (long preferred) as phase-2 ref for cleanup.
-    _phase2Polylines[direction] = (long || short).line;
+    // Track both variants so highlight/dim and cleanup affect the whole
+    // direction, not just whichever was stored last.
+    _phase2Polylines[direction] = [short, long].filter(Boolean).map(v => v.line);
 
     // #493 — the Phase-1 green highlight is only a speculative claim (a
     // straight-line "corner" the router was aimed at). The real road route
