@@ -31,6 +31,18 @@ let selectedAreaBounds = null;
 // corridor boxes clear the backend check with margin.
 const COVERAGE_MAX_BBOX_DEGREES = 0.45;
 const CORRIDOR_BUFFER_MILES = 3;
+
+// #540 — point-to-point origin/destination already impose a natural minimum
+// route length; only requests whose target distance is this multiple beyond
+// the *efficient* (routed) origin->destination distance count as "wild" and
+// should trigger frontier/infill padding expansion. See
+// plans/v0.19.0/POINT_TO_POINT_DISTANCE_TOLERANCE.md.
+const PTP_WILD_MULTIPLIER = 2.0;
+// Efficient point-to-point routed distance for the current generation cycle,
+// computed once in generateRoute() and reused by plotRoadRoute() for every
+// direction's badge — null when not point-to-point or the lookup failed.
+let _ptpEfficientKm = null;
+
 let isDrawingArea = false;
 let drawAreaRect = null;
 let _drawStartLatLng = null;
@@ -1017,6 +1029,26 @@ async function generateRoute() {
     const endPos = (routeType === 'point_to_point' && endMarker) ? endMarker.getLatLng() : null;
     const wind = await getSessionWind();
 
+    // #540 — one-off ORS call for the direct origin->destination route,
+    // reused both to size Phase 1's search radius below and by
+    // plotRoadRoute() later to decide whether a Phase-2 variant should
+    // expand to hit the requested distance ("wild") or accept the
+    // efficient route as-is.
+    _ptpEfficientKm = null;
+    if (endPos) {
+        try {
+            const surfacePref = document.getElementById('surface-preference-select').value;
+            const res = await api.getExplorationRoute({
+                waypoints: [[startPos.lat, startPos.lng], [endPos.lat, endPos.lng]],
+                surfacePreference: surfacePref,
+            });
+            if (res && res.status === 'success') _ptpEfficientKm = res.distance_km;
+        } catch (e) {
+            // Leave null — treated as "wild" (unknown baseline, don't restrict).
+        }
+    }
+    const ptpWild = !endPos || _ptpEfficientKm == null || distanceKm > _ptpEfficientKm * PTP_WILD_MULTIPLIER;
+
     explorationWorker.postMessage({
         start: { lat: startPos.lat, lon: startPos.lng },
         end: endPos ? { lat: endPos.lat, lon: endPos.lng } : null,
@@ -1030,6 +1062,8 @@ async function generateRoute() {
         areaBounds: selectedAreaBounds,
         windDirectionDeg: wind ? wind.windDirectionDeg : null,
         windSpeedKph: wind ? wind.windSpeedKph : null,
+        ptpEfficientKm: _ptpEfficientKm,
+        ptpWild,
     });
 }
 
@@ -1258,7 +1292,7 @@ function displace(lat, lon, distKm, bearingDeg) {
  * otherwise discard the exact corner waypoint a route claimed a tile
  * through while unrelated padding sits untouched.
  */
-async function refineRoute(baseWaypoints, targetKm, surfacePref, candidateList, dirBearing, roadFilters = {}) {
+async function refineRoute(baseWaypoints, targetKm, surfacePref, candidateList, dirBearing, roadFilters = {}, skipExpansion = false) {
     const TOLERANCE = 0.15;
     const MAX_ITERATIONS = 6;
     let waypoints = baseWaypoints.map(w => [...w]); // deep copy
@@ -1318,6 +1352,10 @@ async function refineRoute(baseWaypoints, targetKm, surfacePref, candidateList, 
             ];
             loadBearing = [...loadBearing.slice(0, dropIdx), ...loadBearing.slice(dropIdx + 1)];
         } else if (ratio < 1 - TOLERANCE) {
+            // #540 — not-wild point-to-point: the origin/destination gap is
+            // the real distance signal here, not the requested target. Don't
+            // chase it with padding/candidate detours; accept the route as-is.
+            if (skipExpansion) break;
             // Too short: try adding next candidate zone first, then fall back
             // to pushing a displacement waypoint out along the route bearing.
             if (candidates.length > 0) {
@@ -1355,7 +1393,7 @@ async function refineRoute(baseWaypoints, targetKm, surfacePref, candidateList, 
     // route that's a small fraction of the requested distance. Over-length
     // stuck results are still returned above (getting a longer ride than
     // asked isn't nearly as broken as a near-zero-length one).
-    if (result && result.distance_km / targetKm < 1 - TOLERANCE) {
+    if (!skipExpansion && result && result.distance_km / targetKm < 1 - TOLERANCE) {
         return { route: null, message: 'Route came back far short of the target distance' };
     }
 
@@ -1424,12 +1462,26 @@ async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
     const shortTarget = targetDistanceKm * 0.85;
     const longTarget  = targetDistanceKm * 1.15;
 
-    // Run both variants in parallel.
-    infoEl.textContent = 'Computing short and long variants…';
-    const [shortOutcome, longOutcome] = await Promise.all([
-        refineRoute(baseWaypoints, shortTarget,  surfacePref, candidates, bearing, roadFilters),
-        refineRoute(baseWaypoints, longTarget,   surfacePref, candidates, bearing, roadFilters),
-    ]);
+    // #540 — a not-wild point-to-point request (target close to the
+    // efficient origin->destination distance) shouldn't be forced to hit
+    // the requested distance with padding detours; skip the short/long
+    // split entirely and accept whatever the base waypoints route to.
+    const ptpWild = !isPtp || _ptpEfficientKm == null || targetDistanceKm > _ptpEfficientKm * PTP_WILD_MULTIPLIER;
+    const skipExpansion = isPtp && !ptpWild;
+
+    let shortOutcome, longOutcome;
+    if (skipExpansion) {
+        infoEl.textContent = 'Routing efficient point-to-point route…';
+        shortOutcome = { route: null, message: null };
+        longOutcome = await refineRoute(baseWaypoints, targetDistanceKm, surfacePref, candidates, bearing, roadFilters, true);
+    } else {
+        // Run both variants in parallel.
+        infoEl.textContent = 'Computing short and long variants…';
+        [shortOutcome, longOutcome] = await Promise.all([
+            refineRoute(baseWaypoints, shortTarget,  surfacePref, candidates, bearing, roadFilters),
+            refineRoute(baseWaypoints, longTarget,   surfacePref, candidates, bearing, roadFilters),
+        ]);
+    }
     const shortResult = shortOutcome.route;
     const longResult = longOutcome.route;
 

@@ -37,6 +37,12 @@
  *       available. Used only as a tie-break between otherwise-equal-yield
  *       tour orientations (headwind out, tailwind back) for round trips with
  *       ≥2 zones; ignored for point-to-point routes or when unavailable.
+ *   - ptpEfficientKm/ptpWild: number|null / boolean (#540) — for
+ *       point-to-point only. ptpEfficientKm is the routed origin->destination
+ *       distance from a one-off ORS call the caller made before generation;
+ *       ptpWild is false when the requested distanceKm is close enough to it
+ *       that Phase 1 shouldn't over-search for candidates Phase 2 will
+ *       discard anyway. Both ignored for round trips.
  *
  * Output messages (streamed):
  *   {type: 'route', route: {direction, waypoints, windLabel, stats}}  — one per generated route
@@ -101,13 +107,18 @@ function scanGrid(coverageData, start, reachRadius, areaBounds) {
     return { zoom, unvisited, reachableTiles, buckets, visitedSet };
 }
 
-function optimize({ start, end, distanceKm, mode, routeType, shape, coverageData, coverageDataSecondary, optimizeFor, corridorConstraint, areaBounds, windDirectionDeg, windSpeedKph }) {
+function optimize({ start, end, distanceKm, mode, routeType, shape, coverageData, coverageDataSecondary, optimizeFor, corridorConstraint, areaBounds, windDirectionDeg, windSpeedKph, ptpEfficientKm, ptpWild }) {
     const isRoundTrip = routeType === 'round_trip' || !end;
     // Default to 'loop' for round trips when the caller doesn't specify —
     // matches the pre-#489 behaviour of drawing from whichever quadrant the
     // road network happens to support.
     const effectiveShape = !isRoundTrip ? 'point_to_point' : (shape === 'out_and_back' ? 'out_and_back' : 'loop');
-    const reachRadius = distanceKm / (isRoundTrip ? 4 : 3);
+    // #540 — a not-wild point-to-point request only needs candidates near
+    // the efficient (routed) origin->destination distance, not the full
+    // (possibly much larger) requested distance — Phase 2 won't expand to
+    // use anything further out anyway.
+    const reachBasisKm = (!isRoundTrip && ptpWild === false && ptpEfficientKm != null) ? ptpEfficientKm : distanceKm;
+    const reachRadius = reachBasisKm / (isRoundTrip ? 4 : 3);
 
     reportProgress('Scanning tile grid…');
     const primary = scanGrid(coverageData, start, reachRadius, areaBounds);
