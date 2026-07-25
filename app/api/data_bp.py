@@ -147,6 +147,11 @@ def trigger_analysis():
             # instance, mutated in place by run_full_analysis) — only the
             # services that derive their state from it need rebuilding (#461).
             container.refresh_services('commute', 'planner')
+            # Coverage tiles are cached off activities.json and don't
+            # self-invalidate — drop them so Explore picks up any
+            # newly-fetched rides instead of serving stale coverage.
+            if container.exploration_service is not None:
+                container.exploration_service.invalidate_caches()
         except Exception as e:
             logger.error(f"Background analysis failed: {e}", exc_info=True)
             jobs.analysis.update(status='error', phase='error',
@@ -251,6 +256,8 @@ def trigger_fetch():
                 # tear down WeatherService/TrainerRoadService/RouteLibraryService
                 # or reconstruct AnalysisService itself (#461).
                 container.refresh_services('commute', 'planner')
+                if container.exploration_service is not None:
+                    container.exploration_service.invalidate_caches()
                 jobs.fetch.update(
                     status='done',
                     label=f'Done — {total:,} activities, {new_count:,} new (analysis updated)',
@@ -330,6 +337,8 @@ def trigger_history_backfill():
                 # derive state from analysis_service's route groups / long
                 # rides (#461).
                 container.refresh_services('commute', 'planner')
+                if container.exploration_service is not None:
+                    container.exploration_service.invalidate_caches()
                 jobs.history_backfill.update(
                     status='done',
                     label=f'Done — {new_total:,} new activities backfilled (analysis updated)',

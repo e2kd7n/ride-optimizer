@@ -236,12 +236,6 @@ def _activity_tiles(coords: List[Tuple[float, float]], zoom: int) -> Set[Tuple[i
     return tiles
 
 
-def _bounds_key(bounds: Tuple[float, float, float, float]) -> str:
-    """Deterministic cache key for a bounding box."""
-    rounded = tuple(round(v, 4) for v in bounds)
-    return hashlib.md5(str(rounded).encode()).hexdigest()[:12]
-
-
 class CoverageTracker:
     """Compute tile and road coverage from Strava activity GPS data."""
 
@@ -313,14 +307,22 @@ class CoverageTracker:
 
     def get_tile_coverage(
         self,
-        bounds: Tuple[float, float, float, float],
+        bounds: Optional[Tuple[float, float, float, float]],
         zoom: Optional[int] = None,
     ) -> TileCoverage:
         """
         Compute tile coverage within a bounding box.
 
+        Filters the cached full-history tile set (`get_tile_coverage_all`)
+        down to `bounds` instead of rescanning every activity per viewport.
+        The viewport bbox changes on nearly every request (pan/zoom/new start
+        point), so caching per-bbox on disk was an almost-always-miss cache
+        that forced a full recompute — decoding every activity's polyline and
+        walking its tiles — on effectively every Explore page load.
+
         Args:
-            bounds: (south, west, north, east) in degrees
+            bounds: (south, west, north, east) in degrees, or None for the
+                full-history view (delegates to get_tile_coverage_all).
             zoom: tile zoom level — TILE_ZOOM (squadrat) or SQUADRATINHO_ZOOM
                 (squadratinho). Defaults to the configured zoom.
 
@@ -328,61 +330,31 @@ class CoverageTracker:
             TileCoverage with visited tile data and stats
         """
         zoom = zoom or self.zoom
-        cache_path = self.cache_dir / f"coverage_tiles_{zoom}_{_bounds_key(bounds)}.json"
-        cached = self._load_tile_cache(cache_path)
-        if cached is not None:
-            return cached
+        if bounds is None:
+            return self.get_tile_coverage_all(zoom=zoom)
+
+        all_coverage = self.get_tile_coverage_all(zoom=zoom)
 
         south, west, north, east = bounds
-        activities = self._load_activities()
-
         min_tx, min_ty = lat_lon_to_tile(north, west, zoom)
         max_tx, max_ty = lat_lon_to_tile(south, east, zoom)
 
         visited: Dict[str, dict] = {}
-
-        for act in activities:
-            coords = self._decode_activity_coords(act)
-            if not coords:
-                continue
-
-            start = act.get("start_latlng")
-            if start and len(start) == 2:
-                slat, slon = start
-                if slat < south - 0.1 or slat > north + 0.1 or slon < west - 0.1 or slon > east + 0.1:
-                    end = act.get("end_latlng")
-                    if end and len(end) == 2:
-                        elat, elon = end
-                        if elat < south - 0.1 or elat > north + 0.1 or elon < west - 0.1 or elon > east + 0.1:
-                            continue
-
-            act_id = act.get("id")
-            act_date = act.get("start_date", "")
-
-            for tx, ty in _activity_tiles(coords, zoom):
-                if not (min_tx <= tx <= max_tx and min_ty <= ty <= max_ty):
-                    continue
-                key = f"{tx},{ty}"
-                if key not in visited:
-                    visited[key] = {
-                        "first_ridden": act_date,
-                        "activity_ids": [act_id],
-                    }
-                elif act_id not in visited[key]["activity_ids"]:
-                    visited[key]["activity_ids"].append(act_id)
+        for key, meta in all_coverage.visited.items():
+            tx_str, ty_str = key.split(",")
+            tx, ty = int(tx_str), int(ty_str)
+            if min_tx <= tx <= max_tx and min_ty <= ty <= max_ty:
+                visited[key] = meta
 
         total_tiles = (max_tx - min_tx + 1) * (max_ty - min_ty + 1)
 
-        result = TileCoverage(
+        return TileCoverage(
             visited=visited,
             total_in_bounds=max(total_tiles, 1),
             bounds=bounds,
-            computed_at=datetime.utcnow().isoformat(),
+            computed_at=all_coverage.computed_at,
             zoom=zoom,
         )
-
-        self._save_tile_cache(cache_path, result)
-        return result
 
     def get_tile_coverage_all(self, zoom: Optional[int] = None) -> TileCoverage:
         """
