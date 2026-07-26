@@ -68,6 +68,15 @@ let _phase1Candidates = {};
 // generations rather than re-fetched per click.
 let _sessionWind = undefined; // undefined = not yet fetched, null = unavailable
 
+// Whether the most recent successful loadCoverage() used corridor mode
+// (far-apart point-to-point pins — see computeCorridorBoxes). Passed to the
+// worker so it can skip scanning quadrants that a narrow corridor bbox
+// essentially never has real candidates in — a distinct, much wider
+// viewport bbox (close-together pins) can have genuinely different
+// candidate clusters in multiple quadrants, so this restriction only
+// applies to the corridor case, not point-to-point generally.
+let _coverageIsCorridor = false;
+
 // Per-corridor-box coverage/roadless responses, cached client-side for the
 // duration of the page session — re-placing one pin (e.g. dragging the end
 // point) commonly leaves several corridor boxes unchanged, so this avoids
@@ -701,6 +710,7 @@ async function loadCoverage() {
 
         coverageData = results[0];
         coverageDataSecondary = results[1] || null;
+        _coverageIsCorridor = !!corridorBoxes;
         coverageData.roadless = (roadlessResults[0] && roadlessResults[0].status === 'success')
             ? roadlessResults[0].roadless
             : [];
@@ -1148,6 +1158,7 @@ async function generateRoute() {
         windSpeedKph: wind ? wind.windSpeedKph : null,
         ptpEfficientKm: _ptpEfficientKm,
         ptpWild,
+        isPtpCorridor: routeType === 'point_to_point' && _coverageIsCorridor,
     });
 }
 
