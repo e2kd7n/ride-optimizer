@@ -21,6 +21,7 @@ from datetime import datetime
 from flask import Blueprint, current_app, jsonify, request
 
 from app.extensions import limiter
+from src.config_manager import ConfigManager
 from src.secure_logger import SecureLogger
 
 logger = SecureLogger(__name__)
@@ -31,6 +32,20 @@ bp = Blueprint('planner', __name__, url_prefix='/api')
 # Matches what the Explore UI can realistically request on-screen; anything
 # larger risks a huge Overpass download / graph build (#481).
 MAX_BBOX_DEGREES = 0.5
+
+
+def _rate_limit(config_key: str, default: str):
+    """Build a Flask-Limiter limit-string callable read from config.yaml.
+
+    Flask-Limiter calls this per-request (not once at import time), so the
+    exploration.* rate_limit_* config values can be tuned without touching
+    code — matching the pattern for ors_max_wait_seconds/ors_timeout_seconds
+    elsewhere in this config section — instead of being hardcoded decorator
+    arguments.
+    """
+    def _get():
+        return ConfigManager.get_instance().get(config_key, default)
+    return _get
 
 
 def _validate_bbox(south, west, north, east):
@@ -145,6 +160,7 @@ def planner_analyze_ride():
 # ---------------------------------------------------------------------------
 
 @bp.route('/exploration/tiles')
+@limiter.limit(_rate_limit("exploration.rate_limit_tiles", "60 per minute"))
 def exploration_tiles():
     """Tile coverage within a bounding box, or all tiles if no bounds given."""
     from src.coverage_tracker import TILE_ZOOM, SQUADRATINHO_ZOOM
@@ -199,7 +215,7 @@ def exploration_roads():
 
 
 @bp.route('/exploration/roadless-tiles')
-@limiter.limit("20 per minute")
+@limiter.limit(_rate_limit("exploration.rate_limit_roadless", "20 per minute"))
 def exploration_roadless_tiles():
     """Tiles within a bounding box that fall inside open water (OSM
     `natural=water`) — used to keep the route generator from targeting
@@ -265,7 +281,7 @@ def _validate_waypoints(waypoints):
 
 
 @bp.route('/exploration/route', methods=['POST'])
-@limiter.limit("20 per minute")
+@limiter.limit(_rate_limit("exploration.rate_limit_route", "20 per minute"))
 def exploration_route():
     """Compute a road-following route via ORS for a given waypoint list."""
     svc = current_app.container.get_exploration_service()
@@ -283,7 +299,7 @@ def exploration_route():
 
 
 @bp.route('/exploration/verify-tiles', methods=['POST'])
-@limiter.limit("30 per minute")
+@limiter.limit(_rate_limit("exploration.rate_limit_verify", "30 per minute"))
 def exploration_verify_tiles():
     """Check which planned tiles a route's actual polyline really crosses.
 
@@ -327,7 +343,7 @@ def exploration_verify_tiles():
 
 
 @bp.route('/exploration/new-tiles', methods=['POST'])
-@limiter.limit("30 per minute")
+@limiter.limit(_rate_limit("exploration.rate_limit_verify", "30 per minute"))
 def exploration_new_tiles():
     """Find every tile a route's real polyline crosses that isn't already
     covered by a past activity (#493 follow-up).

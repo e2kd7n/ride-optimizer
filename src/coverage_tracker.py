@@ -7,8 +7,11 @@ based on cached Strava activity GPS tracks.
 
 import json
 import hashlib
+import os
 from src.secure_logger import SecureLogger
 import math
+import threading
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -236,12 +239,6 @@ def _activity_tiles(coords: List[Tuple[float, float]], zoom: int) -> Set[Tuple[i
     return tiles
 
 
-def _bounds_key(bounds: Tuple[float, float, float, float]) -> str:
-    """Deterministic cache key for a bounding box."""
-    rounded = tuple(round(v, 4) for v in bounds)
-    return hashlib.md5(str(rounded).encode()).hexdigest()[:12]
-
-
 class CoverageTracker:
     """Compute tile and road coverage from Strava activity GPS data."""
 
@@ -251,6 +248,11 @@ class CoverageTracker:
         self.cache_dir = Path("data/cache")
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self._activities_cache: Optional[List[dict]] = None
+        # In-memory copy of each zoom's tile index (see _build_or_update_tile_index),
+        # keyed by zoom. Avoids re-reading/re-parsing the on-disk index on every
+        # request once a worker thread has built it once.
+        self._tile_index_cache: Dict[int, dict] = {}
+        self._tile_index_lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # Activity loading
@@ -311,6 +313,107 @@ class CoverageTracker:
     # Tile coverage
     # ------------------------------------------------------------------
 
+    def _tile_index_path(self, zoom: int) -> Path:
+        return self.cache_dir / f"tile_index_{zoom}.json"
+
+    def _load_tile_index_from_disk(self, zoom: int) -> Optional[dict]:
+        path = self._tile_index_path(zoom)
+        if not path.exists():
+            return None
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return {
+                "indexed_activity_ids": set(data["indexed_activity_ids"]),
+                "tiles": data["tiles"],
+            }
+        except (json.JSONDecodeError, OSError, KeyError):
+            logger.warning("Tile index cache at %s is missing/corrupt — will rebuild", path)
+            return None
+
+    def _write_tile_index_atomic(self, zoom: int, index: dict) -> None:
+        """Atomic write (temp file + os.replace) so a mid-write crash or a
+        concurrent reader never observes a torn/partial JSON file."""
+        path = self._tile_index_path(zoom)
+        payload = {
+            "indexed_activity_ids": sorted(index["indexed_activity_ids"]),
+            "tiles": index["tiles"],
+            "computed_at": datetime.utcnow().isoformat(),
+        }
+        tmp_path = path.with_name(f"{path.name}.tmp{os.getpid()}")
+        try:
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(payload, f)
+            secure_chmod(tmp_path)
+            os.replace(tmp_path, path)
+            secure_chmod(path)
+        except OSError as exc:
+            logger.warning("Failed to write tile index cache: %s", exc)
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+
+    def _build_or_update_tile_index(self, zoom: int) -> dict:
+        """Return {"indexed_activity_ids": set, "tiles": dict} for `zoom`,
+        the full set of tiles ever ridden at that zoom level, keyed "x,y".
+
+        Replaces the old per-bbox rescan-from-scratch cache: every activity's
+        polyline is decoded and folded into this index at most once (tracked
+        by activity id, not a "last id" watermark — data_fetcher.py rewrites
+        activities.json as a merged-and-resorted whole on every fetch, so a
+        watermark would miss activities inserted anywhere but the tail).
+        Bbox queries (get_tile_coverage) then just filter this flat dict by
+        tile range — no polyline decoding on the request path at all once the
+        index is warm.
+
+        There's no reliable signal today that fires after a background
+        activity fetch (invalidate_caches() is only wired to the manual
+        "resync" endpoint), so this self-heals on every call by diffing the
+        currently-loaded activity ids against what's indexed, rather than
+        assuming the index is fresh just because it exists on disk.
+        """
+        with self._tile_index_lock:
+            index = self._tile_index_cache.get(zoom)
+            if index is None:
+                index = self._load_tile_index_from_disk(zoom)
+            if index is None:
+                index = {"indexed_activity_ids": set(), "tiles": {}}
+
+            activities = self._load_activities()
+            current_ids = {a.get("id") for a in activities if a.get("id") is not None}
+            new_ids = current_ids - index["indexed_activity_ids"]
+
+            if new_ids:
+                start = time.monotonic()
+                decoded_count = 0
+                for act in activities:
+                    act_id = act.get("id")
+                    if act_id not in new_ids:
+                        continue
+                    coords = self._decode_activity_coords(act)
+                    decoded_count += 1
+                    if coords:
+                        act_date = act.get("start_date", "")
+                        for tx, ty in _activity_tiles(coords, zoom):
+                            key = f"{tx},{ty}"
+                            entry = index["tiles"].get(key)
+                            if entry is None:
+                                index["tiles"][key] = {"first_ridden": act_date, "activity_ids": [act_id]}
+                            elif act_id not in entry["activity_ids"]:
+                                entry["activity_ids"].append(act_id)
+                    index["indexed_activity_ids"].add(act_id)
+
+                logger.info(
+                    "Tile index (zoom=%d) updated: %d new activities decoded in %.2fs (total indexed=%d, tiles=%d)",
+                    zoom, decoded_count, time.monotonic() - start,
+                    len(index["indexed_activity_ids"]), len(index["tiles"]),
+                )
+                self._write_tile_index_atomic(zoom, index)
+
+            self._tile_index_cache[zoom] = index
+            return index
+
     def get_tile_coverage(
         self,
         bounds: Tuple[float, float, float, float],
@@ -328,61 +431,34 @@ class CoverageTracker:
             TileCoverage with visited tile data and stats
         """
         zoom = zoom or self.zoom
-        cache_path = self.cache_dir / f"coverage_tiles_{zoom}_{_bounds_key(bounds)}.json"
-        cached = self._load_tile_cache(cache_path)
-        if cached is not None:
-            return cached
+        start = time.monotonic()
+        index = self._build_or_update_tile_index(zoom)
 
         south, west, north, east = bounds
-        activities = self._load_activities()
-
         min_tx, min_ty = lat_lon_to_tile(north, west, zoom)
         max_tx, max_ty = lat_lon_to_tile(south, east, zoom)
 
         visited: Dict[str, dict] = {}
-
-        for act in activities:
-            coords = self._decode_activity_coords(act)
-            if not coords:
-                continue
-
-            start = act.get("start_latlng")
-            if start and len(start) == 2:
-                slat, slon = start
-                if slat < south - 0.1 or slat > north + 0.1 or slon < west - 0.1 or slon > east + 0.1:
-                    end = act.get("end_latlng")
-                    if end and len(end) == 2:
-                        elat, elon = end
-                        if elat < south - 0.1 or elat > north + 0.1 or elon < west - 0.1 or elon > east + 0.1:
-                            continue
-
-            act_id = act.get("id")
-            act_date = act.get("start_date", "")
-
-            for tx, ty in _activity_tiles(coords, zoom):
-                if not (min_tx <= tx <= max_tx and min_ty <= ty <= max_ty):
-                    continue
-                key = f"{tx},{ty}"
-                if key not in visited:
-                    visited[key] = {
-                        "first_ridden": act_date,
-                        "activity_ids": [act_id],
-                    }
-                elif act_id not in visited[key]["activity_ids"]:
-                    visited[key]["activity_ids"].append(act_id)
+        for key, entry in index["tiles"].items():
+            tx_str, ty_str = key.split(",")
+            tx, ty = int(tx_str), int(ty_str)
+            if min_tx <= tx <= max_tx and min_ty <= ty <= max_ty:
+                visited[key] = entry
 
         total_tiles = (max_tx - min_tx + 1) * (max_ty - min_ty + 1)
 
-        result = TileCoverage(
+        logger.info(
+            "get_tile_coverage(zoom=%d) served from index in %.3fs (%d/%d tiles in bbox)",
+            zoom, time.monotonic() - start, len(visited), len(index["tiles"]),
+        )
+
+        return TileCoverage(
             visited=visited,
             total_in_bounds=max(total_tiles, 1),
             bounds=bounds,
             computed_at=datetime.utcnow().isoformat(),
             zoom=zoom,
         )
-
-        self._save_tile_cache(cache_path, result)
-        return result
 
     def get_tile_coverage_all(self, zoom: Optional[int] = None) -> TileCoverage:
         """
@@ -391,31 +467,8 @@ class CoverageTracker:
         Useful for getting overall stats and the full visited tile set.
         """
         zoom = zoom or self.zoom
-        cache_path = self.cache_dir / f"coverage_tiles_{zoom}_all.json"
-        cached = self._load_tile_cache(cache_path)
-        if cached is not None:
-            return cached
-
-        activities = self._load_activities()
-        visited: Dict[str, dict] = {}
-
-        for act in activities:
-            coords = self._decode_activity_coords(act)
-            if not coords:
-                continue
-
-            act_id = act.get("id")
-            act_date = act.get("start_date", "")
-
-            for tx, ty in _activity_tiles(coords, zoom):
-                key = f"{tx},{ty}"
-                if key not in visited:
-                    visited[key] = {
-                        "first_ridden": act_date,
-                        "activity_ids": [act_id],
-                    }
-                elif act_id not in visited[key]["activity_ids"]:
-                    visited[key]["activity_ids"].append(act_id)
+        index = self._build_or_update_tile_index(zoom)
+        visited = dict(index["tiles"])
 
         bounds = None
         total_in_bounds = len(visited)
@@ -429,16 +482,13 @@ class CoverageTracker:
             bounds = (south, west, north, east)
             total_in_bounds = max((max_tx - min_tx + 1) * (max_ty - min_ty + 1), 1)
 
-        result = TileCoverage(
+        return TileCoverage(
             visited=visited,
             total_in_bounds=total_in_bounds,
             bounds=bounds,
             computed_at=datetime.utcnow().isoformat(),
             zoom=zoom,
         )
-
-        self._save_tile_cache(cache_path, result)
-        return result
 
     # ------------------------------------------------------------------
     # Road coverage (Phase 1B — osmnx-based map matching)
@@ -675,30 +725,6 @@ class CoverageTracker:
     # Cache helpers
     # ------------------------------------------------------------------
 
-    def _load_tile_cache(self, path: Path) -> Optional[TileCoverage]:
-        if not path.exists():
-            return None
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            return TileCoverage(
-                visited=data["visited"],
-                total_in_bounds=data["total_in_bounds"],
-                bounds=tuple(data["bounds"]) if data.get("bounds") else None,
-                computed_at=data.get("computed_at", ""),
-                zoom=data.get("zoom", TILE_ZOOM),
-            )
-        except (json.JSONDecodeError, KeyError, OSError):
-            return None
-
-    def _save_tile_cache(self, path: Path, coverage: TileCoverage) -> None:
-        try:
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(coverage.to_dict(), f)
-            secure_chmod(path)
-        except OSError as exc:
-            logger.warning("Failed to write tile cache: %s", exc)
-
     def _evict_old_road_network_caches(self) -> None:
         """Keep at most MAX_ROAD_NETWORK_CACHES road_network_*.graphml files,
         evicting the least-recently-modified ones beyond that cap."""
@@ -730,6 +756,15 @@ class CoverageTracker:
     def invalidate_caches(self) -> None:
         """Remove all coverage caches (call after new activities are fetched)."""
         self._activities_cache = None
+        with self._tile_index_lock:
+            self._tile_index_cache = {}
+        for p in self.cache_dir.glob("tile_index_*.json"):
+            try:
+                p.unlink()
+            except OSError:
+                pass
+        # Legacy per-bbox cache filenames from before the tile-index rewrite —
+        # harmless if left behind, but clean them up if invalidate is called.
         for p in self.cache_dir.glob("coverage_tiles_*.json"):
             try:
                 p.unlink()

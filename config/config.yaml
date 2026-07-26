@@ -7,8 +7,15 @@ ors:
 
 exploration:
   ors_timeout_seconds: 15
+  ors_max_wait_seconds: 40  # Overall budget for compute_route(), across queueing + every retry/fallback attempt
+  ors_max_concurrent_calls: 2  # Cap on simultaneous ORS calls — leaves headroom under GUNICORN_THREADS (gunicorn.conf.py)
   route_cache_ttl_seconds: 600
   default_speed_kmh: 18  # Fallback for duration→distance conversion (#490) when the rider has no cached ride history to average
+
+  rate_limit_route: "20 per minute"  # /api/exploration/route
+  rate_limit_tiles: "60 per minute"  # /api/exploration/tiles — no per-user limit before this; sized above the route limit since coverage checks fire more often per interaction
+  rate_limit_roadless: "20 per minute"  # /api/exploration/roadless-tiles
+  rate_limit_verify: "30 per minute"  # /api/exploration/verify-tiles, /api/exploration/new-tiles
 
   oauth_callback_host: "localhost"  # Host for OAuth callback server
   oauth_callback_port: 8000  # Port for OAuth callback server

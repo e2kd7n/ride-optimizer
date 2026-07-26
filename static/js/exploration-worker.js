@@ -78,13 +78,16 @@ function scanGrid(coverageData, start, reachRadius, areaBounds) {
     if (!bounds) throw new Error('Coverage data has no bounds');
     const zoom = coverageData.zoom || 14;
 
-    const allTiles = buildTileSet(bounds, zoom);
     const visitedSet = new Set(Object.keys(coverageData.visited || {}));
     // #525: exclude tiles that are open water (not bikeable or walkable)
     // from "new tile" targeting. Best-effort: empty/absent when the
     // roadless lookup failed.
     const roadlessSet = new Set((coverageData.roadless || []).map(t => `${t.x},${t.y}`));
-    const unvisited = allTiles.filter(t => !visitedSet.has(t.key) && !roadlessSet.has(t.key));
+    // Fused build+filter: a corridor bbox for a far-apart point-to-point
+    // route can span many tiles, most of them already ridden — skip
+    // allocating a tile object at all for anything visited/roadless instead
+    // of building the full grid and filtering it a moment later.
+    const unvisited = buildUnvisitedTileSet(bounds, zoom, visitedSet, roadlessSet);
 
     let reachableTiles = unvisited.filter(
         t => haversineKm(start.lat, start.lon, t.lat, t.lon) <= reachRadius
@@ -416,7 +419,9 @@ function nextQuadrant(dir) {
 
 // ── Tile utilities ──────────────────────────────────────────────
 
-function buildTileSet(bounds, zoom = 14) {
+/** All tiles in `bounds` that aren't already visited or roadless — see the
+ *  fused build+filter note at its call site in scanGrid(). */
+function buildUnvisitedTileSet(bounds, zoom, visitedSet, roadlessSet) {
     const [south, west, north, east] = bounds;
     const n = Math.pow(2, zoom);
     const minX = Math.floor((west + 180) / 360 * n);
@@ -427,9 +432,11 @@ function buildTileSet(bounds, zoom = 14) {
     const tiles = [];
     for (let x = minX; x <= maxX; x++) {
         for (let y = minY; y <= maxY; y++) {
+            const key = `${x},${y}`;
+            if (visitedSet.has(key) || roadlessSet.has(key)) continue;
             const lat = tileCenterLat(y, zoom);
             const lon = tileCenterLon(x, zoom);
-            tiles.push({ key: `${x},${y}`, x, y, lat, lon });
+            tiles.push({ key, x, y, lat, lon });
         }
     }
     return tiles;

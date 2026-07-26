@@ -43,6 +43,18 @@ const PTP_WILD_MULTIPLIER = 2.0;
 // direction's badge — null when not point-to-point or the lookup failed.
 let _ptpEfficientKm = null;
 
+// Memoizes the ORS pre-flight call above across repeat "Generate route"
+// clicks with unchanged start/end pins — that call is a live ORS round trip
+// purely to learn the direct routed distance, and re-running it on every
+// click (even with identical pins) was pure waste. Short session TTL since
+// activity/road data isn't expected to change mid-session.
+let _ptpEfficientKmCache = null; // { key, distanceKm, expiresAt }
+const PTP_EFFICIENT_KM_CACHE_TTL_MS = 5 * 60 * 1000;
+
+function ptpEfficientKmCacheKey(startPos, endPos) {
+    return `${startPos.lat.toFixed(5)},${startPos.lng.toFixed(5)}|${endPos.lat.toFixed(5)},${endPos.lng.toFixed(5)}`;
+}
+
 let isDrawingArea = false;
 let drawAreaRect = null;
 let _drawStartLatLng = null;
@@ -55,6 +67,20 @@ let _phase1Candidates = {};
 // #453: current wind, fetched once per session and reused across route
 // generations rather than re-fetched per click.
 let _sessionWind = undefined; // undefined = not yet fetched, null = unavailable
+
+// Per-corridor-box coverage/roadless responses, cached client-side for the
+// duration of the page session — re-placing one pin (e.g. dragging the end
+// point) commonly leaves several corridor boxes unchanged, so this avoids
+// re-fetching boxes whose bounds haven't moved. Cleared on an explicit
+// "clear cache" action (server-side invalidation already implies these are
+// stale); a full page reload also clears it since it's in-memory only.
+let _corridorCoverageCache = new Map();
+let _corridorRoadlessCache = new Map();
+
+// Guards against a slow, now-superseded loadCoverage() response overwriting
+// state set by a newer call (e.g. the user repositioned a pin again before
+// the first request returned).
+let _coverageRequestId = 0;
 
 /**
  * Fetch current wind conditions once per session for the worker's
@@ -82,7 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initMap();
     initWorker();
     document.getElementById('coverage-type-select').addEventListener('change', () => {
-        if (startMarker) loadCoverage();
+        if (startMarker) debouncedLoadCoverage();
     });
     document.getElementById('clear-cache-btn').addEventListener('click', clearCache);
     document.getElementById('generate-route-btn').addEventListener('click', generateRoute);
@@ -304,8 +330,9 @@ function setStart(lat, lon, label = null) {
     document.getElementById('start-display').textContent = label || `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
     updateWorkflowState();
     // #488: coverage loads silently against the new start point instead of
-    // requiring a separate "Load Coverage" step.
-    loadCoverage();
+    // requiring a separate "Load Coverage" step. Debounced so repositioning
+    // the pin with a few quick clicks doesn't fire a fetch per click.
+    debouncedLoadCoverage();
 }
 
 function setEnd(lat, lon, label = null) {
@@ -329,7 +356,8 @@ function setEnd(lat, lon, label = null) {
     updateWorkflowState();
     // Reload coverage so a far-apart end point (point-to-point) picks up
     // corridor mode instead of leaving stale viewport-only coverage in place.
-    loadCoverage();
+    // Debounced — see setStart().
+    debouncedLoadCoverage();
 }
 
 function clearEnd() {
@@ -568,10 +596,26 @@ function mergeRoadlessResults(results) {
     return { status: 'success', roadless };
 }
 
+/** Returns a cached corridor-box result if this exact (rounded) box+zoom was
+ *  already fetched this session, else fetches it and caches the result. */
+function fetchCorridorBox(cache, fetchFn, box, zoom) {
+    const key = `${zoom}:${box.south.toFixed(4)},${box.west.toFixed(4)},${box.north.toFixed(4)},${box.east.toFixed(4)}`;
+    const cached = cache.get(key);
+    if (cached) return Promise.resolve(cached);
+    return fetchFn(box, zoom).then(result => {
+        if (result && result.status === 'success') cache.set(key, result);
+        return result;
+    });
+}
+
+const debouncedLoadCoverage = window.debounce(() => { loadCoverage(); }, 400);
+
 async function loadCoverage() {
+    const requestId = ++_coverageRequestId;
     const statusEl = document.getElementById('coverage-status');
     statusEl.textContent = 'Loading coverage…';
     const slowHintTimer = setTimeout(() => {
+        if (requestId !== _coverageRequestId) return; // superseded by a newer request
         statusEl.textContent = 'Still loading — first coverage load over your full ride history can take up to a minute…';
     }, 5000);
 
@@ -605,12 +649,14 @@ async function loadCoverage() {
 
     let fetchOne, fetchRoadless;
     if (corridorBoxes) {
-        fetchOne = (tileZoom) => Promise.all(corridorBoxes.map(box => api.getTileCoverage(box, tileZoom)))
-            .then(results => mergeCoverageResults(results, corridorBounds));
+        fetchOne = (tileZoom) => Promise.all(
+            corridorBoxes.map(box => fetchCorridorBox(_corridorCoverageCache, api.getTileCoverage.bind(api), box, tileZoom))
+        ).then(results => mergeCoverageResults(results, corridorBounds));
         // #525: roadless tiles (open water) excluded from "new tile" targeting;
         // best-effort per box, same as the single-bbox path below.
-        fetchRoadless = (tileZoom) => Promise.all(corridorBoxes.map(box => api.getRoadlessTiles(box, tileZoom).catch(() => null)))
-            .then(mergeRoadlessResults);
+        fetchRoadless = (tileZoom) => Promise.all(
+            corridorBoxes.map(box => fetchCorridorBox(_corridorRoadlessCache, api.getRoadlessTiles.bind(api), box, tileZoom).catch(() => null))
+        ).then(mergeRoadlessResults);
     } else {
         const bounds = map.getBounds();
         const mapZoom = map.getZoom();
@@ -645,6 +691,8 @@ async function loadCoverage() {
             Promise.all(zooms.map(fetchOne)),
             Promise.all(zooms.map(fetchRoadless)),
         ]);
+        if (requestId !== _coverageRequestId) return; // a newer loadCoverage() call has since taken over
+
         const failed = results.find(d => d.status !== 'success');
         if (failed) {
             statusEl.textContent = failed.message || 'Failed to load coverage';
@@ -673,10 +721,10 @@ async function loadCoverage() {
             ? `Updated ${updatedAt.toLocaleTimeString()} (corridor: ${corridorBoxes.length} segment${corridorBoxes.length > 1 ? 's' : ''})`
             : `Updated ${updatedAt.toLocaleTimeString()}`;
     } catch (e) {
-        statusEl.textContent = `Error: ${e.message}`;
+        if (requestId === _coverageRequestId) statusEl.textContent = `Error: ${e.message}`;
     } finally {
         clearTimeout(slowHintTimer);
-        updateWorkflowState();
+        if (requestId === _coverageRequestId) updateWorkflowState();
     }
 }
 
@@ -1064,15 +1112,23 @@ async function generateRoute() {
     // efficient route as-is.
     _ptpEfficientKm = null;
     if (endPos) {
-        try {
-            const surfacePref = document.getElementById('surface-preference-select').value;
-            const res = await api.getExplorationRoute({
-                waypoints: [[startPos.lat, startPos.lng], [endPos.lat, endPos.lng]],
-                surfacePreference: surfacePref,
-            });
-            if (res && res.status === 'success') _ptpEfficientKm = res.distance_km;
-        } catch (e) {
-            // Leave null — treated as "wild" (unknown baseline, don't restrict).
+        const cacheKey = ptpEfficientKmCacheKey(startPos, endPos);
+        if (_ptpEfficientKmCache && _ptpEfficientKmCache.key === cacheKey && Date.now() < _ptpEfficientKmCache.expiresAt) {
+            _ptpEfficientKm = _ptpEfficientKmCache.distanceKm;
+        } else {
+            try {
+                const surfacePref = document.getElementById('surface-preference-select').value;
+                const res = await api.getExplorationRoute({
+                    waypoints: [[startPos.lat, startPos.lng], [endPos.lat, endPos.lng]],
+                    surfacePreference: surfacePref,
+                });
+                if (res && res.status === 'success') {
+                    _ptpEfficientKm = res.distance_km;
+                    _ptpEfficientKmCache = { key: cacheKey, distanceKm: res.distance_km, expiresAt: Date.now() + PTP_EFFICIENT_KM_CACHE_TTL_MS };
+                }
+            } catch (e) {
+                // Leave null — treated as "wild" (unknown baseline, don't restrict).
+            }
         }
     }
     const ptpWild = !endPos || _ptpEfficientKm == null || distanceKm > _ptpEfficientKm * PTP_WILD_MULTIPLIER;
@@ -1695,6 +1751,8 @@ async function clearCache() {
     }
     try {
         await api.invalidateCoverageCache();
+        _corridorCoverageCache.clear();
+        _corridorRoadlessCache.clear();
         if (typeof showToast === 'function') showToast('Coverage cache cleared', 'info');
         loadCoverage();
     } catch (e) {

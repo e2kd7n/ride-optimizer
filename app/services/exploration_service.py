@@ -40,13 +40,19 @@ class ExplorationService:
         self._tracker = CoverageTracker(self.config)
         # Route memoization: {(waypoints_key, profile): (result_dict, expires_at)}
         self._route_cache: Dict[tuple, Tuple[dict, float]] = {}
-        # Serializes ORS "plot road route" calls (#compute_route) — only one
-        # runs at a time. Running them concurrently was the other half of the
-        # thread-starvation freeze: each already burns up to ors_max_wait_seconds
-        # of a gunicorn thread, so a handful of simultaneous requests could tie
-        # up every thread (and ORS's own per-minute quota) at once. Queueing
-        # them serially trades that for a bounded wait per request instead.
-        self._route_lock = threading.Lock()
+        # Bounds concurrent ORS "plot road route" calls (#compute_route).
+        # Unbounded concurrency was the other half of the thread-starvation
+        # freeze: each call already burns up to ors_max_wait_seconds of a
+        # gunicorn thread, so a handful of simultaneous requests could tie up
+        # every thread (and ORS's own per-minute quota) at once. A hard mutex
+        # (one call at a time) fixed that but also serialized legitimate
+        # client-side concurrency — e.g. the short/long distance-target
+        # variants a single "plot road route" click fires in parallel — so
+        # they just queued behind each other for no benefit. A semaphore sized
+        # to leave thread headroom (default 2 of GUNICORN_THREADS=4) keeps the
+        # starvation protection while letting that concurrency actually help.
+        max_concurrent = int(self.config.get("exploration.ors_max_concurrent_calls", 2))
+        self._route_semaphore = threading.Semaphore(max_concurrent)
 
     def initialize(self):
         pass
@@ -217,28 +223,36 @@ class ExplorationService:
                 logger.debug("ORS cache hit for key %s", cache_key)
                 return result
 
-        # Only one "plot road route" computation runs at a time (see
-        # self._route_lock) — concurrent ORS calls were the other half of the
-        # thread-starvation freeze. Queue behind whichever request got there
-        # first rather than racing it; give up gracefully if the queue wait
-        # alone would blow the overall budget.
-        if not self._route_lock.acquire(timeout=max(0.0, deadline - time.monotonic())):
+        # Only up to `ors_max_concurrent_calls` computations run at once (see
+        # self._route_semaphore) — unbounded concurrent ORS calls were the
+        # other half of the thread-starvation freeze. Queue behind whichever
+        # requests got there first rather than racing all of them; give up
+        # gracefully if the queue wait alone would blow the overall budget.
+        wait_start = time.monotonic()
+        if not self._route_semaphore.acquire(timeout=max(0.0, deadline - time.monotonic())):
+            logger.warning("ORS route semaphore wait timed out after %.2fs", time.monotonic() - wait_start)
             return {
                 "status": "error",
                 "message": "Road routing is busy with another request — try again shortly",
             }
+        sem_wait_s = time.monotonic() - wait_start
+        if sem_wait_s > 0.05:
+            logger.info("ORS route semaphore wait: %.2fs", sem_wait_s)
         try:
             # Another request may have computed (and cached) this exact
-            # route while we were waiting for the lock.
+            # route while we were waiting for a slot.
             cached = self._route_cache.get(cache_key)
             if cached is not None:
                 result, expires_at = cached
                 if time.monotonic() < expires_at:
                     logger.debug("ORS cache hit for key %s (post-queue)", cache_key)
                     return result
-            return self._compute_route_via_ors(waypoints, profile, api_key, ttl, deadline, max_wait, cache_key)
+            call_start = time.monotonic()
+            result = self._compute_route_via_ors(waypoints, profile, api_key, ttl, deadline, max_wait, cache_key)
+            logger.info("ORS route computation took %.2fs (status=%s)", time.monotonic() - call_start, result.get("status"))
+            return result
         finally:
-            self._route_lock.release()
+            self._route_semaphore.release()
 
     def _compute_route_via_ors(
         self,

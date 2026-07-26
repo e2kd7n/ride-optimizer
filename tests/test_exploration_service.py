@@ -459,13 +459,15 @@ class TestComputeRoute:
         # before a second retry, instead of grinding through every candidate.
         assert mock_ors.call_count == 1
 
-    def test_concurrent_requests_are_serialized_not_run_in_parallel(self, service_with_key):
-        """Two overlapping compute_route calls for different routes must not
-        hit ORS at the same time — the second should queue behind the first
-        rather than racing it (concurrent ORS calls were the other half of
-        the thread-starvation freeze alongside the unbounded retry loop)."""
-        entered_first_call = threading.Event()
-        release_first_call = threading.Event()
+    def test_concurrent_requests_bounded_by_semaphore(self, service_with_key):
+        """compute_route calls run concurrently up to ors_max_concurrent_calls
+        (default 2, since the fixture's mock config returns the caller's
+        default for any key it doesn't special-case) — a call beyond that cap
+        must queue rather than run, but legitimate concurrency within the cap
+        (e.g. a "plot road route" click's short/long distance-target
+        variants) should not serialize needlessly the way the old
+        single-lock design did."""
+        release_calls = threading.Event()
         concurrent_calls_seen = []
         in_flight = 0
         in_flight_lock = threading.Lock()
@@ -485,56 +487,63 @@ class TestComputeRoute:
             with in_flight_lock:
                 in_flight += 1
                 concurrent_calls_seen.append(in_flight)
-            if coords[0][0] == -87.65:  # the "first" request's start waypoint
-                entered_first_call.set()
-                release_first_call.wait(timeout=5)
+            release_calls.wait(timeout=5)
             with in_flight_lock:
                 in_flight -= 1
             return good_raw
 
+        routes = [
+            [[41.98, -87.65], [41.99, -87.64]],
+            [[40.0, -80.0], [40.1, -80.1]],
+            [[30.0, -90.0], [30.1, -90.1]],
+        ]
+
         with patch("src.ors_client.get_route", side_effect=fake_get_route):
-            first_thread = threading.Thread(
-                target=lambda: service_with_key.compute_route(
-                    [[41.98, -87.65], [41.99, -87.64]]
-                )
-            )
-            first_thread.start()
-            assert entered_first_call.wait(timeout=5), "first request never reached ORS"
+            threads = [
+                threading.Thread(target=lambda r=r: service_with_key.compute_route(r))
+                for r in routes
+            ]
+            for t in threads:
+                t.start()
 
-            # Second, distinct route — should block on the lock, not run
-            # concurrently with the first.
-            second_thread = threading.Thread(
-                target=lambda: service_with_key.compute_route(
-                    [[40.0, -80.0], [40.1, -80.1]]
-                )
-            )
-            second_thread.start()
-            second_thread_still_waiting = not second_thread.join(timeout=0.3)
+            # Give the two permitted slots time to actually reach ORS before
+            # releasing them, so we observe the concurrency cap in effect.
+            deadline = time.monotonic() + 5
+            while in_flight < 2 and time.monotonic() < deadline:
+                time.sleep(0.01)
+            assert in_flight == 2, "expected exactly 2 concurrent ORS calls (the configured cap)"
 
-            release_first_call.set()
-            first_thread.join(timeout=5)
-            second_thread.join(timeout=5)
+            third_thread_still_waiting = not threads[2].join(timeout=0.3)
 
-        assert second_thread_still_waiting, "second request should have queued behind the first"
-        assert max(concurrent_calls_seen) == 1, "ORS calls overlapped instead of being serialized"
+            release_calls.set()
+            for t in threads:
+                t.join(timeout=5)
+
+        assert third_thread_still_waiting, "third request should have queued behind the first two"
+        assert max(concurrent_calls_seen) == 2, "concurrency should have been capped at 2, not serialized to 1 or left unbounded"
 
     def test_busy_queue_returns_graceful_error_instead_of_hanging(self, service_with_key, mock_config):
-        """If the wait for the lock alone would exceed the wall-clock budget,
-        give up with a clear error rather than blocking the request thread
-        indefinitely behind whatever's already in flight."""
+        """If the wait for a semaphore slot alone would exceed the wall-clock
+        budget, give up with a clear error rather than blocking the request
+        thread indefinitely behind whatever's already in flight."""
         def _get(key, default=None):
             if key == 'ors.api_key':
                 return 'fake-key'
             if key == 'exploration.ors_max_wait_seconds':
-                return 0  # no time left to wait for the lock at all
+                return 0  # no time left to wait for a slot at all
+            if key == 'exploration.ors_max_concurrent_calls':
+                return 2
             return default
 
         mock_config.get = MagicMock(side_effect=_get)
-        service_with_key._route_lock.acquire()  # simulate another request in flight
+        # Saturate both slots to simulate two other requests in flight.
+        service_with_key._route_semaphore.acquire()
+        service_with_key._route_semaphore.acquire()
         try:
             result = service_with_key.compute_route([[41.98, -87.65], [41.99, -87.64]])
         finally:
-            service_with_key._route_lock.release()
+            service_with_key._route_semaphore.release()
+            service_with_key._route_semaphore.release()
 
         assert result["status"] == "error"
         assert "busy" in result["message"].lower()

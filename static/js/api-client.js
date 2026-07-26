@@ -309,8 +309,11 @@ class APIClient {
     // ── Exploration / Coverage ───────────────────────────────
 
     async getTileCoverage(bounds = null, zoom = null) {
-        // Coverage is computed from scratch (no cache) on the first request
-        // after each activity sync and can take 30s+ over a large ride history.
+        // Backend serves this from a persisted per-zoom tile index that's
+        // incrementally updated as new activities appear (src/coverage_tracker.py),
+        // not rescanned from scratch — but the very first request after a fresh
+        // activity sync (or on a brand-new cache) still has to build that index
+        // once, which can take a while over a large ride history.
         const timeoutMs = 45000;
         const params = new URLSearchParams();
         if (bounds) {
