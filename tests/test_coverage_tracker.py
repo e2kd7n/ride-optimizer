@@ -348,15 +348,17 @@ class TestCoverageTracker:
         bounds = (40.0, -75.0, 41.0, -73.0)
         tracker.get_tile_coverage(bounds, zoom=TILE_ZOOM)
         tracker.get_tile_coverage(bounds, zoom=SQUADRATINHO_ZOOM)
-        cache_files = list(tracker.cache_dir.glob("coverage_tiles_*.json"))
+        cache_files = list(tracker.cache_dir.glob("tile_index_*.json"))
         assert len(cache_files) == 2
 
     def test_invalidate_caches(self, tracker):
-        cache_file = tracker.cache_dir / "coverage_tiles_test.json"
-        cache_file.write_text("{}")
+        cache_file = tracker.cache_dir / "tile_index_14.json"
+        cache_file.write_text('{"indexed_activity_ids": [], "tiles": {}}')
+        tracker._tile_index_cache[14] = {"indexed_activity_ids": set(), "tiles": {}}
         tracker.invalidate_caches()
         assert not cache_file.exists()
         assert tracker._activities_cache is None
+        assert tracker._tile_index_cache == {}
 
     def test_road_coverage_graceful_without_osmnx(self, tracker):
         tracker._activities_cache = []
@@ -384,6 +386,106 @@ class TestCoverageTracker:
         ]
         result = tracker.get_tile_coverage_all()
         assert result.visited_count == 0
+
+
+# ── Tile index incremental build/update (perf rewrite) ───────────
+
+class TestTileIndex:
+    @pytest.fixture
+    def mock_config(self):
+        config = MagicMock()
+        config.get = MagicMock(side_effect=lambda key, default=None: default)
+        return config
+
+    @pytest.fixture
+    def tracker(self, mock_config, tmp_path):
+        t = CoverageTracker(mock_config)
+        t.cache_dir = tmp_path
+        return t
+
+    @staticmethod
+    def _activity(act_id, coords, date="2026-01-01"):
+        import polyline as codec
+        return {"id": act_id, "polyline": codec.encode(coords), "start_date": date, "type": "Ride"}
+
+    def test_incremental_update_only_decodes_new_activities(self, tracker):
+        a1 = self._activity(1, [(40.7128, -74.0060), (40.7130, -74.0058)])
+        tracker._activities_cache = [a1]
+        tracker.get_tile_coverage_all()  # first build indexes activity 1
+
+        a2 = self._activity(2, [(41.0, -75.0), (41.001, -75.001)])
+        tracker._activities_cache = [a1, a2]
+        with patch.object(tracker, "_decode_activity_coords", wraps=tracker._decode_activity_coords) as spy:
+            tracker.get_tile_coverage_all()
+            # Only the new activity (id=2) should be decoded on the second call.
+            assert spy.call_count == 1
+            assert spy.call_args[0][0]["id"] == 2
+
+    def test_staleness_check_triggers_rebuild_on_activity_count_change(self, tracker):
+        a1 = self._activity(1, [(40.7128, -74.0060), (40.7130, -74.0058)])
+        tracker._activities_cache = [a1]
+        first = tracker.get_tile_coverage_all()
+        assert first.visited_count >= 1
+
+        a2 = self._activity(2, [(41.0, -75.0), (41.001, -75.001)])
+        tracker._activities_cache = [a1, a2]
+        second = tracker.get_tile_coverage_all()
+        assert second.visited_count > first.visited_count
+
+    def test_bbox_filter_matches_full_rescan_baseline(self, tracker):
+        """The bbox-filtered index result must match a from-scratch scan of
+        the same activities using the exact tile-crossing math directly."""
+        from src.coverage_tracker import _activity_tiles as activity_tiles_fn
+
+        coords1 = [(40.7128, -74.0060), (40.72, -74.0), (40.73, -73.99)]
+        coords2 = [(41.0, -75.0), (41.01, -75.0)]
+        a1 = self._activity(1, coords1)
+        a2 = self._activity(2, coords2)
+        tracker._activities_cache = [a1, a2]
+
+        bounds = (40.0, -75.5, 41.5, -73.0)
+        result = tracker.get_tile_coverage(bounds, zoom=TILE_ZOOM)
+
+        min_tx, min_ty = lat_lon_to_tile(bounds[2], bounds[1], TILE_ZOOM)
+        max_tx, max_ty = lat_lon_to_tile(bounds[0], bounds[3], TILE_ZOOM)
+        expected = set()
+        for coords in (coords1, coords2):
+            for tx, ty in activity_tiles_fn(coords, TILE_ZOOM):
+                if min_tx <= tx <= max_tx and min_ty <= ty <= max_ty:
+                    expected.add(f"{tx},{ty}")
+
+        assert set(result.visited.keys()) == expected
+
+    def test_concurrent_index_writes_produce_valid_json(self, tracker):
+        """Two threads building the index at once for different zooms must
+        not corrupt each other's cache file (atomic write via temp+replace)."""
+        import threading as th
+
+        activities = [self._activity(i, [(40.0 + i * 0.01, -74.0), (40.01 + i * 0.01, -74.01)])
+                      for i in range(20)]
+        tracker._activities_cache = activities
+
+        errors = []
+
+        def build(zoom):
+            try:
+                tracker._build_or_update_tile_index(zoom)
+            except Exception as exc:  # pragma: no cover - failure path
+                errors.append(exc)
+
+        threads = [th.Thread(target=build, args=(TILE_ZOOM,)) for _ in range(4)]
+        threads += [th.Thread(target=build, args=(SQUADRATINHO_ZOOM,)) for _ in range(4)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=5)
+
+        assert errors == []
+        for zoom in (TILE_ZOOM, SQUADRATINHO_ZOOM):
+            path = tracker._tile_index_path(zoom)
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)  # must not raise — valid JSON
+            assert "tiles" in data
 
 
 # ── roadless (open-water) tile detection (#525) ──────────────────
