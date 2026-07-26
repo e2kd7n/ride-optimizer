@@ -43,6 +43,13 @@
  *       ptpWild is false when the requested distanceKm is close enough to it
  *       that Phase 1 shouldn't over-search for candidates Phase 2 will
  *       discard anyway. Both ignored for round trips.
+ *   - isPtpCorridor: boolean — true when a far-apart point-to-point pair put
+ *       coverageData in corridor mode (a narrow bbox around the direct
+ *       start->end line). Restricts Phase 1 to the single quadrant facing
+ *       `end` instead of all 4, since a corridor bbox essentially never has
+ *       real candidates outside that direction. Ignored for round trips and
+ *       for close-together point-to-point pairs (viewport-bounds coverage),
+ *       where other quadrants can hold genuinely distinct route options.
  *
  * Output messages (streamed):
  *   {type: 'route', route: {direction, waypoints, windLabel, stats}}  — one per generated route
@@ -110,7 +117,7 @@ function scanGrid(coverageData, start, reachRadius, areaBounds) {
     return { zoom, unvisited, reachableTiles, buckets, visitedSet };
 }
 
-function optimize({ start, end, distanceKm, mode, routeType, shape, coverageData, coverageDataSecondary, optimizeFor, corridorConstraint, areaBounds, windDirectionDeg, windSpeedKph, ptpEfficientKm, ptpWild }) {
+function optimize({ start, end, distanceKm, mode, routeType, shape, coverageData, coverageDataSecondary, optimizeFor, corridorConstraint, areaBounds, windDirectionDeg, windSpeedKph, ptpEfficientKm, ptpWild, isPtpCorridor }) {
     const isRoundTrip = routeType === 'round_trip' || !end;
     // Default to 'loop' for round trips when the caller doesn't specify —
     // matches the pre-#489 behaviour of drawing from whichever quadrant the
@@ -150,9 +157,22 @@ function optimize({ start, end, distanceKm, mode, routeType, shape, coverageData
     // ride history, keyed by zoom since tile coordinate spaces differ per grid.
     const visitedSetsByZoom = new Map(grids.map(g => [g.zoom, g.visitedSet]));
 
+    // Corridor mode (far-apart point-to-point pins) bounds the coverage grid
+    // to a narrow rectangle around the direct start->end line, so quadrants
+    // other than the one facing `end` essentially never have real candidates
+    // in them — restricting to that quadrant skips wasted per-quadrant
+    // constructInsertionTour work. A close-together point-to-point pair uses
+    // the full map viewport as its bounds instead, where other quadrants can
+    // hold genuinely distinct candidate clusters (real route-choice
+    // diversity, not just wasted compute), so this only narrows the corridor
+    // case, not point-to-point generally.
+    const relevantQuadrants = (!isRoundTrip && isPtpCorridor)
+        ? [quadrantFor(bearingDeg(start.lat, start.lon, end.lat, end.lon))]
+        : QUADRANTS;
+
     let totalRoutes = 0;
-    QUADRANTS.forEach((dir, i) => {
-        reportProgress(`Optimizing ${dir} route (${i + 1}/${QUADRANTS.length})…`);
+    relevantQuadrants.forEach((dir, i) => {
+        reportProgress(`Optimizing ${dir} route (${i + 1}/${relevantQuadrants.length})…`);
 
         // #489: 'loop' pulls zones from this quadrant AND its clockwise
         // neighbour so outbound/return legs are biased toward different
