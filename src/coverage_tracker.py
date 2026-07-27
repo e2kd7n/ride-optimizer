@@ -416,14 +416,23 @@ class CoverageTracker:
 
     def get_tile_coverage(
         self,
-        bounds: Tuple[float, float, float, float],
+        bounds: Optional[Tuple[float, float, float, float]],
         zoom: Optional[int] = None,
     ) -> TileCoverage:
         """
         Compute tile coverage within a bounding box.
 
+        Filters the persisted, incrementally-updated per-zoom tile index
+        (`_build_or_update_tile_index`) down to `bounds`, instead of
+        rescanning every activity per viewport. The viewport bbox changes on
+        nearly every request (pan/zoom/new start point), so caching per-bbox
+        on disk was an almost-always-miss cache that forced a full
+        recompute — decoding every activity's polyline and walking its
+        tiles — on effectively every Explore page load.
+
         Args:
-            bounds: (south, west, north, east) in degrees
+            bounds: (south, west, north, east) in degrees, or None for the
+                full-history view (delegates to get_tile_coverage_all).
             zoom: tile zoom level — TILE_ZOOM (squadrat) or SQUADRATINHO_ZOOM
                 (squadratinho). Defaults to the configured zoom.
 
@@ -431,6 +440,9 @@ class CoverageTracker:
             TileCoverage with visited tile data and stats
         """
         zoom = zoom or self.zoom
+        if bounds is None:
+            return self.get_tile_coverage_all(zoom=zoom)
+
         start = time.monotonic()
         index = self._build_or_update_tile_index(zoom)
 
