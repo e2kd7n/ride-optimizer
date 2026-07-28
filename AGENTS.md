@@ -360,6 +360,11 @@ plans/
 - Avoid information overload on initial view
 - **Weather cards show wind and precipitation whenever available, not temperature alone** (new in v2.2 — see DESIGN_PRINCIPLES.md §2)
 
+## Code Quality Standards
+
+### Copyright & Attribution
+- New/touched source files should carry a copyright header: `# Copyright (c) 2026 e2kd7n. All rights reserved.` (adopted here for consistency with the couponclipper/mealplanner projects on the same Pi; not yet retrofitted onto existing files)
+
 ## Shared Pi Infrastructure
 
 ### Pi Health Stats File
