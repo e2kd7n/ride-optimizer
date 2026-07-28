@@ -115,6 +115,14 @@ class PlannerService:
         logger.info(f"Initializing planner with {len(long_rides)} long rides")
         self._long_rides = long_rides
     
+    # #519 — climbing profile each workout type is best served by. Hard
+    # efforts benefit from sustained climbs; easy/recovery days are better
+    # served by a route that doesn't add unplanned intensity.
+    _HILLY_WORKOUT_TYPES = {'Threshold', 'VO2Max', 'Sprint', 'Anaerobic'}
+    _FLAT_WORKOUT_TYPES = {'Endurance', 'Recovery'}
+    _HILLY_TARGET_M_PER_KM = 20.0
+    _FLAT_MAX_M_PER_KM = 10.0
+
     def get_workout_rides(self,
                           workout_type: str,
                           target_duration_min: Optional[int] = None,
@@ -130,7 +138,10 @@ class PlannerService:
             limit: Max rides to return
 
         Returns:
-            List of ride dicts scored against the workout, best first.
+            List of ride dicts scored against the workout, best first. Each
+            includes 'fit_reasons' — short strings explaining the match, for
+            display alongside the score (mirrors the commute-side
+            workout_fit_row_reasons pattern).
         """
         if not self._long_rides:
             return []
@@ -158,7 +169,29 @@ class PlannerService:
                 except Exception:
                     pass
 
-            score = duration_score * 0.5 + variety_score * 0.3 + location_score * 0.2
+            climb_m_per_km = ride.elevation_gain / max(ride.distance_km, 0.1)
+            elevation_score = 1.0
+            elevation_reason = None
+            if workout_type in self._HILLY_WORKOUT_TYPES:
+                elevation_score = min(1.0, climb_m_per_km / self._HILLY_TARGET_M_PER_KM)
+                if elevation_score >= 0.7:
+                    elevation_reason = (
+                        f"Sustained climbing ({round(ride.elevation_gain * 3.28084)} ft) "
+                        f"matches {workout_type} intervals"
+                    )
+            elif workout_type in self._FLAT_WORKOUT_TYPES:
+                elevation_score = max(0.0, 1.0 - climb_m_per_km / self._FLAT_MAX_M_PER_KM)
+                if elevation_score >= 0.7:
+                    elevation_reason = f"Flat, low-climbing route — good fit for {workout_type}"
+
+            score = (duration_score * 0.4 + elevation_score * 0.25
+                     + variety_score * 0.2 + location_score * 0.15)
+
+            fit_reasons = []
+            if target_duration_min and duration_score >= 0.7:
+                fit_reasons.append(f"{round(ride_duration_min)} min matches your {target_duration_min} min target")
+            if elevation_reason:
+                fit_reasons.append(elevation_reason)
 
             scored.append({
                 'ride_id': ride.activity_id,
@@ -167,6 +200,7 @@ class PlannerService:
                 'duration_minutes': round(ride_duration_min),
                 'elevation_ft': round(ride.elevation_gain * 3.28084),
                 'score': round(score, 2),
+                'fit_reasons': fit_reasons,
                 'is_loop': ride.is_loop,
                 'start_location': list(ride.start_location),
             })
