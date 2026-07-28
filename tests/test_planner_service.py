@@ -342,6 +342,107 @@ class TestGetRideDetails:
         assert 'not found' in result['message']
 
 
+@pytest.fixture
+def mock_hilly_ride():
+    """Ride with a steep climbing profile (~30 m/km) for workout-fit tests."""
+    ride = Mock(spec=LongRide)
+    ride.activity_id = 11111
+    ride.name = "Ridge Climb"
+    ride.distance = 40000  # 40 km
+    ride.distance_km = 40.0
+    ride.duration_hours = 2.0
+    ride.elevation_gain = 1200  # 30 m/km
+    ride.average_speed = 5.56
+    ride.start_location = (40.7128, -74.0060)
+    ride.end_location = (40.7128, -74.0060)
+    ride.is_loop = True
+    ride.type = "loop"
+    ride.uses = 1
+    ride.coordinates = [(40.7128, -74.0060), (40.75, -74.02)]
+    ride.activity_ids = [11111]
+    ride.activity_dates = ["2024-04-01"]
+    return ride
+
+
+@pytest.fixture
+def mock_flat_ride():
+    """Ride with a near-flat profile (~2 m/km) for workout-fit tests."""
+    ride = Mock(spec=LongRide)
+    ride.activity_id = 22222
+    ride.name = "River Path"
+    ride.distance = 40000  # 40 km
+    ride.distance_km = 40.0
+    ride.duration_hours = 2.0
+    ride.elevation_gain = 80  # 2 m/km
+    ride.average_speed = 5.56
+    ride.start_location = (40.7128, -74.0060)
+    ride.end_location = (40.7128, -74.0060)
+    ride.is_loop = True
+    ride.type = "loop"
+    ride.uses = 1
+    ride.coordinates = [(40.7128, -74.0060), (40.72, -74.01)]
+    ride.activity_ids = [22222]
+    ride.activity_dates = ["2024-04-02"]
+    return ride
+
+
+class TestGetWorkoutRides:
+    """Test get_workout_rides workout-fit matching (#519)."""
+
+    def test_uninitialized_returns_empty(self, planner_service):
+        """No long rides loaded yet -> empty list, not an error."""
+        assert planner_service.get_workout_rides(workout_type='Endurance') == []
+
+    def test_includes_fit_reasons_field(self, initialized_service):
+        """Every scored ride carries a fit_reasons list, even if empty."""
+        rides = initialized_service.get_workout_rides(workout_type='Tempo')
+        assert rides
+        for ride in rides:
+            assert 'fit_reasons' in ride
+            assert isinstance(ride['fit_reasons'], list)
+
+    def test_hilly_workout_prefers_hilly_ride(self, planner_service, mock_hilly_ride, mock_flat_ride):
+        """Threshold/VO2Max-style workouts should rank a steep route above a flat one."""
+        planner_service.initialize([mock_flat_ride, mock_hilly_ride])
+        rides = planner_service.get_workout_rides(workout_type='Threshold')
+
+        hilly = next(r for r in rides if r['ride_id'] == 11111)
+        flat = next(r for r in rides if r['ride_id'] == 22222)
+        assert hilly['score'] > flat['score']
+        assert any('climb' in reason.lower() for reason in hilly['fit_reasons'])
+
+    def test_flat_workout_prefers_flat_ride(self, planner_service, mock_hilly_ride, mock_flat_ride):
+        """Endurance/Recovery-style workouts should rank a flat route above a steep one."""
+        planner_service.initialize([mock_flat_ride, mock_hilly_ride])
+        rides = planner_service.get_workout_rides(workout_type='Recovery')
+
+        hilly = next(r for r in rides if r['ride_id'] == 11111)
+        flat = next(r for r in rides if r['ride_id'] == 22222)
+        assert flat['score'] > hilly['score']
+        assert any('flat' in reason.lower() for reason in flat['fit_reasons'])
+
+    def test_neutral_workout_type_ignores_elevation(self, planner_service, mock_hilly_ride, mock_flat_ride):
+        """Workout types with no defined climbing preference shouldn't penalize either profile."""
+        planner_service.initialize([mock_flat_ride, mock_hilly_ride])
+        rides = planner_service.get_workout_rides(workout_type='Group Ride')
+
+        hilly = next(r for r in rides if r['ride_id'] == 11111)
+        flat = next(r for r in rides if r['ride_id'] == 22222)
+        # Same duration/uses/location -> identical score when elevation isn't scored.
+        assert hilly['score'] == flat['score']
+
+    def test_duration_match_adds_fit_reason(self, initialized_service):
+        """A ride within tolerance of the target duration explains why in fit_reasons."""
+        rides = initialized_service.get_workout_rides(workout_type='Endurance', target_duration_min=120)
+        short_ride = next(r for r in rides if r['ride_id'] == 67890)
+        assert any('matches your' in reason for reason in short_ride['fit_reasons'])
+
+    def test_sorted_by_score_and_respects_limit(self, initialized_service):
+        """Results come back best-first and capped at limit."""
+        rides = initialized_service.get_workout_rides(workout_type='Endurance', limit=1)
+        assert len(rides) == 1
+
+
 class TestRideScoring:
     """Test ride scoring functionality."""
     

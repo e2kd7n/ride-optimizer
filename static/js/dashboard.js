@@ -22,18 +22,12 @@ async function loadDashboard() {
 }
 
 /**
- * Workout type badge class mapping for TrainerRoad integration.
+ * Workout type badge class for TrainerRoad integration (#519, SEM-3).
+ * A single neutral, --workout-color-based class for every type — workout
+ * *category* isn't a value judgment, so it must never share bg-success/
+ * warning/danger with the fit-quality badges rendered alongside it.
  */
-const WORKOUT_TYPE_BADGES = {
-    'Endurance':  'bg-info text-dark',
-    'Tempo':      'bg-primary',
-    'Threshold':  'bg-warning text-dark',
-    'VO2Max':     'bg-danger',
-    'Sprint':     'bg-danger',
-    'Anaerobic':  'bg-danger',
-    'Recovery':   'bg-success',
-    'Group Ride': 'bg-info text-dark',
-};
+const WORKOUT_TYPE_BADGE_CLASS = 'badge-workout-type';
 
 /**
  * Shared workout data cache — fetched once per dashboard load,
@@ -93,7 +87,7 @@ async function loadWorkoutStrip() {
         _workoutOptions = data;
         const esc = window.escapeHtml;
         const w = data.workout;
-        const typeBadgeClass = WORKOUT_TYPE_BADGES[w.type] || 'bg-secondary';
+        const typeBadgeClass = WORKOUT_TYPE_BADGE_CLASS;
         const stale = isWorkoutDataStale();
         const staleBadge = stale
             ? '<span class="badge bg-warning text-dark ms-2"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Stale</span>'
@@ -144,7 +138,7 @@ function renderBasicWorkoutStrip(container) {
     if (!_todayWorkout) { container.style.display = 'none'; return; }
     const esc = window.escapeHtml;
     const w = _todayWorkout;
-    const typeBadgeClass = WORKOUT_TYPE_BADGES[w.type] || 'bg-secondary';
+    const typeBadgeClass = WORKOUT_TYPE_BADGE_CLASS;
     container.innerHTML = `
         <div class="workout-strip">
             <i class="bi bi-lightning-charge workout-strip-icon" aria-hidden="true"></i>
@@ -318,24 +312,31 @@ function renderWorkoutRideOption(workoutRide) {
     const esc = window.escapeHtml;
     const wName = esc(workoutRide.workout_name || 'Workout');
     const wType = esc(workoutRide.workout_type || '');
-    const typeBadgeClass = WORKOUT_TYPE_BADGES[workoutRide.workout_type] || 'bg-secondary';
+    const typeBadgeClass = WORKOUT_TYPE_BADGE_CLASS;
 
     const rideCards = workoutRide.rides.map(ride => {
         const scorePct = Math.round(ride.score * 100);
         const scoreClass = scorePct >= 70 ? 'bg-success'
                          : scorePct >= 50 ? 'bg-warning text-dark'
                          : 'bg-danger';
+        // #519 — reuse the workout-fit-row-reasons caption pattern so the
+        // "why this route" explanation reads the same way it does on the
+        // commute hero card, instead of a bare unexplained score.
+        const reasons = (ride.fit_reasons || []).map(r => esc(r)).join(' · ');
         return `
-            <div class="d-flex align-items-center justify-content-between py-1">
-                <div>
-                    <span class="small fw-semibold">${esc(ride.name)}</span>
-                    <div class="d-flex gap-2 small text-muted">
-                        <span><i class="bi bi-clock" aria-hidden="true"></i> ${ride.duration_minutes} min</span>
-                        <span><i class="bi bi-signpost" aria-hidden="true"></i> ${ride.distance_miles.toFixed(1)} mi</span>
-                        <span><i class="bi bi-graph-up" aria-hidden="true"></i> ${ride.elevation_ft} ft</span>
+            <div class="py-1">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <span class="small fw-semibold">${esc(ride.name)}</span>
+                        <div class="d-flex gap-2 small text-muted">
+                            <span><i class="bi bi-clock" aria-hidden="true"></i> ${ride.duration_minutes} min</span>
+                            <span><i class="bi bi-signpost" aria-hidden="true"></i> ${ride.distance_miles.toFixed(1)} mi</span>
+                            <span><i class="bi bi-graph-up" aria-hidden="true"></i> ${ride.elevation_ft} ft</span>
+                        </div>
                     </div>
+                    <span class="badge ${scoreClass}">${scorePct}</span>
                 </div>
-                <span class="badge ${scoreClass}">${scorePct}</span>
+                ${reasons ? `<div class="workout-fit-row-reasons">${reasons}</div>` : ''}
             </div>`;
     }).join('');
 
@@ -777,18 +778,31 @@ async function loadRecommendation() {
                 ${heading.sub ? `<span class="ms-1">· ${heading.sub}</span>` : ''}
             </div>`;
 
-        html += renderHeroCard(primary, true, secondary);
+        // #519 — a scheduled workout with no commute to attach to (e.g. a
+        // weekend Endurance ride) shouldn't leave the hero position empty
+        // with the workout-ride recommendation nested below it; that
+        // recommendation *is* the day's most time-urgent decision, so it
+        // takes the hero slot instead (Design Principles §2, time-urgency
+        // ordering). When a commute exists, current placement (workout-ride
+        // below the commute hero) stays — the commute is still more urgent.
+        const noCommuteToday = primary.status !== 'success' && (!secondary || secondary.status !== 'success');
 
-        if (secondary && secondary.status === 'success') {
-            html += `
-                <div class="secondary-label small text-muted mt-3 mb-1">
-                    <i class="bi bi-arrow-return-right me-1"></i>${secondaryLabel}
-                </div>`;
-            html += renderHeroCard(secondary, false);
-        }
-
-        if (data.workout_ride) {
+        if (noCommuteToday && data.workout_ride) {
             html += renderWorkoutRideOption(data.workout_ride);
+        } else {
+            html += renderHeroCard(primary, true, secondary);
+
+            if (secondary && secondary.status === 'success') {
+                html += `
+                    <div class="secondary-label small text-muted mt-3 mb-1">
+                        <i class="bi bi-arrow-return-right me-1"></i>${secondaryLabel}
+                    </div>`;
+                html += renderHeroCard(secondary, false);
+            }
+
+            if (data.workout_ride) {
+                html += renderWorkoutRideOption(data.workout_ride);
+            }
         }
 
         container.innerHTML = html;

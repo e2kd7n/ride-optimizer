@@ -111,6 +111,17 @@
     --workout-border: rgba(232, 93, 4, 0.3);
 }
 
+/* #519 (SEM-3): workout *category* is not a value judgment, so it needs its
+   own neutral badge treatment — reusing bg-success/warning/danger for
+   workout type collided with those same classes' use for fit-quality
+   ratings on the same card (e.g. a Threshold badge and a "Poor fit" badge
+   both rendering red for unrelated reasons). */
+.badge-workout-type {
+    background: var(--workout-bg);
+    color: var(--workout-color);
+    border: 1px solid var(--workout-border);
+}
+
 /* Fair Weather Night ground — token set only; no toggle UI ships yet.
    Day is the default; setting data-theme="night" on <html> flips the system. */
 html[data-theme="night"] {
@@ -135,6 +146,13 @@ html[data-theme="night"] {
     --bs-body-color-rgb: 234, 240, 243;
     --bs-body-bg-rgb: 11, 22, 32;
     --bs-secondary-color-rgb: 143, 166, 180;
+
+    /* #519 (SEM-4): workout-color had no Night value and kept its
+       light-tuned hex against the dark surfaces below — same brightness-lift
+       treatment as --accent-warm above. */
+    --workout-color: #FF8A4D;
+    --workout-bg: rgba(255, 138, 77, 0.12);
+    --workout-border: rgba(255, 138, 77, 0.35);
 }
 
 body {
