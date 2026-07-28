@@ -438,8 +438,9 @@ class TestCronInstallation:
         
         # Check for required placeholders
         assert 'PROJECT_PATH' in content
-        assert 'PYTHON_PATH' in content
-        
+        assert 'CONTAINER_NAME' in content
+        assert 'podman exec' in content
+
         # Check for all jobs
         assert 'daily_analysis.py' in content
         assert 'weather_refresh.py' in content

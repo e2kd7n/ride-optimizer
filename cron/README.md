@@ -47,7 +47,7 @@ All cron jobs support **push notifications via ntfy.sh** for proactive monitorin
 - **Notifications**: Sends critical alert on failure
 
 ### 4. System Health Check (`system_health.py`)
-- **Schedule**: Every 15 minutes
+- **Schedule**: Every other hour
 - **Purpose**: Monitor system health and record status
 - **Checks**:
   - Disk space availability (alerts at 80% and 90%)
@@ -89,26 +89,32 @@ chmod +x cron/*.py
 crontab -e
 ```
 
-3. Add these lines (replace paths):
+3. Add these lines (replace paths and container name):
 ```cron
 # Ride Optimizer - Smart Static Architecture
-0 2 * * * cd /path/to/ride-optimizer && /usr/bin/python3 cron/daily_analysis.py >> logs/cron.log 2>&1
-0 */6 * * * cd /path/to/ride-optimizer && /usr/bin/python3 cron/weather_refresh.py >> logs/cron.log 2>&1
-0 3 * * * cd /path/to/ride-optimizer && /usr/bin/python3 cron/cache_cleanup.py >> logs/cron.log 2>&1
-*/15 * * * * cd /path/to/ride-optimizer && /usr/bin/python3 cron/system_health.py >> logs/cron.log 2>&1
+0 2 * * * cd /path/to/ride-optimizer && podman exec ride-optimizer python cron/daily_analysis.py >> logs/cron.log 2>&1
+0 */6 * * * cd /path/to/ride-optimizer && podman exec ride-optimizer python cron/weather_refresh.py >> logs/cron.log 2>&1
+0 3 * * * cd /path/to/ride-optimizer && podman exec ride-optimizer python cron/cache_cleanup.py >> logs/cron.log 2>&1
+0 */2 * * * cd /path/to/ride-optimizer && podman exec ride-optimizer python cron/system_health.py >> logs/cron.log 2>&1
 ```
+
+Jobs run **inside** the app container via `podman exec` rather than with the host's own Python — see [Architecture Notes](#why-podman-exec) below.
 
 ## Testing Jobs
 
-Run any job manually to test:
+Run any job manually to test — use `podman exec` to match how cron actually
+invokes it (same container user, same bind-mounted data/config):
 
 ```bash
-cd /path/to/ride-optimizer
-python3 cron/daily_analysis.py
-python3 cron/weather_refresh.py
-python3 cron/cache_cleanup.py
-python3 cron/system_health.py
+podman exec ride-optimizer python cron/daily_analysis.py
+podman exec ride-optimizer python cron/weather_refresh.py
+podman exec ride-optimizer python cron/cache_cleanup.py
+podman exec ride-optimizer python cron/system_health.py
 ```
+
+Running a script with the host's own `python3 cron/daily_analysis.py` instead
+will hit `PermissionError` on `data/*.json` — those files are owned by the
+container's uid, not the host user (#543).
 
 ## Monitoring
 
@@ -181,16 +187,25 @@ tail -50 logs/cron.log
 
 ### Permission Errors
 
-Ensure scripts are executable:
+Jobs run inside the app container via `podman exec`, so they run as the
+container's own user and already own `data/`/`config/` — you shouldn't see
+`PermissionError` there anymore. If you do, check the container is actually
+up (`podman ps`) and that `install_cron.sh` generated the crontab with the
+right container name (`podman container exists ride-optimizer`).
+
+Scripts still need to be executable for manual/local runs outside the
+container:
 ```bash
 chmod +x cron/*.py
 ```
 
 ### Path Issues
 
-Cron jobs run with minimal environment. The scripts use absolute paths derived from their location, but ensure:
-- Python 3 is in PATH
-- Project dependencies are installed
+Cron jobs run with minimal environment. The scripts use paths derived from
+their own file location, resolved relative to the container's `/app`
+working directory. Ensure:
+- The `ride-optimizer` container is running (`podman ps`)
+- `podman` is on the host cron user's PATH
 - `.env` file exists with required configuration
 
 ## Uninstallation
@@ -209,6 +224,21 @@ crontab cron/crontab.backup.YYYYMMDD_HHMMSS
 ```
 
 ## Architecture Notes
+
+### Why podman exec
+
+Jobs run as `podman exec ride-optimizer python cron/<script>.py` rather than
+with the host's own Python. `data/`, `config/`, `cache/`, and `logs/` are
+bind-mounted host directories owned by the container's rootless-Podman
+subuid — not the host user cron runs as. Running scripts on bare host
+Python caused `PermissionError` on nearly every run (#543): a POSIX ACL
+granting the host user access existed on `data/*.json`, but its mask kept
+getting reset to `---` every time the app's `secure_chmod(0o600)` touched
+the file, since `chmod`'s "group" bits rewrite the ACL mask on a file that
+already carries an extended ACL. Running inside the container sidesteps
+the cross-uid bridge entirely — the job runs as the same user (`rideopt`)
+that already owns the files, and gets the container's pinned dependencies
+instead of whatever's installed system-wide on the host.
 
 ### Why Cron Instead of APScheduler?
 

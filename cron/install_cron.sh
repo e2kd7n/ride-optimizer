@@ -5,14 +5,23 @@ set -e
 
 # Get project root directory
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PYTHON_PATH="$(which python3)"
+CONTAINER_NAME="${RIDE_OPTIMIZER_CONTAINER:-ride-optimizer}"
 
 echo "=========================================="
 echo "Ride Optimizer Cron Installation"
 echo "=========================================="
 echo "Project root: $PROJECT_ROOT"
-echo "Python path: $PYTHON_PATH"
+echo "Container name: $CONTAINER_NAME"
 echo ""
+
+# Jobs run inside the app container (podman exec) so they share its uid and
+# see the same bind-mounted data/config the app itself owns (#543) — warn
+# early if that container isn't up rather than failing silently at 2 AM.
+if command -v podman >/dev/null 2>&1 && ! podman container exists "$CONTAINER_NAME"; then
+    echo "WARNING: container '$CONTAINER_NAME' not found (podman container exists failed)."
+    echo "Cron jobs will fail until it's running. Set RIDE_OPTIMIZER_CONTAINER if it's named differently."
+    echo ""
+fi
 
 # Make cron scripts executable
 echo "Making cron scripts executable..."
@@ -25,7 +34,7 @@ chmod +x "$PROJECT_ROOT/cron/system_health.py"
 echo "Creating crontab configuration..."
 CRONTAB_FILE="$PROJECT_ROOT/cron/crontab.generated"
 sed -e "s|PROJECT_PATH|$PROJECT_ROOT|g" \
-    -e "s|PYTHON_PATH|$PYTHON_PATH|g" \
+    -e "s|CONTAINER_NAME|$CONTAINER_NAME|g" \
     "$PROJECT_ROOT/cron/crontab.template" > "$CRONTAB_FILE"
 
 echo ""
