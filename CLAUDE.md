@@ -85,4 +85,4 @@ A server-side route search endpoint exists but the frontend ignores it — the r
 - When adding business logic: add to or extend an `app/services/` class; keep heavy data processing in `src/`.
 - `main.py` is a deprecated CLI tool — do not extend it for web features.
 - Persistence goes through `src/json_storage.py`; there is no database. `app/models/` and the `apscheduler` dependency were removed (no source files, no scheduler wiring) — don't assume either is active.
-- Scheduled jobs (`cron/daily_analysis.py`, `cache_cleanup.py`, `weather_refresh.py`, `system_health.py`) run via the system crontab, installed with `cron/install_cron.sh` — not via an in-process scheduler.
+- Scheduled jobs (`cron/daily_analysis.py`, `cache_cleanup.py`, `weather_refresh.py`, `system_health.py`) run via the system crontab, installed with `cron/install_cron.sh` — not via an in-process scheduler. Cron entries invoke each script with `podman exec <container> python cron/<script>.py`, not the host's own Python — `data/`/`config/` are bind-mounted and owned by the container's rootless-Podman subuid, so running on bare host Python hits `PermissionError` on nearly every job (#543).
