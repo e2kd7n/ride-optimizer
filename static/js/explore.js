@@ -1628,7 +1628,9 @@ async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
     }
 
     const short = renderVariant(shortResult, '(−)', palette.light, 0.9);
-    const long  = renderVariant(longResult,  '(+)', palette.base,  1.0);
+    // #540: skipExpansion means longResult is the direct efficient route, not
+    // the "long" half of a short/long pair — don't label it like one.
+    const long  = renderVariant(longResult,  skipExpansion ? 'Direct' : '(+)', palette.base,  1.0);
 
     // Track both variants so highlight/dim and cleanup affect the whole
     // direction, not just whichever was stored last.
@@ -1674,12 +1676,20 @@ async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
         const outAndBackBadge = v.result.is_out_and_back
             ? '<span class="badge bg-secondary-subtle text-secondary-emphasis" title="No alternate road found nearby for the return leg">Out-and-back</span>'
             : '';
+        // #540: when skipExpansion fired, this result is the efficient direct
+        // route, not a distance-matched variant — flag the mismatch instead
+        // of silently showing a distance that doesn't match the target.
+        const targetLabel = window.formatDistance ? window.formatDistance(targetDistanceKm, 1) : `${targetDistanceKm} km`;
+        const directBadge = skipExpansion
+            ? `<span class="badge bg-secondary-subtle text-secondary-emphasis" title="Origin and destination are already ${v.distLabel} apart by road — showing the efficient route instead of padding to your ${targetLabel} target.">Direct route</span>`
+            : '';
         const dataKey = `${direction}-${suffix}`;
         return `
             <div class="d-flex align-items-center gap-2 flex-wrap mt-4px">
                 <span class="text-muted small">${label} ${v.distLabel} · ${v.result.duration_min} min
                     ${surfText ? `· ${surfText}` : ''} ${tilesText}</span>
                 ${outAndBackBadge}
+                ${directBadge}
                 <button class="btn btn-xs btn-outline-secondary export-gpx-btn ms-auto"
                         data-variant="${dataKey}"
                         aria-label="Export GPX ${label}">
@@ -1692,7 +1702,7 @@ async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
     if (labelEl) {
         const parts = [];
         if (short) parts.push(`${short.distLabel} (−)`);
-        if (long)  parts.push(`${long.distLabel} (+)`);
+        if (long)  parts.push(skipExpansion ? `${long.distLabel} (direct)` : `${long.distLabel} (+)`);
         const tilesSuffix = verified
             ? ` · ${unionMap.size} new tile${unionMap.size === 1 ? '' : 's'}${unionMap.size === 0 ? ' reached' : ''}`
             : '';
@@ -1701,7 +1711,7 @@ async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
 
     infoEl.innerHTML =
         variantRow(short, 'Short:', 'short', shortClaimed) +
-        variantRow(long,  'Long:',  'long', longClaimed);
+        variantRow(long,  skipExpansion ? 'Route:' : 'Long:', 'long', longClaimed);
     infoEl.classList.remove('d-none');
 
     // Wire up GPX exports.
