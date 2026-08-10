@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-07-21 12:18:35 UTC / 2026-07-21 07:18:35 CDT
+**Last Updated:** 2026-08-10 15:05:38 UTC / 2026-08-10 10:05:38 CDT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -8,9 +8,30 @@ This file reflects the current state of GitHub issues organized by release miles
 
 ## 📍 Release Context
 
-- **Current Release:** none (deployed, milestone fully closed)
-- **Next Release:** unknown (in development)
+- **Current Release:** v0.19.0 (deployed, milestone fully closed)
+- **Next Release:** v0.18.0 (in development)
 - **Future Releases:** 
+
+---
+
+## 🎯 v0.18.0 (Next Release - IN DEVELOPMENT)
+
+**Priority within this release determines work order. Complete P0/P1 issues before moving to future releases.**
+
+### 🔴 P0 - CRITICAL
+**No P0 issues** ✅
+
+### 🔴 P1 - HIGH
+**No P1 issues** ✅
+
+### 🟡 P2 - MEDIUM
+**No P2 issues** ✅
+
+### 🟢 P3 - LOW
+- #514 - Offload background analysis batch jobs to Pi Zero W cluster (ClusterHAT)
+
+### 📋 P4 - FUTURE
+**No P4 issues** ✅
 
 ---
 
@@ -18,7 +39,25 @@ This file reflects the current state of GitHub issues organized by release miles
 
 These issues need to be assigned to a release milestone and prioritized.
 
-**All issues are assigned to releases** ✅
+### 🔴 P0 - CRITICAL
+None
+
+### 🔴 P1 - HIGH
+- #518 - Indoor-workout weather trigger: only checks cold + rain — add max forecast temp and air quality
+
+### 🟡 P2 - MEDIUM
+- #546 - Hero card border, route status icons, and workout badges use hardcoded colors instead of Fair Weather tokens
+- #545 - Weekly log rotation never triggers for continuously-appended cron logs (mtime-based find never matches)
+
+### 🟢 P3 - LOW
+- #547 - Design docs have drifted from implementation: stale card-radius/button-color values and outdated field notes
+
+### 📋 P4 - FUTURE
+None
+
+### ⚠️ Unprioritized (No P-label)
+- #532 - Persist ORS route cache to disk and add TTL to coverage-tile cache
+- #526 - Add HTTPS/TLS to Pi deployment (required for geolocation and other secure-context APIs)
 
 ---
 
