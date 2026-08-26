@@ -153,6 +153,15 @@ else
     log "✓ No stale branches found"
 fi
 
+# 4b. Worktree hygiene
+log_section "Worktree Hygiene"
+log "Checking for stale git worktrees (merged/closed PR, no uncommitted or unpushed work)..."
+if [ -f "./scripts/prune-worktrees.sh" ]; then
+    ./scripts/prune-worktrees.sh "$PROJECT_ROOT" --apply 2>&1 | tee -a "$MAINTENANCE_LOG"
+else
+    log "⚠️  prune-worktrees.sh not found, skipping"
+fi
+
 # 5. Start issue management in background
 log_section "Issue Management (Background Task)"
 ISSUE_LOG="$LOG_DIR/issue-update-$TIMESTAMP.log"
