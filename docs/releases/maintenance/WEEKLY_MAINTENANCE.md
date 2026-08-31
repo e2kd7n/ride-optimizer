@@ -127,35 +127,42 @@ Weekly maintenance: [Date]"
 - Review error handling patterns
 - Update type hints if needed
 
-## Automation Opportunities
+## Automation
 
-Consider creating a script to help with weekly maintenance:
+`scripts/weekly-maintenance.sh` (backups, git/branch/worktree hygiene, issue-priority
+regeneration via `scripts/update-issue-priorities.sh`, ntfy summary) automates most of the
+weekly checklist above. It's runnable two ways:
 
+**Interactively**, on a dev machine with an existing `gh auth login` session:
 ```bash
-#!/bin/bash
-# weekly_doc_sync.sh
-
-echo "=== Weekly Documentation Sync ==="
-echo "Date: $(date)"
-echo ""
-
-echo "1. Checking for code changes since last sync..."
-git log --since="7 days ago" --oneline --no-merges
-
-echo ""
-echo "2. Files to review:"
-echo "   - PLAN.md"
-echo "   - TECHNICAL_SPEC.md"
-echo "   - IMPLEMENTATION_GUIDE.md"
-echo "   - WORKFLOW.md"
-
-echo ""
-echo "3. Modules to verify:"
-ls -1 src/*.py
-
-echo ""
-echo "Please review and update documentation as needed."
+./scripts/weekly-maintenance.sh
 ```
+This never auto-commits — `ISSUE_PRIORITIES.md` and this file's "Last Sync Date" section are
+regenerated locally, left for you to review and commit by hand.
+
+**Unattended, via cron on pi4** — `cron/crontab.template` installs it Sundays at 5 AM, run as
+host bash directly (not `podman exec`, unlike the app's own cron jobs: it needs `git`/`gh`/`jq`
+against the host checkout itself, not the containerized app's bind-mounted `data/`/`config/`).
+The cron entry sets `AUTO_COMMIT_MAINTENANCE=true`, which is the only thing that makes this path
+auto-commit and push `ISSUE_PRIORITIES.md` and this file — off by default so the same script
+never surprises an interactive run.
+
+Requirements for the unattended path:
+- `GH_TOKEN` set in the Pi's `.env` (see `.env.example`) — cron has no `gh auth login` session,
+  so every `gh` call (branch/PR evaluation, worktree pruning, issue-priority regen, the backup
+  push to `github.com/e2kd7n/backups`) needs this to authenticate non-interactively.
+- The GHCR image must include `cron/send_maintenance_summary.py` (moved there from `scripts/`
+  since only `cron/` is `COPY`'d into the image — the ntfy summary step runs via
+  `podman exec ride-optimizer python cron/send_maintenance_summary.py`, the same pattern as
+  `daily_analysis.py` etc., because it needs the app's Python deps that bare host Python lacks).
+- `git push` must already work unattended from the Pi's checkout (existing credential
+  helper/SSH key) for both the main repo and the `backups` push.
+
+Logs: `logs/cron_weekly_maintenance.log` (cron wrapper output) and a fresh
+`logs/maintenance-<timestamp>.log` per run. `--auto-close` is deliberately never passed to
+`update-issue-priorities.sh` here — regex-based issue closing has produced false positives
+before, so "appears resolved" issues are only ever flagged for human review, never closed
+automatically.
 
 ## Last Sync Date
 

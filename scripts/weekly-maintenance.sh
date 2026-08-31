@@ -2,6 +2,10 @@
 # Weekly Maintenance Script
 # Runs documentation sync, issue management, and creates backups
 # Usage: ./scripts/weekly-maintenance.sh
+#
+# Safe to run interactively on a dev machine (existing `gh auth login` session)
+# or unattended via the Pi cron entry in cron/crontab.template, which sets
+# AUTO_COMMIT_MAINTENANCE=true — see docs/releases/maintenance/WEEKLY_MAINTENANCE.md.
 
 set -e
 
@@ -16,6 +20,20 @@ NC='\033[0m' # No Color
 # Store the original working directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Self-contained token loading for unattended cron (no `gh auth login` session
+# there) — same .env pattern as scripts/backup-env.sh. Falls through to
+# ambient `gh` auth when .env isn't present (e.g. a dev machine already
+# logged in). Exports everything in .env, including GH_TOKEN, to every `gh`
+# call below and to the subprocesses this script shells out to.
+if [ -f "$PROJECT_ROOT/.env" ]; then
+    set -a
+    # shellcheck source=/dev/null
+    source "$PROJECT_ROOT/.env"
+    set +a
+fi
+
+CONTAINER_NAME="${RIDE_OPTIMIZER_CONTAINER:-ride-optimizer}"
 
 BACKUP_DIR="$PROJECT_ROOT/backups/maintenance"
 LOG_DIR="$PROJECT_ROOT/logs"
@@ -70,9 +88,19 @@ log "✓ Cleanup complete"
 # Push backups to GitHub
 log_section "Pushing Backups to GitHub"
 BACKUP_REPO="https://github.com/e2kd7n/backups.git"
+# Embed GH_TOKEN in the clone URL when present so this works unattended (no
+# ambient credential helper on Pi cron); falls back to the plain URL so
+# interactive runs on a machine with `gh auth setup-git` keep working as-is.
+# Never logged — only used as the git remote URL, and the temp clone (whose
+# .git/config would carry it) is removed via trap below even on failure.
+BACKUP_REPO_AUTH="$BACKUP_REPO"
+if [ -n "${GH_TOKEN:-}" ]; then
+    BACKUP_REPO_AUTH="https://x-access-token:${GH_TOKEN}@github.com/e2kd7n/backups.git"
+fi
 TEMP_BACKUP_CLONE=$(mktemp -d)
+trap 'rm -rf "$TEMP_BACKUP_CLONE"' EXIT
 log "Cloning backup repository..."
-if git clone "$BACKUP_REPO" "$TEMP_BACKUP_CLONE" 2>/dev/null; then
+if git clone "$BACKUP_REPO_AUTH" "$TEMP_BACKUP_CLONE" 2>/dev/null; then
     mkdir -p "$TEMP_BACKUP_CLONE/ride-optimizer"
     cp "$BACKUP_DIR"/ISSUE_PRIORITIES-"$TIMESTAMP".md "$TEMP_BACKUP_CLONE/ride-optimizer/" 2>/dev/null || true
     cp "$BACKUP_DIR"/docs-"$TIMESTAMP".tar.gz "$TEMP_BACKUP_CLONE/ride-optimizer/" 2>/dev/null || true
@@ -92,7 +120,7 @@ if git clone "$BACKUP_REPO" "$TEMP_BACKUP_CLONE" 2>/dev/null; then
 else
     log "⚠️  Could not clone $BACKUP_REPO — skipping remote backup"
 fi
-rm -rf "$TEMP_BACKUP_CLONE"
+# Cleanup handled by the trap set above (covers early-exit paths too).
 
 # 2. Git status check
 log_section "Git Status Check"
@@ -260,6 +288,29 @@ if [ "${WAIT_FOR_COMPLETION:-false}" = "true" ] && [ -n "${ISSUE_PID:-}" ]; then
     log "✓ Issue management complete"
 fi
 
+# 9b. Commit and push maintenance file changes (opt-in — off by default so an
+# interactive run never surprises a developer with an unexpected commit; the
+# Pi cron entry in cron/crontab.template sets AUTO_COMMIT_MAINTENANCE=true).
+# Self-sufficient: waits for the background issue-update job itself, so it
+# doesn't depend on WAIT_FOR_COMPLETION also being set.
+if [ "${AUTO_COMMIT_MAINTENANCE:-false}" = "true" ]; then
+    log_section "Committing Maintenance Changes"
+    if [ -n "${ISSUE_PID:-}" ] && kill -0 "$ISSUE_PID" 2>/dev/null; then
+        log "Waiting for issue management to finish before committing..."
+        wait "$ISSUE_PID" 2>/dev/null || true
+    fi
+    if [ -n "$(git status --porcelain -- ISSUE_PRIORITIES.md "$WEEKLY_LOG" 2>/dev/null)" ]; then
+        git add ISSUE_PRIORITIES.md "$WEEKLY_LOG"
+        if git commit -m "chore: weekly maintenance sync $(date -u +%Y-%m-%d)" >>"$MAINTENANCE_LOG" 2>&1 && git push >>"$MAINTENANCE_LOG" 2>&1; then
+            log "✓ Committed and pushed maintenance changes"
+        else
+            log "⚠️  Commit/push failed — see log"
+        fi
+    else
+        log "✓ No maintenance file changes to commit"
+    fi
+fi
+
 # 10. Send maintenance summary notification
 log_section "Sending Maintenance Summary"
 # grep -c exits 1 (not just nonzero output) when the count is zero, so
@@ -270,5 +321,14 @@ SECURITY_VULNS=${SECURITY_VULNS:-0}
 ISSUES_CLOSED=$(gh issue list --state closed --search "closed:>=$(date -u -d '7 days ago' +%Y-%m-%d 2>/dev/null || date -u -v-7d +%Y-%m-%d 2>/dev/null || echo '2000-01-01')" --json number --jq 'length' 2>/dev/null || echo 0)
 CACHE_SIZE=$(du -sm "$PROJECT_ROOT/cache" 2>/dev/null | cut -f1 || echo 0)
 
-python3 "$PROJECT_ROOT/scripts/send_maintenance_summary.py" "$SECURITY_VULNS" "$ISSUES_CLOSED" "$CACHE_SIZE" 2>>"$MAINTENANCE_LOG" || log "⚠️  Failed to send maintenance summary"
+# send_maintenance_summary.py imports app modules (src/config_manager.py,
+# src/ntfy_notifier.py) that bare host Python doesn't have installed — same
+# reason the other cron jobs run via podman exec instead of host Python (#543).
+# It lives under cron/ (not scripts/) specifically because that's the
+# directory the Dockerfile COPYs into the image, so podman exec can reach it.
+if command -v podman >/dev/null 2>&1 && podman container exists "$CONTAINER_NAME" 2>/dev/null; then
+    podman exec "$CONTAINER_NAME" python cron/send_maintenance_summary.py "$SECURITY_VULNS" "$ISSUES_CLOSED" "$CACHE_SIZE" 2>>"$MAINTENANCE_LOG" || log "⚠️  Failed to send maintenance summary"
+else
+    log "⚠️  Container '$CONTAINER_NAME' not running — skipping maintenance summary notification"
+fi
 
