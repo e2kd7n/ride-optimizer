@@ -516,14 +516,22 @@ class CoverageTracker:
 
         south, west, north, east = bounds
         graph_cache = self.cache_dir / f"road_network_{_bbox_cache_key(bounds)}.graphml"
+        ttl = int(self.config.get("exploration.road_network_cache_ttl_seconds", 0))
 
         if graph_cache.exists():
-            try:
-                G = ox.load_graphml(graph_cache)
-                logger.info("Loaded cached road network from %s", graph_cache)
-                return G
-            except Exception:
-                pass
+            age_s = time.time() - graph_cache.stat().st_mtime
+            if ttl <= 0 or age_s <= ttl:
+                try:
+                    G = ox.load_graphml(graph_cache)
+                    logger.info("Loaded cached road network from %s", graph_cache)
+                    return G
+                except Exception:
+                    pass
+            else:
+                logger.info(
+                    "Road network cache %s is %.0fs old (TTL %ds) — refetching",
+                    graph_cache, age_s, ttl,
+                )
 
         logger.info("Fetching road network from OSM for bounds %s", bounds)
         G = ox.graph_from_bbox(
@@ -627,12 +635,20 @@ class CoverageTracker:
         without a full bike-network graph fetch.
         """
         cache_file = self.cache_dir / f"water_{_bbox_cache_key(bounds)}.json"
+        ttl = int(self.config.get("exploration.water_polygon_cache_ttl_seconds", 0))
         if cache_file.exists():
-            try:
-                with open(cache_file, "r", encoding="utf-8") as f:
-                    return json.load(f)
-            except (json.JSONDecodeError, OSError):
-                pass
+            age_s = time.time() - cache_file.stat().st_mtime
+            if ttl <= 0 or age_s <= ttl:
+                try:
+                    with open(cache_file, "r", encoding="utf-8") as f:
+                        return json.load(f)
+                except (json.JSONDecodeError, OSError):
+                    pass
+            else:
+                logger.info(
+                    "Water polygon cache %s is %.0fs old (TTL %ds) — refetching",
+                    cache_file, age_s, ttl,
+                )
 
         south, west, north, east = bounds
         query = (
