@@ -51,3 +51,9 @@ config/.intervals_encryption_key
 
 # Runtime file-locking artifacts (0-byte lock files, not data)
 *.json.lock
+
+# scripts/log-triage.sh runtime state (#550) — lives in logs/, not data/,
+# since logs/ is provably writable by both the host cron user and the
+# container's subuid (see scripts/log-triage.sh for why)
+logs/log-triage-status.json
+logs/log-triage-carryover.json
