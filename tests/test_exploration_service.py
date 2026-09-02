@@ -1,5 +1,6 @@
 """Tests for app/services/exploration_service.py and src/ors_client.py."""
 
+import json
 import threading
 import time
 from unittest.mock import MagicMock, patch
@@ -625,6 +626,94 @@ class TestComputeRoute:
                 service_with_key.compute_route([[41.0, -87.0 - i * 0.001], [41.1, -87.1 - i * 0.001]])
 
         assert len(service_with_key._route_cache) == MAX_ROUTE_CACHE_ENTRIES
+
+
+# ── Route cache disk persistence (#532) ───────────────────────────
+
+
+class TestRouteCachePersistence:
+    """The in-memory ORS route memo is lost on every process restart/redeploy,
+    forcing identical requests to re-hit ORS's 2000/day free-tier quota cold.
+    Persisting it to data/cache/route_cache.json makes the win survive
+    restarts."""
+
+    _RAW = {
+        "features": [{
+            "geometry": {"coordinates": [[-87.65, 41.98], [-87.64, 41.99]]},
+            "properties": {
+                "summary": {"distance": 1000.0, "duration": 300.0},
+                "extras": {},
+            },
+        }],
+    }
+
+    def test_computed_route_is_written_to_disk(self, service_with_key):
+        with patch("src.ors_client.get_route", return_value=self._RAW):
+            service_with_key.compute_route([[41.98, -87.65], [41.99, -87.64]])
+
+        cache_file = service_with_key._route_cache_path()
+        assert cache_file.exists()
+        data = json.loads(cache_file.read_text())
+        assert len(data["entries"]) == 1
+        assert data["entries"][0]["profile"] == "cycling-regular"
+
+    def test_persisted_cache_is_secured(self, service_with_key):
+        """Cached route coordinates are GPS data — must be owner-only (0o600)."""
+        with patch("src.ors_client.get_route", return_value=self._RAW):
+            service_with_key.compute_route([[41.98, -87.65], [41.99, -87.64]])
+
+        with patch("app.services.exploration_service.secure_chmod") as mock_chmod:
+            service_with_key._persist_route_cache()
+        mock_chmod.assert_called()
+
+    def test_load_from_disk_restores_cache_and_avoids_ors_call(self, service_with_key, mock_config, tmp_path):
+        """A fresh ExplorationService instance (simulating a process restart)
+        must reuse a still-valid on-disk cache instead of recomputing."""
+        with patch("src.ors_client.get_route", return_value=self._RAW) as mock_get:
+            service_with_key.compute_route([[41.98, -87.65], [41.99, -87.64]])
+        assert mock_get.call_count == 1
+
+        with patch('app.services.exploration_service.ConfigManager.get_instance', return_value=mock_config):
+            fresh = ExplorationService()
+        fresh._tracker.cache_dir = tmp_path
+        fresh._load_route_cache_from_disk()
+
+        assert len(fresh._route_cache) == 1
+        with patch("src.ors_client.get_route") as mock_get2:
+            result = fresh.compute_route([[41.98, -87.65], [41.99, -87.64]])
+        mock_get2.assert_not_called()
+        assert result["status"] == "success"
+
+    def test_expired_entries_are_not_loaded_from_disk(self, service_with_key, mock_config, tmp_path):
+        cache_file = service_with_key._route_cache_path()
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+        cache_file.write_text(json.dumps({
+            "entries": [{
+                "waypoints": [[41.98, -87.65], [41.99, -87.64]],
+                "profile": "cycling-regular",
+                "result": {"status": "success"},
+                "expires_at": time.time() - 100,  # already expired
+            }],
+        }))
+
+        with patch('app.services.exploration_service.ConfigManager.get_instance', return_value=mock_config):
+            fresh = ExplorationService()
+        fresh._tracker.cache_dir = tmp_path
+        fresh._load_route_cache_from_disk()
+
+        assert len(fresh._route_cache) == 0
+
+    def test_corrupt_cache_file_is_ignored(self, service_with_key, mock_config, tmp_path):
+        cache_file = service_with_key._route_cache_path()
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+        cache_file.write_text("not valid json{")
+
+        with patch('app.services.exploration_service.ConfigManager.get_instance', return_value=mock_config):
+            fresh = ExplorationService()
+        fresh._tracker.cache_dir = tmp_path
+        fresh._load_route_cache_from_disk()  # must not raise
+
+        assert len(fresh._route_cache) == 0
 
 
 # ── surface_breakdown reduction ──────────────────────────────────

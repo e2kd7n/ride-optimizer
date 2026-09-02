@@ -10,6 +10,8 @@ exploration:
   ors_max_wait_seconds: 40  # Overall budget for compute_route(), across queueing + every retry/fallback attempt
   ors_max_concurrent_calls: 2  # Cap on simultaneous ORS calls — leaves headroom under GUNICORN_THREADS (gunicorn.conf.py)
   route_cache_ttl_seconds: 600
+  road_network_cache_ttl_seconds: 0  # Age (seconds) after which a cached road_network_*.graphml is refetched from OSM instead of reused. 0 = never expire (default; road networks change slowly and invalidate_caches() already clears these on new activity fetches).
+  water_polygon_cache_ttl_seconds: 0  # Same, for water_*.json (Overpass natural=water polygons). 0 = never expire — these aren't cleared by invalidate_caches() at all today.
   default_speed_kmh: 18  # Fallback for duration→distance conversion (#490) when the rider has no cached ride history to average
 
   rate_limit_route: "20 per minute"  # /api/exploration/route

@@ -2,6 +2,8 @@
 
 import json
 import math
+import os
+import time
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -678,3 +680,96 @@ class TestRoadNetworkCacheEviction:
         tracker.invalidate_caches()
         remaining = list(tracker.cache_dir.glob("road_network*.graphml"))
         assert remaining == []
+
+
+# ── road_network / water_polygon cache TTL (#532) ─────────────────
+
+class TestCacheTtl:
+    """Road-network and water-polygon file caches never expired on their own
+    (only count-based eviction / explicit invalidate_caches()). An optional
+    TTL lets a cached file be treated as stale by age alone."""
+
+    BOUNDS = (40.0, -75.0, 41.0, -74.0)
+
+    @pytest.fixture
+    def tracker(self, tmp_path):
+        config = MagicMock()
+        self._config_values = {}
+        config.get = MagicMock(side_effect=lambda key, default=None: self._config_values.get(key, default))
+        t = CoverageTracker(config)
+        t.cache_dir = tmp_path
+        return t
+
+    def _age_file(self, path: Path, age_seconds: float) -> None:
+        now = time.time()
+        os.utime(path, (now - age_seconds, now - age_seconds))
+
+    def test_road_graph_reused_when_default_ttl_disabled(self, tracker):
+        """ttl=0 (default) means never expire, regardless of file age."""
+        cache_file = tracker.cache_dir / f"road_network_{_bbox_cache_key(self.BOUNDS)}.graphml"
+        cache_file.write_text("cached-graph")
+        self._age_file(cache_file, age_seconds=10_000_000)
+
+        mock_ox = MagicMock()
+        mock_ox.load_graphml.return_value = "the-cached-graph"
+        with patch.dict("sys.modules", {"osmnx": mock_ox}):
+            G = tracker._get_or_fetch_road_graph(self.BOUNDS)
+
+        assert G == "the-cached-graph"
+        mock_ox.graph_from_bbox.assert_not_called()
+
+    def test_road_graph_reused_within_ttl(self, tracker):
+        self._config_values["exploration.road_network_cache_ttl_seconds"] = 3600
+        cache_file = tracker.cache_dir / f"road_network_{_bbox_cache_key(self.BOUNDS)}.graphml"
+        cache_file.write_text("cached-graph")
+        self._age_file(cache_file, age_seconds=60)
+
+        mock_ox = MagicMock()
+        mock_ox.load_graphml.return_value = "the-cached-graph"
+        with patch.dict("sys.modules", {"osmnx": mock_ox}):
+            G = tracker._get_or_fetch_road_graph(self.BOUNDS)
+
+        assert G == "the-cached-graph"
+        mock_ox.graph_from_bbox.assert_not_called()
+
+    def test_road_graph_refetched_once_stale(self, tracker):
+        self._config_values["exploration.road_network_cache_ttl_seconds"] = 3600
+        cache_file = tracker.cache_dir / f"road_network_{_bbox_cache_key(self.BOUNDS)}.graphml"
+        cache_file.write_text("stale-graph")
+        self._age_file(cache_file, age_seconds=7200)
+
+        mock_ox = MagicMock()
+        mock_ox.load_graphml.return_value = "should-not-be-used"
+        mock_ox.graph_from_bbox.return_value = "fresh-graph"
+        with patch.dict("sys.modules", {"osmnx": mock_ox}):
+            G = tracker._get_or_fetch_road_graph(self.BOUNDS)
+
+        assert G == "fresh-graph"
+        mock_ox.load_graphml.assert_not_called()
+        mock_ox.graph_from_bbox.assert_called_once()
+
+    def test_water_polygons_reused_when_default_ttl_disabled(self, tracker):
+        cache_file = tracker.cache_dir / f"water_{_bbox_cache_key(self.BOUNDS)}.json"
+        cache_file.write_text(json.dumps([[[40.1, -74.5], [40.2, -74.5], [40.2, -74.4]]]))
+        self._age_file(cache_file, age_seconds=10_000_000)
+
+        with patch("requests.post") as mock_post:
+            polygons = tracker._get_or_fetch_water_polygons(self.BOUNDS)
+
+        assert len(polygons) == 1
+        mock_post.assert_not_called()
+
+    def test_water_polygons_refetched_once_stale(self, tracker):
+        self._config_values["exploration.water_polygon_cache_ttl_seconds"] = 3600
+        cache_file = tracker.cache_dir / f"water_{_bbox_cache_key(self.BOUNDS)}.json"
+        cache_file.write_text(json.dumps([[[40.1, -74.5], [40.2, -74.5], [40.2, -74.4]]]))
+        self._age_file(cache_file, age_seconds=7200)
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"elements": []}
+        mock_response.raise_for_status = MagicMock()
+        with patch("requests.post", return_value=mock_response) as mock_post:
+            polygons = tracker._get_or_fetch_water_polygons(self.BOUNDS)
+
+        assert polygons == []
+        mock_post.assert_called_once()

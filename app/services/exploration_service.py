@@ -6,13 +6,17 @@ management following the existing service patterns (constructor + initialize).
 """
 
 from src.secure_logger import SecureLogger
+import json
 import math
+import os
 import threading
 import time
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.config_manager import ConfigManager
 from src.coverage_tracker import CoverageTracker
+from src.json_storage import secure_chmod
 
 logger = SecureLogger(__name__)
 
@@ -31,6 +35,11 @@ _UNPAVED_SURFACE_VALUES = {7, 8, 9, 10, 11, 12}   # gravel, dirt, grass, ...
 # Cap on retained route-memo entries (#482) — each entry holds a full route
 # polyline, so an unbounded dict is a slow memory leak on a long-running Pi.
 MAX_ROUTE_CACHE_ENTRIES = 200
+
+# Persists the route memo to disk (#532) so it survives process restarts/
+# redeploys instead of cold-starting empty and re-hitting ORS's 2000/day
+# free-tier quota for routes that were already computed before the restart.
+ROUTE_CACHE_FILENAME = "route_cache.json"
 
 
 class ExplorationService:
@@ -55,7 +64,7 @@ class ExplorationService:
         self._route_semaphore = threading.Semaphore(max_concurrent)
 
     def initialize(self):
-        pass
+        self._load_route_cache_from_disk()
 
     def get_tile_coverage(
         self,
@@ -108,6 +117,77 @@ class ExplorationService:
             overflow = len(self._route_cache) - MAX_ROUTE_CACHE_ENTRIES
             for k in list(self._route_cache.keys())[:overflow]:
                 del self._route_cache[k]
+
+        self._persist_route_cache()
+
+    def _route_cache_path(self) -> Path:
+        return self._tracker.cache_dir / ROUTE_CACHE_FILENAME
+
+    def _load_route_cache_from_disk(self) -> None:
+        """Populate self._route_cache from disk (#532), so a fresh process
+        doesn't re-hit ORS for routes it already computed before a restart."""
+        path = self._route_cache_path()
+        if not path.exists():
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("Route cache at %s is missing/corrupt — starting fresh: %s", path, exc)
+            return
+
+        now_wall = time.time()
+        now_mono = time.monotonic()
+        loaded = 0
+        for entry in data.get("entries", []):
+            # expires_at was persisted as a wall-clock timestamp — translate
+            # the remaining lifetime onto this process's monotonic clock,
+            # since time.monotonic() itself is not meaningful across restarts.
+            remaining = entry.get("expires_at", 0) - now_wall
+            if remaining <= 0:
+                continue
+            try:
+                cache_key = (
+                    tuple((round(lat, 6), round(lon, 6)) for lat, lon in entry["waypoints"]),
+                    entry["profile"],
+                )
+            except (KeyError, TypeError, ValueError):
+                continue
+            self._route_cache[cache_key] = (entry["result"], now_mono + remaining)
+            loaded += 1
+        logger.info("Loaded %d cached ORS route(s) from disk", loaded)
+
+    def _persist_route_cache(self) -> None:
+        """Write the current (already-capped) in-memory route cache to disk."""
+        path = self._route_cache_path()
+        now_mono = time.monotonic()
+        now_wall = time.time()
+        entries = []
+        for (waypoints, profile), (result, expires_at) in self._route_cache.items():
+            remaining = expires_at - now_mono
+            if remaining <= 0:
+                continue
+            entries.append({
+                "waypoints": [list(pt) for pt in waypoints],
+                "profile": profile,
+                "result": result,
+                "expires_at": now_wall + remaining,
+            })
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = path.with_name(f"{path.name}.tmp{os.getpid()}")
+        try:
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump({"entries": entries}, f)
+            secure_chmod(tmp_path)
+            os.replace(tmp_path, path)
+            secure_chmod(path)
+        except OSError as exc:
+            logger.warning("Failed to persist route cache: %s", exc)
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
 
     def verify_tile_claims(
         self,
