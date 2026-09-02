@@ -29,6 +29,7 @@ chmod +x "$PROJECT_ROOT/cron/daily_analysis.py"
 chmod +x "$PROJECT_ROOT/cron/weather_refresh.py"
 chmod +x "$PROJECT_ROOT/cron/cache_cleanup.py"
 chmod +x "$PROJECT_ROOT/cron/system_health.py"
+chmod +x "$PROJECT_ROOT/cron/log_triage.py"
 
 # Create crontab file from template
 echo "Creating crontab configuration..."
