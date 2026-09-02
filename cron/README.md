@@ -60,6 +60,32 @@ All cron jobs support **push notifications via ntfy.sh** for proactive monitorin
   - Critical: Disk >90%, cache corruption, API down
   - Warning: Disk >80%, stale data >36h
 
+### 5. Error-Log Triage (`log_triage.py`, wrapped by `../scripts/log-triage.sh`)
+- **Schedule**: Weekly, Sunday at 3:30 AM (before log rotation runs)
+- **Purpose**: Turn recurring ERROR/WARNING clusters in the other jobs' logs
+  into deduped GitHub issues, so a repeating problem isn't only noticed if
+  someone happens to be reading logs when it happens (#550)
+- **How**: `log_triage.py` scans `logs/cron_*.log` (the per-job files —
+  deliberately **not** the aggregate `logs/cron.log`, which would
+  double-count every line), clusters by (logger, normalized message),
+  requires 3+ occurrences (1 for CRITICAL, 5 for WARNING) in the trailing 7
+  days, and emits one JSON candidate per cluster. `scripts/log-triage.sh`
+  dedupes those against every existing `auto-log-triage`-labeled issue (open
+  *and* closed, via a `<!-- auto-log-triage:fingerprint=... -->` marker in
+  the issue body) and files up to `MAX_ISSUES_PER_RUN` (default 5) new
+  issues, carrying any overflow to next week's run
+- **Additive only**: doesn't replace or duplicate `system_health.py`'s
+  checks or the real-time ntfy alerts — this is the "don't lose track of a
+  recurring problem" layer, not the "notify me right now" layer
+- **Redaction**: re-applies `src/pii_sanitizer.sanitize_log_message` to
+  every excerpt before it can reach a filed (public) issue, on top of
+  whatever sanitization already happened at log-write time
+- **Logs**: `logs/cron_log_triage.log`
+- **Dry run**: `./scripts/log-triage.sh --dry-run` runs the full pipeline,
+  including the real dedup fetch, but logs "would create" instead of filing
+- **Notifications**: Sends critical alert on failure (via `log_triage.py`
+  itself, same `NtfyNotifier.send_cron_failure_alert` used by the other jobs)
+
 ## Installation
 
 ### Automatic Installation
@@ -96,9 +122,11 @@ crontab -e
 0 */6 * * * cd /path/to/ride-optimizer && podman exec ride-optimizer python cron/weather_refresh.py >> logs/cron.log 2>&1
 0 3 * * * cd /path/to/ride-optimizer && podman exec ride-optimizer python cron/cache_cleanup.py >> logs/cron.log 2>&1
 0 */2 * * * cd /path/to/ride-optimizer && podman exec ride-optimizer python cron/system_health.py >> logs/cron.log 2>&1
+30 3 * * 0 cd /path/to/ride-optimizer && ./scripts/log-triage.sh >> logs/cron_log_triage.log 2>&1
+0 4 * * 0 cd /path/to/ride-optimizer && ./scripts/rotate-logs.sh
 ```
 
-Jobs run **inside** the app container via `podman exec` rather than with the host's own Python — see [Architecture Notes](#why-podman-exec) below.
+Jobs run **inside** the app container via `podman exec` rather than with the host's own Python — see [Architecture Notes](#why-podman-exec) below. `log-triage.sh` and `rotate-logs.sh` are the exception: they run as host bash directly, since they need `gh`/`git`/`gzip` against the host checkout, the same reason `weekly-maintenance.sh` does (`log-triage.sh` shells out to `podman exec ... python cron/log_triage.py` itself for the one step that needs the container's Python).
 
 ## Testing Jobs
 
@@ -110,6 +138,7 @@ podman exec ride-optimizer python cron/daily_analysis.py
 podman exec ride-optimizer python cron/weather_refresh.py
 podman exec ride-optimizer python cron/cache_cleanup.py
 podman exec ride-optimizer python cron/system_health.py
+./scripts/log-triage.sh --dry-run
 ```
 
 Running a script with the host's own `python3 cron/daily_analysis.py` instead
@@ -144,7 +173,10 @@ tail -f logs/cron_daily_analysis.log
 tail -f logs/cron_weather_refresh.log
 tail -f logs/cron_cache_cleanup.log
 tail -f logs/cron_system_health.log
+tail -f logs/cron_log_triage.log
 ```
+
+Status/carryover state for log-triage: `logs/log-triage-status.json`, `logs/log-triage-carryover.json`.
 
 ### Check Job History
 
@@ -282,6 +314,6 @@ The cron jobs replace these APScheduler jobs:
 - `run_weather_refresh()` → `weather_refresh.py`
 - `run_cache_cleanup()` → `cache_cleanup.py`
 - `check_system_health()` → `system_health.py`
-- `run_log_rotation()` → Built into crontab (gzip + delete)
+- `run_log_rotation()` → `scripts/rotate-logs.sh` (weekly, unconditional gzip + 30-day delete — see #545/#553)
 
 Job history format is compatible, so historical data is preserved.
