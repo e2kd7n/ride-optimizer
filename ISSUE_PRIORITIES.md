@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-08-10 15:05:38 UTC / 2026-08-10 10:05:38 CDT
+**Last Updated:** 2026-09-02 02:43:00 UTC / 2026-09-02 02:43:00 GMT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -46,16 +46,19 @@ None
 - #518 - Indoor-workout weather trigger: only checks cold + rain — add max forecast temp and air quality
 
 ### 🟡 P2 - MEDIUM
+- #550 - Automate weekly error-log triage into GitHub issues
 - #546 - Hero card border, route status icons, and workout badges use hardcoded colors instead of Fair Weather tokens
 - #545 - Weekly log rotation never triggers for continuously-appended cron logs (mtime-based find never matches)
 
 ### 🟢 P3 - LOW
+- #551 - scripts: adopt a consistent visual design language (colors, section headers, progress feedback)
 - #547 - Design docs have drifted from implementation: stale card-radius/button-color values and outdated field notes
 
 ### 📋 P4 - FUTURE
 None
 
 ### ⚠️ Unprioritized (No P-label)
+- #553 - Weekly log rotation cron likely never fires on actively-written logs
 - #532 - Persist ORS route cache to disk and add TTL to coverage-tile cache
 - #526 - Add HTTPS/TLS to Pi deployment (required for geolocation and other secure-context APIs)
 
