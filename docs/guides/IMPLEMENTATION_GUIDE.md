@@ -35,6 +35,13 @@ Browser opens automatically to http://localhost:8083
 
 ### For Developers (Understanding the Architecture)
 
+> **Superseded.** The phases below (originally written for the CLI-based `main.py` tool and its
+> "Smart Static" web layer) predate the current app, which moved most pages to Jinja templates
+> (#470) and route handlers into Blueprints (Epic #413) — see `CLAUDE.md` / `AGENTS.md` for the
+> authoritative, actively-maintained architecture description, and `docs/TECHNICAL_SPEC.md` §1
+> for the current component breakdown. This guide is kept for historical build-order reference
+> only; don't use it to describe the live app's architecture or file layout.
+
 ## Architecture Overview
 
 The application uses a **Smart Static architecture**:

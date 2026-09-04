@@ -336,7 +336,7 @@ plans/
 
 ## Design Principles (Non-Negotiable)
 
-**Full spec:** `plans/v0.6.0/DESIGN_PRINCIPLES.md` (v2.2). **Brand identity:** `docs/designs/FAIR_WEATHER_BRAND_BOOK.md` — logo, color tokens (Day/Night), type, and reference screens for the current "Fair Weather" brand, adopted 2026-07-05. Not yet wired into `static/css/main.css` (still on pre-rebrand tokens) — check the brand book before hand-picking a color or icon for new UI work.
+**Full spec:** `plans/v0.6.0/DESIGN_PRINCIPLES.md` (see its own Version History for the current revision). **Brand identity:** `docs/designs/FAIR_WEATHER_BRAND_BOOK.md` — logo, color tokens (Day/Night), type, and reference screens for the current "Fair Weather" brand, adopted 2026-07-05. Fully wired into `static/css/main.css` (Day/Night token table plus the dark-mode override block) — check the brand book before hand-picking a color or icon for new UI work.
 
 ### Mobile-First Approach
 - Start with 320px viewport (iPhone SE)
