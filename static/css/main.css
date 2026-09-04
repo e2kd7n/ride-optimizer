@@ -2124,13 +2124,14 @@ h5.card-title {
 .opacity-90 { opacity: 0.9; }
 .opacity-80 { opacity: 0.8; }
 .hero-weather-badge { font-size: 1rem; padding: var(--space-2) var(--space-3); }
-.hero-border-good { border-left: 4px solid #28a745; padding-left: var(--space-3); }
-.hero-border-warn { border-left: 4px solid #ffc107; padding-left: var(--space-3); }
-.hero-border-bad { border-left: 4px solid #dc3545; padding-left: var(--space-3); }
+/* #546 (SEM-1/SEM-2): shared good/warn/bad rating (dashboard.js scoreToRating)
+   drives both the hero border and the route status icon, so the same score
+   means the same color on both widgets, via the real semantic tokens. */
+.hero-border-good { border-left: 4px solid var(--success); padding-left: var(--space-3); }
+.hero-border-warn { border-left: 4px solid var(--warning); padding-left: var(--space-3); }
+.hero-border-bad { border-left: 4px solid var(--danger); padding-left: var(--space-3); }
 .route-name-truncate { min-width: 120px; max-width: 140px; }
 .route-status-icon { font-size: 1rem; flex-shrink: 0; }
-.route-status-icon-great { color: #28a745; }
-.route-status-icon-good { color: #20c997; }
-.route-status-icon-fair { color: #ffc107; }
-.route-status-icon-poor { color: #fd7e14; }
-.route-status-icon-bad { color: #dc3545; }
+.route-status-icon-good { color: var(--success); }
+.route-status-icon-warn { color: var(--warning); }
+.route-status-icon-bad { color: var(--danger); }
