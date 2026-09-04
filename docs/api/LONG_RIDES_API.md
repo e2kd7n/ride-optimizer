@@ -170,13 +170,13 @@ Consolidate named groups with similar routes despite different names.
 def consolidate_similar_named_groups(
     self,
     name_groups: Dict[str, List[Activity]],
-    similarity_threshold: float = 0.20
+    similarity_threshold: float = 2.0
 ) -> Dict[str, List[Activity]]
 ```
 
 **Parameters:**
 - `name_groups`: Dictionary mapping activity names to lists of activities
-- `similarity_threshold`: Maximum Fréchet distance (km) to consider routes similar (default: 0.20)
+- `similarity_threshold`: Maximum combined Fréchet+Hausdorff distance (km) to consider routes similar (default: 2.0)
 
 **Returns:**
 - Updated name_groups dictionary with similar routes consolidated
@@ -189,7 +189,7 @@ def consolidate_similar_named_groups(
 
 **Example:**
 ```python
-consolidated = analyzer.consolidate_similar_named_groups(name_groups, 0.15)
+consolidated = analyzer.consolidate_similar_named_groups(name_groups, 2.0)
 ```
 
 ---
@@ -233,7 +233,7 @@ def match_unnamed_rides_to_groups(
     self,
     unnamed_rides: List[Activity],
     named_groups: Dict[str, List[Activity]],
-    similarity_threshold: float = 0.15,
+    similarity_threshold: float = 2.0,
     use_parallel: bool = True,
     max_workers: int = None
 ) -> Tuple[Dict[str, List[Activity]], List[Activity]]
@@ -242,7 +242,7 @@ def match_unnamed_rides_to_groups(
 **Parameters:**
 - `unnamed_rides`: List of activities with generic/no names
 - `named_groups`: Dictionary of existing named route groups
-- `similarity_threshold`: Maximum Fréchet distance (km) for similarity (default: 0.15)
+- `similarity_threshold`: Maximum combined Fréchet+Hausdorff distance (km) for similarity (default: 2.0)
 - `use_parallel`: Whether to use parallel processing (default: True)
 - `max_workers`: Maximum worker processes (default: auto 2-6 based on workload)
 
@@ -262,7 +262,7 @@ def match_unnamed_rides_to_groups(
 updated_groups, still_unnamed = analyzer.match_unnamed_rides_to_groups(
     unnamed_rides,
     name_groups,
-    similarity_threshold=0.15,
+    similarity_threshold=2.0,
     use_parallel=True
 )
 ```
@@ -507,25 +507,19 @@ Add to `config/config.yaml`:
 long_rides:
   # Minimum distance to classify as long ride (km)
   min_distance_km: 15
-  
-  # Route similarity thresholds (km)
-  similarity_threshold: 0.15
-  consolidation_threshold: 0.20
-  
-  # Search radius for location-based recommendations (km)
-  search_radius_km: 5.0
-  
-  # Parallel processing
-  use_parallel: true
-  max_workers: null  # null = auto-detect (2-6 workers)
 
-route_naming:
-  # Number of sample points along route for naming
-  sample_points: 10
-  
-  # Maximum length of generated route names
-  max_name_length: 50
+  # Max combined Fréchet+Hausdorff distance (km) for route matching
+  similarity_threshold: 1.2
+
+  # Search radius for location-based recommendations (km)
+  search_radius_km: 5
+
+  # Long-ride planner defaults
+  default_target_duration_hours: 2.0
+  default_target_distance_km: 40
 ```
+
+`use_parallel` and `max_workers` are Python call-site arguments to `match_unnamed_rides_to_groups()` (see above), not config-driven — there is no `long_rides.use_parallel`/`long_rides.max_workers` config key. Route-naming density is controlled by the top-level `route_naming` block (`sampling_density`, `commute_sampling_density`, etc. — see `docs/TECHNICAL_SPEC.md` § Configuration System); there is no `sample_points`/`max_name_length` key.
 
 ---
 
@@ -613,17 +607,19 @@ updated_groups, still_unnamed = analyzer.match_unnamed_rides_to_groups(
 
 ### Custom Similarity Thresholds
 
+The default is `2.0` km (combined Fréchet+Hausdorff distance) — see `consolidate_similar_named_groups()` above.
+
 ```python
 # Stricter matching (routes must be very similar)
 name_groups = analyzer.consolidate_similar_named_groups(
     name_groups,
-    similarity_threshold=0.10  # 100m tolerance
+    similarity_threshold=0.5  # 500m tolerance
 )
 
 # Looser matching (group more variations together)
 name_groups = analyzer.consolidate_similar_named_groups(
     name_groups,
-    similarity_threshold=0.30  # 300m tolerance
+    similarity_threshold=3.0  # 3km tolerance
 )
 ```
 

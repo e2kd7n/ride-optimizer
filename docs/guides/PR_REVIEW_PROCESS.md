@@ -56,6 +56,7 @@ When you do want a self-review pass (PR or not), this checklist still applies:
 - [ ] Public API changes are documented
 - [ ] Complex logic has a brief inline comment explaining *why*
 - [ ] User-facing behavior changes are reflected in guides
+- [ ] If this PR closes an issue tied to a design-doc field note (e.g. a `plans/v0.6.0/DESIGN_PRINCIPLES.md` "Field note" citing that issue's finding), add a "Resolved as of [date]/[commit]" annotation to that field note instead of leaving it describing an open bug
 
 ---
 
