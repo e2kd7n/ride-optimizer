@@ -285,16 +285,24 @@ class PlannerService:
             # Get weather forecasts for each day
             recommendations = []
             today = datetime.now().date()
-            
+
+            # Scored per (rounded lat/lon, date) for the lifetime of this call only
+            # (#554) — filtered_rides can be hundreds of entries that mostly share
+            # a handful of real-world start locations (e.g. home), so without this
+            # _get_weather_for_ride() below fires one external API call per ride
+            # per day even when most of those calls are for the exact same spot.
+            weather_cache: Dict[Tuple[float, float, str], Dict[str, Any]] = {}
+
             for day_offset in range(forecast_days):
                 target_date = today + timedelta(days=day_offset)
                 day_name = target_date.strftime('%A')
-                
+
                 # Score rides for this day
                 day_rides = self._score_rides_for_day(
-                    filtered_rides, 
+                    filtered_rides,
                     target_date,
-                    location
+                    location,
+                    weather_cache,
                 )
                 
                 if day_rides:
@@ -800,23 +808,26 @@ class PlannerService:
     def _score_rides_for_day(self,
                             rides: List[LongRide],
                             target_date: datetime.date,
-                            location: Optional[Tuple[float, float]]) -> List[Dict[str, Any]]:
+                            location: Optional[Tuple[float, float]],
+                            weather_cache: Dict[Tuple[float, float, str], Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Score rides for a specific day based on weather and other factors.
-        
+
         Args:
             rides: List of rides to score
             target_date: Date to score for
             location: Optional location preference
-            
+            weather_cache: Per-call memo of weather results, shared across every
+                day/ride scored within the same get_recommendations() call (#554)
+
         Returns:
             List of scored rides
         """
         scored_rides = []
-        
+
         for ride in rides:
             # Get weather forecast for ride location
-            weather = self._get_weather_for_ride(ride, target_date)
+            weather = self._get_weather_for_ride(ride, target_date, weather_cache)
             
             # Calculate scores
             weather_score = self._calculate_weather_score(weather)
@@ -857,44 +868,57 @@ class PlannerService:
         scored_rides.sort(key=lambda r: r['score'], reverse=True)
         return scored_rides
     
-    def _get_weather_for_ride(self, ride: LongRide, target_date: datetime.date) -> Dict[str, Any]:
+    def _get_weather_for_ride(self, ride: LongRide, target_date: datetime.date,
+                             weather_cache: Dict[Tuple[float, float, str], Dict[str, Any]]) -> Dict[str, Any]:
         """
         Get weather forecast for a ride on a specific date.
-        
+
         Args:
             ride: LongRide object with coordinates
             target_date: Date to get forecast for
-            
+            weather_cache: Per-call memo keyed by (rounded lat, rounded lon, date) —
+                see get_recommendations (#554). Rides sharing a start location
+                (e.g. home) collapse onto the same cache entry instead of each
+                firing its own external API call.
+
         Returns:
             Dictionary with weather data including comfort_score and cycling_favorability
         """
         try:
             # Calculate days ahead for forecast
             days_ahead = (target_date - datetime.now().date()).days
-            
+
             if days_ahead < 0:
                 logger.warning(f"Cannot get forecast for past date: {target_date}")
                 return {}
-            
+
             # Get forecast for ride start location
             lat, lon = ride.start_location
-            
+
+            cache_key = (round(lat, 3), round(lon, 3), target_date.isoformat())
+            if cache_key in weather_cache:
+                return weather_cache[cache_key]
+
             # Get forecast from WeatherFetcher (uses get_daily_forecast, not get_forecast)
             forecast_data = self.weather_fetcher.get_daily_forecast(lat, lon, days=min(days_ahead + 1, 7))
-            
+
             if not forecast_data:
                 logger.warning(f"No forecast data available for {target_date}")
+                weather_cache[cache_key] = {}
                 return {}
-            
+
             # Find the forecast for target date (forecast_data is a list of daily forecasts)
             if days_ahead < len(forecast_data):
                 day_forecast = forecast_data[days_ahead]
-                
-                return _weather_data_to_dict(day_forecast, location_name=ride.name)
-            
+
+                result = _weather_data_to_dict(day_forecast, location_name=ride.name)
+                weather_cache[cache_key] = result
+                return result
+
             logger.warning(f"Forecast not available for day {days_ahead}")
+            weather_cache[cache_key] = {}
             return {}
-            
+
         except Exception as e:
             logger.error(f"Failed to get weather for ride {ride.activity_id}: {e}", exc_info=True)
             return {}

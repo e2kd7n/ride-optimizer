@@ -19,6 +19,7 @@ from src.coverage_tracker import (
     _interpolate_points,
     _segment_tiles,
     _activity_tiles,
+    _robust_tile_range,
     TILE_ZOOM,
     SQUADRATINHO_ZOOM,
     MAX_ROAD_NETWORK_CACHES,
@@ -242,6 +243,115 @@ class TestTileCoverage:
         assert d["visited_count"] == 1
         assert d["coverage_pct"] == 10.0
         assert d["bounds"] == (40.0, -74.0, 41.0, -73.0)
+
+    def test_coverage_pct_caps_at_100(self):
+        """#556: get_tile_coverage_all() trims outlier tiles out of
+        total_in_bounds while keeping them in `visited`, which can push the
+        raw ratio above 100%. Capped rather than shown as nonsensical."""
+        tc = TileCoverage(
+            visited={f"{i},0": {"first_ridden": "", "activity_ids": [1]} for i in range(10)},
+            total_in_bounds=5,
+        )
+        assert tc.coverage_pct == 100.0
+
+
+# ── _robust_tile_range (#556) ──────────────────────────────────────
+
+class TestRobustTileRange:
+    """A single geographically-distant activity (a trip, or a corrupted GPS
+    point) shouldn't balloon get_tile_coverage_all()'s reported bounds to span
+    the outlier — verified on production data: 5,849 visited tiles produced a
+    bounding box spanning nearly the whole globe (69.6M total_in_bounds,
+    permanent ~0.0% coverage_pct)."""
+
+    def test_small_sample_uses_raw_min_max(self):
+        """Below _OUTLIER_MIN_SAMPLES, trimming is skipped entirely — not
+        enough points to trust percentile statistics."""
+        assert _robust_tile_range([10, 11, 12, 1000]) == (10, 1000)
+
+    def test_large_cluster_trims_far_outlier(self):
+        cluster = list(range(100, 150))  # 50 tightly-packed points
+        coords = cluster + [50000]  # one wild outlier, 31st+ point
+        min_v, max_v = _robust_tile_range(coords)
+        assert (min_v, max_v) == (100, 149)
+
+    def test_large_cluster_trims_outlier_on_either_side(self):
+        cluster = list(range(1000, 1050))
+        coords = [-99999] + cluster + [99999]
+        min_v, max_v = _robust_tile_range(coords)
+        assert (min_v, max_v) == (1000, 1049)
+
+    def test_uniform_values_zero_iqr_no_crash(self):
+        """All-identical values (zero spread) can't have outliers by
+        definition — must not divide by zero or otherwise error."""
+        assert _robust_tile_range([5] * 25) == (5, 5)
+
+    def test_no_outliers_returns_raw_min_max(self):
+        coords = list(range(200, 240))
+        assert _robust_tile_range(coords) == (200, 239)
+
+
+class TestGetTileCoverageAllOutlierBounds:
+    """Integration-level: get_tile_coverage_all() end to end with a synthetic
+    tile index reproducing the production scenario."""
+
+    @pytest.fixture
+    def mock_config(self):
+        config = MagicMock()
+        config.get = MagicMock(side_effect=lambda key, default=None: default)
+        return config
+
+    @pytest.fixture
+    def tracker(self, mock_config, tmp_path):
+        t = CoverageTracker(mock_config)
+        t.cache_dir = tmp_path
+        return t
+
+    def test_outlier_tile_does_not_balloon_bounds(self, tracker):
+        zoom = TILE_ZOOM
+        tiles = {
+            f"{4825 + i},{6160 + i % 5}": {"first_ridden": "2026-01-01", "activity_ids": [1]}
+            for i in range(30)
+        }
+        outlier_key = "100,9000"  # a tile from the other side of the world
+        tiles[outlier_key] = {"first_ridden": "2026-02-01", "activity_ids": [2]}
+
+        # Seed the persisted tile index directly rather than synthesizing a
+        # real cross-globe polyline — _build_or_update_tile_index() only
+        # re-decodes activities whose id isn't already in indexed_activity_ids.
+        tracker._tile_index_cache[zoom] = {
+            "indexed_activity_ids": {1, 2},
+            "tiles": tiles,
+        }
+        tracker._activities_cache = []
+
+        result = tracker.get_tile_coverage_all(zoom=zoom)
+
+        # The outlier tile is still reported as visited (real progress, still
+        # shown on the map)...
+        assert outlier_key in result.visited
+        assert result.visited_count == 31
+        # ...but no longer blows up the reported bounding box.
+        assert result.total_in_bounds < 1000
+        assert result.coverage_pct <= 100.0
+
+    def test_no_outliers_bounds_unaffected(self, tracker):
+        """A tight, outlier-free cluster gets the same bounds as before."""
+        zoom = TILE_ZOOM
+        tiles = {
+            f"{4825 + i},{6160 + i % 5}": {"first_ridden": "2026-01-01", "activity_ids": [1]}
+            for i in range(30)
+        }
+        tracker._tile_index_cache[zoom] = {
+            "indexed_activity_ids": {1},
+            "tiles": tiles,
+        }
+        tracker._activities_cache = []
+
+        result = tracker.get_tile_coverage_all(zoom=zoom)
+
+        assert result.visited_count == 30
+        assert result.total_in_bounds == 30 * 5  # 30 x-values x 5 y-values
 
 
 # ── CoverageTracker ─────────────────────────────────────────────
@@ -680,6 +790,67 @@ class TestRoadNetworkCacheEviction:
         tracker.invalidate_caches()
         remaining = list(tracker.cache_dir.glob("road_network*.graphml"))
         assert remaining == []
+
+
+# ── legacy coverage_tiles_*.json cleanup (#555) ────────────────────
+
+class TestLegacyCoverageTileSweep:
+    """The pre-tile-index-rewrite per-bbox cache (coverage_tiles_*.json) is
+    dead weight nothing writes anymore, but was previously only cleaned up
+    inside invalidate_caches() — which, on the production Pi, apparently
+    hadn't run since the rewrite: 38 files / 32MB were still sitting there
+    over five weeks later. _sweep_legacy_coverage_tile_files() now also runs
+    unconditionally at __init__ so a deployment self-heals on its next
+    restart rather than waiting on a resync that may never come."""
+
+    @pytest.fixture
+    def mock_config(self):
+        config = MagicMock()
+        config.get = MagicMock(side_effect=lambda key, default=None: default)
+        return config
+
+    @pytest.fixture
+    def tracker(self, mock_config, tmp_path):
+        t = CoverageTracker(mock_config)
+        t.cache_dir = tmp_path
+        return t
+
+    def test_sweep_removes_legacy_files(self, tracker):
+        for i in range(3):
+            (tracker.cache_dir / f"coverage_tiles_17_fake{i}.json").write_text("{}")
+        (tracker.cache_dir / "coverage_tiles_14_all.json").write_text("{}")
+
+        removed = tracker._sweep_legacy_coverage_tile_files()
+
+        assert removed == 4
+        assert list(tracker.cache_dir.glob("coverage_tiles_*.json")) == []
+
+    def test_sweep_leaves_current_caches_untouched(self, tracker):
+        (tracker.cache_dir / "coverage_tiles_17_fake.json").write_text("{}")
+        (tracker.cache_dir / "tile_index_14.json").write_text("{}")
+        (tracker.cache_dir / "water_abc123.json").write_text("{}")
+
+        tracker._sweep_legacy_coverage_tile_files()
+
+        remaining = {p.name for p in tracker.cache_dir.glob("*.json")}
+        assert remaining == {"tile_index_14.json", "water_abc123.json"}
+
+    def test_sweep_is_a_no_op_when_nothing_legacy_exists(self, tracker):
+        assert tracker._sweep_legacy_coverage_tile_files() == 0
+
+    def test_init_calls_the_sweep(self, mock_config):
+        """Verifies the __init__ wiring without touching the real filesystem
+        default (data/cache) — the sweep itself is exercised directly above."""
+        with patch.object(CoverageTracker, '_sweep_legacy_coverage_tile_files', return_value=0) as mock_sweep:
+            CoverageTracker(mock_config)
+        mock_sweep.assert_called_once()
+
+    def test_invalidate_caches_still_removes_legacy_files(self, tracker):
+        """Regression guard: invalidate_caches() used to inline this glob/unlink
+        loop directly; it now delegates to _sweep_legacy_coverage_tile_files()."""
+        (tracker.cache_dir / "coverage_tiles_17_fake.json").write_text("{}")
+        tracker.invalidate_caches()
+        assert list(tracker.cache_dir.glob("coverage_tiles_*.json")) == []
 
 
 # ── road_network / water_polygon cache TTL (#532) ─────────────────

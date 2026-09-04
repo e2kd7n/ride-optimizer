@@ -452,7 +452,7 @@ class TestRideScoring:
         rides = initialized_service._long_rides
         
         scored_rides = initialized_service._score_rides_for_day(
-            rides, target_date, None
+            rides, target_date, None, {}
         )
         
         assert len(scored_rides) == 2
@@ -474,7 +474,7 @@ class TestRideScoring:
         rides = initialized_service._long_rides
         
         scored_rides = initialized_service._score_rides_for_day(
-            rides, target_date, None
+            rides, target_date, None, {}
         )
         
         # Find the rides by their uses count
@@ -491,7 +491,7 @@ class TestRideScoring:
         location = (40.7128, -74.0060)
         
         scored_rides = initialized_service._score_rides_for_day(
-            rides, target_date, location
+            rides, target_date, location, {}
         )
         
         # All rides should have location scores
@@ -505,7 +505,7 @@ class TestRideScoring:
         rides = initialized_service._long_rides
         
         scored_rides = initialized_service._score_rides_for_day(
-            rides, target_date, None
+            rides, target_date, None, {}
         )
         
         scores = [r['score'] for r in scored_rides]
@@ -535,7 +535,7 @@ class TestWeatherIntegration:
             # Need Flask app context for WeatherSnapshot
             with app.app_context():
                 target_date = date.today()
-                weather = initialized_service._get_weather_for_ride(mock_long_ride, target_date)
+                weather = initialized_service._get_weather_for_ride(mock_long_ride, target_date, {})
 
                 assert weather is not None
                 assert 'temperature_c' in weather
@@ -573,6 +573,107 @@ class TestWeatherIntegration:
         """Test weather summary with no data."""
         summary = initialized_service._get_weather_summary(None)
         assert 'unavailable' in summary.lower()
+
+
+class TestWeatherCacheMemoization:
+    """#554: get_recommendations() was firing one external weather API call per
+    (ride, day) with no dedup — verified on production data to take 12+ minutes
+    and starve the gunicorn thread pool. These tests cover the per-call
+    weather_cache memoization fix."""
+
+    def test_rides_sharing_a_location_and_day_share_one_forecast_call(
+        self, planner_service, mock_hilly_ride, mock_flat_ride,
+    ):
+        """mock_hilly_ride and mock_flat_ride both start at (40.7128, -74.0060) —
+        scoring both for the same day must not fetch the forecast twice."""
+        planner_service.initialize([mock_hilly_ride, mock_flat_ride])
+        target_date = date.today()
+        weather_cache = {}
+
+        mock_forecast = [{
+            'date': str(target_date),
+            'temp_max_c': 22.0, 'temp_min_c': 15.0,
+            'precipitation_sum_mm': 0.0, 'precipitation_prob_max': 10,
+            'wind_speed_max_kph': 15.0, 'wind_direction_dominant_deg': 180,
+        }]
+        with patch.object(planner_service.weather_fetcher, 'get_daily_forecast',
+                           return_value=mock_forecast) as mock_fetch:
+            scored = planner_service._score_rides_for_day(
+                [mock_hilly_ride, mock_flat_ride], target_date, None, weather_cache,
+            )
+
+        assert len(scored) == 2
+        mock_fetch.assert_called_once()
+        # Both rides still got real weather data, just from the shared cache entry.
+        for ride in scored:
+            assert ride['weather']
+
+    def test_same_location_different_days_each_fetch_once(
+        self, planner_service, mock_hilly_ride, mock_flat_ride,
+    ):
+        """Same shared location, but two different target dates — each date is
+        its own cache entry, so this should be 2 calls, not 1 and not 4."""
+        planner_service.initialize([mock_hilly_ride, mock_flat_ride])
+        today = date.today()
+        weather_cache = {}
+
+        mock_forecast = [
+            {'date': str(today), 'temp_max_c': 22.0, 'temp_min_c': 15.0,
+             'precipitation_sum_mm': 0.0, 'precipitation_prob_max': 10,
+             'wind_speed_max_kph': 15.0, 'wind_direction_dominant_deg': 180},
+            {'date': str(today + timedelta(days=1)), 'temp_max_c': 20.0, 'temp_min_c': 12.0,
+             'precipitation_sum_mm': 0.0, 'precipitation_prob_max': 5,
+             'wind_speed_max_kph': 10.0, 'wind_direction_dominant_deg': 90},
+        ]
+        with patch.object(planner_service.weather_fetcher, 'get_daily_forecast',
+                           return_value=mock_forecast) as mock_fetch:
+            planner_service._score_rides_for_day(
+                [mock_hilly_ride, mock_flat_ride], today, None, weather_cache,
+            )
+            planner_service._score_rides_for_day(
+                [mock_hilly_ride, mock_flat_ride], today + timedelta(days=1), None, weather_cache,
+            )
+
+        assert mock_fetch.call_count == 2
+
+    def test_cache_is_scoped_to_a_single_call_not_shared_across_instances(
+        self, planner_service, mock_hilly_ride, app,
+    ):
+        """Passing a fresh {} (as get_recommendations does per-call) must not
+        leak memoized results from an earlier, unrelated call."""
+        planner_service.initialize([mock_hilly_ride])
+        target_date = date.today()
+        mock_forecast = [{
+            'date': str(target_date), 'temp_max_c': 22.0, 'temp_min_c': 15.0,
+            'precipitation_sum_mm': 0.0, 'precipitation_prob_max': 10,
+            'wind_speed_max_kph': 15.0, 'wind_direction_dominant_deg': 180,
+        }]
+        with app.app_context():
+            with patch.object(planner_service.weather_fetcher, 'get_daily_forecast',
+                               return_value=mock_forecast) as mock_fetch:
+                planner_service._get_weather_for_ride(mock_hilly_ride, target_date, {})
+                planner_service._get_weather_for_ride(mock_hilly_ride, target_date, {})
+
+        assert mock_fetch.call_count == 2, "a fresh cache dict per call must not reuse the prior call's entry"
+
+    def test_get_recommendations_builds_a_fresh_cache_per_call(
+        self, initialized_service,
+    ):
+        """End-to-end: get_recommendations() itself must not error out or share
+        state across two separate invocations (regression guard for the
+        weather_cache being threaded through correctly end-to-end)."""
+        mock_forecast = [{
+            'date': str(date.today()), 'temp_max_c': 22.0, 'temp_min_c': 15.0,
+            'precipitation_sum_mm': 0.0, 'precipitation_prob_max': 10,
+            'wind_speed_max_kph': 15.0, 'wind_direction_dominant_deg': 180,
+        }] * 7
+        with patch.object(initialized_service.weather_fetcher, 'get_daily_forecast',
+                           return_value=mock_forecast):
+            first = initialized_service.get_recommendations(forecast_days=3)
+            second = initialized_service.get_recommendations(forecast_days=3)
+
+        assert first['status'] == 'success'
+        assert second['status'] == 'success'
 
 
 class TestDistanceConversions:
