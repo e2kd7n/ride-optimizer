@@ -112,4 +112,4 @@ Two product-level rules were adopted alongside the visual identity (both now in 
 
 ## Rollout
 
-Not yet wired into `static/*.html` or `static/css/main.css` — those still carry the pre-rebrand indigo tokens. See `plans/v0.6.0/DESIGN_PRINCIPLES.md` §4 for the token mapping to apply when implementing.
+Migration is complete — `static/css/main.css` and every `static/*.html` page carry the Day/Night tokens above, including the dark-mode override block (`main.css:16-130`); no pre-rebrand indigo gradient remains. Treat `main.css` as the reference implementation of these tokens; `plans/v0.6.0/DESIGN_PRINCIPLES.md` §4 gives the flattened token reference for implementers.
