@@ -30,6 +30,16 @@ async function loadDashboard() {
 const WORKOUT_TYPE_BADGE_CLASS = 'badge-workout-type';
 
 /**
+ * Shared score-to-rating bucketing for the hero border and the route status
+ * icon, so the two decision-critical widgets on the "Today" screen agree on
+ * what a given score means (#546, SEM-2). Three buckets, not five — that's
+ * all the semantic tokens (--success/--warning/--danger) the app has.
+ */
+function scoreToRating(score) {
+    return score >= 70 ? 'good' : score >= 50 ? 'warn' : 'bad';
+}
+
+/**
  * Shared workout data cache — fetched once per dashboard load,
  * used by both the workout strip and the weather banner pill.
  */
@@ -656,7 +666,7 @@ function renderHeroCard(rec, isHero, secondaryRec) {
         ? `Compare both directions — return score: ${secondaryScore}`
         : 'Compare both directions';
 
-    const borderClass = score >= 70 ? 'hero-border-good' : score >= 50 ? 'hero-border-warn' : 'hero-border-bad';
+    const borderClass = `hero-border-${scoreToRating(score)}`;
     const windImpact = rec.wind_impact;
     const windBadge = windImpact
         ? `<span class="badge bg-light text-dark border ms-2" title="Wind impact on this route">
@@ -831,12 +841,11 @@ async function loadRouteStatus() {
         const esc = window.escapeHtml;
         function routeStatusRow(route) {
             const score = route.condition_score || 75;
-            let icon, colorClass;
-            if (score >= 80) { icon = 'bi-check-circle-fill'; colorClass = 'route-status-icon-great'; }
-            else if (score >= 65) { icon = 'bi-hand-thumbs-up-fill'; colorClass = 'route-status-icon-good'; }
-            else if (score >= 50) { icon = 'bi-exclamation-triangle-fill'; colorClass = 'route-status-icon-fair'; }
-            else if (score >= 35) { icon = 'bi-hand-thumbs-down-fill'; colorClass = 'route-status-icon-poor'; }
-            else { icon = 'bi-x-circle-fill'; colorClass = 'route-status-icon-bad'; }
+            const rating = scoreToRating(score);
+            const colorClass = `route-status-icon-${rating}`;
+            const icon = rating === 'good' ? 'bi-check-circle-fill'
+                : rating === 'warn' ? 'bi-exclamation-triangle-fill'
+                : 'bi-x-circle-fill';
             const name = esc((route.name || 'Route').slice(0, 22));
             return `
                 <div class="route-status-row d-flex align-items-center gap-2 py-1">
