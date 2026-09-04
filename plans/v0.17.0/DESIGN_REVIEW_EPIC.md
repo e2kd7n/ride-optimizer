@@ -2,8 +2,8 @@
 
 **Version:** v0.17.0
 **Created:** 2026-07-04
-**Updated:** 2026-07-06 (final staff engineering review: re-scoped #362, resolved #374, shipped version-string fix, replaced implementation plan with PR/subagent execution plan)
-**Status:** Planned for implementation
+**Updated:** 2026-07-06 (final staff engineering review: re-scoped #362, resolved #374, shipped version-string fix, replaced implementation plan with PR/subagent execution plan); doc-status annotation added 2026-09-03 (#547) — epic and all 20 child issues #357–#376 confirmed closed, epic itself closed 2026-07-06
+**Status:** Closed
 **Epic Issue:** [#352](https://github.com/e2kd7n/ride-optimizer/issues/352)
 **Consolidated Findings:** [DESIGN_REVIEW_FINDINGS.md](./DESIGN_REVIEW_FINDINGS.md)
 
@@ -217,8 +217,8 @@ design verdicts from the three reviewers.
 - [x] **20 implementation issues created** → #357–#376 (all in v0.17.0 milestone)
 - [x] **#374 resolved directly** (help modal now degrades gracefully via `onerror` fallback — no longer blocked on tutorial asset creation)
 - [x] **Stale `v0.14.0` version strings and "What's New" toast fixed directly** across all 8 templates (part of #376, pulled forward — see `static/index.html`, footers app-wide)
-- [ ] Remaining 18 child implementation issues resolved via PR plan (A–I) above and closed
-- [ ] Epic #352 closed with summary comment
+- [x] Remaining 18 child implementation issues resolved via PR plan (A–I) above and closed
+- [x] Epic #352 closed with summary comment (2026-07-06)
 
 ---
 
@@ -228,8 +228,8 @@ design verdicts from the three reviewers.
 - [x] Findings consolidated into a single document
 - [x] Design guidelines updated to reflect new decisions
 - [x] All actionable findings have a corresponding GitHub issue in v0.17.0
-- [ ] All child issues resolved and closed (#357–#376)
-- [ ] This epic closed with a summary comment linking the findings document
+- [x] All child issues resolved and closed (#357–#376)
+- [x] This epic closed with a summary comment linking the findings document
 
 ---
 

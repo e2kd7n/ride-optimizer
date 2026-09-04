@@ -440,14 +440,13 @@ safety_score = (frequency_score * 0.4 + road_score * 0.3 + elevation_score * 0.3
 composite = (
     time_score * weights['time'] +
     distance_score * weights['distance'] +
-    safety_score * weights['safety']
+    safety_score * weights['safety'] +
+    weather_score * weights['weather']
 )
 ```
 
 ### Default Weights
-- Time: 0.4 (40%)
-- Distance: 0.3 (30%)
-- Safety: 0.3 (30%)
+Source of truth: `config/config.yaml` `optimization.weights` — see the full config reference below (§ Configuration System) rather than duplicating values here, they will drift again. As of this writing: Time 0.25, Distance 0.10, Safety 0.35, Weather 0.30.
 
 ---
 
@@ -638,18 +637,19 @@ route_analysis:
   outlier_tolerance_percentile: 95.0  # Ignore worst 5% of point deviations
 
 route_naming:
-  sampling_density: 10              # Number of points to sample along route
-  min_segment_length_pct: 10        # Minimum % to be considered significant segment
-  show_full_path: true              # Show start → middle → end format
-  max_segments_in_name: 3           # Maximum segments to include in name
-  enable_segment_naming: true       # Feature flag to enable/disable segment-based naming
+  sampling_density: 10               # Number of points to sample along route
+  commute_sampling_density: 20       # Higher density for commute routes (one-time geocoding cost)
+  min_segment_length_pct: 10         # Minimum % to be considered significant segment
+  show_full_path: true               # Show start → middle → end format
+  max_segments_in_name: 3            # Maximum segments to include in name
+  enable_segment_naming: true        # Feature flag to enable/disable segment-based naming
 
 optimization:
   weights:
-    time: 0.35      # Speed and duration
-    distance: 0.25  # Route length
-    safety: 0.25    # Familiarity and road conditions
-    weather: 0.15   # Wind impact on cycling efficiency
+    time: 0.25      # Speed and duration
+    distance: 0.10  # Route length
+    safety: 0.35    # Familiarity and road conditions
+    weather: 0.30   # Wind impact on cycling efficiency
   weather_enabled: true  # Enable real-time weather analysis
 
 visualization:
@@ -1220,11 +1220,11 @@ class LongRideAnalyzer:
     # Classification & Grouping
     def classify_activities(self, commute_activities: List[Activity]) -> Tuple[List[Activity], List[Activity]]
     def group_rides_by_name(self, long_ride_activities: List[Activity]) -> Tuple[Dict[str, List[Activity]], List[Activity]]
-    def consolidate_similar_named_groups(self, name_groups: Dict[str, List[Activity]], similarity_threshold: float = 0.20) -> Dict[str, List[Activity]]
+    def consolidate_similar_named_groups(self, name_groups: Dict[str, List[Activity]], similarity_threshold: float = 2.0) -> Dict[str, List[Activity]]
     def consolidate_named_groups(self, name_groups: Dict[str, List[Activity]]) -> List[LongRide]
     
     # Route Matching (with Parallel Processing)
-    def match_unnamed_rides_to_groups(self, unnamed_rides: List[Activity], named_groups: Dict[str, List[Activity]], similarity_threshold: float = 0.15, use_parallel: bool = True, max_workers: int = None) -> Tuple[Dict[str, List[Activity]], List[Activity]]
+    def match_unnamed_rides_to_groups(self, unnamed_rides: List[Activity], named_groups: Dict[str, List[Activity]], similarity_threshold: float = 2.0, use_parallel: bool = True, max_workers: int = None) -> Tuple[Dict[str, List[Activity]], List[Activity]]
     def generate_fallback_names(self, unnamed_rides: List[Activity]) -> Dict[str, List[Activity]]
     
     # Extraction & Discovery
@@ -1290,17 +1290,14 @@ Wind analysis with strong preference for tailwinds on return:
 
 ```yaml
 long_rides:
-  min_distance_km: 15  # Minimum distance for long rides
-  similarity_threshold: 0.15  # Route matching threshold (km)
-  consolidation_threshold: 0.20  # Group consolidation threshold (km)
-  search_radius_km: 5.0  # Location search radius
-  use_parallel: true  # Enable parallel processing
-  max_workers: null  # Auto-detect (2-6 workers)
-
-route_naming:
-  sample_points: 10  # Points along route for naming
-  max_name_length: 50  # Maximum name length
+  min_distance_km: 15  # Minimum distance to be considered a long ride
+  similarity_threshold: 1.2  # Max combined Fréchet+Hausdorff distance (km) for route matching
+  search_radius_km: 5  # Radius to search for rides near clicked location
+  default_target_duration_hours: 2.0  # Default target ride duration
+  default_target_distance_km: 40  # Default target ride distance
 ```
+
+`consolidate_similar_named_groups()` and `match_unnamed_rides_to_groups()` (§ above) default `similarity_threshold` to `2.0` in code when not passed explicitly — the value above is what the app actually configures via `config.yaml`. There is no separate `consolidation_threshold`, `use_parallel`, or `max_workers` config key; `use_parallel`/`max_workers` are call-site Python arguments, not config-driven. Route-naming density is controlled by the `route_naming` block earlier in this section (`sampling_density`, not `sample_points`) — see § Configuration System above; don't duplicate it here.
 
 ### Performance Characteristics
 

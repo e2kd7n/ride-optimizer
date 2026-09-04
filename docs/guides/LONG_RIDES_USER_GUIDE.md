@@ -79,7 +79,13 @@ The system automatically filters out virtual/indoor rides using multiple detecti
 
 ## How to Access
 
-1. **Generate Report:** Run the analyzer with your Strava data
+> **Status:** The web app's `PlannerService` backend (long-ride recommendations, nearby-rides
+> search, ride analysis) is fully implemented and API-reachable, but no page in the live web app
+> currently calls it — see `CLAUDE.md` "Unexposed Backend Capabilities". The steps below describe
+> the older, now-deprecated CLI path (`main.py` → `legacy/report_generator.py`'s static HTML
+> report), not a feature reachable from the current web app's navigation.
+
+1. **Generate Report:** Run the deprecated CLI analyzer (`main.py`) with your Strava data — requires the `weasyprint`/`qrcode` extras, not installed by default
 2. **Open HTML Report:** Open the generated `report.html` file
 3. **Navigate to Long Rides Tab:** Click the "Long Rides" tab in the report
 

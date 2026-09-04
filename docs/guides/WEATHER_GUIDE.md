@@ -66,10 +66,10 @@ Edit `config/config.yaml`:
 optimization:
   weather_enabled: true  # Set to false to disable weather analysis
   weights:
-    time: 0.35      # 35% weight on speed
-    distance: 0.25  # 25% weight on distance
-    safety: 0.25    # 25% weight on safety
-    weather: 0.15   # 15% weight on weather conditions
+    time: 0.25      # 25% weight on speed
+    distance: 0.10  # 10% weight on distance
+    safety: 0.35    # 35% weight on safety
+    weather: 0.30   # 30% weight on weather conditions
 ```
 
 ### Adjust Weather Weight
