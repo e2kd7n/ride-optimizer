@@ -75,7 +75,7 @@ A server-side route search endpoint exists but the frontend ignores it — the r
 
 ## Visual Design
 
-**Brand identity:** `docs/designs/FAIR_WEATHER_BRAND_BOOK.md` (adopted 2026-07-05) — logo mark, Day/Night color tokens, type, and reference screens for the current "Fair Weather" identity. `docs/designs/BRAND_CONCEPTS_COMPARISON.html` holds the two alternate directions that were reviewed and not chosen. **Design rules:** `plans/v0.6.0/DESIGN_PRINCIPLES.md` (v2.2) is the living guideline doc — mobile-first, visual hierarchy, color usage, map/controls layout, etc.
+**Brand identity:** `docs/designs/FAIR_WEATHER_BRAND_BOOK.md` (adopted 2026-07-05) — logo mark, Day/Night color tokens, type, and reference screens for the current "Fair Weather" identity. `docs/designs/BRAND_CONCEPTS_COMPARISON.html` holds the two alternate directions that were reviewed and not chosen. **Design rules:** `plans/v0.6.0/DESIGN_PRINCIPLES.md` is the living guideline doc — mobile-first, visual hierarchy, color usage, map/controls layout, etc. (see its own Version History for the current revision; don't pin a version number here, it drifts).
 
 `static/css/main.css` and all `static/*.html` pages have been migrated to the Fair Weather Day/Night tokens (colors, navbar, cards, buttons, focus rings) — no pre-rebrand indigo gradient (`#667eea`/`#764ba2`) remains. When touching UI, check the brand book before introducing a new color, icon, or shape rather than reaching for a one-off hardcoded value.
 
