@@ -1,7 +1,7 @@
 # Design Principles & Guidelines
 
-**Version:** 2.3
-**Last Updated:** 2026-07-05
+**Version:** 2.4
+**Last Updated:** 2026-09-03
 **Status:** Active
 
 ---
@@ -96,10 +96,14 @@ The app's visual identity is **Fair Weather** — built around the one decision 
 - **Secondary metrics demoted:** Metrics that are social signals (popularity/uses), administrative counts (pipeline health), or derived redundancies (near-zero percentages) must not appear in the same visual tier (same CSS class, same card slot, same grid cell) as primary decision metrics (distance, duration, score).
 
 > **Field note (v0.17.0 Design Review):** Findings PLACE-DASH-2, PLACE-ROUTES-2, and PLACE-DETAIL-2 identified three pages where the map column received more Bootstrap columns than the decision/data column. Finding ID-RDTL-2 documented the "Uses" popularity metric sharing equal visual weight with Distance, Duration, and Elevation in the Route Detail primary grid. CP-4 (Information Density) documented this secondary-at-primary-weight pattern recurring across Dashboard, Reports, Route Detail, and Explore.
+>
+> **Resolved (2026-09-03):** PLACE-DASH-2 is fixed — `templates/index.html:92,131` now gives the hero decision card and the map/panels column equal weight (`col-lg-6`/`col-lg-6`). PLACE-DETAIL-2 is also fixed; see the v2.3 correction below, which is itself now resolved.
 
 > **Field note (v2.2 — Fair Weather):** The map + controls side-by-side rule formalizes a recommendation already made ad hoc in #367 (Explore: "two-column layout on desktop: generation controls left `col-lg-4` / map right `col-lg-8`"). It also applies to #365 (Routes Library column ratio).
 >
 > **Correction (v2.3):** An earlier version of this note called Route Detail's existing `col-lg-5`/`col-lg-7` split (`route-detail.html`) "the reference implementation" for this rule. That was wrong: `col-lg-5` for the stats column is below the `col-lg-6` minimum the ratio rule above requires, and finding PLACE-DETAIL-2 (v0.17.0 Design Review, field note above) already flagged this exact split as an instance of the map column outweighing the data column — the two field notes contradicted each other. Route Detail *does* correctly follow the side-by-side placement rule (stats beside the map, not stacked, on `lg`+); it does *not* comply with the column-ratio rule. Treat the placement as the reference example and the ratio as a known, not-yet-corrected deviation — don't cite the split as compliant with both rules.
+>
+> **Resolved (2026-09-03):** The column-ratio deviation above is fixed — `static/js/route-detail.js:474,534` now renders `col-lg-7` for the stats column and `col-lg-5` for the map, satisfying the `col-lg-6` minimum. Route Detail now complies with both the placement rule and the ratio rule.
 
 **Rationale:** Users should immediately understand what's most important.
 
@@ -295,19 +299,16 @@ The app's visual identity is **Fair Weather** — built around the one decision 
 **Guidelines:**
 
 **Buttons:**
-- Primary action: Solid color (`#667eea`)
+- Primary action: solid fill, fully rounded — see `.btn-primary` in the Common Patterns Library below for the current color token; don't hardcode a hex here, it will drift from the CSS
 - Secondary action: Outline style
-- Destructive action: Red (`#dc3545`) with `btn-danger` or `btn-outline-danger` styling; must be accompanied by a confirmation dialog (`confirm()` or a Bootstrap confirmation popover) before executing irreversible operations
+- Destructive action: `btn-danger` or `btn-outline-danger` styling using the semantic danger token (§4 Color Palette); must be accompanied by a confirmation dialog (`confirm()` or a Bootstrap confirmation popover) before executing irreversible operations
 - Disabled: 50% opacity, no pointer events
 - **Unit system applied globally:** Any label, static string, slider range, or stat header that displays a measurement (distance, temperature, speed) must read the user's unit preference from `window.getUnitSystem()` / `window.getDistanceUnit()` on page load. Hard-coded unit strings (e.g. `"Miles"`, `"°F"`, `"km"` in HTML) are not permitted.
 
 > **Field note (v0.17.0 Design Review):** Finding DISC-EXPLORE-5 documented the "Clear Cache" destructive action on Explore using identical button styling to the safe "Load Coverage" action, with no confirmation. Findings DISC-SETTINGS-3, DISC-REPORTS-4, and DISC-EXPLORE-3 documented three separate pages where unit-system preference was not applied to measurement labels, each independently found by the Discoverability reviewer.
 
 **Cards:**
-- Border radius: 10px
-- Shadow: `0 2px 4px rgba(0,0,0,0.1)`
-- Padding: 20px
-- Margin bottom: 20px
+- Border radius, shadow, padding, and margin — see `.card` in the Common Patterns Library below for current values; don't duplicate them here, they will drift from the CSS
 
 **Forms:**
 - Label above input
@@ -461,6 +462,7 @@ Before merging UI/UX changes:
 
 ## Version History
 
+- **v2.4** (2026-09-03): Doc-drift cleanup (#547). §10 Buttons/Cards bullet lists no longer duplicate hardcoded values (`#667eea`, `#dc3545`, `10px` radius, mismatched shadow) that had drifted from the Common Patterns Library CSS — they now point at the CSS instead. Added "Resolved" annotations to the v0.17.0 field notes for PLACE-DASH-2 (Dashboard hero row, `templates/index.html:92,131`) and the v2.3 Route Detail column-ratio correction (`static/js/route-detail.js:474,534`), both confirmed fixed in code.
 - **v2.3** (2026-07-05): Corrected an internal contradiction in §3 — the v2.2 field note called Route Detail's `col-lg-5`/`col-lg-7` split "the reference implementation" for the map+controls side-by-side rule, but the v0.17.0 field note directly above it (finding PLACE-DETAIL-2) already flagged that same split as violating the column-ratio rule's `col-lg-6` minimum. Route Detail remains the reference example for side-by-side *placement* only; the ratio itself is a known, uncorrected deviation.
 - **v2.2** (2026-07-05): Fair Weather brand identity adopted — new Brand Identity section (mark, wordmark, type, tagline); Primary/Semantic Colors in §4 replaced with Day/Night cobalt/coral tokens (full spec: [`docs/designs/FAIR_WEATHER_BRAND_BOOK.md`](../../docs/designs/FAIR_WEATHER_BRAND_BOOK.md)); §2 new guideline that weather cards show wind and precipitation alongside temperature whenever meaningful; §3 new guideline that map controls/lists sit beside the map on desktop (`lg`+), not stacked above or below it, formalizing prior ad hoc recommendations in #365 and #367; Common Patterns Library CSS snippets updated to the new tokens and 999px/16px shape language.
 - **v2.1** (2026-07-04): Field notes and extended guidelines added from v0.17.0 Design Review (Epic #352). New sub-guidelines added to §2 (time-urgency ordering, teaser before collapse), §3 (card column ratios, secondary metrics demoted), §7 (workflow sequencing, jargon-free first use, interactive elements visually distinct, post-action navigation hints), §10 (destructive action confirmation, unit system applied globally).

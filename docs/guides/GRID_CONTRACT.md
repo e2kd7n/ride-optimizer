@@ -2,7 +2,7 @@
 
 **Scope:** All pages in the PWA (`index.html`, `routes.html`, `commute.html`, `settings.html`)  
 **Authority:** This document supersedes the spacing scale in `UIUX_REDESIGN_STRATEGY.md` Appendix B, which incorrectly lists 12px as a valid token value.  
-**Last Updated:** 2026-05-21
+**Last Updated:** 2026-09-03
 
 ---
 
@@ -259,14 +259,9 @@ The `!important` is required to override Bootstrap's `.d-md-none` utility. This 
 
 ## Card anatomy
 
-Every card in the app shares these spatial properties:
+This Grid Contract owns card *spacing* only — padding and margin, on the same 8px scale as everything else on this page. Card *shape* (border-radius, shadow) is a brand concern, not a grid one; the Fair Weather Brand Book (`docs/designs/FAIR_WEATHER_BRAND_BOOK.md`) and its implementation in `static/css/main.css` are the sole source of truth for those values — don't duplicate them here, they will drift.
 
 ```css
-.card {
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-}
-
 .card-body {
     padding: var(--space-3);   /* 16px all sides */
 }
