@@ -51,7 +51,14 @@ class TileCoverage:
     def coverage_pct(self) -> float:
         if self.total_in_bounds == 0:
             return 0.0
-        return round(self.visited_count / self.total_in_bounds * 100, 1)
+        # get_tile_coverage_all() (#556) trims outlier tiles out of `bounds`/
+        # `total_in_bounds` while keeping the full ridden-tile set in `visited`
+        # (so a genuinely-ridden far-away tile still shows up on the map) — so
+        # visited_count can, in principle, include a handful of tiles outside
+        # the reported bounds. Cap at 100% rather than surface a nonsensical
+        # >100% "coverage" figure; the trimmed denominator is deliberately a
+        # "core riding area" estimate, not a strict superset guarantee.
+        return round(min(100.0, self.visited_count / self.total_in_bounds * 100), 1)
 
     def to_dict(self) -> dict:
         return {
@@ -70,6 +77,45 @@ def _bbox_cache_key(bounds: Tuple[float, float, float, float]) -> str:
     rounded = tuple(round(v, 5) for v in bounds)
     raw = ",".join(str(v) for v in rounded)
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
+
+
+# Tukey's-fences trimming for _robust_tile_range (#556): a single activity
+# geographically far from a rider's normal riding area (a trip, or a
+# corrupted/erroneous GPS point) otherwise balloons get_tile_coverage_all()'s
+# reported bounds to span the outlier, driving total_in_bounds into the tens
+# of millions and coverage_pct to a permanent ~0% — verified on production
+# data (5,849 visited tiles, but a bbox spanning nearly the whole globe).
+_OUTLIER_IQR_MULTIPLIER = 3
+# Below this many points, percentile statistics are too noisy to trust —
+# just use the raw range (matches pre-fix behavior for small datasets).
+_OUTLIER_MIN_SAMPLES = 20
+
+
+def _robust_tile_range(coords: List[int]) -> Tuple[int, int]:
+    """(min, max) of `coords`, excluding extreme outliers via Tukey's fences.
+
+    Applied independently per axis (x, then y) since the bounding box this
+    feeds is inherently an axis-aligned rectangle — an outlier tile's x and y
+    don't need to be jointly extreme to distort that rectangle on one side.
+    Falls back to the raw min/max when there are too few points to trust
+    percentile statistics, or when the interquartile range is zero (a tight,
+    degenerate cluster with no meaningful spread to trim).
+    """
+    if len(coords) < _OUTLIER_MIN_SAMPLES:
+        return min(coords), max(coords)
+
+    arr = np.asarray(coords)
+    q1, q3 = np.percentile(arr, [25, 75])
+    iqr = q3 - q1
+    if iqr == 0:
+        return int(arr.min()), int(arr.max())
+
+    lower = q1 - _OUTLIER_IQR_MULTIPLIER * iqr
+    upper = q3 + _OUTLIER_IQR_MULTIPLIER * iqr
+    filtered = arr[(arr >= lower) & (arr <= upper)]
+    if filtered.size == 0:
+        return int(arr.min()), int(arr.max())
+    return int(filtered.min()), int(filtered.max())
 
 
 def lat_lon_to_tile(lat: float, lon: float, zoom: int = TILE_ZOOM) -> Tuple[int, int]:
@@ -247,6 +293,9 @@ class CoverageTracker:
         self.zoom = config.get("exploration.tile_zoom_level", TILE_ZOOM)
         self.cache_dir = Path("data/cache")
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        removed = self._sweep_legacy_coverage_tile_files()
+        if removed:
+            logger.info("Removed %d legacy coverage_tiles_*.json cache file(s) (#555)", removed)
         self._activities_cache: Optional[List[dict]] = None
         # In-memory copy of each zoom's tile index (see _build_or_update_tile_index),
         # keyed by zoom. Avoids re-reading/re-parsing the on-disk index on every
@@ -487,8 +536,9 @@ class CoverageTracker:
         if visited:
             xs = [int(k.split(",")[0]) for k in visited]
             ys = [int(k.split(",")[1]) for k in visited]
-            min_tx, max_tx = min(xs), max(xs)
-            min_ty, max_ty = min(ys), max(ys)
+            # Robust to outlier tiles (#556) — see _robust_tile_range.
+            min_tx, max_tx = _robust_tile_range(xs)
+            min_ty, max_ty = _robust_tile_range(ys)
             south, west, _, _ = tile_to_bounds(min_tx, max_ty, zoom)
             _, _, north, east = tile_to_bounds(max_tx, min_ty, zoom)
             bounds = (south, west, north, east)
@@ -781,6 +831,30 @@ class CoverageTracker:
             except OSError:
                 pass
 
+    def _sweep_legacy_coverage_tile_files(self) -> int:
+        """Delete leftover coverage_tiles_*.json files from the per-bbox
+        caching scheme that predates the tile-index rewrite (#555).
+
+        Nothing in the current codebase writes these anymore — coverage is
+        served from the persisted, incrementally-updated tile_index_{zoom}.json
+        instead. The only previous cleanup was inside invalidate_caches(),
+        which only runs on a manual resync; in production that apparently
+        never happened — 38 of these files (32MB) were still sitting on the
+        Pi over five weeks after the rewrite that made them obsolete. Called
+        unconditionally at __init__ so a leftover deployment self-heals on
+        its next restart instead of waiting on a resync that may never come.
+
+        Returns the number of files removed.
+        """
+        removed = 0
+        for p in self.cache_dir.glob("coverage_tiles_*.json"):
+            try:
+                p.unlink()
+                removed += 1
+            except OSError:
+                pass
+        return removed
+
     def invalidate_caches(self) -> None:
         """Remove all coverage caches (call after new activities are fetched)."""
         self._activities_cache = None
@@ -791,13 +865,7 @@ class CoverageTracker:
                 p.unlink()
             except OSError:
                 pass
-        # Legacy per-bbox cache filenames from before the tile-index rewrite —
-        # harmless if left behind, but clean them up if invalidate is called.
-        for p in self.cache_dir.glob("coverage_tiles_*.json"):
-            try:
-                p.unlink()
-            except OSError:
-                pass
+        self._sweep_legacy_coverage_tile_files()
         for p in self.cache_dir.glob("road_network_*.graphml"):
             try:
                 p.unlink()

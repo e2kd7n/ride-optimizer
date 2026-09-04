@@ -24,7 +24,8 @@ class WeatherFetcher:
     """Fetches weather data from Open-Meteo API (free, no API key needed)."""
     
     def __init__(self, cache_radius_km: float = 2.0, cache_duration_hours: float = 1.5,
-                 cache_file: Optional[str] = None, max_cache_entries: int = 500):
+                 cache_file: Optional[str] = None, max_cache_entries: int = 500,
+                 forecast_cache_duration_hours: float = 3.0, forecast_cache_file: Optional[str] = None):
         """
         Initialize weather fetcher.
 
@@ -35,13 +36,19 @@ class WeatherFetcher:
             max_cache_entries: Hard cap on cache size. Once exceeded, the oldest entries are
                 evicted regardless of TTL, bounding both memory use and the cost of the linear
                 scan _find_cached_weather does on every lookup (default 500).
+            forecast_cache_duration_hours: How long to cache daily-forecast data in hours
+                (default 3.0 — longer than cache_duration_hours since a multi-day forecast
+                doesn't need to be as fresh as "current conditions").
+            forecast_cache_file: Path to the daily-forecast cache file (default: alongside
+                cache_file, named daily_forecast_cache.json).
         """
         self.base_url = "https://api.open-meteo.com/v1/forecast"
         self.session = requests.Session()
         self.cache_radius_km = cache_radius_km
         self.cache_duration_hours = cache_duration_hours
         self.max_cache_entries = max_cache_entries
-        
+        self.forecast_cache_duration_hours = forecast_cache_duration_hours
+
         # Set up cache file path
         if cache_file is None:
             cache_dir = Path("cache")
@@ -50,10 +57,22 @@ class WeatherFetcher:
         else:
             self.cache_file = Path(cache_file)
             self.cache_file.parent.mkdir(parents=True, exist_ok=True)
-        
+
+        # Default alongside cache_file (not a fresh Path("cache")) so callers that
+        # isolate cache_file (e.g. tests pointing it at tmp_path) get an isolated
+        # forecast cache too, instead of silently writing into the real cache dir.
+        if forecast_cache_file is None:
+            self.forecast_cache_file = self.cache_file.parent / "daily_forecast_cache.json"
+        else:
+            self.forecast_cache_file = Path(forecast_cache_file)
+            self.forecast_cache_file.parent.mkdir(parents=True, exist_ok=True)
+
         # Load cache from file
         self.cache = self._load_cache()
         logger.info(f"Loaded {len(self.cache)} weather cache entries from {self.cache_file}")
+
+        self.forecast_cache = self._load_forecast_cache()
+        logger.info(f"Loaded {len(self.forecast_cache)} daily-forecast cache entries from {self.forecast_cache_file}")
     
     def _load_cache(self) -> Dict:
         """
@@ -159,9 +178,107 @@ class WeatherFetcher:
                            f"for ({lat:.4f}, {lon:.4f}) - {distance_km:.2f}km away, "
                            f"{cache_age_min:.1f} min old")
                 return cache_entry['data']
-        
+
         return None
-    
+
+    def _load_forecast_cache(self) -> Dict:
+        """Load the daily-forecast cache from JSON file (parallel to _load_cache)."""
+        if not self.forecast_cache_file.exists():
+            logger.debug(f"No forecast cache file found at {self.forecast_cache_file}")
+            return {}
+
+        try:
+            with open(self.forecast_cache_file, 'r') as f:
+                cache_data = json.load(f)
+
+            cache = {}
+            for key_str, entry in cache_data.items():
+                lat, lon = map(float, key_str.split(','))
+                cache[(lat, lon)] = {
+                    'data': entry['data'],
+                    'days': entry.get('days', len(entry['data'])),
+                    'timestamp': datetime.fromisoformat(entry['timestamp']),
+                }
+
+            logger.debug(f"Loaded {len(cache)} entries from forecast cache file")
+            return cache
+
+        except (json.JSONDecodeError, KeyError, ValueError) as e:
+            logger.warning(f"Error loading forecast cache file: {e}. Starting with empty cache.")
+            return {}
+
+    def _save_forecast_cache(self):
+        """Save the daily-forecast cache to JSON file (parallel to _save_cache)."""
+        try:
+            cache_data = {}
+            for (lat, lon), entry in self.forecast_cache.items():
+                key_str = f"{lat},{lon}"
+                cache_data[key_str] = {
+                    'data': entry['data'],
+                    'days': entry['days'],
+                    'timestamp': entry['timestamp'].isoformat(),
+                }
+
+            with open(self.forecast_cache_file, 'w') as f:
+                json.dump(cache_data, f, indent=2)
+            secure_chmod(self.forecast_cache_file)
+
+            logger.debug(f"Saved {len(cache_data)} entries to forecast cache file")
+
+        except Exception as e:
+            logger.error(f"Error saving forecast cache file: {e}")
+
+    def _evict_oldest_forecast_if_needed(self) -> None:
+        """Bound forecast cache size regardless of TTL (parallel to _evict_oldest_if_needed)."""
+        overflow = len(self.forecast_cache) - self.max_cache_entries
+        if overflow <= 0:
+            return
+        oldest_keys = sorted(self.forecast_cache.keys(), key=lambda k: self.forecast_cache[k]['timestamp'])[:overflow]
+        for key in oldest_keys:
+            del self.forecast_cache[key]
+        logger.debug(f"Evicted {overflow} oldest forecast cache entries "
+                     f"(cache size capped at {self.max_cache_entries})")
+
+    def _find_cached_forecast(self, lat: float, lon: float, days: int) -> Optional[List[Dict]]:
+        """
+        Find a cached daily forecast covering at least `days` days for a nearby
+        location (if not expired). A forecast cached with more days than requested
+        is trimmed to the requested length rather than treated as a miss.
+
+        Args:
+            lat: Latitude
+            lon: Longitude
+            days: Number of forecast days the caller needs
+
+        Returns:
+            Cached forecast data (trimmed to `days` entries) or None if not found/expired
+        """
+        now = datetime.now()
+
+        for cache_key, cache_entry in list(self.forecast_cache.items()):
+            cache_lat, cache_lon = cache_key
+
+            cache_age = now - cache_entry['timestamp']
+            if cache_age > timedelta(hours=self.forecast_cache_duration_hours):
+                del self.forecast_cache[cache_key]
+                logger.debug(f"Removed expired forecast cache for ({cache_lat:.4f}, {cache_lon:.4f}) "
+                           f"- age: {cache_age.total_seconds()/3600:.1f} hours")
+                continue
+
+            if cache_entry['days'] < days:
+                # Cached forecast doesn't cover enough days for this request.
+                continue
+
+            distance_km = geodesic((lat, lon), (cache_lat, cache_lon)).km
+            if distance_km <= self.cache_radius_km:
+                cache_age_min = cache_age.total_seconds() / 60
+                logger.debug(f"Using cached forecast from ({cache_lat:.4f}, {cache_lon:.4f}) "
+                           f"for ({lat:.4f}, {lon:.4f}) - {distance_km:.2f}km away, "
+                           f"{cache_age_min:.1f} min old")
+                return cache_entry['data'][:days]
+
+        return None
+
     def get_current_conditions(self, lat: float, lon: float, save_cache: bool = True) -> Optional[Dict]:
         """
         Get current weather conditions for a location (with caching).
@@ -290,18 +407,34 @@ class WeatherFetcher:
             logger.error(f"Error fetching hourly forecast: {e}")
             return None
     
-    def get_daily_forecast(self, lat: float, lon: float, days: int = 7) -> Optional[List[Dict]]:
+    def get_daily_forecast(self, lat: float, lon: float, days: int = 7,
+                            save_cache: bool = True) -> Optional[List[Dict]]:
         """
-        Get daily weather forecast for up to 7 days.
-        
+        Get daily weather forecast for up to 7 days (cached — see _find_cached_forecast).
+
+        Unlike get_current_conditions, this previously had no caching at all: every
+        call — regardless of caller (PlannerService scoring dozens of rides per
+        forecast day, /api/weather/forecast, forecast_generator.py) — hit the
+        Open-Meteo API fresh. That's what let a single planner recommendations
+        request fire hundreds of redundant identical calls (#554).
+
         Args:
             lat: Latitude
             lon: Longitude
             days: Number of days to forecast (default 7, max 7)
-            
+            save_cache: Whether to persist the cache to disk immediately after this
+                fetch. Callers making several fetches back-to-back should pass False
+                and call _save_forecast_cache() once at the end instead.
+
         Returns:
             List of daily forecasts or None if unavailable
         """
+        days = min(days, 7)
+
+        cached = self._find_cached_forecast(lat, lon, days)
+        if cached is not None:
+            return cached
+
         try:
             params = {
                 'latitude': lat,
@@ -310,20 +443,20 @@ class WeatherFetcher:
                         'precipitation_probability_max,wind_speed_10m_max,wind_direction_10m_dominant',
                 'wind_speed_unit': 'kmh',
                 'timezone': 'auto',
-                'forecast_days': min(days, 7)
+                'forecast_days': days
             }
-            
+
             response = self.session.get(self.base_url, params=params, timeout=10)
             response.raise_for_status()
-            
+
             data = response.json()
-            
+
             if 'daily' not in data:
                 return None
-            
+
             daily = data['daily']
             forecasts = []
-            
+
             for i in range(min(days, len(daily['time']))):
                 forecast = {
                     'date': daily['time'][i],
@@ -335,10 +468,20 @@ class WeatherFetcher:
                     'wind_direction_dominant_deg': daily['wind_direction_10m_dominant'][i]
                 }
                 forecasts.append(forecast)
-            
+
             logger.info(f"Fetched {len(forecasts)}-day forecast for ({lat:.4f}, {lon:.4f})")
+
+            self.forecast_cache[(lat, lon)] = {
+                'data': forecasts,
+                'days': len(forecasts),
+                'timestamp': datetime.now(),
+            }
+            self._evict_oldest_forecast_if_needed()
+            if save_cache:
+                self._save_forecast_cache()
+
             return forecasts
-            
+
         except requests.exceptions.RequestException as e:
             logger.error(f"Error fetching daily forecast: {e}")
             return None
