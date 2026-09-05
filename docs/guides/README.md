@@ -11,6 +11,7 @@ This directory contains user guides and implementation documentation for the Rid
 
 ### Design System
 - [`GRID_CONTRACT.md`](GRID_CONTRACT.md) - **Start here for any UI work.** Spacing tokens, column layouts, breakpoints, and verification rules for the 8px grid
+- [`CLI_SCRIPT_STYLE_GUIDE.md`](CLI_SCRIPT_STYLE_GUIDE.md) - Color/UI conventions for `scripts/*.sh` — the Fair Weather brand translated to terminal output
 
 ### Implementation Guides
 - [`IMPLEMENTATION_GUIDE.md`](IMPLEMENTATION_GUIDE.md) - General implementation guidelines and best practices
