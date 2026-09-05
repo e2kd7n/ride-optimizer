@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-09-03 02:29:37 UTC / 2026-09-03 02:29:37 GMT
+**Last Updated:** 2026-09-05 02:41:29 UTC / 2026-09-05 02:41:29 GMT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -46,20 +46,15 @@ None
 - #518 - Indoor-workout weather trigger: only checks cold + rain — add max forecast temp and air quality
 
 ### 🟡 P2 - MEDIUM
-- #546 - Hero card border, route status icons, and workout badges use hardcoded colors instead of Fair Weather tokens
+None
 
 ### 🟢 P3 - LOW
 - #551 - scripts: adopt a consistent visual design language (colors, section headers, progress feedback)
-- #547 - Design docs have drifted from implementation: stale card-radius/button-color values and outdated field notes
 
 ### 📋 P4 - FUTURE
 None
 
 ### ⚠️ Unprioritized (No P-label)
-- #556 - get_tile_coverage_all() bounds/coverage_pct become meaningless with one geographically distant activity
-- #555 - Legacy per-bbox coverage_tiles_*.json cache files never get cleaned up (32MB dead weight on Pi)
-- #554 - PlannerService.get_recommendations() makes one uncached weather API call per (ride, day) — can starve gunicorn threads for 10+ minutes
-- #532 - Persist ORS route cache to disk and add TTL to coverage-tile cache
 - #526 - Add HTTPS/TLS to Pi deployment (required for geolocation and other secure-context APIs)
 
 ---
