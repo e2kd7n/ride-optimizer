@@ -3,6 +3,14 @@
 Utility scripts, test harnesses, and automation tools. Run Python scripts from the project root
 (e.g. `python scripts/verify_dependencies.py`); shell scripts are executable (`./scripts/foo.sh`).
 
+## Shared Helpers
+
+- **utilities.sh** — color/UI toolkit (`section`, `steps_init`/`step`, `start_spinner`/`stop_spinner`,
+  `progress_bar`, `timer_start`/`timer_end`, `wait_for`) shared across the `.sh` scripts below.
+  Source it rather than defining ad hoc ANSI escapes — see
+  `docs/guides/CLI_SCRIPT_STYLE_GUIDE.md` for the conventions and `pi-auto-update.sh` for a
+  reference usage (#551).
+
 ## Testing & Validation
 
 - **test_imports.py** — quick syntax check across `app/`, `src/`, and the entry points

@@ -20,119 +20,122 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR/.."
+# shellcheck source=utilities.sh
+source "$SCRIPT_DIR/utilities.sh"
+
+section "Local Pi Build" "📦"
+echo -e "  ${YELLOW}⚠️  This bypasses CI/CD and GHCR.${NC}"
+echo -e "  ${YELLOW}   This image will be overwritten by the next auto-update run.${NC}"
 echo ""
-echo "========================================================================"
-echo " WARNING: local Pi build — bypasses CI/CD and GHCR."
-echo " This image will be overwritten by the next auto-update run."
+echo -e "  ${BLUE}Preferred workflow:${NC}"
+echo -e "  ${BLUE}  git push  ->  CI builds  ->  ./scripts/pi-auto-update.sh --force${NC}"
 echo ""
-echo " Preferred workflow:"
-echo "   git push  ->  CI builds  ->  ./scripts/pi-auto-update.sh --force"
-echo "========================================================================"
-echo ""
-read -p "Build locally instead of pulling from GHCR? (y/N) " -n 1 -r
+read -p "  Build locally instead of pulling from GHCR? (y/N) " -n 1 -r
 echo
 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo "Aborted.  Run: ./scripts/pi-auto-update.sh --force"
+    echo -e "  ${BLUE}Aborted.  Run: ./scripts/pi-auto-update.sh --force${NC}"
     exit 1
 fi
 
-echo "🍓 Raspberry Pi Podman Build Script"
-echo "===================================="
-echo ""
+# ── Pre-flight ───────────────────────────────────────────────────────────────
 
-# Check if running on ARM
+section "Pre-flight Check" "🔍"
+
 ARCH=$(uname -m)
 if [[ "$ARCH" != "aarch64" && "$ARCH" != "armv7l" ]]; then
-    echo "⚠️  Warning: Not running on ARM architecture (detected: $ARCH)"
-    echo "   This script is optimized for Raspberry Pi"
-    read -p "Continue anyway? (y/N) " -n 1 -r
+    echo -e "  ${YELLOW}⚠️  Not running on ARM architecture (detected: $ARCH)${NC}"
+    echo -e "  ${YELLOW}   This script is optimized for Raspberry Pi${NC}"
+    read -p "  Continue anyway? (y/N) " -n 1 -r
     echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
-    fi
+    [[ $REPLY =~ ^[Yy]$ ]] || exit 1
+else
+    echo -e "  ${GREEN}✓${NC}  ARM architecture ($ARCH)"
 fi
 
-# Check if podman is installed
 if ! command -v podman &> /dev/null; then
-    echo "❌ Error: podman is not installed"
-    echo "   Install with: sudo apt-get install -y podman"
+    echo -e "  ${RED}❌ podman is not installed${NC}"
+    echo -e "  ${YELLOW}   Install with: sudo apt-get install -y podman${NC}"
     exit 1
 fi
+echo -e "  ${GREEN}✓${NC}  podman installed"
 
-# Check if podman-compose is installed
 if ! command -v podman-compose &> /dev/null; then
-    echo "⚠️  Warning: podman-compose is not installed"
-    echo "   Install with: pipx install podman-compose"
-    echo "   Or: pip3 install --user podman-compose"
-    read -p "Continue with podman only? (y/N) " -n 1 -r
+    echo -e "  ${YELLOW}⚠️  podman-compose is not installed${NC}"
+    echo -e "  ${YELLOW}   Install with: pipx install podman-compose${NC}"
+    echo -e "  ${YELLOW}   Or: pip3 install --user podman-compose${NC}"
+    read -p "  Continue with podman only? (y/N) " -n 1 -r
     echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
-    fi
+    [[ $REPLY =~ ^[Yy]$ ]] || exit 1
     USE_COMPOSE=false
 else
+    echo -e "  ${GREEN}✓${NC}  podman-compose installed"
     USE_COMPOSE=true
 fi
 
-# Check for .env file
 if [ ! -f .env ]; then
-    echo "⚠️  Warning: .env file not found"
+    echo -e "  ${YELLOW}⚠️  .env file not found${NC}"
     if [ -f .env.example ]; then
-        echo "   Creating .env from .env.example"
+        echo -e "  ${YELLOW}   Creating .env from .env.example${NC}"
         cp .env.example .env
-        echo "   ⚠️  Please edit .env with your Strava credentials before running!"
+        echo -e "  ${YELLOW}   ⚠️  Please edit .env with your Strava credentials before running!${NC}"
     else
-        echo "   ❌ Error: .env.example not found"
+        echo -e "  ${RED}❌ .env.example not found${NC}"
         exit 1
     fi
+else
+    echo -e "  ${GREEN}✓${NC}  .env present"
 fi
 
-echo ""
-echo "📦 Building container image..."
-echo "   This may take 15-30 minutes on Raspberry Pi"
-echo ""
+# ── Build ────────────────────────────────────────────────────────────────────
 
-# Build with network=host to avoid slirp4netns issues
+section "Building Image" "📦"
+echo -e "  ${BLUE}This may take 15-30 minutes on Raspberry Pi${NC}"
+timer_start
+
+BUILD_OK=true
 if [ "$USE_COMPOSE" = true ]; then
-    echo "Using podman-compose..."
-    # Build with host network to avoid slirp4netns issues
-    podman-compose build --no-cache || {
+    echo -e "  ${DIM}Using podman-compose...${NC}"
+    if ! podman-compose build --no-cache; then
         echo ""
-        echo "❌ Build failed with podman-compose"
-        echo "   Trying alternative build method..."
-        podman build --network=host --no-cache -t ride-optimizer:latest .
-    }
+        echo -e "  ${YELLOW}⚠️  Build failed with podman-compose — trying podman directly${NC}"
+        podman build --network=host --no-cache -t ride-optimizer:latest . || BUILD_OK=false
+    fi
 else
-    echo "Using podman directly..."
-    podman build --network=host --no-cache -t ride-optimizer:latest .
+    echo -e "  ${DIM}Using podman directly...${NC}"
+    podman build --network=host --no-cache -t ride-optimizer:latest . || BUILD_OK=false
 fi
 
-if [ $? -eq 0 ]; then
+timer_end
+
+# ── Summary ──────────────────────────────────────────────────────────────────
+
+if [ "$BUILD_OK" = true ]; then
+    section "Summary" "🚲"
+    echo -e "  ${GREEN}✓ Build successful!${NC}"
     echo ""
-    echo "✅ Build successful!"
-    echo ""
-    echo "Next steps:"
-    echo "  1. Edit .env with your Strava credentials (if not done)"
-    echo "  2. Run: podman-compose up -d"
-    echo "     Or: podman run -d --name ride-optimizer --env-file .env \\"
-    echo "         -v ./data:/app/data:Z -v ./cache:/app/cache:Z \\"
-    echo "         -v ./logs:/app/logs:Z -v ./config:/app/config:Z \\"
-    echo "         --network=host ride-optimizer:latest"
-    echo "  3. Access menu: podman exec -it ride-optimizer python scripts/menu.py"
+    echo -e "  ${BLUE}Next steps:${NC}"
+    echo "    1. Edit .env with your Strava credentials (if not done)"
+    echo "    2. Run: podman-compose up -d"
+    echo "       Or: podman run -d --name ride-optimizer --env-file .env \\"
+    echo "           -v ./data:/app/data:Z -v ./cache:/app/cache:Z \\"
+    echo "           -v ./logs:/app/logs:Z -v ./config:/app/config:Z \\"
+    echo "           --network=host ride-optimizer:latest"
+    echo "    3. Access menu: podman exec -it ride-optimizer python scripts/menu.py"
 else
+    section "Summary" "🚲"
+    echo -e "  ${RED}✗ Build failed!${NC}"
     echo ""
-    echo "❌ Build failed!"
-    echo ""
-    echo "Troubleshooting tips:"
-    echo "  1. Check available disk space: df -h"
-    echo "  2. Check available memory: free -h"
-    echo "  3. Increase swap if needed:"
-    echo "     sudo dphys-swapfile swapoff"
-    echo "     sudo nano /etc/dphys-swapfile  # Set CONF_SWAPSIZE=2048"
-    echo "     sudo dphys-swapfile setup"
-    echo "     sudo dphys-swapfile swapon"
-    echo "  4. Try building as root: sudo podman build --network=host -t ride-optimizer:latest ."
-    echo "  5. Check logs: journalctl --user -u podman"
+    echo -e "  ${YELLOW}Troubleshooting tips:${NC}"
+    echo "    1. Check available disk space: df -h"
+    echo "    2. Check available memory: free -h"
+    echo "    3. Increase swap if needed:"
+    echo "       sudo dphys-swapfile swapoff"
+    echo "       sudo nano /etc/dphys-swapfile  # Set CONF_SWAPSIZE=2048"
+    echo "       sudo dphys-swapfile setup"
+    echo "       sudo dphys-swapfile swapon"
+    echo "    4. Try building as root: sudo podman build --network=host -t ride-optimizer:latest ."
+    echo "    5. Check logs: journalctl --user -u podman"
     exit 1
 fi
-
