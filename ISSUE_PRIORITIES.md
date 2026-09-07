@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-09-07 12:20:15 UTC / 2026-09-07 12:20:15 GMT
+**Last Updated:** 2026-09-07 16:44:38 UTC / 2026-09-07 16:44:38 GMT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -43,7 +43,7 @@ These issues need to be assigned to a release milestone and prioritized.
 None
 
 ### 🔴 P1 - HIGH
-- #518 - Indoor-workout weather trigger: only checks cold + rain — add max forecast temp and air quality
+None
 
 ### 🟡 P2 - MEDIUM
 None
