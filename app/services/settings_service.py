@@ -25,7 +25,12 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     'auto_save': True,
     'show_secondary_metrics': True,
     'outdoor_min_temp_f': 40,
+    'outdoor_max_temp_f': 95,
     'outdoor_allow_rain': False,
+    # US AQI (0-500) above which an outdoor workout is pushed indoors. 100 is
+    # the EPA's "Unhealthy for Sensitive Groups" threshold — a conservative
+    # default given sustained aerobic exertion increases inhalation (#518).
+    'outdoor_max_aqi': 100,
 }
 
 

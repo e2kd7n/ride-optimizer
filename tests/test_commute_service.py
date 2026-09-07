@@ -845,6 +845,98 @@ class TestWorkoutAwareCommute:
 
 
 @pytest.mark.unit
+class TestApplyWeatherIndoorDecision:
+    """Test _apply_weather_indoor_decision (#518)."""
+
+    def _setup(self, commute_service, weather=None, aqi=None,
+               outdoor_min_temp_f=40, outdoor_max_temp_f=95,
+               outdoor_allow_rain=False, outdoor_max_aqi=100):
+        commute_service._recommender = Mock()
+        commute_service._recommender.home_location = (40.7128, -74.0060)
+        commute_service.weather_service.get_current_weather = Mock(return_value=weather)
+        commute_service.weather_service.get_air_quality = Mock(
+            return_value={'aqi': aqi} if aqi is not None else None)
+        commute_service.settings_service.get_settings = Mock(return_value={
+            'outdoor_min_temp_f': outdoor_min_temp_f,
+            'outdoor_max_temp_f': outdoor_max_temp_f,
+            'outdoor_allow_rain': outdoor_allow_rain,
+            'outdoor_max_aqi': outdoor_max_aqi,
+        })
+
+    def test_no_weather_falls_back_to_indoor_preferred(self, commute_service):
+        self._setup(commute_service, weather=None)
+        constraints = {'indoor_preferred': True, 'notes': []}
+        commute_service._apply_weather_indoor_decision(constraints)
+        assert constraints['indoor_fallback'] is True
+
+    def test_too_cold_from_temp_c_only_payload(self, commute_service):
+        """WeatherFetcher.get_current_conditions only ever returns temp_c, never
+        temperature_f/temperature — this regression-tests the fallback chain
+        that derives temp_f from temp_c instead of silently defaulting to 70."""
+        self._setup(commute_service, weather={'temp_c': -5, 'precipitation_mm': 0},
+                    outdoor_min_temp_f=40)
+        constraints = {'notes': []}
+        commute_service._apply_weather_indoor_decision(constraints)
+        assert constraints['indoor_fallback'] is True
+        assert 'below your 40' in constraints['indoor_reason']
+
+    def test_too_hot(self, commute_service):
+        self._setup(commute_service, weather={'temp_c': 40, 'precipitation_mm': 0},
+                    outdoor_max_temp_f=95)
+        constraints = {'notes': []}
+        commute_service._apply_weather_indoor_decision(constraints)
+        assert constraints['indoor_fallback'] is True
+        assert 'above your 95' in constraints['indoor_reason']
+
+    def test_too_wet_when_rain_disallowed(self, commute_service):
+        self._setup(commute_service, weather={'temp_c': 20, 'precipitation_mm': 2.0},
+                    outdoor_allow_rain=False)
+        constraints = {'notes': []}
+        commute_service._apply_weather_indoor_decision(constraints)
+        assert constraints['indoor_fallback'] is True
+        assert 'precipitation' in constraints['indoor_reason']
+
+    def test_rain_allowed_does_not_trigger_indoor(self, commute_service):
+        self._setup(commute_service, weather={'temp_c': 20, 'precipitation_mm': 2.0},
+                    outdoor_allow_rain=True)
+        constraints = {'notes': []}
+        commute_service._apply_weather_indoor_decision(constraints)
+        assert constraints['indoor_fallback'] is False
+
+    def test_air_quality_over_threshold_triggers_indoor(self, commute_service):
+        self._setup(commute_service, weather={'temp_c': 20, 'precipitation_mm': 0},
+                    aqi=175, outdoor_max_aqi=100)
+        constraints = {'notes': []}
+        commute_service._apply_weather_indoor_decision(constraints)
+        assert constraints['indoor_fallback'] is True
+        assert 'AQI 175' in constraints['indoor_reason']
+
+    def test_air_quality_under_threshold_does_not_trigger_indoor(self, commute_service):
+        self._setup(commute_service, weather={'temp_c': 20, 'precipitation_mm': 0},
+                    aqi=42, outdoor_max_aqi=100)
+        constraints = {'notes': []}
+        commute_service._apply_weather_indoor_decision(constraints)
+        assert constraints['indoor_fallback'] is False
+
+    def test_favorable_conditions_clear_indoor_preferred(self, commute_service):
+        self._setup(commute_service, weather={'temp_c': 20, 'precipitation_mm': 0}, aqi=30)
+        constraints = {'indoor_preferred': True, 'notes': []}
+        commute_service._apply_weather_indoor_decision(constraints)
+        assert constraints['indoor_fallback'] is False
+        assert any('suitable for outdoor' in n for n in constraints['notes'])
+
+    def test_air_quality_fetch_failure_does_not_block_other_checks(self, commute_service):
+        """A broken/unavailable AQI source degrades gracefully instead of
+        crashing the whole indoor/outdoor decision."""
+        self._setup(commute_service, weather={'temp_c': -5, 'precipitation_mm': 0})
+        commute_service.weather_service.get_air_quality = Mock(side_effect=Exception("AQI API down"))
+        constraints = {'notes': []}
+        commute_service._apply_weather_indoor_decision(constraints)
+        assert constraints['indoor_fallback'] is True
+        assert 'below your' in constraints['indoor_reason']
+
+
+@pytest.mark.unit
 class TestAnalyzeWorkoutFit:
     """Test _analyze_workout_fit."""
 

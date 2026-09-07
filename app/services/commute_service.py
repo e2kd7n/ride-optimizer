@@ -710,52 +710,76 @@ class CommuteService:
     
     def _apply_weather_indoor_decision(self, constraints: Dict[str, Any]) -> None:
         """
-        Set indoor_fallback based on current weather vs user thresholds.
+        Set indoor_fallback based on current weather/air-quality vs user thresholds.
 
         Overrides the workout type's inherent indoor_preferred flag when
-        weather is suitable for outdoor riding.
+        conditions are suitable for outdoor riding.
         """
         settings = self.settings_service.get_settings()
         min_temp = settings.get('outdoor_min_temp_f', 40)
+        max_temp = settings.get('outdoor_max_temp_f', 95)
         allow_rain = settings.get('outdoor_allow_rain', False)
+        max_aqi = settings.get('outdoor_max_aqi', 100)
+
+        home = self._recommender.home_location if self._recommender else None
 
         try:
-            home = self._recommender.home_location if self._recommender else None
-            if home:
-                weather = self.weather_service.get_current_weather(
-                    home[0], home[1], location_name='Home')
-            else:
-                weather = None
+            weather = self.weather_service.get_current_weather(
+                home[0], home[1], location_name='Home') if home else None
         except Exception as e:
             logger.warning(f"Could not fetch weather for indoor decision: {e}")
             weather = None
+
+        aqi = None
+        if home:
+            try:
+                aqi_data = self.weather_service.get_air_quality(
+                    home[0], home[1], location_name='Home')
+                if aqi_data:
+                    aqi = aqi_data.get('aqi')
+            except Exception as e:
+                logger.warning(f"Could not fetch air quality for indoor decision: {e}")
 
         if not weather:
             constraints['indoor_fallback'] = constraints.get('indoor_preferred', False)
             return
 
-        temp_f = weather.get('temperature_f', weather.get('temperature', 70))
+        # temperature_f/temperature are never actually present on the raw
+        # fetcher payload (WeatherFetcher.get_current_conditions only returns
+        # temp_c) — without this fallback chain, temp_f silently defaulted to
+        # 70 every time and too_cold/too_hot never fired from real weather.
+        temp_c = weather.get('temperature_c', weather.get('temp_c'))
+        temp_f = weather.get('temperature_f', weather.get('temperature'))
+        if temp_f is None:
+            temp_f = (temp_c * 9 / 5 + 32) if temp_c is not None else 70
         precip_mm = weather.get('precipitation_mm', weather.get('precipitation', 0))
         is_raining = isinstance(precip_mm, (int, float)) and precip_mm > 0
 
         too_cold = temp_f < min_temp
+        too_hot = temp_f > max_temp
         too_wet = is_raining and not allow_rain
+        too_polluted = isinstance(aqi, (int, float)) and aqi > max_aqi
 
-        if too_cold or too_wet:
+        if too_cold or too_hot or too_wet or too_polluted:
             constraints['indoor_fallback'] = True
             reasons = []
             if too_cold:
                 reasons.append(f'{temp_f:.0f}°F is below your {min_temp}°F minimum')
+            if too_hot:
+                reasons.append(f'{temp_f:.0f}°F is above your {max_temp}°F maximum')
             if too_wet:
                 reasons.append('precipitation detected')
+            if too_polluted:
+                reasons.append(f'air quality (AQI {aqi:.0f}) exceeds your {max_aqi} limit')
             constraints['indoor_reason'] = ' and '.join(reasons)
             constraints['notes'].append(f'Indoor recommended: {constraints["indoor_reason"]}')
         else:
             constraints['indoor_fallback'] = False
             if constraints.get('indoor_preferred'):
+                aqi_note = f', AQI {aqi:.0f}' if isinstance(aqi, (int, float)) else ''
                 constraints['notes'].append(
                     f'Weather is suitable for outdoor riding ({temp_f:.0f}°F, '
-                    f'{"light rain" if is_raining else "dry"})')
+                    f'{"light rain" if is_raining else "dry"}{aqi_note})')
 
     def _analyze_workout_fit(self,
                             recommendation: Dict[str, Any],

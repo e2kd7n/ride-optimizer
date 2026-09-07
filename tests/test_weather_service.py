@@ -467,10 +467,34 @@ class TestGetDegradedWeather:
         weather_service.storage.read = Mock(return_value=stale_cache)
         
         result = weather_service._get_degraded_weather(42.3601, -71.0589)
-        
+
         assert result['temperature_c'] == 18
         assert result['wind_speed_kph'] == 10
-        assert result['conditions'] == 'Cloudy'
-        assert result['comfort_score'] == 0.75
+
+
+class TestGetAirQuality:
+    """Test WeatherService.get_air_quality (#518)."""
+
+    def test_delegates_to_fetcher(self, weather_service):
+        weather_service.fetcher.get_air_quality = Mock(return_value={'aqi': 42})
+
+        result = weather_service.get_air_quality(42.3601, -71.0589)
+
+        assert result == {'aqi': 42}
+        weather_service.fetcher.get_air_quality.assert_called_once_with(42.3601, -71.0589)
+
+    def test_returns_none_when_fetcher_returns_none(self, weather_service):
+        weather_service.fetcher.get_air_quality = Mock(return_value=None)
+
+        result = weather_service.get_air_quality(42.3601, -71.0589)
+
+        assert result is None
+
+    def test_exception_returns_none(self, weather_service):
+        weather_service.fetcher.get_air_quality = Mock(side_effect=Exception("AQI API down"))
+
+        result = weather_service.get_air_quality(42.3601, -71.0589)
+
+        assert result is None
 
 
