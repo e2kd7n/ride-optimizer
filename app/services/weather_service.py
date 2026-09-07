@@ -178,6 +178,32 @@ class WeatherService:
             logger.error(f"Error getting current weather: {e}", exc_info=True)
             return self._get_degraded_weather(lat, lon, location_name)
     
+    def get_air_quality(self,
+                        lat: float,
+                        lon: float,
+                        location_name: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """
+        Get current air quality (US AQI) for a location.
+
+        Delegates to WeatherFetcher.get_air_quality, which has its own
+        radius+TTL cache (separate from the weather cache, since air quality
+        comes from a different Open-Meteo API/host) — no additional caching
+        layer needed here.
+
+        Args:
+            lat: Latitude
+            lon: Longitude
+            location_name: Optional location name for logging
+
+        Returns:
+            Dict with 'aqi' (US AQI, 0-500), 'pm2_5', 'pm10', or None if unavailable.
+        """
+        try:
+            return self.fetcher.get_air_quality(lat, lon)
+        except Exception as e:
+            logger.warning(f"Error getting air quality for {location_name or (lat, lon)}: {e}")
+            return None
+
     def get_weather_summary(self,
                            lat: float,
                            lon: float,

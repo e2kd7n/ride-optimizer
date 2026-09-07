@@ -25,7 +25,8 @@ class WeatherFetcher:
     
     def __init__(self, cache_radius_km: float = 2.0, cache_duration_hours: float = 1.5,
                  cache_file: Optional[str] = None, max_cache_entries: int = 500,
-                 forecast_cache_duration_hours: float = 3.0, forecast_cache_file: Optional[str] = None):
+                 forecast_cache_duration_hours: float = 3.0, forecast_cache_file: Optional[str] = None,
+                 aqi_cache_duration_hours: float = 2.0, aqi_cache_file: Optional[str] = None):
         """
         Initialize weather fetcher.
 
@@ -41,13 +42,20 @@ class WeatherFetcher:
                 doesn't need to be as fresh as "current conditions").
             forecast_cache_file: Path to the daily-forecast cache file (default: alongside
                 cache_file, named daily_forecast_cache.json).
+            aqi_cache_duration_hours: How long to cache air-quality data in hours (default 2.0 —
+                AQI moves more slowly than temperature/precipitation, so a slightly longer TTL
+                than cache_duration_hours is fine).
+            aqi_cache_file: Path to the air-quality cache file (default: alongside cache_file,
+                named air_quality_cache.json).
         """
         self.base_url = "https://api.open-meteo.com/v1/forecast"
+        self.aqi_base_url = "https://air-quality-api.open-meteo.com/v1/air-quality"
         self.session = requests.Session()
         self.cache_radius_km = cache_radius_km
         self.cache_duration_hours = cache_duration_hours
         self.max_cache_entries = max_cache_entries
         self.forecast_cache_duration_hours = forecast_cache_duration_hours
+        self.aqi_cache_duration_hours = aqi_cache_duration_hours
 
         # Set up cache file path
         if cache_file is None:
@@ -67,12 +75,21 @@ class WeatherFetcher:
             self.forecast_cache_file = Path(forecast_cache_file)
             self.forecast_cache_file.parent.mkdir(parents=True, exist_ok=True)
 
+        if aqi_cache_file is None:
+            self.aqi_cache_file = self.cache_file.parent / "air_quality_cache.json"
+        else:
+            self.aqi_cache_file = Path(aqi_cache_file)
+            self.aqi_cache_file.parent.mkdir(parents=True, exist_ok=True)
+
         # Load cache from file
         self.cache = self._load_cache()
         logger.info(f"Loaded {len(self.cache)} weather cache entries from {self.cache_file}")
 
         self.forecast_cache = self._load_forecast_cache()
         logger.info(f"Loaded {len(self.forecast_cache)} daily-forecast cache entries from {self.forecast_cache_file}")
+
+        self.aqi_cache = self._load_aqi_cache()
+        logger.info(f"Loaded {len(self.aqi_cache)} air-quality cache entries from {self.aqi_cache_file}")
     
     def _load_cache(self) -> Dict:
         """
@@ -278,6 +295,152 @@ class WeatherFetcher:
                 return cache_entry['data'][:days]
 
         return None
+
+    def _load_aqi_cache(self) -> Dict:
+        """Load the air-quality cache from JSON file (parallel to _load_cache)."""
+        if not self.aqi_cache_file.exists():
+            logger.debug(f"No air-quality cache file found at {self.aqi_cache_file}")
+            return {}
+
+        try:
+            with open(self.aqi_cache_file, 'r') as f:
+                cache_data = json.load(f)
+
+            cache = {}
+            for key_str, entry in cache_data.items():
+                lat, lon = map(float, key_str.split(','))
+                cache[(lat, lon)] = {
+                    'data': entry['data'],
+                    'timestamp': datetime.fromisoformat(entry['timestamp']),
+                }
+
+            logger.debug(f"Loaded {len(cache)} entries from air-quality cache file")
+            return cache
+
+        except (json.JSONDecodeError, KeyError, ValueError) as e:
+            logger.warning(f"Error loading air-quality cache file: {e}. Starting with empty cache.")
+            return {}
+
+    def _save_aqi_cache(self):
+        """Save the air-quality cache to JSON file (parallel to _save_cache)."""
+        try:
+            cache_data = {}
+            for (lat, lon), entry in self.aqi_cache.items():
+                key_str = f"{lat},{lon}"
+                cache_data[key_str] = {
+                    'data': entry['data'],
+                    'timestamp': entry['timestamp'].isoformat(),
+                }
+
+            with open(self.aqi_cache_file, 'w') as f:
+                json.dump(cache_data, f, indent=2)
+            secure_chmod(self.aqi_cache_file)
+
+            logger.debug(f"Saved {len(cache_data)} entries to air-quality cache file")
+
+        except Exception as e:
+            logger.error(f"Error saving air-quality cache file: {e}")
+
+    def _evict_oldest_aqi_if_needed(self) -> None:
+        """Bound air-quality cache size regardless of TTL (parallel to _evict_oldest_if_needed)."""
+        overflow = len(self.aqi_cache) - self.max_cache_entries
+        if overflow <= 0:
+            return
+        oldest_keys = sorted(self.aqi_cache.keys(), key=lambda k: self.aqi_cache[k]['timestamp'])[:overflow]
+        for key in oldest_keys:
+            del self.aqi_cache[key]
+        logger.debug(f"Evicted {overflow} oldest air-quality cache entries "
+                     f"(cache size capped at {self.max_cache_entries})")
+
+    def _find_cached_aqi(self, lat: float, lon: float) -> Optional[Dict]:
+        """Find cached air-quality data for a nearby location (if not expired)."""
+        now = datetime.now()
+
+        for cache_key, cache_entry in list(self.aqi_cache.items()):
+            cache_lat, cache_lon = cache_key
+
+            cache_age = now - cache_entry['timestamp']
+            if cache_age > timedelta(hours=self.aqi_cache_duration_hours):
+                del self.aqi_cache[cache_key]
+                logger.debug(f"Removed expired air-quality cache for ({cache_lat:.4f}, {cache_lon:.4f}) "
+                           f"- age: {cache_age.total_seconds()/3600:.1f} hours")
+                continue
+
+            distance_km = geodesic((lat, lon), (cache_lat, cache_lon)).km
+            if distance_km <= self.cache_radius_km:
+                cache_age_min = cache_age.total_seconds() / 60
+                logger.debug(f"Using cached air quality from ({cache_lat:.4f}, {cache_lon:.4f}) "
+                           f"for ({lat:.4f}, {lon:.4f}) - {distance_km:.2f}km away, "
+                           f"{cache_age_min:.1f} min old")
+                return cache_entry['data']
+
+        return None
+
+    def get_air_quality(self, lat: float, lon: float, save_cache: bool = True) -> Optional[Dict]:
+        """
+        Get current air quality (US AQI) for a location, with radius+TTL caching
+        (see _find_cached_aqi) mirroring get_current_conditions.
+
+        Uses Open-Meteo's free Air Quality API (no key required) — a separate
+        service/host from the main forecast API, so it has its own base URL and
+        cache rather than reusing self.cache.
+
+        Args:
+            lat: Latitude
+            lon: Longitude
+            save_cache: Whether to persist the cache to disk immediately after this
+                fetch (see get_current_conditions for why a caller might pass False).
+
+        Returns:
+            Dict with 'aqi' (US AQI, 0-500), 'pm2_5', 'pm10', 'timestamp', or None
+            if unavailable.
+        """
+        cached = self._find_cached_aqi(lat, lon)
+        if cached:
+            return cached
+
+        try:
+            params = {
+                'latitude': lat,
+                'longitude': lon,
+                'current': 'us_aqi,pm2_5,pm10',
+                'timezone': 'auto',
+            }
+
+            response = self.session.get(self.aqi_base_url, params=params, timeout=10)
+            response.raise_for_status()
+
+            data = response.json()
+
+            if 'current' not in data:
+                return None
+
+            current = data['current']
+            aqi_data = {
+                'timestamp': current.get('time'),
+                'aqi': current.get('us_aqi'),
+                'pm2_5': current.get('pm2_5'),
+                'pm10': current.get('pm10'),
+                'lat': lat,
+                'lon': lon,
+            }
+
+            logger.info(f"Fetched air quality for ({lat:.4f}, {lon:.4f}): US AQI {aqi_data['aqi']}")
+
+            self.aqi_cache[(lat, lon)] = {
+                'data': aqi_data,
+                'timestamp': datetime.now(),
+            }
+            self._evict_oldest_aqi_if_needed()
+
+            if save_cache:
+                self._save_aqi_cache()
+
+            return aqi_data
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error fetching air quality: {e}")
+            return None
 
     def get_current_conditions(self, lat: float, lon: float, save_cache: bool = True) -> Optional[Dict]:
         """

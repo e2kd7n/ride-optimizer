@@ -665,6 +665,21 @@
                                         </div>
                                     </div>
                                     <div class="col-md-6">
+                                        <label class="form-label fw-bold" for="outdoor-max-temp">
+                                            Maximum temperature for outdoor workouts
+                                        </label>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <input type="range" class="form-range flex-grow-1"
+                                                   id="outdoor-max-temp" min="60" max="120" step="5" value="95"
+                                                   aria-describedby="outdoor-max-temp-value">
+                                            <span id="outdoor-max-temp-value" class="badge bg-secondary min-w-48px">95°F</span>
+                                        </div>
+                                        <div class="form-text">
+                                            <i class="bi bi-info-circle" aria-hidden="true"></i>
+                                            Above this temperature, indoor trainer is recommended regardless of workout type.
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
                                         <label class="form-label fw-bold d-block">
                                             Precipitation
                                         </label>
@@ -678,6 +693,23 @@
                                         <div class="form-text">
                                             <i class="bi bi-info-circle" aria-hidden="true"></i>
                                             When unchecked, any active precipitation triggers indoor recommendation.
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold" for="outdoor-max-aqi">
+                                            Air quality limit (US AQI)
+                                        </label>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <input type="range" class="form-range flex-grow-1"
+                                                   id="outdoor-max-aqi" min="0" max="300" step="10" value="100"
+                                                   aria-describedby="outdoor-max-aqi-value">
+                                            <span id="outdoor-max-aqi-value" class="badge bg-secondary min-w-48px">100</span>
+                                        </div>
+                                        <div class="form-text">
+                                            <i class="bi bi-info-circle" aria-hidden="true"></i>
+                                            Above this AQI, indoor trainer is recommended. 100 is the EPA's
+                                            "Unhealthy for Sensitive Groups" threshold — sustained exercise
+                                            increases inhalation, so a conservative default is used.
                                         </div>
                                     </div>
                                 </div>

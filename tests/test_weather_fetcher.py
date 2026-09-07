@@ -1,4 +1,5 @@
-"""Tests for src/weather_fetcher.py — daily-forecast caching (#554).
+"""Tests for src/weather_fetcher.py — daily-forecast caching (#554) and
+air-quality fetching (#518).
 
 get_daily_forecast() previously made a fresh Open-Meteo HTTP call on every
 invocation with zero caching (unlike get_current_conditions, which already had
@@ -7,12 +8,17 @@ external call per (ride, day) with no dedup even when many rides shared the
 same start location — confirmed on production data to take 12+ minutes and
 starve the app's 4-thread gunicorn pool. These tests cover the new
 forecast-cache layer added to close that gap.
+
+TestGetAirQuality covers get_air_quality(), added for #518 (indoor-workout
+trigger needs an AQI signal) — a separate Open-Meteo host/API with its own
+radius+TTL cache mirroring get_current_conditions/get_daily_forecast.
 """
 
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
 
 import pytest
+import requests
 
 from src.weather_fetcher import WeatherFetcher
 
@@ -169,3 +175,115 @@ class TestGetDailyForecastCaching:
             fetcher.get_daily_forecast(40.0 + i, -74.0, days=1)
 
         assert len(fetcher.forecast_cache) == 3
+
+
+def _mock_aqi_response(aqi=42, pm2_5=10.0, pm10=15.0):
+    """Build a fake Open-Meteo air-quality API 'current' JSON payload."""
+    return {
+        'current': {
+            'time': '2026-01-01T12:00',
+            'us_aqi': aqi,
+            'pm2_5': pm2_5,
+            'pm10': pm10,
+        }
+    }
+
+
+def _set_aqi_response(mock_session, aqi=42, pm2_5=10.0, pm10=15.0):
+    response = Mock()
+    response.json.return_value = _mock_aqi_response(aqi, pm2_5, pm10)
+    response.raise_for_status = Mock()
+    mock_session.return_value.get.return_value = response
+    return response
+
+
+@pytest.mark.unit
+class TestGetAirQuality:
+    """Test WeatherFetcher.get_air_quality (#518)."""
+
+    def test_first_call_hits_the_aqi_api(self, fetcher, mock_session):
+        _set_aqi_response(mock_session, aqi=42)
+
+        result = fetcher.get_air_quality(40.7128, -74.0060)
+
+        assert result['aqi'] == 42
+        mock_session.return_value.get.assert_called_once()
+        called_url = mock_session.return_value.get.call_args[0][0]
+        assert called_url == fetcher.aqi_base_url
+
+    def test_second_call_same_location_is_cached(self, fetcher, mock_session):
+        _set_aqi_response(mock_session, aqi=42)
+
+        first = fetcher.get_air_quality(40.7128, -74.0060)
+        second = fetcher.get_air_quality(40.7128, -74.0060)
+
+        mock_session.return_value.get.assert_called_once()
+        assert first == second
+
+    def test_nearby_location_within_radius_is_cached(self, fetcher, mock_session):
+        _set_aqi_response(mock_session, aqi=42)
+
+        fetcher.get_air_quality(40.7128, -74.0060)
+        # ~1km away — within the default 2km cache_radius_km.
+        result = fetcher.get_air_quality(40.7218, -74.0060)
+
+        mock_session.return_value.get.assert_called_once()
+        assert result is not None
+
+    def test_far_location_is_not_cached(self, fetcher, mock_session):
+        _set_aqi_response(mock_session, aqi=42)
+
+        fetcher.get_air_quality(40.7128, -74.0060)
+        fetcher.get_air_quality(51.5074, -0.1278)  # London — nowhere close
+
+        assert mock_session.return_value.get.call_count == 2
+
+    def test_expired_aqi_cache_refetches(self, fetcher, mock_session):
+        _set_aqi_response(mock_session, aqi=42)
+        fetcher.get_air_quality(40.7128, -74.0060)
+
+        key = (40.7128, -74.0060)
+        fetcher.aqi_cache[key]['timestamp'] = (
+            datetime.now() - timedelta(hours=fetcher.aqi_cache_duration_hours + 1)
+        )
+
+        fetcher.get_air_quality(40.7128, -74.0060)
+
+        assert mock_session.return_value.get.call_count == 2
+
+    def test_aqi_cache_persists_to_disk(self, fetcher, mock_session):
+        _set_aqi_response(mock_session, aqi=42)
+        fetcher.get_air_quality(40.7128, -74.0060)
+
+        assert fetcher.aqi_cache_file.exists()
+
+        reloaded = WeatherFetcher(cache_file=str(fetcher.cache_file))
+        assert (40.7128, -74.0060) in reloaded.aqi_cache
+
+    def test_none_response_is_not_cached(self, fetcher, mock_session):
+        """A response missing 'current' returns None and must not poison the cache."""
+        response = Mock()
+        response.json.return_value = {}
+        response.raise_for_status = Mock()
+        mock_session.return_value.get.return_value = response
+
+        result = fetcher.get_air_quality(40.7128, -74.0060)
+
+        assert result is None
+        assert (40.7128, -74.0060) not in fetcher.aqi_cache
+
+    def test_request_exception_returns_none(self, fetcher, mock_session):
+        mock_session.return_value.get.side_effect = requests.exceptions.RequestException("boom")
+
+        result = fetcher.get_air_quality(40.7128, -74.0060)
+
+        assert result is None
+
+    def test_aqi_cache_eviction_caps_size(self, mock_session, tmp_path):
+        fetcher = WeatherFetcher(cache_file=str(tmp_path / "weather_cache.json"), max_cache_entries=3)
+        _set_aqi_response(mock_session, aqi=42)
+
+        for i in range(5):
+            fetcher.get_air_quality(40.0 + i, -74.0)
+
+        assert len(fetcher.aqi_cache) == 3

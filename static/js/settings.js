@@ -3,30 +3,36 @@
  */
 
         // Canonical temperature (always stored/sent as Fahrenheit) + current display unit for the
-        // outdoor-min-temp slider. See #375a.
+        // outdoor-min-temp/outdoor-max-temp sliders. See #375a, #518.
         let _outdoorMinTempF = 40;
+        let _outdoorMaxTempF = 95;
         let _isMetricTemp = false;
 
         function fToC(f) { return Math.round((f - 32) * 5 / 9); }
         function cToF(c) { return Math.round((c * 9 / 5) + 32); }
 
         function setOutdoorTempSliderUnit(isMetric) {
-            const slider = document.getElementById('outdoor-min-temp');
-            const label = document.getElementById('outdoor-min-temp-value');
-            if (!slider || !label) return;
             _isMetricTemp = isMetric;
+            _setOneOutdoorTempSlider('outdoor-min-temp', 'outdoor-min-temp-value', _outdoorMinTempF, isMetric, -20, 30, 0, 80);
+            _setOneOutdoorTempSlider('outdoor-max-temp', 'outdoor-max-temp-value', _outdoorMaxTempF, isMetric, 15, 50, 60, 120);
+        }
+
+        function _setOneOutdoorTempSlider(sliderId, labelId, valueF, isMetric, metricMin, metricMax, imperialMin, imperialMax) {
+            const slider = document.getElementById(sliderId);
+            const label = document.getElementById(labelId);
+            if (!slider || !label) return;
             if (isMetric) {
-                slider.min = -20;
-                slider.max = 30;
+                slider.min = metricMin;
+                slider.max = metricMax;
                 slider.step = 5;
-                const c = fToC(_outdoorMinTempF);
-                slider.value = Math.min(Math.max(c, -20), 30);
+                const c = fToC(valueF);
+                slider.value = Math.min(Math.max(c, metricMin), metricMax);
                 label.textContent = slider.value + '°C';
             } else {
-                slider.min = 0;
-                slider.max = 80;
+                slider.min = imperialMin;
+                slider.max = imperialMax;
                 slider.step = 5;
-                slider.value = Math.min(Math.max(_outdoorMinTempF, 0), 80);
+                slider.value = Math.min(Math.max(valueF, imperialMin), imperialMax);
                 label.textContent = slider.value + '°F';
             }
         }
@@ -201,8 +207,19 @@
             if (settings.outdoor_min_temp_f !== undefined) {
                 _outdoorMinTempF = settings.outdoor_min_temp_f;
             }
+            if (settings.outdoor_max_temp_f !== undefined) {
+                _outdoorMaxTempF = settings.outdoor_max_temp_f;
+            }
             if (settings.outdoor_allow_rain !== undefined) {
                 document.getElementById('outdoor-allow-rain').checked = settings.outdoor_allow_rain;
+            }
+            if (settings.outdoor_max_aqi !== undefined) {
+                const aqiSlider = document.getElementById('outdoor-max-aqi');
+                const aqiLabel = document.getElementById('outdoor-max-aqi-value');
+                if (aqiSlider && aqiLabel) {
+                    aqiSlider.value = settings.outdoor_max_aqi;
+                    aqiLabel.textContent = settings.outdoor_max_aqi;
+                }
             }
             const unitSystem = document.getElementById('unit-system').value;
             setOutdoorTempSliderUnit(unitSystem === 'metric');
@@ -227,7 +244,7 @@
             // Settings reset button (save is handled by form submit)
             document.getElementById('reset-settings').addEventListener('click', resetSettings);
 
-            // Outdoor temp slider live display (unit-aware — #375a)
+            // Outdoor temp sliders live display (unit-aware — #375a, #518)
             const tempSlider = document.getElementById('outdoor-min-temp');
             const tempLabel = document.getElementById('outdoor-min-temp-value');
             if (tempSlider && tempLabel) {
@@ -243,7 +260,30 @@
                 });
             }
 
-            // Keep the outdoor temp slider's display unit in sync if the user changes Unit System
+            const maxTempSlider = document.getElementById('outdoor-max-temp');
+            const maxTempLabel = document.getElementById('outdoor-max-temp-value');
+            if (maxTempSlider && maxTempLabel) {
+                maxTempSlider.addEventListener('input', function() {
+                    const val = Number(this.value);
+                    if (_isMetricTemp) {
+                        _outdoorMaxTempF = cToF(val);
+                        maxTempLabel.textContent = val + '°C';
+                    } else {
+                        _outdoorMaxTempF = val;
+                        maxTempLabel.textContent = val + '°F';
+                    }
+                });
+            }
+
+            const aqiSlider = document.getElementById('outdoor-max-aqi');
+            const aqiLabel = document.getElementById('outdoor-max-aqi-value');
+            if (aqiSlider && aqiLabel) {
+                aqiSlider.addEventListener('input', function() {
+                    aqiLabel.textContent = this.value;
+                });
+            }
+
+            // Keep the outdoor temp sliders' display unit in sync if the user changes Unit System
             // before saving.
             const unitSelect = document.getElementById('unit-system');
             if (unitSelect) {
@@ -292,7 +332,9 @@
                 show_elevation: document.getElementById('show-elevation').checked,
                 auto_save: document.getElementById('auto-save').checked,
                 outdoor_min_temp_f: _outdoorMinTempF,
+                outdoor_max_temp_f: _outdoorMaxTempF,
                 outdoor_allow_rain: document.getElementById('outdoor-allow-rain').checked,
+                outdoor_max_aqi: Number(document.getElementById('outdoor-max-aqi').value),
             };
 
             // Always update localStorage as offline fallback
@@ -344,8 +386,11 @@
                 document.getElementById('show-elevation').checked = true;
                 document.getElementById('auto-save').checked = true;
                 _outdoorMinTempF = 40;
+                _outdoorMaxTempF = 95;
                 setOutdoorTempSliderUnit(false);
                 document.getElementById('outdoor-allow-rain').checked = false;
+                document.getElementById('outdoor-max-aqi').value = 100;
+                document.getElementById('outdoor-max-aqi-value').textContent = '100';
 
                 localStorage.removeItem('fairWeatherTheme');
                 const systemTheme = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'night' : 'day';
