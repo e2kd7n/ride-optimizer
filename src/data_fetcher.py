@@ -51,6 +51,7 @@ class Activity:
     achievement_count: int = 0
     pr_count: int = 0
     kudos_count: int = 0
+    source: Optional[str] = None  # 'strava' or 'garmin' — used for cross-source dedup, not persisted before this field existed
 
     @classmethod
     def from_strava_activity(cls, activity, use_detailed_polyline=False):
@@ -121,6 +122,7 @@ class Activity:
             achievement_count=_opt_int(getattr(activity, 'achievement_count', None)) or 0,
             pr_count=_opt_int(getattr(activity, 'pr_count', None)) or 0,
             kudos_count=_opt_int(getattr(activity, 'kudos_count', None)) or 0,
+            source='strava',
         )
     
     @classmethod
@@ -166,6 +168,7 @@ class Activity:
             max_heartrate=ga.get('maxHR'),
             average_watts=ga.get('avgPower'),
             kilojoules=None,
+            source='garmin',
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -196,6 +199,80 @@ class Activity:
         if data.get('end_latlng'):
             data['end_latlng'] = extract_latlng(data['end_latlng'])
         return cls(**data)
+
+
+def _parse_activity_start(activity: Activity) -> Optional[datetime]:
+    """Parse an activity's local start time, tolerant of both Strava's
+    ISO-with-'T' format and Garmin's space-separated 'YYYY-MM-DD HH:MM:SS'.
+
+    Returns a naive datetime (tzinfo stripped) since both sources encode
+    wall-clock local time — comparing them is only meaningful naive-to-naive.
+    """
+    value = activity.start_date_local or activity.start_date
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(value)
+    except ValueError:
+        try:
+            dt = datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
+        except ValueError:
+            return None
+    return dt.replace(tzinfo=None)
+
+
+def _within_ratio(a: float, b: float, tolerance: float) -> bool:
+    """True if `a` and `b` are within `tolerance` fraction of the larger one.
+
+    Two short/near-zero values (e.g. brief indoor efforts) shouldn't fail
+    the check just because a tiny absolute difference is a huge ratio.
+    """
+    larger = max(abs(a or 0), abs(b or 0))
+    if larger < 1e-6:
+        return True
+    return abs((a or 0) - (b or 0)) / larger <= tolerance
+
+
+def find_cross_source_duplicate(
+    candidate: Activity,
+    existing_by_id: Dict[int, Activity],
+    time_tolerance_seconds: int = 300,
+    ratio_tolerance: float = 0.10,
+) -> Optional[Activity]:
+    """Find an existing activity from a *different* source that likely
+    represents the same physical ride as `candidate`.
+
+    Strava and Garmin each mint their own activity IDs, so the same ride
+    ingested from both never collides on ID — same-source dedup can't catch
+    it. Match on start time + distance + moving time instead. Deliberately
+    never considers `name`: ride names are freeform (often a generic default
+    like "Morning Ride" from either platform) and are not a reliable key.
+    """
+    if not candidate.source:
+        return None
+
+    candidate_start = _parse_activity_start(candidate)
+    if candidate_start is None:
+        return None
+
+    for existing in existing_by_id.values():
+        if not existing.source or existing.source == candidate.source:
+            continue
+
+        existing_start = _parse_activity_start(existing)
+        if existing_start is None:
+            continue
+
+        if abs((candidate_start - existing_start).total_seconds()) > time_tolerance_seconds:
+            continue
+        if not _within_ratio(candidate.distance, existing.distance, ratio_tolerance):
+            continue
+        if not _within_ratio(candidate.moving_time, existing.moving_time, ratio_tolerance):
+            continue
+
+        return existing
+
+    return None
 
 
 class StravaDataFetcher:
@@ -427,7 +504,8 @@ class StravaDataFetcher:
             'new': 0,
             'updated': 0,
             'total': 0,
-            'previous_total': 0
+            'previous_total': 0,
+            'cross_source_duplicates': 0,
         }
         
         if merge and self.cache_path.exists():
@@ -440,12 +518,29 @@ class StravaDataFetcher:
                 # Create a dict of existing activities by ID for fast lookup
                 existing_by_id = {act.id: act for act in existing_activities}
                 
-                # Add new activities, replacing any duplicates
+                # Add new activities, replacing any duplicates. A cross-source
+                # duplicate (same physical ride ingested from a different
+                # source, e.g. a Garmin device that also auto-uploads to
+                # Strava) never shares an ID with its counterpart, so it
+                # always looks "new" by ID alone — catch it via a fuzzy
+                # time/distance/moving-time match before adding it (#557).
                 for act in activities:
                     if act.id in existing_by_id:
                         stats['updated'] += 1
-                    else:
-                        stats['new'] += 1
+                        existing_by_id[act.id] = act
+                        continue
+
+                    duplicate_of = find_cross_source_duplicate(act, existing_by_id)
+                    if duplicate_of is not None:
+                        stats['cross_source_duplicates'] += 1
+                        logger.info(
+                            f"Skipping activity id={act.id} source={act.source}: matches "
+                            f"existing id={duplicate_of.id} source={duplicate_of.source} "
+                            "(same ride, different source)"
+                        )
+                        continue
+
+                    stats['new'] += 1
                     existing_by_id[act.id] = act
                 
                 # Convert back to list and sort by date (newest first)
@@ -460,11 +555,15 @@ class StravaDataFetcher:
                 print(f"Previous cache size: {stats['previous_total']} activities")
                 print(f"New activities added: {stats['new']}")
                 print(f"Existing activities updated: {stats['updated']}")
+                if stats['cross_source_duplicates']:
+                    print(f"Cross-source duplicates skipped: {stats['cross_source_duplicates']}")
                 print(f"Total cache size: {stats['total']} activities")
                 print(f"Net change: +{stats['total'] - stats['previous_total']} activities")
                 print("="*70 + "\n")
-                
-                logger.info(f"Merged cache: {stats['new']} new, {stats['updated']} updated, {stats['total']} total")
+
+                logger.info(f"Merged cache: {stats['new']} new, {stats['updated']} updated, "
+                            f"{stats['cross_source_duplicates']} cross-source duplicates skipped, "
+                            f"{stats['total']} total")
                 activities = merged_activities
                 
             except Exception as e:
