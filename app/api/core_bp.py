@@ -19,6 +19,7 @@ from pathlib import Path
 from flask import Blueprint, current_app, jsonify, request
 from flask_wtf.csrf import generate_csrf
 
+from app.extensions import limiter
 from src.secure_logger import SecureLogger
 
 logger = SecureLogger(__name__)
@@ -124,6 +125,7 @@ def reset_settings():
 # ---------------------------------------------------------------------------
 
 @bp.route('/user/data', methods=['DELETE'])
+@limiter.limit("10 per minute")
 def delete_user_data():
     """GDPR-compliant endpoint to delete all user data."""
     data = request.get_json(silent=True) or {}

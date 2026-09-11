@@ -433,6 +433,7 @@ def get_gear_stats():
 
 
 @bp.route('/stats/refresh-gear', methods=['POST'])
+@limiter.limit("10 per minute")
 def refresh_gear():
     """Fetch athlete's bikes and shoes from Strava and update the gear cache."""
     container = current_app.container

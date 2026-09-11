@@ -7,6 +7,8 @@ Frontend Integration:
 - Returns map data with center, zoom, routes, markers, and layers
 """
 
+import html
+
 from flask import Blueprint, request, jsonify
 from typing import List, Dict, Optional
 from src.secure_logger import SecureLogger
@@ -34,6 +36,14 @@ def load_route_groups() -> Dict:
 def get_default_center() -> List[float]:
     """Get default map center (Chicago area)."""
     return [41.8781, -87.6298]
+
+
+def _safe_name(source: Dict, default: str) -> str:
+    """HTML-escape a route/group display name before it's embedded in
+    popup_html/tooltip strings, which Leaflet renders as raw HTML client-side
+    (#map-renderer.js bindPopup/bindTooltip) — group names trace back to
+    Strava activity titles, which are attacker-controlled free text."""
+    return html.escape(str(source.get('name') or default))
 
 
 @bp.route('/<page_type>')
@@ -129,7 +139,8 @@ def get_dashboard_map_data() -> Dict:
         
         # Sample coordinates for performance (every 5th point)
         sampled_coords = coords[::5] if len(coords) > 100 else coords
-        
+
+        safe_name = _safe_name(group, f'Route Group {i+1}')
         layer = {
             'name': group.get('name', f'Route Group {i+1}'),
             'show': i < 3,  # Show first 3 layers by default
@@ -139,12 +150,12 @@ def get_dashboard_map_data() -> Dict:
                 'weight': 4,
                 'opacity': 0.7,
                 'popup_html': f"""
-                    <strong>{group.get('name', 'Route')}</strong><br>
+                    <strong>{safe_name}</strong><br>
                     Distance: {rep_route.get('distance', 0) / 1000:.1f} km<br>
                     Elevation: {rep_route.get('elevation_gain', 0):.0f} m<br>
                     Uses: {group.get('frequency', 0)}
                 """,
-                'tooltip': group.get('name', 'Route')
+                'tooltip': safe_name
             }],
             'markers': []
         }
@@ -218,7 +229,8 @@ def get_commute_map_data() -> Dict:
         
         # Highlight first route (recommended)
         is_recommended = i == 0
-        
+
+        safe_name = _safe_name(group, f'Commute Route {i+1}')
         layer = {
             'name': group.get('name', f'Commute Route {i+1}'),
             'show': True,  # Show all commute routes
@@ -228,13 +240,13 @@ def get_commute_map_data() -> Dict:
                 'weight': 5 if is_recommended else 3,
                 'opacity': 0.9 if is_recommended else 0.6,
                 'popup_html': f"""
-                    <strong>{group.get('name', 'Route')}</strong><br>
+                    <strong>{safe_name}</strong><br>
                     {'<span class="badge bg-success">Recommended</span><br>' if is_recommended else ''}
                     Distance: {rep_route.get('distance', 0) / 1000:.1f} km<br>
                     Elevation: {rep_route.get('elevation_gain', 0):.0f} m<br>
                     Uses: {group.get('frequency', 0)}
                 """,
-                'tooltip': group.get('name', 'Route')
+                'tooltip': safe_name
             }],
             'markers': []
         }
@@ -296,18 +308,19 @@ def get_route_detail_map_data(route_id: str) -> Dict:
     center = [center_lat, center_lng]
     
     # Create single route (no layers needed)
+    safe_name = _safe_name(route_group, 'Route')
     route = {
         'coordinates': coords,
         'color': '#007bff',
         'weight': 4,
         'opacity': 0.8,
         'popup_html': f"""
-            <strong>{route_group.get('name', 'Route')}</strong><br>
+            <strong>{safe_name}</strong><br>
             Distance: {rep_route.get('distance', 0) / 1000:.1f} km<br>
             Elevation: {rep_route.get('elevation_gain', 0):.0f} m<br>
             Uses: {route_group.get('frequency', 0)}
         """,
-        'tooltip': route_group.get('name', 'Route')
+        'tooltip': safe_name
     }
     
     # Add start/end markers
