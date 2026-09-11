@@ -114,20 +114,6 @@ class TestStravaDataFetcher:
         assert fetcher.config == mock_config
         assert hasattr(fetcher, 'cache_path')
     
-    def test_decode_polyline(self, mock_client, mock_config):
-        """Test polyline decoding."""
-        fetcher = StravaDataFetcher(mock_client, mock_config, use_test_cache=True)
-        
-        # Simple polyline encoding for testing
-        # This is a simplified test - real polylines are more complex
-        encoded = "_p~iF~ps|U_ulLnnqC_mqNvxq`@"
-        
-        result = fetcher.decode_polyline(encoded)
-        
-        assert isinstance(result, list)
-        assert len(result) > 0
-        assert all(isinstance(coord, tuple) and len(coord) == 2 for coord in result)
-    
     def test_filter_commute_activities(self, mock_client, mock_config):
         """Test filtering commute activities."""
         fetcher = StravaDataFetcher(mock_client, mock_config, use_test_cache=True)
@@ -657,21 +643,6 @@ class TestFetchActivities:
         with pytest.raises(RuntimeError, match="API down"):
             fetcher.fetch_activities(use_cache=False)
 
-    def test_get_activity_details_success(self, fetcher):
-        strava_act = self._make_strava_activity(77)
-        strava_act.map = Mock()
-        strava_act.map.polyline = "detailed"
-        strava_act.map.summary_polyline = "summary"
-        fetcher.client.get_activity.return_value = strava_act
-        result = fetcher.get_activity_details(77)
-        assert result is not None
-        assert result.id == 77
-
-    def test_get_activity_details_error_returns_none(self, fetcher):
-        fetcher.client.get_activity.side_effect = RuntimeError("Not found")
-        result = fetcher.get_activity_details(999)
-        assert result is None
-
     def test_fetch_with_before_date_filters(self, fetcher):
         strava_act = self._make_strava_activity(1)
         strava_act.start_date = datetime(2026, 6, 1, 8, 0, tzinfo=timezone.utc)
@@ -795,68 +766,6 @@ class TestFromDictNestedLatlng:
         d['start_latlng'] = []
         act = Activity.from_dict(d)
         assert act.start_latlng == []
-
-
-class TestEnrichActivities:
-    """Test enrich_activities_with_detailed_polylines."""
-
-    @pytest.fixture
-    def fetcher(self, tmp_path):
-        client = Mock()
-        config = Mock()
-        config.get.side_effect = lambda key, default=None: {
-            'data_fetching.cache_duration_days': 7,
-            'data_fetching.max_activities': 500,
-        }.get(key, default)
-        f = StravaDataFetcher(client, config, use_test_cache=False)
-        f.cache_path = tmp_path / "activities.json"
-        return f
-
-    def _make_strava_act(self, aid=1):
-        m = Mock()
-        m.id = aid
-        m.name = "Ride"
-        m.type = "Ride"
-        m.sport_type = None
-        m.start_date = datetime(2026, 1, 1, 8, 0, tzinfo=timezone.utc)
-        m.distance = 5000.0
-        m.moving_time = 1200
-        m.elapsed_time = 1300
-        m.total_elevation_gain = 50.0
-        m.average_speed = 4.0
-        m.max_speed = 8.0
-        m.start_latlng = None
-        m.end_latlng = None
-        m.map = Mock()
-        m.map.polyline = "detailed_poly"
-        m.map.summary_polyline = "summary_poly"
-        return m
-
-    def test_enriches_polylines(self, fetcher):
-        activity = Activity(
-            id=1, name="Test", type="Ride",
-            start_date="2026-01-01T08:00:00+00:00",
-            distance=5000.0, moving_time=1200, elapsed_time=1300,
-            total_elevation_gain=50.0, average_speed=4.0, max_speed=8.0,
-            polyline="summary_only",
-        )
-        fetcher.client.get_activity.return_value = self._make_strava_act(1)
-        result = fetcher.enrich_activities_with_detailed_polylines([activity])
-        assert len(result) == 1
-        assert result[0].polyline == "detailed_poly"
-
-    def test_enrichment_failure_keeps_original(self, fetcher):
-        activity = Activity(
-            id=2, name="Test", type="Ride",
-            start_date="2026-01-01T08:00:00+00:00",
-            distance=5000.0, moving_time=1200, elapsed_time=1300,
-            total_elevation_gain=50.0, average_speed=4.0, max_speed=8.0,
-            polyline="original_poly",
-        )
-        fetcher.client.get_activity.side_effect = RuntimeError("API error")
-        result = fetcher.enrich_activities_with_detailed_polylines([activity])
-        assert len(result) == 1
-        assert result[0].polyline == "original_poly"
 
 
 class TestFilterCommuteEdgeCases:

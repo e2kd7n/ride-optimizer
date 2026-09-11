@@ -68,10 +68,6 @@ class ServiceContainer:
     # Public interface
     # ------------------------------------------------------------------
 
-    @property
-    def initialised(self) -> bool:
-        return self._initialised
-
     def initialise(self) -> None:
         """Initialise all services (idempotent; safe to call multiple times).
 
@@ -115,16 +111,6 @@ class ServiceContainer:
 
         self._initialised = True
         logger.info("Services initialized successfully")
-
-    def reset_initialisation(self) -> None:
-        """Force a full re-initialisation of every service on the next initialise() call.
-
-        Prefer refresh_services() below when only specific services are
-        affected by an action — this nukes and rebuilds all six services,
-        which is heavier than necessary for e.g. a location change that only
-        affects CommuteService (issue #461).
-        """
-        self._initialised = False
 
     def refresh_services(self, *names: str) -> None:
         """Re-run init for only the named services, in place, without touching

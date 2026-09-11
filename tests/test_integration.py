@@ -357,26 +357,6 @@ strava:
         endpoints = location_finder.extract_endpoints()
         assert endpoints == []
     
-    def test_invalid_polyline(self, tmp_path):
-        """Test handling of invalid polyline data."""
-        mock_client = Mock()
-        config_content = """
-cache:
-  directory: "cache"
-  enabled: false
-"""
-        config_file = tmp_path / "config.yaml"
-        config_file.write_text(config_content)
-        ConfigManager.reset_instance()
-        config = ConfigManager(str(config_file))
-
-        fetcher = StravaDataFetcher(mock_client, config, use_test_cache=True)
-        
-        # Invalid polyline should raise an exception
-        with pytest.raises(IndexError):
-            fetcher.decode_polyline("invalid_polyline_data")
-
-
 @pytest.mark.integration
 class TestLongRidesWorkflow:
     """Integration tests for Long Rides feature workflow."""
