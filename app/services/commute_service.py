@@ -238,50 +238,6 @@ class CommuteService:
                 'count': 0
             }
     
-    def get_departure_windows(self) -> Dict[str, Any]:
-        """
-        Get optimal departure time windows for commutes.
-        
-        Returns:
-            Dictionary with time windows:
-            {
-                'morning': {
-                    'start': str (HH:MM),
-                    'end': str (HH:MM),
-                    'optimal': str (HH:MM)
-                },
-                'evening': {
-                    'start': str (HH:MM),
-                    'end': str (HH:MM),
-                    'optimal': str (HH:MM)
-                }
-            }
-        """
-        if not self._recommender:
-            return {
-                'morning': {'start': '07:00', 'end': '09:00', 'optimal': '08:00'},
-                'evening': {'start': '15:00', 'end': '18:00', 'optimal': '16:30'}
-            }
-        
-        # Get windows from recommender
-        morning_start = self._recommender.morning_window_start
-        morning_end = self._recommender.morning_window_end
-        evening_start = self._recommender.evening_window_start
-        evening_end = self._recommender.evening_window_end
-        
-        return {
-            'morning': {
-                'start': morning_start.strftime('%H:%M'),
-                'end': morning_end.strftime('%H:%M'),
-                'optimal': '08:00'  # TODO: Calculate based on weather/traffic
-            },
-            'evening': {
-                'start': evening_start.strftime('%H:%M'),
-                'end': evening_end.strftime('%H:%M'),
-                'optimal': '16:30'  # TODO: Calculate based on weather/traffic
-            }
-        }
-    
     def _format_recommendation(self, rec: CommuteRecommendation) -> Dict[str, Any]:
         """
         Format a CommuteRecommendation for web consumption.

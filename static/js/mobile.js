@@ -388,14 +388,6 @@ function handleResponsiveResize() {
             } else {
                 document.body.classList.remove('mobile-view');
             }
-            
-            // Invalidate map sizes if they exist
-            if (window.recommendationsMap) {
-                window.recommendationsMap.invalidateSize();
-            }
-            if (window.nextCommuteMap) {
-                window.nextCommuteMap.invalidateSize();
-            }
         }, 250);
     });
 }
@@ -453,50 +445,6 @@ function enhanceAsyncActions() {
 }
 
 /**
- * Handle pull-to-refresh gesture (optional enhancement)
- */
-function initializePullToRefresh() {
-    if (!isTouchDevice) {
-        return;
-    }
-    
-    let touchStartY = 0;
-    let isPulling = false;
-    
-    document.addEventListener('touchstart', function(e) {
-        if (window.scrollY === 0) {
-            touchStartY = e.touches[0].clientY;
-        }
-    }, { passive: true });
-    
-    document.addEventListener('touchmove', function(e) {
-        if (window.scrollY === 0) {
-            const touchY = e.touches[0].clientY;
-            const pullDistance = touchY - touchStartY;
-            
-            if (pullDistance > 100 && !isPulling) {
-                isPulling = true;
-                // Show refresh indicator
-                if (window.showToast) {
-                    window.showToast('Release to refresh', 'info', { duration: 1000 });
-                }
-            }
-        }
-    }, { passive: true });
-    
-    document.addEventListener('touchend', function() {
-        if (isPulling) {
-            isPulling = false;
-            // Trigger refresh
-            if (window.location.reload) {
-                window.location.reload();
-            }
-        }
-        touchStartY = 0;
-    }, { passive: true });
-}
-
-/**
  * Initialize all mobile features
  */
 function initializeMobileFeatures() {
@@ -518,10 +466,7 @@ function initializeMobileFeatures() {
     handleResponsiveResize();
     preventIOSZoom();
     enhanceAsyncActions();
-    
-    // Optional: Pull-to-refresh (can be disabled if not desired)
-    // initializePullToRefresh();
-    
+
     console.log('✓ Mobile features initialized');
 }
 

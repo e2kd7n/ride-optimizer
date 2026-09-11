@@ -230,44 +230,6 @@ class WeatherService:
             logger.warning(f"Error getting air quality for {location_name or (lat, lon)}: {e}")
             return None
 
-    def get_weather_summary(self,
-                           lat: float,
-                           lon: float,
-                           location_name: Optional[str] = None) -> Dict[str, Any]:
-        """
-        Get weather with formatted summary for UI display.
-        
-        Args:
-            lat: Latitude
-            lon: Longitude
-            location_name: Optional location name
-            
-        Returns:
-            Dictionary with weather data and formatted summary string
-        """
-        weather = self.get_current_weather(lat, lon, location_name)
-        
-        if not weather:
-            return {
-                'summary': 'Weather data unavailable',
-                'available': False
-            }
-        
-        # Format summary
-        temp_f = weather.get('temperature_f', 0)
-        conditions = weather.get('conditions', 'Unknown')
-        wind_kph = weather.get('wind_speed_kph', 0)
-        wind_mph = wind_kph * 0.621371
-        
-        summary = f"{temp_f:.0f}°F, {conditions}"
-        if wind_kph > 0:
-            summary += f", Wind {wind_mph:.0f} mph"
-        
-        weather['summary'] = summary
-        weather['available'] = True
-        
-        return weather
-    
     def get_daily_forecast(self,
                           lat: float,
                           lon: float,

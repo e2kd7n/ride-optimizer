@@ -258,35 +258,6 @@ class TestSearchRoutes:
         assert 'Search failed' in result['message']
 
 
-class TestGetRouteDetails:
-    """Test get_route_details functionality."""
-    
-    def test_get_commute_route_details(self, initialized_service):
-        """Test getting commute route details."""
-        result = initialized_service.get_route_details("route_group_1", "commute")
-        assert result['status'] == 'success'
-        assert result['route']['id'] == "route_group_1"
-        assert result['route']['name'] == 'Home to Work'
-        assert 'routes' in result['route']  # Detailed view includes routes list
-        assert 'coordinates' in result['route']
-    
-    def test_get_long_ride_details(self, initialized_service):
-        """Test getting long ride details."""
-        result = initialized_service.get_route_details("67890", "long_ride")
-        assert result['status'] == 'success'
-        assert result['route']['id'] == "67890"
-        assert result['route']['name'] == 'Weekend Century'
-        assert 'coordinates' in result['route']
-        assert 'start_location' in result['route']
-        assert 'end_location' in result['route']
-    
-    def test_get_route_details_not_found(self, initialized_service):
-        """Test getting details for non-existent route."""
-        result = initialized_service.get_route_details("nonexistent", "commute")
-        assert result['status'] == 'error'
-        assert 'not found' in result['message']
-
-
 class TestGetRouteStatistics:
     """Test get_route_statistics functionality."""
     

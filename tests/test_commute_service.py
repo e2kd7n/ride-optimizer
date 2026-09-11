@@ -303,39 +303,6 @@ class TestGetAllCommuteOptions:
         assert result['count'] == 0
 
 
-@pytest.mark.unit
-class TestGetDepartureWindows:
-    """Test departure window calculations."""
-    
-    def test_get_windows_not_initialized(self, commute_service):
-        """Test getting windows when service not initialized."""
-        result = commute_service.get_departure_windows()
-        
-        # Should return default windows
-        assert 'morning' in result
-        assert 'evening' in result
-        assert result['morning']['start'] == '07:00'
-        assert result['morning']['end'] == '09:00'
-        assert result['evening']['start'] == '15:00'
-        assert result['evening']['end'] == '18:00'
-    
-    def test_get_windows_from_recommender(self, commute_service):
-        """Test getting windows from initialized recommender."""
-        commute_service._recommender = Mock()
-        commute_service._recommender.morning_window_start = time(6, 30)
-        commute_service._recommender.morning_window_end = time(9, 30)
-        commute_service._recommender.evening_window_start = time(16, 0)
-        commute_service._recommender.evening_window_end = time(19, 0)
-        
-        result = commute_service.get_departure_windows()
-        
-        assert result['morning']['start'] == '06:30'
-        assert result['morning']['end'] == '09:30'
-        assert result['evening']['start'] == '16:00'
-        assert result['evening']['end'] == '19:00'
-        # Optimal times are placeholders for now
-        assert 'optimal' in result['morning']
-        assert 'optimal' in result['evening']
 
 
 @pytest.mark.unit
@@ -464,11 +431,7 @@ class TestCommuteServiceIntegration:
         # Get recommendation
         result = commute_service.get_next_commute()
         assert result['status'] == 'success'
-        
-        # Get departure windows
-        windows = commute_service.get_departure_windows()
-        assert windows['morning']['start'] == '07:00'
-        
+
         # Get all options
         mock_recommender.get_all_recommendations.return_value = [mock_rec]
         options = commute_service.get_all_commute_options('to_work')

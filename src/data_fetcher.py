@@ -16,7 +16,6 @@ from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, asdict
 
 from stravalib.client import Client
-import polyline
 
 from src.secure_logger import SecureLogger
 from src.json_storage import JSONStorage, secure_chmod
@@ -455,57 +454,6 @@ class StravaDataFetcher:
 
         return activities
     
-    def get_activity_details(self, activity_id: int) -> Optional[Activity]:
-        """
-        Get detailed information for a specific activity.
-        
-        Args:
-            activity_id: Strava activity ID
-            
-        Returns:
-            Activity object or None
-        """
-        try:
-            activity = self.client.get_activity(activity_id)
-            return Activity.from_strava_activity(activity, use_detailed_polyline=True)
-        except Exception as e:
-            logger.error(f"Failed to fetch activity {activity_id}: {e}")
-            return None
-    
-    def enrich_activities_with_detailed_polylines(self, activities: List[Activity]) -> List[Activity]:
-        """
-        Fetch detailed polylines for activities that only have summary polylines.
-        This makes an additional API call per activity, so use sparingly.
-        
-        Args:
-            activities: List of Activity objects with summary polylines
-            
-        Returns:
-            List of Activity objects with detailed polylines
-        """
-        enriched_activities = []
-        
-        logger.info(f"Fetching detailed polylines for {len(activities)} activities...")
-        
-        for i, activity in enumerate(activities):
-            try:
-                # Fetch detailed activity data
-                detailed_activity = self.client.get_activity(activity.id)
-                enriched = Activity.from_strava_activity(detailed_activity, use_detailed_polyline=True)
-                enriched_activities.append(enriched)
-                
-                if (i + 1) % 10 == 0:
-                    logger.info(f"Enriched {i + 1}/{len(activities)} activities")
-                    
-            except Exception as e:
-                logger.warning(f"Failed to enrich activity_id={activity.id}: {e}")
-                # Keep original activity if enrichment fails
-                enriched_activities.append(activity)
-                continue
-        
-        logger.info(f"Successfully enriched {len(enriched_activities)} activities with detailed polylines")
-        return enriched_activities
-    
     def cache_activities(self, activities: List[Activity], merge: bool = True) -> dict:
         """
         Save activities to cache file.
@@ -732,18 +680,6 @@ class StravaDataFetcher:
         
         return filtered
     
-    def decode_polyline(self, encoded: str) -> List[tuple]:
-        """
-        Decode polyline string to list of coordinates.
-
-        Args:
-            encoded: Encoded polyline string
-
-        Returns:
-            List of (lat, lon) tuples
-        """
-        return polyline.decode(encoded)
-
     # ------------------------------------------------------------------
     # Gear (bikes / shoes) — fetched from the athlete profile
     # ------------------------------------------------------------------

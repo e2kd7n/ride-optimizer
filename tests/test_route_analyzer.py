@@ -444,12 +444,6 @@ class TestCacheKeyHelpers:
         r2 = _make_route(2, coords=[(42.0, -88.0), (42.1, -88.1)])
         assert analyzer._get_cache_key(r1, r2) == analyzer._get_cache_key(r2, r1)
 
-    def test_generate_cache_key_deterministic(self, analyzer):
-        routes = [_make_route(i) for i in range(3)]
-        key1 = analyzer._generate_cache_key(routes)
-        key2 = analyzer._generate_cache_key(routes[::-1])  # reversed order
-        assert key1 == key2  # key is based on sorted IDs
-
 
 # ---------------------------------------------------------------------------
 # _determine_direction tests

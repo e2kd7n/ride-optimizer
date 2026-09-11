@@ -514,15 +514,25 @@ function pollCalendarBackfillStatus() {
     const btn = document.getElementById('cal-backfill-btn');
     const statusEl = document.getElementById('cal-backfill-status');
 
-    const poll = setInterval(async () => {
-        try {
-            const job = await api.get('/fetch/status');
+    function resetBtn() {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-cloud-download"></i> Backfill this month';
+    }
+
+    window.pollJob({
+        intervalMs: 3000,
+        fetchStatus: () => api.get('/fetch/status'),
+        onGiveUp: (reason) => {
+            resetBtn();
+            if (typeof showToast === 'function') {
+                showToast(reason === 'timeout' ? 'Backfill is taking unusually long' : 'Lost connection while checking backfill status', 'warning');
+            }
+        },
+        onStatus: (job) => {
             statusEl.textContent = job.label || 'Fetching…';
 
             if (job.status === 'done' || job.status === 'error') {
-                clearInterval(poll);
-                btn.disabled = false;
-                btn.innerHTML = '<i class="bi bi-cloud-download"></i> Backfill this month';
+                resetBtn();
                 if (typeof showToast === 'function') {
                     showToast(job.label || (job.status === 'done' ? 'Backfill complete' : 'Backfill failed'),
                         job.status === 'done' ? 'success' : 'error');
@@ -532,9 +542,11 @@ function pollCalendarBackfillStatus() {
                     loadStats();
                     loadActivities();
                 }
+                return job.status;
             }
-        } catch (_) { /* network hiccup — keep polling */ }
-    }, 3000);
+            return 'running';
+        },
+    });
 }
 
 // -----------------------------------------------------------------------

@@ -340,58 +340,6 @@ class TestGetCurrentWeather:
         assert '42.36' in location_name
 
 
-class TestGetWeatherSummary:
-    """Test weather summary formatting."""
-    
-    def test_formats_summary_string(self, weather_service, sample_weather_data):
-        """Test summary string formatting."""
-        weather_service.get_current_weather = Mock(return_value=sample_weather_data)
-        
-        result = weather_service.get_weather_summary(42.3601, -71.0589, 'Boston')
-        
-        assert 'summary' in result
-        assert '68°F' in result['summary']
-        assert 'Clear' in result['summary']
-        assert 'Wind' in result['summary']
-        assert result['available'] is True
-    
-    def test_includes_wind_in_summary(self, weather_service):
-        """Test that wind is included in summary when present."""
-        weather_data = {
-            'temperature_f': 72,
-            'conditions': 'Partly Cloudy',
-            'wind_speed_kph': 20
-        }
-        weather_service.get_current_weather = Mock(return_value=weather_data)
-        
-        result = weather_service.get_weather_summary(42.3601, -71.0589)
-        
-        assert 'Wind' in result['summary']
-        assert 'mph' in result['summary']
-    
-    def test_no_wind_in_summary_when_zero(self, weather_service):
-        """Test that wind is omitted when zero."""
-        weather_data = {
-            'temperature_f': 72,
-            'conditions': 'Clear',
-            'wind_speed_kph': 0
-        }
-        weather_service.get_current_weather = Mock(return_value=weather_data)
-        
-        result = weather_service.get_weather_summary(42.3601, -71.0589)
-        
-        assert 'Wind' not in result['summary']
-    
-    def test_unavailable_weather(self, weather_service):
-        """Test handling unavailable weather data."""
-        weather_service.get_current_weather = Mock(return_value={})
-        
-        result = weather_service.get_weather_summary(42.3601, -71.0589)
-        
-        assert result['summary'] == 'Weather data unavailable'
-        assert result['available'] is False
-
-
 class TestGetDegradedWeather:
     """Test degraded weather fallback."""
     

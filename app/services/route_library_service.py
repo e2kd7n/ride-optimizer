@@ -229,29 +229,6 @@ class RouteLibraryService:
                 'count': 0
             }
 
-    def get_route_details(self, route_id: str, route_type: str) -> Dict[str, Any]:
-        """
-        Get detailed information about a specific route.
-
-        Args:
-            route_id: Route identifier
-            route_type: 'commute' or 'long_ride'
-
-        Returns:
-            Dictionary with route details
-        """
-        route = self.get_route_by_id(route_id, route_type=route_type)
-        if route:
-            return {
-                'status': 'success',
-                'route': route
-            }
-
-        return {
-            'status': 'error',
-            'message': f'Route {route_id} not found'
-        }
-
     def get_route_by_id(self, route_id: str, route_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Get a single route by ID with full detail payload."""
         self._load_from_cache()

@@ -346,30 +346,6 @@ class RouteAnalyzer:
         
         return groups
     
-    def _generate_cache_key(self, routes: List[Route]) -> str:
-        """
-        Generate cache key based on route activity IDs and config.
-        
-        Args:
-            routes: List of routes
-            
-        Returns:
-            Cache key string
-        """
-        # Sort activity IDs for consistent key
-        activity_ids = sorted([r.activity_id for r in routes])
-        
-        # Include similarity threshold and algorithm version in key
-        key_data = {
-            'activity_ids': activity_ids,
-            'similarity_threshold': self.similarity_threshold,
-            'algorithm': 'frechet' if FRECHET_AVAILABLE else 'hausdorff',
-            'version': '2.0'  # Increment when algorithm changes
-        }
-        
-        key_str = json.dumps(key_data, sort_keys=True)
-        return hashlib.sha256(key_str.encode()).hexdigest()
-    
     def _get_route_hash(self, route: Route) -> str:
         """
         Generate a unique hash for a route based on its coordinates.
