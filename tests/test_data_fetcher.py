@@ -7,7 +7,7 @@ import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import Mock, MagicMock, patch, call
-from src.data_fetcher import Activity, StravaDataFetcher
+from src.data_fetcher import Activity, StravaDataFetcher, find_cross_source_duplicate
 
 
 class TestActivity:
@@ -427,6 +427,66 @@ class TestCacheManagement:
         assert stats['updated'] == 1
         assert stats['total'] == 1
 
+    def test_cache_activities_cross_source_duplicate_suppressed(self, fetcher):
+        """Same ride ingested from Garmin after Strava already has it (e.g.
+        Garmin auto-uploads to Strava) should be suppressed, not double-counted."""
+        self._write_cache(fetcher.cache_path, age_days=0, activities=[
+            {'id': 111, 'name': 'Morning Ride', 'type': 'Ride', 'source': 'strava',
+             'start_date_local': '2024-01-15T08:30:00', 'distance': 20000.0,
+             'moving_time': 3600, 'elapsed_time': 3700,
+             'total_elevation_gain': 200.0, 'average_speed': 5.5, 'max_speed': 10.0}
+        ])
+        garmin_import = [Activity(
+            id=999999, name='Garmin Activity', type='Ride', source='garmin',
+            start_date_local='2024-01-15 08:31:30',  # 90s later, Garmin's space-separated format
+            distance=20200.0, moving_time=3650, elapsed_time=3700,
+            total_elevation_gain=200.0, average_speed=5.5, max_speed=10.0,
+        )]
+        stats = fetcher.cache_activities(garmin_import, merge=True)
+        assert stats['new'] == 0
+        assert stats['cross_source_duplicates'] == 1
+        assert stats['total'] == 1
+
+    def test_cache_activities_cross_source_distinct_rides_not_suppressed(self, fetcher):
+        """Two different rides that merely start close in time (different
+        source) but differ in distance must both be kept."""
+        self._write_cache(fetcher.cache_path, age_days=0, activities=[
+            {'id': 111, 'name': 'Ride', 'type': 'Ride', 'source': 'strava',
+             'start_date_local': '2024-01-15T08:30:00', 'distance': 20000.0,
+             'moving_time': 3600, 'elapsed_time': 3700,
+             'total_elevation_gain': 200.0, 'average_speed': 5.5, 'max_speed': 10.0}
+        ])
+        garmin_import = [Activity(
+            id=222, name='Ride', type='Ride', source='garmin',
+            start_date_local='2024-01-15 08:31:00', distance=5000.0,
+            moving_time=900, elapsed_time=950, total_elevation_gain=50.0,
+            average_speed=5.5, max_speed=10.0,
+        )]
+        stats = fetcher.cache_activities(garmin_import, merge=True)
+        assert stats['new'] == 1
+        assert stats['cross_source_duplicates'] == 0
+        assert stats['total'] == 2
+
+    def test_cache_activities_cross_source_identical_name_far_apart_not_suppressed(self, fetcher):
+        """Regression guard: an identical activity name must never, on its
+        own, cause two genuinely different rides to be treated as duplicates."""
+        self._write_cache(fetcher.cache_path, age_days=0, activities=[
+            {'id': 111, 'name': 'Ride', 'type': 'Ride', 'source': 'strava',
+             'start_date_local': '2024-01-15T08:30:00', 'distance': 20000.0,
+             'moving_time': 3600, 'elapsed_time': 3700,
+             'total_elevation_gain': 200.0, 'average_speed': 5.5, 'max_speed': 10.0}
+        ])
+        garmin_import = [Activity(
+            id=222, name='Ride', type='Ride', source='garmin',
+            start_date_local='2024-03-01 09:00:00', distance=5000.0,
+            moving_time=900, elapsed_time=950, total_elevation_gain=50.0,
+            average_speed=5.5, max_speed=10.0,
+        )]
+        stats = fetcher.cache_activities(garmin_import, merge=True)
+        assert stats['new'] == 1
+        assert stats['cross_source_duplicates'] == 0
+        assert stats['total'] == 2
+
     def test_get_cache_age_days(self, fetcher):
         self._write_cache(fetcher.cache_path, age_days=3)
         age = fetcher._get_cache_age_days()
@@ -434,6 +494,52 @@ class TestCacheManagement:
 
     def test_get_cache_age_days_missing(self, fetcher):
         assert fetcher._get_cache_age_days() == 0.0
+
+
+class TestFindCrossSourceDuplicate:
+    """Unit tests for find_cross_source_duplicate() in isolation."""
+
+    def _activity(self, id, source, start_date_local, distance, moving_time, name="Ride"):
+        return Activity(
+            id=id, name=name, type="Ride", source=source,
+            start_date_local=start_date_local, distance=distance,
+            moving_time=moving_time, elapsed_time=moving_time + 60,
+            total_elevation_gain=100.0, average_speed=5.0, max_speed=9.0,
+        )
+
+    def test_matches_close_time_and_distance_different_source(self):
+        existing = self._activity(1, 'strava', '2024-01-15T08:30:00', 20000.0, 3600)
+        candidate = self._activity(2, 'garmin', '2024-01-15 08:31:30', 20200.0, 3650)
+        match = find_cross_source_duplicate(candidate, {1: existing})
+        assert match is existing
+
+    def test_no_match_when_same_source(self):
+        """Same-source overlap is already handled by ID — this function must
+        not also fire same-source, or it could suppress a legitimate second
+        activity that happens to look similar."""
+        existing = self._activity(1, 'strava', '2024-01-15T08:30:00', 20000.0, 3600)
+        candidate = self._activity(2, 'strava', '2024-01-15T08:31:30', 20200.0, 3650)
+        assert find_cross_source_duplicate(candidate, {1: existing}) is None
+
+    def test_no_match_when_distance_too_different(self):
+        existing = self._activity(1, 'strava', '2024-01-15T08:30:00', 20000.0, 3600)
+        candidate = self._activity(2, 'garmin', '2024-01-15T08:31:00', 5000.0, 900)
+        assert find_cross_source_duplicate(candidate, {1: existing}) is None
+
+    def test_no_match_when_time_too_far_apart(self):
+        existing = self._activity(1, 'strava', '2024-01-15T08:30:00', 20000.0, 3600)
+        candidate = self._activity(2, 'garmin', '2024-01-15T09:15:00', 20100.0, 3600)
+        assert find_cross_source_duplicate(candidate, {1: existing}) is None
+
+    def test_ignores_name_entirely(self):
+        """An identical name must not cause a match on its own, and a
+        completely different name must not prevent a real match."""
+        existing = self._activity(1, 'strava', '2024-01-15T08:30:00', 20000.0, 3600, name="Ride")
+        far_apart_same_name = self._activity(2, 'garmin', '2024-06-01T08:30:00', 5000.0, 900, name="Ride")
+        assert find_cross_source_duplicate(far_apart_same_name, {1: existing}) is None
+
+        close_different_name = self._activity(3, 'garmin', '2024-01-15T08:31:00', 20100.0, 3610, name="Completely Different Name")
+        assert find_cross_source_duplicate(close_different_name, {1: existing}) is existing
 
 
 class TestFetchActivities:
