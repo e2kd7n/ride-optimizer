@@ -181,6 +181,7 @@ def setup_status():
 
 
 @bp.route('/setup/credentials', methods=['POST'])
+@limiter.limit("10 per minute")
 def setup_credentials():
     """Save Strava Client ID and Secret to .env."""
     data = request.get_json(silent=True) or {}
