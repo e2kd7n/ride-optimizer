@@ -2,9 +2,7 @@
 Maps API - Provides page-level map data for dashboard, commute, planner, and route-detail pages.
 This is separate from map_api.py which provides route-specific data.
 
-Frontend Integration:
-- map-renderer.js calls /api/maps/<page_type>
-- Returns map data with center, zoom, routes, markers, and layers
+Returns map data with center, zoom, routes, markers, and layers for /api/maps/<page_type>.
 """
 
 import html
@@ -41,7 +39,7 @@ def get_default_center() -> List[float]:
 def _safe_name(source: Dict, default: str) -> str:
     """HTML-escape a route/group display name before it's embedded in
     popup_html/tooltip strings, which Leaflet renders as raw HTML client-side
-    (#map-renderer.js bindPopup/bindTooltip) — group names trace back to
+    (bindPopup/bindTooltip) — group names trace back to
     Strava activity titles, which are attacker-controlled free text."""
     return html.escape(str(source.get('name') or default))
 
