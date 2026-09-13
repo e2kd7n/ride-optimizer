@@ -103,6 +103,26 @@ class APIClient {
                     const error = new Error(errorMessage);
                     error.status = response.status;
                     error.statusText = response.statusText;
+                    // #580 — capture the server's Retry-After on a 429 so the
+                    // retry loop below can honor it instead of guessing with
+                    // blind exponential backoff. Accepts either delta-seconds
+                    // (the usual rate-limit form) or an HTTP-date value;
+                    // absent/unparseable leaves retryAfterMs unset and the
+                    // caller falls back to exponential backoff.
+                    if (response.status === 429) {
+                        const retryAfterHeader = response.headers.get('Retry-After');
+                        if (retryAfterHeader) {
+                            const seconds = Number(retryAfterHeader);
+                            if (Number.isFinite(seconds) && seconds >= 0) {
+                                error.retryAfterMs = seconds * 1000;
+                            } else {
+                                const dateMs = Date.parse(retryAfterHeader);
+                                if (!Number.isNaN(dateMs)) {
+                                    error.retryAfterMs = Math.max(0, dateMs - Date.now());
+                                }
+                            }
+                        }
+                    }
                     throw error;
                 }
 
@@ -144,8 +164,12 @@ class APIClient {
                     throw error;
                 }
                 
-                // Exponential backoff: 1s, 2s, 4s
-                const delay = this.retryDelay * Math.pow(2, attempt);
+                // #580 — a 429 with a Retry-After header waits exactly as
+                // long as the server asked; otherwise fall back to the
+                // existing exponential backoff (1s, 2s, 4s).
+                const delay = (error.status === 429 && typeof error.retryAfterMs === 'number')
+                    ? error.retryAfterMs
+                    : this.retryDelay * Math.pow(2, attempt);
                 console.log(`Retrying in ${delay}ms...`);
                 await this.sleep(delay);
             }
