@@ -286,6 +286,13 @@ class ServiceContainer:
                 if self.exploration_service is None:
                     from app.services.exploration_service import ExplorationService
                     self.exploration_service = ExplorationService()
+                    # Cold-start pre-warm (#560): kick off a background
+                    # build of both zooms' tile index right away instead of
+                    # waiting for the first live Explore request to pay for
+                    # it synchronously. start_prewarm() is single-fire and
+                    # spawns its own daemon thread, so this doesn't block
+                    # the caller of get_exploration_service().
+                    self.exploration_service.start_prewarm()
         return self.exploration_service
 
     def get_geocoding_service(self):

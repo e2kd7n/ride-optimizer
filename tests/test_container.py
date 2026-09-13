@@ -72,3 +72,25 @@ class TestGetExplorationServiceLocking:
 
         assert result is sentinel
         mock_cls.assert_not_called()
+
+    def test_first_construction_triggers_prewarm(self):
+        """#560: the container should kick off the exploration service's
+        cold-start pre-warm right after constructing it."""
+        container = ServiceContainer()
+        with patch("app.services.exploration_service.ExplorationService") as mock_cls:
+            mock_instance = MagicMock(name="exploration_service_instance")
+            mock_cls.return_value = mock_instance
+            container.get_exploration_service()
+
+        mock_instance.start_prewarm.assert_called_once()
+
+    def test_repeated_access_does_not_retrigger_prewarm(self):
+        container = ServiceContainer()
+        with patch("app.services.exploration_service.ExplorationService") as mock_cls:
+            mock_instance = MagicMock(name="exploration_service_instance")
+            mock_cls.return_value = mock_instance
+            container.get_exploration_service()
+            container.get_exploration_service()
+            container.get_exploration_service()
+
+        mock_instance.start_prewarm.assert_called_once()

@@ -89,6 +89,110 @@ class TestExplorationService:
             mock_inv.assert_called_once()
 
 
+# ── cold-start pre-warm (#560) ────────────────────────────────────
+
+
+class TestStartPrewarm:
+    def test_prewarm_builds_both_zooms_sequentially(self, service):
+        service._tracker._activities_cache = []
+        calls = []
+        build_lock = threading.Lock()
+
+        def fake_build(zoom):
+            with build_lock:
+                calls.append(zoom)
+            return {"indexed_activity_ids": set(), "tiles": {}}
+
+        with patch.object(service._tracker, "_build_or_update_tile_index", side_effect=fake_build) as mock_build:
+            service.start_prewarm()
+            # Wait for the daemon thread to finish.
+            for _ in range(50):
+                if mock_build.call_count >= 2:
+                    break
+                time.sleep(0.05)
+
+        assert calls == [TILE_ZOOM, SQUADRATINHO_ZOOM]
+
+    def test_prewarm_is_single_fire(self, service):
+        service._tracker._activities_cache = []
+        with patch.object(
+            service._tracker, "_build_or_update_tile_index",
+            return_value={"indexed_activity_ids": set(), "tiles": {}},
+        ) as mock_build:
+            service.start_prewarm()
+            service.start_prewarm()
+            service.start_prewarm()
+            for _ in range(50):
+                if mock_build.call_count >= 2:
+                    break
+                time.sleep(0.05)
+
+        # Exactly one pass over both zooms, despite three calls.
+        assert mock_build.call_count == 2
+
+    def test_prewarm_tolerates_missing_activities_file(self, service, tmp_path):
+        # No activities.json written under tmp_path — _load_activities()
+        # must treat this as "no activities yet", not raise.
+        service._tracker._activities_cache = None
+        service._tracker.cache_dir = tmp_path
+
+        done = threading.Event()
+        real_worker = service._prewarm_worker
+
+        def wrapped_worker():
+            real_worker()
+            done.set()
+
+        with patch.object(service, "_prewarm_worker", side_effect=wrapped_worker):
+            service.start_prewarm()
+            assert done.wait(timeout=5)
+
+        # Both zooms built to an empty (but valid) index.
+        for zoom in (TILE_ZOOM, SQUADRATINHO_ZOOM):
+            path = service._tracker._tile_index_path(zoom)
+            assert path.exists() or service._tracker._tile_index_cache.get(zoom) is not None
+
+    def test_prewarm_survives_a_build_exception(self, service):
+        """A failure building one zoom's index must be caught and logged,
+        not crash the daemon thread or propagate to the caller — and the
+        other zoom should still get a chance to warm."""
+        service._tracker._activities_cache = []
+        calls = []
+
+        def flaky_build(zoom):
+            calls.append(zoom)
+            if zoom == TILE_ZOOM:
+                raise RuntimeError("simulated failure")
+            return {"indexed_activity_ids": set(), "tiles": {}}
+
+        with patch.object(service._tracker, "_build_or_update_tile_index", side_effect=flaky_build) as mock_build:
+            service.start_prewarm()
+            for _ in range(50):
+                if mock_build.call_count >= 2:
+                    break
+                time.sleep(0.05)
+
+        assert calls == [TILE_ZOOM, SQUADRATINHO_ZOOM]
+
+    def test_prewarm_thread_is_a_daemon(self, service):
+        service._tracker._activities_cache = []
+        created_threads = []
+        real_thread_cls = threading.Thread
+
+        def spy_thread(*args, **kwargs):
+            t = real_thread_cls(*args, **kwargs)
+            created_threads.append(t)
+            return t
+
+        with patch("app.services.exploration_service.threading.Thread", side_effect=spy_thread):
+            service.start_prewarm()
+            for t in created_threads:
+                t.join(timeout=5)
+
+        assert len(created_threads) == 1
+        assert created_threads[0].daemon is True
+
+
 # ── verify_tile_claims (#493) ────────────────────────────────────
 
 

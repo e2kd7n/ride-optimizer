@@ -62,9 +62,62 @@ class ExplorationService:
         # starvation protection while letting that concurrency actually help.
         max_concurrent = int(self.config.get("exploration.ors_max_concurrent_calls", 2))
         self._route_semaphore = threading.Semaphore(max_concurrent)
+        # Single-fire guard for start_prewarm() (#560) — a cold process
+        # builds nothing at startup, so the first live request pays for a
+        # full activity-polyline decode synchronously. See start_prewarm().
+        self._prewarm_started = False
+        self._prewarm_lock = threading.Lock()
 
     def initialize(self):
         self._load_route_cache_from_disk()
+
+    def start_prewarm(self) -> None:
+        """Kick off a background pre-warm of both zooms' tile index (#560).
+
+        Nothing builds the tile index at startup otherwise — the first
+        live Explore request after a cold process (restart/redeploy) pays
+        for a full activity-polyline decode synchronously, which can take
+        several seconds on a real activity history. This spawns a daemon
+        thread that builds TILE_ZOOM's and SQUADRATINHO_ZOOM's index ahead
+        of any real request, so by the time a user opens Explore the index
+        is already warm — and any request that beats the warm-up still
+        gets #563's stale-serving path instead of a multi-second block.
+
+        Single-fire: a second call is a no-op, so callers (e.g.
+        ServiceContainer.get_exploration_service()) don't need to track
+        whether they've already triggered this. Zooms are warmed
+        sequentially, not in parallel — #558's per-zoom locks mean warming
+        one zoom doesn't block reads/writes at another, so there's no
+        correctness reason to parallelize, and running sequentially avoids
+        two full activity-decode passes competing for the same CPU at
+        once. A missing data/cache/activities.json is tolerated (
+        CoverageTracker._load_activities() already treats that as "no
+        activities yet" rather than an error); any other exception is
+        caught and logged so a failure here can't silently kill the daemon
+        thread or, worse, the caller.
+        """
+        with self._prewarm_lock:
+            if self._prewarm_started:
+                return
+            self._prewarm_started = True
+
+        thread = threading.Thread(
+            target=self._prewarm_worker, name="exploration-prewarm", daemon=True
+        )
+        thread.start()
+
+    def _prewarm_worker(self) -> None:
+        from src.coverage_tracker import TILE_ZOOM, SQUADRATINHO_ZOOM
+
+        for zoom in (TILE_ZOOM, SQUADRATINHO_ZOOM):
+            try:
+                start = time.monotonic()
+                self._tracker._build_or_update_tile_index(zoom)
+                logger.info(
+                    "Pre-warmed tile index (zoom=%d) in %.2fs", zoom, time.monotonic() - start
+                )
+            except Exception as exc:
+                logger.error("Tile index pre-warm failed for zoom=%d: %s", zoom, exc, exc_info=True)
 
     def get_tile_coverage(
         self,
