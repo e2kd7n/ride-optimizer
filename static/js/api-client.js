@@ -62,7 +62,7 @@ class APIClient {
      * Generic fetch wrapper with error handling and retry logic
      */
     async fetch(endpoint, options = {}) {
-        const { timeoutMs, ...fetchOptions } = options;
+        const { timeoutMs, onRetry, ...fetchOptions } = options;
         const url = `${this.baseURL}${endpoint}`;
         const method = (fetchOptions.method || 'GET').toUpperCase();
         const isMutation = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method);
@@ -171,6 +171,16 @@ class APIClient {
                     ? error.retryAfterMs
                     : this.retryDelay * Math.pow(2, attempt);
                 console.log(`Retrying in ${delay}ms...`);
+
+                // #563 — let a caller surface retry progress in its own UI
+                // (e.g. explore.js's coverage status line) without this
+                // generic fetch wrapper knowing anything about DOM elements
+                // or endpoint-specific response shapes. 1-indexed attempt
+                // numbers: this is the attempt about to start.
+                if (typeof onRetry === 'function') {
+                    onRetry(attempt + 2, this.retryAttempts);
+                }
+
                 await this.sleep(delay);
             }
         }
@@ -332,13 +342,15 @@ class APIClient {
 
     // ── Exploration / Coverage ───────────────────────────────
 
-    async getTileCoverage(bounds = null, zoom = null) {
-        // Backend serves this from a persisted per-zoom tile index that's
-        // incrementally updated as new activities appear (src/coverage_tracker.py),
-        // not rescanned from scratch — but the very first request after a fresh
-        // activity sync (or on a brand-new cache) still has to build that index
-        // once, which can take a while over a large ride history.
-        const timeoutMs = 45000;
+    async getTileCoverage(bounds = null, zoom = null, onRetry = null) {
+        // #563 — this used to allow 45s per attempt, so 3 stacked retries on
+        // a hung backend meant a 138s silent hang. The backend now has a
+        // stale-serving fast path for the coverage endpoint (fresh data,
+        // stale-but-immediate data, or a fast clean error), so a real
+        // response — of any of those three kinds — should land well inside
+        // this window; a much shorter timeout here just means "give up and
+        // retry" happens promptly instead of 3x45s later.
+        const timeoutMs = 12000;
         const params = new URLSearchParams();
         if (bounds) {
             params.set('south', bounds.south);
@@ -348,7 +360,7 @@ class APIClient {
         }
         if (zoom) params.set('zoom', zoom);
         const qs = params.toString();
-        return this.fetch(`/exploration/tiles${qs ? '?' + qs : ''}`, { timeoutMs });
+        return this.fetch(`/exploration/tiles${qs ? '?' + qs : ''}`, { timeoutMs, onRetry });
     }
 
     async getRoadCoverage(bounds) {
