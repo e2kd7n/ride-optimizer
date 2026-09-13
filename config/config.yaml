@@ -14,9 +14,9 @@ exploration:
   water_polygon_cache_ttl_seconds: 0  # Same, for water_*.json (Overpass natural=water polygons). 0 = never expire — these aren't cleared by invalidate_caches() at all today.
   default_speed_kmh: 18  # Fallback for duration→distance conversion (#490) when the rider has no cached ride history to average
 
-  rate_limit_route: "20 per minute"  # /api/exploration/route
+  rate_limit_route: "40 per minute"  # /api/exploration/route — #580: was 20/min, well below the up-to-12 ORS calls a single "Plot road route" tap can generate (2 directions x up to 6 refinement iterations, #565). 40 leaves headroom for a full worst-case interaction (~12 calls) plus a retry or a second interaction in the same minute, without opening the door to sustained abuse.
   rate_limit_tiles: "60 per minute"  # /api/exploration/tiles — no per-user limit before this; sized above the route limit since coverage checks fire more often per interaction
-  rate_limit_roadless: "20 per minute"  # /api/exploration/roadless-tiles
+  rate_limit_roadless: "40 per minute"  # /api/exploration/roadless-tiles — #580: was 20/min, tight for multi-zoom (squadrat + squadratinho) and multi-bbox corridor coverage loads that can fire several roadless-tile requests per Explore interaction. Raised to match rate_limit_route's headroom.
   rate_limit_verify: "30 per minute"  # /api/exploration/verify-tiles, /api/exploration/new-tiles
 
   oauth_callback_host: "localhost"  # Host for OAuth callback server
