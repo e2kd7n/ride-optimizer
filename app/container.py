@@ -12,6 +12,7 @@ Wave initialisation (parallel where dependencies allow):
 """
 
 from src.secure_logger import SecureLogger
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from app.jobs.job_state import JobRegistry
@@ -35,6 +36,11 @@ class ServiceContainer:
         self.commute_service = None
         self.planner_service = None
         self.exploration_service = None
+        # Guards lazy construction in get_exploration_service() (#572) —
+        # without it, concurrent first-requests could each observe
+        # exploration_service as None and construct duplicate
+        # ExplorationService/CoverageTracker instances.
+        self._exploration_service_lock: threading.Lock = threading.Lock()
         self.geocoding_service = None
         self.garmin_service = None
         # SettingsService is eager — constructed immediately
@@ -262,10 +268,24 @@ class ServiceContainer:
     # ------------------------------------------------------------------
 
     def get_exploration_service(self):
-        """Return ExplorationService, creating it on first access."""
+        """Return ExplorationService, creating it on first access.
+
+        Double-checked locking (#572): without a lock, two concurrent
+        first-requests (e.g. two Explore page loads racing before anything
+        has warmed this up) could both observe exploration_service as None
+        and each construct their own ExplorationService/CoverageTracker
+        instance — the loser's work (and its in-memory tile index state)
+        would then be silently discarded. The outer None check avoids
+        taking the lock on every call once the service is warm; callers
+        that read the public `exploration_service` attribute directly
+        (app/api/data_bp.py) are unaffected since this only changes how
+        the attribute is populated the first time.
+        """
         if self.exploration_service is None:
-            from app.services.exploration_service import ExplorationService
-            self.exploration_service = ExplorationService()
+            with self._exploration_service_lock:
+                if self.exploration_service is None:
+                    from app.services.exploration_service import ExplorationService
+                    self.exploration_service = ExplorationService()
         return self.exploration_service
 
     def get_geocoding_service(self):
