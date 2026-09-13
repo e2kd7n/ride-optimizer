@@ -32,6 +32,18 @@ EARTH_RADIUS_M = 6_371_000
 MAX_ROAD_NETWORK_CACHES = 20  # cap on retained road_network_<hash>.graphml files
 MAX_WATER_POLYGON_CACHES = 20  # cap on retained water_<hash>.json files
 _OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+# Overpass's own internal query budget ([out:json][timeout:N]) and the
+# client-side requests.post timeout (#562) — lowered together from the
+# previous 25/30s. The client timeout stays a couple seconds above the
+# query timeout so we don't abort a query Overpass would've legitimately
+# finished (lowering only the client side would do exactly that).
+_OVERPASS_QUERY_TIMEOUT_S = 10
+_OVERPASS_REQUEST_TIMEOUT_S = 12
+# Short-lived "this endpoint just failed" marker (#562), keyed by endpoint
+# rather than by bbox: an outage is global to the endpoint, but the query
+# bbox changes on nearly every pin placement, so a bbox-keyed marker would
+# almost always miss and every request would still pay the full timeout.
+_OVERPASS_NEGATIVE_CACHE_TTL_S = 60
 
 
 @dataclass
@@ -317,6 +329,10 @@ class CoverageTracker:
         # lazy-creation step, never held across a build/read.
         self._tile_index_locks: Dict[int, threading.Lock] = {}
         self._tile_index_locks_lock = threading.Lock()
+        # Negative cache for Overpass failures (#562): endpoint -> wall-clock
+        # timestamp until which fresh requests fail fast instead of retrying.
+        self._overpass_failure_until: Dict[str, float] = {}
+        self._overpass_failure_lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # Activity loading
@@ -814,9 +830,23 @@ class CoverageTracker:
                     cache_file, age_s, ttl,
                 )
 
+        # Negative cache (#562): skip straight to failure if Overpass failed
+        # recently rather than paying out another ~12s timeout for a query
+        # that's very likely to fail again during an outage.
+        with self._overpass_failure_lock:
+            failure_until = self._overpass_failure_until.get(_OVERPASS_URL)
+        if failure_until is not None and time.time() < failure_until:
+            remaining = failure_until - time.time()
+            logger.warning(
+                "Overpass endpoint recently failed — skipping retry for %.0fs more", remaining,
+            )
+            raise RuntimeError(
+                f"Overpass water-polygon lookup temporarily unavailable ({remaining:.0f}s)"
+            )
+
         south, west, north, east = bounds
         query = (
-            "[out:json][timeout:25];"
+            f"[out:json][timeout:{_OVERPASS_QUERY_TIMEOUT_S}];"
             "("
             f'way["natural"="water"]({south},{west},{north},{east});'
             f'relation["natural"="water"]({south},{west},{north},{east});'
@@ -825,9 +855,26 @@ class CoverageTracker:
         )
         # Overpass rejects requests with no/default User-Agent (406).
         headers = {"User-Agent": "ride-optimizer (exploration water-tile lookup)"}
-        response = requests.post(_OVERPASS_URL, data={"data": query}, headers=headers, timeout=30)
-        response.raise_for_status()
-        elements = response.json().get("elements", [])
+        try:
+            response = requests.post(
+                _OVERPASS_URL, data={"data": query}, headers=headers,
+                timeout=_OVERPASS_REQUEST_TIMEOUT_S,
+            )
+            response.raise_for_status()
+            elements = response.json().get("elements", [])
+        except (requests.RequestException, ValueError, OSError) as exc:
+            with self._overpass_failure_lock:
+                self._overpass_failure_until[_OVERPASS_URL] = time.time() + _OVERPASS_NEGATIVE_CACHE_TTL_S
+            logger.warning(
+                "Overpass water-polygon query failed: %s — negative-caching endpoint for %ds",
+                exc, _OVERPASS_NEGATIVE_CACHE_TTL_S,
+            )
+            raise
+
+        # A successful call clears any earlier failure marker so the next
+        # request isn't held back by a now-stale negative cache entry.
+        with self._overpass_failure_lock:
+            self._overpass_failure_until.pop(_OVERPASS_URL, None)
 
         polygons: List[List[Tuple[float, float]]] = []
         for element in elements:
@@ -842,13 +889,23 @@ class CoverageTracker:
                         if len(ring) >= 3:
                             polygons.append(ring)
 
+        # Atomic write (temp file + os.replace, #562) — like the tile index
+        # and route cache already do — so a concurrent reader can never
+        # observe a truncated/partial JSON file mid-write.
+        tmp_path = cache_file.with_name(f"{cache_file.name}.tmp{os.getpid()}")
         try:
-            with open(cache_file, "w", encoding="utf-8") as f:
+            with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(polygons, f)
+            secure_chmod(tmp_path)
+            os.replace(tmp_path, cache_file)
             secure_chmod(cache_file)
             self._evict_old_water_polygon_caches()
         except OSError as exc:
             logger.warning("Failed to write water polygon cache: %s", exc)
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
 
         return polygons
 
