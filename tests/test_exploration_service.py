@@ -83,6 +83,11 @@ class TestExplorationService:
             service.invalidate_caches()
             mock_inv.assert_called_once()
 
+    def test_hard_invalidate_caches(self, service):
+        with patch.object(service._tracker, "hard_invalidate_caches") as mock_inv:
+            service.hard_invalidate_caches()
+            mock_inv.assert_called_once()
+
 
 # ── verify_tile_claims (#493) ────────────────────────────────────
 

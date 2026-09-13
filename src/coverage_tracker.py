@@ -416,11 +416,16 @@ class CoverageTracker:
         tile range — no polyline decoding on the request path at all once the
         index is warm.
 
-        There's no reliable signal today that fires after a background
-        activity fetch (invalidate_caches() is only wired to the manual
-        "resync" endpoint), so this self-heals on every call by diffing the
-        currently-loaded activity ids against what's indexed, rather than
-        assuming the index is fresh just because it exists on disk.
+        invalidate_caches() now runs automatically after every activity
+        fetch/analyze/backfill (see the three call sites in
+        app/api/data_bp.py) and clears the in-memory index/activities cache
+        so this call reloads from disk and diffs against fresh data (#571).
+        This also self-heals independent of that, on *every* call, by
+        diffing the currently-loaded activity ids against what's indexed
+        rather than assuming the index is fresh just because it exists on
+        disk — that still matters for e.g. a long-running dev process, or
+        any other path that touches activities.json without going through
+        invalidate_caches().
         """
         with self._tile_index_lock:
             index = self._tile_index_cache.get(zoom)
@@ -856,7 +861,41 @@ class CoverageTracker:
         return removed
 
     def invalidate_caches(self) -> None:
-        """Remove all coverage caches (call after new activities are fetched)."""
+        """Soft-invalidate: clear in-memory state only (#571/#583).
+
+        Drops the cached activities list and the in-memory tile index, so
+        the next read reloads the on-disk index and diffs it against
+        freshly-loaded activities (see _build_or_update_tile_index) — but
+        leaves the on-disk tile_index_{zoom}.json files themselves alone.
+
+        This is what runs automatically after every activity fetch/analyze/
+        backfill (the three call sites in app/api/data_bp.py, in turn
+        triggered nightly by cron/daily_analysis.py). Those call sites used
+        to invoke a fully destructive wipe (see hard_invalidate_caches()
+        below) that deleted the on-disk index outright, forcing a full cold
+        rebuild — decoding every ridden activity's polyline from scratch —
+        on the next Explore page load after every nightly sync. Soft
+        invalidation still picks up the new activities (via the diff in
+        _build_or_update_tile_index) without paying that cost, since the
+        vast majority of previously-indexed tiles didn't change.
+
+        For an explicit, user-initiated "clear my coverage cache" action,
+        use hard_invalidate_caches() instead.
+        """
+        self._activities_cache = None
+        with self._tile_index_lock:
+            self._tile_index_cache = {}
+        logger.info("Coverage caches soft-invalidated (in-memory only)")
+
+    def hard_invalidate_caches(self) -> None:
+        """Fully wipe all coverage caches, including the on-disk tile index.
+
+        This is the old (pre-#571) invalidate_caches() behaviour, kept
+        available for an explicit, user-initiated cache-clear request —
+        e.g. after suspected corruption, or a deliberate full rebuild.
+        Do NOT wire this into the automatic post-activity-sync path; use
+        the soft invalidate_caches() there instead.
+        """
         self._activities_cache = None
         with self._tile_index_lock:
             self._tile_index_cache = {}
@@ -879,4 +918,4 @@ class CoverageTracker:
                 legacy_cache.unlink()
             except OSError:
                 pass
-        logger.info("Coverage caches invalidated")
+        logger.info("Coverage caches hard-invalidated (on-disk index cleared)")
