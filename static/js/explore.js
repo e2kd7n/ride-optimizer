@@ -624,7 +624,26 @@ function mergeCoverageResults(results, bounds) {
         bounds,
         computed_at: new Date().toISOString(),
         zoom: successes[0].zoom,
+        // #563 — best-effort passthrough of a stale-data flag from the
+        // backend's stale-serving fast path, if any box's response carried
+        // one. Checked generically (see the isStale() helper below) since
+        // the exact field name the backend agent landed wasn't available
+        // when this was written.
+        stale: successes.some(r => isStale(r)),
     };
+}
+
+/**
+ * #563 — the backend is separately adding a stale-serving fast path to the
+ * coverage endpoint (so a slow full rebuild doesn't block the response),
+ * expected to flag a stale-but-immediate response somehow — e.g. a field
+ * like `stale: true` or `is_stale: true` (the latter is the existing
+ * convention in app/services/weather_service.py's own stale-fallback path).
+ * Written defensively against either name (or neither, if the backend used
+ * something else entirely) so this never hard-depends on one exact shape.
+ */
+function isStale(result) {
+    return !!(result && (result.stale || result.is_stale));
 }
 
 function mergeRoadlessResults(results) {
@@ -687,6 +706,19 @@ async function loadCoverage() {
         statusEl.textContent = 'Still loading — first coverage load over your full ride history can take up to a minute…';
     }, 5000);
 
+    // #563 — getTileCoverage()'s per-attempt timeout was cut from 45s to
+    // ~12s now that the backend has a stale-serving fast path, but a
+    // request can still time out and retry (e.g. a cold, never-before-built
+    // tile index). Surface each retry attempt here instead of leaving
+    // "Loading coverage…" as one static string for the whole stacked
+    // duration. Deliberately generic — this only counts attempts via
+    // api-client.js's onRetry hook, it doesn't depend on any particular
+    // response field.
+    const onCoverageRetry = (attemptNum, maxAttempts) => {
+        if (requestId !== _coverageRequestId) return; // superseded by a newer request
+        statusEl.textContent = `Retrying coverage load… (${attemptNum}/${maxAttempts})`;
+    };
+
     const mode = getCoverageMode();
     const zooms = mode === 'both' ? [14, 17] : [parseInt(mode, 10)];
 
@@ -718,7 +750,11 @@ async function loadCoverage() {
     let fetchOne, fetchRoadless;
     if (corridorBoxes) {
         fetchOne = (tileZoom) => Promise.all(
-            corridorBoxes.map(box => fetchCorridorBox(_corridorCoverageCache, api.getTileCoverage.bind(api), box, tileZoom))
+            corridorBoxes.map(box => fetchCorridorBox(
+                _corridorCoverageCache,
+                (b, z) => api.getTileCoverage(b, z, onCoverageRetry),
+                box, tileZoom
+            ))
         ).then(results => mergeCoverageResults(results, corridorBounds));
         // #525: roadless tiles (open water) excluded from "new tile" targeting;
         // best-effort per box, same as the single-bbox path below.
@@ -735,8 +771,8 @@ async function loadCoverage() {
                 west: bounds.getWest(),
                 north: bounds.getNorth(),
                 east: bounds.getEast(),
-            }, tileZoom)
-            : api.getTileCoverage(null, tileZoom);
+            }, tileZoom, onCoverageRetry)
+            : api.getTileCoverage(null, tileZoom, onCoverageRetry);
 
         // #525: roadless tiles (open water, e.g. lakes) get excluded from
         // "new tile" targeting so routes stop chasing coverage credit in places
@@ -786,9 +822,16 @@ async function loadCoverage() {
         newTilesLayer.clearLayers();
         renderTiles(coverageData, coverageDataSecondary);
         const updatedAt = corridorBoxes ? new Date(coverageData.computed_at) : new Date(coverageData.computed_at + 'Z');
-        statusEl.textContent = corridorBoxes
+        // #563 — flag when the backend's stale-serving fast path answered
+        // with cached-but-possibly-outdated data rather than a fresh
+        // rebuild, so a rider isn't silently planning against numbers that
+        // don't yet reflect a just-synced activity.
+        const staleSuffix = isStale(coverageData) || (coverageDataSecondary && isStale(coverageDataSecondary))
+            ? ' (showing cached data — may not include your latest activity yet)'
+            : '';
+        statusEl.textContent = (corridorBoxes
             ? `Updated ${updatedAt.toLocaleTimeString()} (corridor: ${corridorBoxes.length} segment${corridorBoxes.length > 1 ? 's' : ''})`
-            : `Updated ${updatedAt.toLocaleTimeString()}`;
+            : `Updated ${updatedAt.toLocaleTimeString()}`) + staleSuffix;
     } catch (e) {
         if (requestId === _coverageRequestId) showCoverageError(e.message);
     } finally {
