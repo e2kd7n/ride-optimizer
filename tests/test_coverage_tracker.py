@@ -463,11 +463,26 @@ class TestCoverageTracker:
         cache_files = list(tracker.cache_dir.glob("tile_index_*.json"))
         assert len(cache_files) == 2
 
-    def test_invalidate_caches(self, tracker):
+    def test_invalidate_caches_is_soft(self, tracker):
+        """#571: the automatic post-sync path (invalidate_caches()) must
+        clear in-memory state without deleting the on-disk tile index —
+        otherwise every nightly sync forces a full cold rebuild."""
         cache_file = tracker.cache_dir / "tile_index_14.json"
         cache_file.write_text('{"indexed_activity_ids": [], "tiles": {}}')
         tracker._tile_index_cache[14] = {"indexed_activity_ids": set(), "tiles": {}}
+        tracker._activities_cache = [{"id": 1, "type": "Ride"}]
+
         tracker.invalidate_caches()
+
+        assert cache_file.exists()  # on-disk index NOT deleted
+        assert tracker._activities_cache is None  # #583: activities cache cleared too
+        assert tracker._tile_index_cache == {}
+
+    def test_hard_invalidate_caches_removes_on_disk_index(self, tracker):
+        cache_file = tracker.cache_dir / "tile_index_14.json"
+        cache_file.write_text('{"indexed_activity_ids": [], "tiles": {}}')
+        tracker._tile_index_cache[14] = {"indexed_activity_ids": set(), "tiles": {}}
+        tracker.hard_invalidate_caches()
         assert not cache_file.exists()
         assert tracker._activities_cache is None
         assert tracker._tile_index_cache == {}
@@ -783,13 +798,22 @@ class TestRoadNetworkCacheEviction:
         remaining = list(tracker.cache_dir.glob("road_network_*.graphml"))
         assert len(remaining) == MAX_ROAD_NETWORK_CACHES
 
-    def test_invalidate_caches_removes_all_bbox_keyed_graphs(self, tracker):
+    def test_hard_invalidate_caches_removes_all_bbox_keyed_graphs(self, tracker):
         for i in range(3):
             (tracker.cache_dir / f"road_network_fake{i}.graphml").write_text("x")
         (tracker.cache_dir / "road_network.graphml").write_text("legacy")
-        tracker.invalidate_caches()
+        tracker.hard_invalidate_caches()
         remaining = list(tracker.cache_dir.glob("road_network*.graphml"))
         assert remaining == []
+
+    def test_soft_invalidate_caches_leaves_road_network_graphs(self, tracker):
+        """The soft invalidate (automatic post-sync path, #571) only clears
+        in-memory state — road network graphs have their own TTL (#532) and
+        aren't tied to activity sync, so they shouldn't be evicted here."""
+        (tracker.cache_dir / "road_network_fake0.graphml").write_text("x")
+        tracker.invalidate_caches()
+        remaining = list(tracker.cache_dir.glob("road_network*.graphml"))
+        assert len(remaining) == 1
 
 
 # ── legacy coverage_tiles_*.json cleanup (#555) ────────────────────
@@ -845,11 +869,12 @@ class TestLegacyCoverageTileSweep:
             CoverageTracker(mock_config)
         mock_sweep.assert_called_once()
 
-    def test_invalidate_caches_still_removes_legacy_files(self, tracker):
-        """Regression guard: invalidate_caches() used to inline this glob/unlink
-        loop directly; it now delegates to _sweep_legacy_coverage_tile_files()."""
+    def test_hard_invalidate_caches_still_removes_legacy_files(self, tracker):
+        """Regression guard: hard_invalidate_caches() used to inline this
+        glob/unlink loop directly; it now delegates to
+        _sweep_legacy_coverage_tile_files()."""
         (tracker.cache_dir / "coverage_tiles_17_fake.json").write_text("{}")
-        tracker.invalidate_caches()
+        tracker.hard_invalidate_caches()
         assert list(tracker.cache_dir.glob("coverage_tiles_*.json")) == []
 
 

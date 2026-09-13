@@ -100,7 +100,16 @@ class ExplorationService:
         return self._tracker.get_roadless_tiles(bounds, zoom=zoom)
 
     def invalidate_caches(self):
+        """Soft-invalidate the coverage cache (in-memory only, see #571).
+        This is what the automatic post-activity-sync path in data_bp.py
+        calls — it does not touch the on-disk tile index."""
         self._tracker.invalidate_caches()
+
+    def hard_invalidate_caches(self):
+        """Fully wipe the coverage cache, including the on-disk tile index.
+        Not yet wired to any endpoint — intended for an explicit,
+        user-initiated "clear my coverage cache" action (#576)."""
+        self._tracker.hard_invalidate_caches()
 
     def _store_route_cache(self, cache_key: tuple, result: dict, expires_at: float) -> None:
         """Store a route memo entry, evicting expired entries first and then
