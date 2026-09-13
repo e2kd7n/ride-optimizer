@@ -1002,6 +1002,127 @@ class TestGetRoadlessTiles:
         assert result["status"] == "error"
 
 
+# ── get_roadless_tiles() bbox prefilter (#574) ─────────────────────
+
+class TestRoadlessTilesBboxPrefilter:
+    """get_roadless_tiles()/_point_in_polygon() previously ran a full
+    ray-cast for every tile against every water polygon with no cheap
+    reject first. #574 precomputes each polygon's bbox once per call and
+    skips the ray-cast entirely for a tile whose center falls outside it —
+    not a per-(bbox,zoom) result cache (deliberately not added; see
+    get_tile_coverage()'s own docstring on why that pattern was dropped)."""
+
+    @pytest.fixture
+    def mock_config(self):
+        config = MagicMock()
+        config.get = MagicMock(side_effect=lambda key, default=None: default)
+        return config
+
+    @pytest.fixture
+    def tracker(self, mock_config, tmp_path):
+        t = CoverageTracker(mock_config)
+        t.cache_dir = tmp_path
+        return t
+
+    # A wider bbox spanning a 6x6 tile block at TILE_ZOOM, so a small
+    # water polygon tucked in one corner leaves plenty of tiles whose
+    # centers fall outside its bbox.
+    _x0, _y0 = lat_lon_to_tile(40.7, -74.0, TILE_ZOOM)
+    _south, _west, _, _ = tile_to_bounds(_x0, _y0 + 5, TILE_ZOOM)
+    _, _, _north, _east = tile_to_bounds(_x0 + 5, _y0, TILE_ZOOM)
+    BOUNDS = (_south, _west, _north, _east)
+
+    @staticmethod
+    def _overpass_response(elements):
+        resp = MagicMock()
+        resp.raise_for_status = MagicMock()
+        resp.json.return_value = {"elements": elements}
+        return resp
+
+    def test_polygon_bbox_computes_correct_extent(self, tracker):
+        polygon = [(10.0, 20.0), (10.0, 25.0), (15.0, 25.0), (15.0, 20.0), (10.0, 20.0)]
+        assert tracker._polygon_bbox(polygon) == (10.0, 20.0, 15.0, 25.0)
+
+    def test_prefilter_skips_ray_cast_for_tiles_outside_polygon_bbox(self, tracker):
+        """A small water polygon confined to one corner of the bbox must
+        not trigger a _point_in_polygon call for tiles whose centers fall
+        outside that polygon's own bbox."""
+        # A tiny polygon around the single tile at (x0, y0) only.
+        t_south, t_west, t_north, t_east = tile_to_bounds(self._x0, self._y0, TILE_ZOOM)
+        ring = [
+            {"lat": t_south, "lon": t_west},
+            {"lat": t_south, "lon": t_east},
+            {"lat": t_north, "lon": t_east},
+            {"lat": t_north, "lon": t_west},
+            {"lat": t_south, "lon": t_west},
+        ]
+        elements = [{"type": "way", "geometry": ring}]
+
+        with patch("requests.post", return_value=self._overpass_response(elements)):
+            with patch.object(
+                tracker, "_point_in_polygon", wraps=tracker._point_in_polygon
+            ) as spy:
+                result = tracker.get_roadless_tiles(self.BOUNDS, zoom=TILE_ZOOM)
+
+        assert result["status"] == "success"
+        min_tx, min_ty = lat_lon_to_tile(self._north, self._west, TILE_ZOOM)
+        max_tx, max_ty = lat_lon_to_tile(self._south, self._east, TILE_ZOOM)
+        total_tiles = (max_tx - min_tx + 1) * (max_ty - min_ty + 1)
+        assert total_tiles > 4  # sanity: bbox is meaningfully larger than the polygon
+
+        # The prefilter must reject the vast majority of tiles before ever
+        # calling the full ray-cast test.
+        assert spy.call_count < total_tiles
+
+    def test_prefilter_result_matches_brute_force_ray_cast(self, tracker):
+        """Correctness guard: the bbox-prefiltered result must be identical
+        to what a full ray-cast-every-tile sweep would produce — the
+        prefilter is a same-call speedup, not a behavior change."""
+        # An irregular polygon covering roughly the left half of the bbox.
+        mid_lon = (self._west + self._east) / 2
+        pad = 0.001
+        ring = [
+            {"lat": self._south - pad, "lon": self._west - pad},
+            {"lat": self._south - pad, "lon": mid_lon},
+            {"lat": self._north + pad, "lon": mid_lon},
+            {"lat": self._north + pad, "lon": self._west - pad},
+            {"lat": self._south - pad, "lon": self._west - pad},
+        ]
+        elements = [{"type": "way", "geometry": ring}]
+
+        with patch("requests.post", return_value=self._overpass_response(elements)):
+            result = tracker.get_roadless_tiles(self.BOUNDS, zoom=TILE_ZOOM)
+        assert result["status"] == "success"
+        prefiltered = {(t["x"], t["y"]) for t in result["roadless"]}
+
+        # Brute-force: ray-cast every tile center against the raw polygon,
+        # no bbox shortcut at all.
+        polygon = [(pt["lat"], pt["lon"]) for pt in ring]
+        min_tx, min_ty = lat_lon_to_tile(self._north, self._west, TILE_ZOOM)
+        max_tx, max_ty = lat_lon_to_tile(self._south, self._east, TILE_ZOOM)
+        brute_force = set()
+        for tx in range(min_tx, max_tx + 1):
+            for ty in range(min_ty, max_ty + 1):
+                t_south, t_west, t_north, t_east = tile_to_bounds(tx, ty, TILE_ZOOM)
+                center_lat = (t_south + t_north) / 2
+                center_lon = (t_west + t_east) / 2
+                if tracker._point_in_polygon(center_lat, center_lon, polygon):
+                    brute_force.add((tx, ty))
+
+        assert prefiltered == brute_force
+        assert len(brute_force) > 0  # sanity: the polygon actually covers some tiles
+
+    def test_no_polygons_means_no_ray_cast_calls_at_all(self, tracker):
+        with patch("requests.post", return_value=self._overpass_response([])):
+            with patch.object(
+                tracker, "_point_in_polygon", wraps=tracker._point_in_polygon
+            ) as spy:
+                result = tracker.get_roadless_tiles(self.BOUNDS, zoom=TILE_ZOOM)
+
+        assert result["roadless"] == []
+        spy.assert_not_called()
+
+
 # ── road_network cache keying / eviction (#481) ──────────────────
 
 class TestBboxCacheKey:
