@@ -1114,6 +1114,16 @@ async function generateRoute() {
 
     let routeCount = 0;
 
+    // #565 — generate-then-plot used to require a separate manual "Plot road
+    // route" tap per compass direction (up to 4), each firing up to 12 ORS
+    // calls. Track the highest-scored Phase-1 candidate (by unvisited-tile
+    // count, the same metric the worker's own zone scoring/insertion-tour
+    // construction is optimizing for) as routes stream in, so the 'done'
+    // handler can auto-plot it without the rider having to pick first.
+    let bestRoute = null;
+    let bestBadge = null;
+    let bestScore = -Infinity;
+
     const slowHintTimer = setTimeout(() => {
         statusEl.textContent += ' — still working, larger search areas can take longer…';
     }, 8000);
@@ -1135,12 +1145,19 @@ async function generateRoute() {
         if (msg.type === 'route') {
             // Phase 1 result: render dashed preview and add badge with "Plot road route" button.
             renderRoute(msg.route, routeCount);
-            addRouteListItem(msg.route, routeCount, distanceKm);
+            const badge = addRouteListItem(msg.route, routeCount, distanceKm);
             // Highlight the candidate target zone this route is aimed at (not a claim yet).
             renderNewTiles(msg.route.newTilesByZoom, msg.route.direction, 'candidate');
             // Store Phase-1 candidate data for iterative refinement.
             if (msg.candidates) {
                 _phase1Candidates[msg.route.direction] = msg.candidates;
+            }
+            const score = (msg.route.stats && typeof msg.route.stats.unvisited === 'number')
+                ? msg.route.stats.unvisited : 0;
+            if (score > bestScore) {
+                bestScore = score;
+                bestRoute = msg.route;
+                bestBadge = badge;
             }
             routeCount++;
             statusEl.textContent = `Found ${routeCount} route${routeCount > 1 ? 's' : ''} so far…`;
@@ -1149,11 +1166,20 @@ async function generateRoute() {
 
         if (msg.type === 'done') {
             stopWorking();
-            statusEl.textContent = routeCount > 0
-                ? `${routeCount} route${routeCount > 1 ? 's' : ''} generated — click "Plot road route" to get real road directions`
-                : 'No reachable unvisited tiles found — try increasing distance or moving the start point';
             if (routeCount > 0) {
+                const bestLabel = DIRECTION_LABELS[bestRoute.direction] || bestRoute.direction;
+                statusEl.textContent = `${routeCount} route${routeCount > 1 ? 's' : ''} generated — auto-plotting the best route (${bestLabel})…`;
                 map.fitBounds(routeLayer.getBounds(), { padding: [40, 40] });
+                // Auto-plot the top-scored direction so the common case (any
+                // good new-tile route, now) takes one tap instead of
+                // generate -> compare -> pick -> wait. The other directions'
+                // "Plot road route" buttons stay available for anyone who
+                // wants to compare/override.
+                if (bestBadge) {
+                    plotRoadRoute(bestRoute.direction, bestRoute, distanceKm, bestBadge);
+                }
+            } else {
+                statusEl.textContent = 'No reachable unvisited tiles found — try increasing distance or moving the start point';
             }
             return;
         }
@@ -1415,6 +1441,8 @@ function addRouteListItem(route, index, targetDistanceKm, extraLabel = '') {
     badge.querySelector('.plot-road-btn').addEventListener('click', () => {
         plotRoadRoute(dir, route, targetDistanceKm, badge);
     });
+
+    return badge;
 }
 
 // ── Phase 2: Road routing ────────────────────────────────────────
