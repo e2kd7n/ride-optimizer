@@ -301,7 +301,14 @@ class CoverageTracker:
         # keyed by zoom. Avoids re-reading/re-parsing the on-disk index on every
         # request once a worker thread has built it once.
         self._tile_index_cache: Dict[int, dict] = {}
-        self._tile_index_lock = threading.Lock()
+        # Per-zoom locks (#558) rather than one lock shared across every
+        # zoom — a cold rebuild at one zoom (e.g. squadratinho, zoom 17)
+        # would otherwise serialize reads/writes at an already-warm zoom
+        # (squadrat, zoom 14) behind it. Lazily created per zoom by
+        # _get_zoom_lock(); _tile_index_locks_lock guards only that
+        # lazy-creation step, never held across a build/read.
+        self._tile_index_locks: Dict[int, threading.Lock] = {}
+        self._tile_index_locks_lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # Activity loading
@@ -403,6 +410,23 @@ class CoverageTracker:
             except OSError:
                 pass
 
+    def _get_zoom_lock(self, zoom: int) -> threading.Lock:
+        """Return the lock guarding zoom `zoom`'s tile index, creating it on
+        first use (#558). Per-zoom rather than one global lock so a cold
+        rebuild at one zoom doesn't block reads/writes at an already-warm
+        zoom. The outer unlocked check avoids taking
+        _tile_index_locks_lock on every call once a zoom's lock exists.
+        """
+        lock = self._tile_index_locks.get(zoom)
+        if lock is not None:
+            return lock
+        with self._tile_index_locks_lock:
+            lock = self._tile_index_locks.get(zoom)
+            if lock is None:
+                lock = threading.Lock()
+                self._tile_index_locks[zoom] = lock
+            return lock
+
     def _build_or_update_tile_index(self, zoom: int) -> dict:
         """Return {"indexed_activity_ids": set, "tiles": dict} for `zoom`,
         the full set of tiles ever ridden at that zoom level, keyed "x,y".
@@ -426,8 +450,24 @@ class CoverageTracker:
         disk — that still matters for e.g. a long-running dev process, or
         any other path that touches activities.json without going through
         invalidate_caches().
+
+        Guarded by a per-zoom lock (#558), not one lock shared across every
+        zoom, so a cold rebuild at one zoom doesn't serialize reads/writes
+        at an already-warm zoom behind it. Updates are copy-on-write: when
+        new activities need folding in, this builds a *new* tiles dict (and
+        a new entry dict for any tile a new activity touches) instead of
+        mutating the previously-published one in place, then publishes the
+        result with a single `self._tile_index_cache[zoom] = index`
+        assignment — atomic under the GIL. A caller that grabbed a
+        reference to the old `index` before this ran (e.g. get_tile_coverage(),
+        which iterates index["tiles"] *after* this lock is released) keeps
+        iterating a snapshot that's never mutated out from under it, no
+        matter what runs next. This is what fixes the dict-mutated-during-
+        iteration race from #559 (merged into #558): under the old design,
+        a concurrent rebuild mutated the exact same dict object a reader
+        elsewhere was iterating.
         """
-        with self._tile_index_lock:
+        with self._get_zoom_lock(zoom):
             index = self._tile_index_cache.get(zoom)
             if index is None:
                 index = self._load_tile_index_from_disk(zoom)
@@ -441,6 +481,13 @@ class CoverageTracker:
             if new_ids:
                 start = time.monotonic()
                 decoded_count = 0
+                # Shallow copies: existing tile entries are shared objects
+                # with the previously-published index until this loop
+                # touches them, at which point a *new* entry dict/list is
+                # substituted in new_tiles rather than the shared one being
+                # mutated in place (see docstring above).
+                new_tiles = dict(index["tiles"])
+                new_indexed_ids = set(index["indexed_activity_ids"])
                 for act in activities:
                     act_id = act.get("id")
                     if act_id not in new_ids:
@@ -451,12 +498,17 @@ class CoverageTracker:
                         act_date = act.get("start_date", "")
                         for tx, ty in _activity_tiles(coords, zoom):
                             key = f"{tx},{ty}"
-                            entry = index["tiles"].get(key)
+                            entry = new_tiles.get(key)
                             if entry is None:
-                                index["tiles"][key] = {"first_ridden": act_date, "activity_ids": [act_id]}
+                                new_tiles[key] = {"first_ridden": act_date, "activity_ids": [act_id]}
                             elif act_id not in entry["activity_ids"]:
-                                entry["activity_ids"].append(act_id)
-                    index["indexed_activity_ids"].add(act_id)
+                                new_tiles[key] = {
+                                    "first_ridden": entry["first_ridden"],
+                                    "activity_ids": entry["activity_ids"] + [act_id],
+                                }
+                    new_indexed_ids.add(act_id)
+
+                index = {"indexed_activity_ids": new_indexed_ids, "tiles": new_tiles}
 
                 logger.info(
                     "Tile index (zoom=%d) updated: %d new activities decoded in %.2fs (total indexed=%d, tiles=%d)",
@@ -883,9 +935,17 @@ class CoverageTracker:
         use hard_invalidate_caches() instead.
         """
         self._activities_cache = None
-        with self._tile_index_lock:
-            self._tile_index_cache = {}
+        self._clear_tile_index_cache()
         logger.info("Coverage caches soft-invalidated (in-memory only)")
+
+    def _clear_tile_index_cache(self) -> None:
+        """Drop every zoom's in-memory tile index, one zoom at a time under
+        that zoom's own lock (#558) — so this can't race a concurrent
+        _build_or_update_tile_index() call for the same zoom (there's no
+        single global lock anymore to serialize the two under)."""
+        for zoom in set(self._tile_index_cache) | set(self._tile_index_locks):
+            with self._get_zoom_lock(zoom):
+                self._tile_index_cache.pop(zoom, None)
 
     def hard_invalidate_caches(self) -> None:
         """Fully wipe all coverage caches, including the on-disk tile index.
@@ -897,13 +957,27 @@ class CoverageTracker:
         the soft invalidate_caches() there instead.
         """
         self._activities_cache = None
-        with self._tile_index_lock:
-            self._tile_index_cache = {}
-        for p in self.cache_dir.glob("tile_index_*.json"):
+
+        # Delete each zoom's on-disk file under that zoom's own lock (#558),
+        # so this can't delete a tile_index_{zoom}.json file out from under
+        # an in-flight _build_or_update_tile_index() call for the same
+        # zoom. Covers zooms known in memory (cache or lock already exists)
+        # as well as zooms only seen on disk (e.g. a fresh process that
+        # hasn't read/built a given zoom's index yet this run).
+        zooms = set(self._tile_index_cache) | set(self._tile_index_locks)
+        for path in self.cache_dir.glob("tile_index_*.json"):
             try:
-                p.unlink()
-            except OSError:
-                pass
+                zooms.add(int(path.stem.rsplit("_", 1)[-1]))
+            except ValueError:
+                continue
+        for zoom in zooms:
+            with self._get_zoom_lock(zoom):
+                self._tile_index_cache.pop(zoom, None)
+                try:
+                    self._tile_index_path(zoom).unlink()
+                except OSError:
+                    pass
+
         self._sweep_legacy_coverage_tile_files()
         for p in self.cache_dir.glob("road_network_*.graphml"):
             try:

@@ -615,6 +615,138 @@ class TestTileIndex:
             assert "tiles" in data
 
 
+# ── per-zoom locking / copy-on-write (#558, absorbs #559) ────────
+
+class TestPerZoomLocking:
+    """A single global lock across every zoom meant a cold rebuild at one
+    zoom (e.g. squadratinho) serialized reads/writes at an already-warm
+    zoom (squadrat) behind it. #558 redesigns this as per-zoom locks plus
+    copy-on-write index updates, which also fixes #559: a reader iterating
+    index["tiles"] after _build_or_update_tile_index() returns (outside any
+    lock) used to be exposed to a concurrent rebuild mutating that exact
+    same dict object out from under it."""
+
+    @pytest.fixture
+    def mock_config(self):
+        config = MagicMock()
+        config.get = MagicMock(side_effect=lambda key, default=None: default)
+        return config
+
+    @pytest.fixture
+    def tracker(self, mock_config, tmp_path):
+        t = CoverageTracker(mock_config)
+        t.cache_dir = tmp_path
+        return t
+
+    @staticmethod
+    def _activity(act_id, coords, date="2026-01-01"):
+        import polyline as codec
+        return {"id": act_id, "polyline": codec.encode(coords), "start_date": date, "type": "Ride"}
+
+    def test_different_zooms_use_different_lock_objects(self, tracker):
+        lock_a = tracker._get_zoom_lock(TILE_ZOOM)
+        lock_b = tracker._get_zoom_lock(SQUADRATINHO_ZOOM)
+        assert lock_a is not lock_b
+
+    def test_same_zoom_reuses_same_lock_object(self, tracker):
+        assert tracker._get_zoom_lock(TILE_ZOOM) is tracker._get_zoom_lock(TILE_ZOOM)
+
+    def test_cold_rebuild_at_one_zoom_does_not_block_another_zoom(self, tracker):
+        """A slow build at SQUADRATINHO_ZOOM must not hold up a concurrent
+        read/build at TILE_ZOOM (#558) — the old design shared one lock
+        across every zoom."""
+        import threading as th
+
+        a1 = self._activity(1, [(40.7128, -74.0060), (40.7130, -74.0058)])
+        tracker._activities_cache = [a1]
+
+        release_slow_zoom = th.Event()
+        entered_slow_zoom = th.Event()
+        real_decode = tracker._decode_activity_coords
+
+        def slow_decode(activity):
+            entered_slow_zoom.set()
+            release_slow_zoom.wait(timeout=5)
+            return real_decode(activity)
+
+        with patch.object(tracker, "_decode_activity_coords", side_effect=slow_decode):
+            t = th.Thread(target=tracker._build_or_update_tile_index, args=(SQUADRATINHO_ZOOM,))
+            t.start()
+            assert entered_slow_zoom.wait(timeout=5), "slow zoom build never started"
+
+            # TILE_ZOOM must complete promptly even though SQUADRATINHO_ZOOM's
+            # build is blocked mid-decode — this would hang under the old
+            # single global lock.
+            fast_result = tracker._build_or_update_tile_index(TILE_ZOOM)
+            assert fast_result["tiles"]
+
+            release_slow_zoom.set()
+            t.join(timeout=5)
+            assert not t.is_alive()
+
+    def test_reader_iterating_old_snapshot_survives_concurrent_rebuild(self, tracker):
+        """Regression for #559: a reader that already has a reference to
+        index["tiles"] (as get_tile_coverage() does, after the lock is
+        released) must not see a RuntimeError or a torn/partial dict if
+        another thread rebuilds the same zoom's index concurrently —
+        copy-on-write means the rebuild publishes a brand new dict rather
+        than mutating the one the reader is iterating."""
+        import threading as th
+
+        a1 = self._activity(1, [(40.7128, -74.0060), (40.7130, -74.0058)])
+        tracker._activities_cache = [a1]
+        index = tracker._build_or_update_tile_index(TILE_ZOOM)
+        tiles_snapshot = index["tiles"]
+        assert len(tiles_snapshot) >= 1
+        snapshot_keys_before = set(tiles_snapshot.keys())
+
+        a2 = self._activity(2, [(41.0, -75.0), (41.001, -75.001)])
+        tracker._activities_cache = [a1, a2]
+
+        errors = []
+
+        def rebuild():
+            try:
+                tracker._build_or_update_tile_index(TILE_ZOOM)
+            except Exception as exc:  # pragma: no cover - failure path
+                errors.append(exc)
+
+        t = th.Thread(target=rebuild)
+        t.start()
+        collected = []
+        for key, entry in tiles_snapshot.items():  # iterating the OLD dict
+            collected.append(key)
+            time.sleep(0.001)  # widen the race window
+        t.join(timeout=5)
+
+        assert errors == []
+        # The old snapshot must be exactly as it was — never mutated by the
+        # concurrent rebuild, which published a separate new dict instead.
+        assert set(collected) == snapshot_keys_before
+        assert set(tiles_snapshot.keys()) == snapshot_keys_before
+
+    def test_new_activity_touching_existing_tile_does_not_mutate_old_entry(self, tracker):
+        """A new activity that crosses an already-indexed tile must produce
+        a *new* entry object rather than appending to the old one in place
+        — otherwise a reader holding the old published index would see the
+        new activity_id show up in an entry it already has a reference to."""
+        coords = [(40.7128, -74.0060)]
+        a1 = self._activity(1, coords)
+        tracker._activities_cache = [a1]
+        first_index = tracker._build_or_update_tile_index(TILE_ZOOM)
+        old_entry = next(iter(first_index["tiles"].values()))
+        assert old_entry["activity_ids"] == [1]
+
+        a2 = self._activity(2, coords)  # same tile, new activity
+        tracker._activities_cache = [a1, a2]
+        second_index = tracker._build_or_update_tile_index(TILE_ZOOM)
+        new_entry = next(iter(second_index["tiles"].values()))
+
+        assert new_entry["activity_ids"] == [1, 2]
+        # The entry object held by the first snapshot is untouched.
+        assert old_entry["activity_ids"] == [1]
+
+
 # ── roadless (open-water) tile detection (#525) ──────────────────
 
 class TestGetRoadlessTiles:
