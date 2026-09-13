@@ -423,8 +423,14 @@ function updateWorkflowState() {
         if (startReady && !coverageReady) missing.push('wait for coverage to finish loading');
         if (isPtp && !endMarker) missing.push('set an end point');
         statusEl.textContent = `Next: ${missing.join(' and ')} to generate routes.`;
+        // #564 — a muted small line below a busy control panel is easy to
+        // miss as the reason the button is disabled; bump its weight (no new
+        // color) so it reads as anchored to the button just above it rather
+        // than blending into the other small-muted text on the page.
+        statusEl.classList.add('fw-medium');
     } else {
         statusEl.textContent = 'Ready to generate routes.';
+        statusEl.classList.remove('fw-medium');
     }
 }
 
@@ -648,6 +654,30 @@ function fetchCorridorBox(cache, fetchFn, box, zoom) {
 
 const debouncedLoadCoverage = window.debounce(() => { loadCoverage(); }, 400);
 
+/**
+ * #564 — surface a coverage-load failure both as a toast (so it's noticed
+ * even if the rider isn't looking at the sidebar) and as a persistent
+ * in-place error with a Retry button (so recovering doesn't require
+ * guessing that repositioning a pin or reopening the page re-triggers the
+ * load). Reuses the app-wide renderErrorStateInto()/showToast() helpers
+ * (common.js) that every other error path in this codebase already uses,
+ * rather than inventing a one-off status treatment.
+ */
+function showCoverageError(message) {
+    const statusEl = document.getElementById('coverage-status');
+    const safeMessage = message || 'Failed to load coverage';
+    if (typeof window.renderErrorStateInto === 'function') {
+        window.renderErrorStateInto(statusEl, safeMessage, {
+            variant: 'danger',
+            small: true,
+            retry: () => loadCoverage(),
+        });
+    } else {
+        statusEl.textContent = `Error: ${safeMessage}`;
+    }
+    if (typeof showToast === 'function') showToast(safeMessage, 'error');
+}
+
 async function loadCoverage() {
     const requestId = ++_coverageRequestId;
     const statusEl = document.getElementById('coverage-status');
@@ -733,7 +763,7 @@ async function loadCoverage() {
 
         const failed = results.find(d => d.status !== 'success');
         if (failed) {
-            statusEl.textContent = failed.message || 'Failed to load coverage';
+            showCoverageError(failed.message);
             return;
         }
 
@@ -760,7 +790,7 @@ async function loadCoverage() {
             ? `Updated ${updatedAt.toLocaleTimeString()} (corridor: ${corridorBoxes.length} segment${corridorBoxes.length > 1 ? 's' : ''})`
             : `Updated ${updatedAt.toLocaleTimeString()}`;
     } catch (e) {
-        if (requestId === _coverageRequestId) statusEl.textContent = `Error: ${e.message}`;
+        if (requestId === _coverageRequestId) showCoverageError(e.message);
     } finally {
         clearTimeout(slowHintTimer);
         if (requestId === _coverageRequestId) updateWorkflowState();
