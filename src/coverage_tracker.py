@@ -925,6 +925,15 @@ class CoverageTracker:
             j = i
         return inside
 
+    @staticmethod
+    def _polygon_bbox(polygon: List[Tuple[float, float]]) -> Tuple[float, float, float, float]:
+        """(min_lat, min_lon, max_lat, max_lon) bounding box of a polygon
+        ring — a cheap prefilter (#574) computed once per polygon per
+        get_roadless_tiles() call, ahead of the full tile sweep."""
+        lats = [pt[0] for pt in polygon]
+        lons = [pt[1] for pt in polygon]
+        return min(lats), min(lons), max(lats), max(lons)
+
     def get_roadless_tiles(
         self,
         bounds: Tuple[float, float, float, float],
@@ -940,6 +949,16 @@ class CoverageTracker:
         osmnx/shapely dependency — so it doesn't need a full bike-network
         graph fetch. This only catches open water, not genuinely roadless
         (but dry) terrain that the old osmnx-graph-absence check also caught.
+
+        Each polygon's bounding box is precomputed once, before the tile
+        sweep (#574), and used as a cheap prefilter: a tile whose center
+        falls outside every polygon's bbox is rejected immediately, without
+        running the full O(polygon points) ray-cast test at all. This is
+        deliberately NOT a per-(bbox,zoom) *result* cache — get_tile_coverage()'s
+        own docstring explains why that pattern was dropped elsewhere (an
+        almost-always-miss cache, since the viewport bbox changes on nearly
+        every request); the bbox prefilter here is a same-call speedup, not
+        a cache of this method's output.
         """
         zoom = zoom or self.zoom
 
@@ -953,14 +972,22 @@ class CoverageTracker:
         min_tx, min_ty = lat_lon_to_tile(north, west, zoom)
         max_tx, max_ty = lat_lon_to_tile(south, east, zoom)
 
+        polygons_with_bbox = [(poly, self._polygon_bbox(poly)) for poly in polygons]
+
         roadless: List[Dict[str, int]] = []
         for tx in range(min_tx, max_tx + 1):
             for ty in range(min_ty, max_ty + 1):
                 t_south, t_west, t_north, t_east = tile_to_bounds(tx, ty, zoom)
                 center_lat = (t_south + t_north) / 2
                 center_lon = (t_west + t_east) / 2
-                if any(self._point_in_polygon(center_lat, center_lon, poly) for poly in polygons):
-                    roadless.append({"x": tx, "y": ty})
+                for poly, (p_min_lat, p_min_lon, p_max_lat, p_max_lon) in polygons_with_bbox:
+                    # Bbox prefilter: skip the full ray-cast entirely for a
+                    # polygon whose bbox can't possibly contain this tile.
+                    if not (p_min_lat <= center_lat <= p_max_lat and p_min_lon <= center_lon <= p_max_lon):
+                        continue
+                    if self._point_in_polygon(center_lat, center_lon, poly):
+                        roadless.append({"x": tx, "y": ty})
+                        break
 
         return {
             "status": "success",
