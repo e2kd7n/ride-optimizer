@@ -28,7 +28,10 @@ let selectedAreaBounds = null;
 // (app/api/planner_bp.py MAX_BBOX_DEGREES, #481) to bound Overpass/graph
 // cost. A point-to-point route between far-apart start/end pins can easily
 // exceed that on the straight-line bbox, so kept a hair under so tiled
-// corridor boxes clear the backend check with margin.
+// corridor boxes clear the backend check with margin. computeCorridorBoxes()
+// below subtracts the CORRIDOR_BUFFER_MILES padding from this value *before*
+// splitting (#584) so the padding stays a genuine safety margin instead of
+// being added on top of an already-max-sized box.
 const COVERAGE_MAX_BBOX_DEGREES = 0.45;
 const CORRIDOR_BUFFER_MILES = 3;
 
@@ -420,8 +423,14 @@ function updateWorkflowState() {
         if (startReady && !coverageReady) missing.push('wait for coverage to finish loading');
         if (isPtp && !endMarker) missing.push('set an end point');
         statusEl.textContent = `Next: ${missing.join(' and ')} to generate routes.`;
+        // #564 — a muted small line below a busy control panel is easy to
+        // miss as the reason the button is disabled; bump its weight (no new
+        // color) so it reads as anchored to the button just above it rather
+        // than blending into the other small-muted text on the page.
+        statusEl.classList.add('fw-medium');
     } else {
         statusEl.textContent = 'Ready to generate routes.';
+        statusEl.classList.remove('fw-medium');
     }
 }
 
@@ -538,14 +547,40 @@ function milesToDegLon(miles, atLat) {
 
 /**
  * Split the straight line between two points into a chain of overlapping
- * boxes, each within maxSpanDeg per side and padded by bufferMiles — used
- * when a point-to-point route's own start/end bbox is too large for the
- * coverage endpoints to accept in one request.
+ * boxes, each within maxSpanDeg per side (after padding) and padded by
+ * bufferMiles — used when a point-to-point route's own start/end bbox is too
+ * large for the coverage endpoints to accept in one request.
+ *
+ * #584: the split size fed into `segments` below is maxSpanDeg *minus* the
+ * padding that gets added back to every box afterward — not the raw
+ * maxSpanDeg. Splitting on the raw value and padding afterward let the
+ * padding (meant to be a safety margin under the backend's hard
+ * MAX_BBOX_DEGREES limit) get added on top of an already-maxSpanDeg-sized
+ * box, pushing some boxes' final padded span past the backend limit and
+ * causing an unretried 400 on long point-to-point routes.
  */
 function computeCorridorBoxes(startLatLng, endLatLng, bufferMiles, maxSpanDeg) {
     const latSpan = Math.abs(endLatLng.lat - startLatLng.lat);
     const lonSpan = Math.abs(endLatLng.lng - startLatLng.lng);
-    const segments = Math.max(1, Math.ceil(Math.max(latSpan, lonSpan) / maxSpanDeg));
+
+    // Each box below is padded by bufferMiles on *both* edges of an axis
+    // (e.g. south AND north), so the raw (pre-padding) split size must leave
+    // room for 2x the padding on whichever axis pads wider. milesToDegLon
+    // grows with |latitude| (cos shrinks toward the poles), so use the
+    // higher-magnitude latitude of the two endpoints as the conservative
+    // case — any point interpolated between them has |lat| no greater than
+    // that, so its actual per-box longitude padding can only be smaller.
+    const worstLat = Math.max(Math.abs(startLatLng.lat), Math.abs(endLatLng.lat));
+    const padLatDeg = milesToDegLat(bufferMiles);
+    const padLonDeg = milesToDegLon(bufferMiles, worstLat);
+    const maxPadDeg = Math.max(padLatDeg, padLonDeg);
+    // Floor guards against a degenerate/negative split size at extreme
+    // latitudes where padding alone could approach or exceed maxSpanDeg —
+    // not a realistic case for road rides, but keeps this from producing an
+    // absurd segment count instead of just a wider-than-ideal box.
+    const rawSplitDeg = Math.max(0.05, maxSpanDeg - 2 * maxPadDeg);
+
+    const segments = Math.max(1, Math.ceil(Math.max(latSpan, lonSpan) / rawSplitDeg));
 
     const boxes = [];
     for (let i = 0; i < segments; i++) {
@@ -618,6 +653,30 @@ function fetchCorridorBox(cache, fetchFn, box, zoom) {
 }
 
 const debouncedLoadCoverage = window.debounce(() => { loadCoverage(); }, 400);
+
+/**
+ * #564 — surface a coverage-load failure both as a toast (so it's noticed
+ * even if the rider isn't looking at the sidebar) and as a persistent
+ * in-place error with a Retry button (so recovering doesn't require
+ * guessing that repositioning a pin or reopening the page re-triggers the
+ * load). Reuses the app-wide renderErrorStateInto()/showToast() helpers
+ * (common.js) that every other error path in this codebase already uses,
+ * rather than inventing a one-off status treatment.
+ */
+function showCoverageError(message) {
+    const statusEl = document.getElementById('coverage-status');
+    const safeMessage = message || 'Failed to load coverage';
+    if (typeof window.renderErrorStateInto === 'function') {
+        window.renderErrorStateInto(statusEl, safeMessage, {
+            variant: 'danger',
+            small: true,
+            retry: () => loadCoverage(),
+        });
+    } else {
+        statusEl.textContent = `Error: ${safeMessage}`;
+    }
+    if (typeof showToast === 'function') showToast(safeMessage, 'error');
+}
 
 async function loadCoverage() {
     const requestId = ++_coverageRequestId;
@@ -704,7 +763,7 @@ async function loadCoverage() {
 
         const failed = results.find(d => d.status !== 'success');
         if (failed) {
-            statusEl.textContent = failed.message || 'Failed to load coverage';
+            showCoverageError(failed.message);
             return;
         }
 
@@ -731,7 +790,7 @@ async function loadCoverage() {
             ? `Updated ${updatedAt.toLocaleTimeString()} (corridor: ${corridorBoxes.length} segment${corridorBoxes.length > 1 ? 's' : ''})`
             : `Updated ${updatedAt.toLocaleTimeString()}`;
     } catch (e) {
-        if (requestId === _coverageRequestId) statusEl.textContent = `Error: ${e.message}`;
+        if (requestId === _coverageRequestId) showCoverageError(e.message);
     } finally {
         clearTimeout(slowHintTimer);
         if (requestId === _coverageRequestId) updateWorkflowState();
