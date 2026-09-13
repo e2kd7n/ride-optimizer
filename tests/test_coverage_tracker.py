@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 import pytest
+import requests
 
 from src.coverage_tracker import (
     CoverageTracker,
@@ -1245,3 +1246,125 @@ class TestCacheTtl:
 
         assert polygons == []
         mock_post.assert_called_once()
+
+
+# ── Overpass timeout / retry / negative cache (#562) ──────────────
+
+class TestOverpassTimeoutAndNegativeCache:
+    """_get_or_fetch_water_polygons() previously made a single
+    requests.post(timeout=30) call with a [timeout:25] Overpass query and
+    no negative cache, so a slow/degraded Overpass endpoint made every
+    roadless-tile request pay out a ~30s wait, one at a time, forever."""
+
+    BOUNDS = (40.0, -75.0, 41.0, -74.0)
+
+    @pytest.fixture
+    def mock_config(self):
+        config = MagicMock()
+        config.get = MagicMock(side_effect=lambda key, default=None: default)
+        return config
+
+    @pytest.fixture
+    def tracker(self, mock_config, tmp_path):
+        t = CoverageTracker(mock_config)
+        t.cache_dir = tmp_path
+        return t
+
+    @staticmethod
+    def _overpass_response(elements=None):
+        resp = MagicMock()
+        resp.raise_for_status = MagicMock()
+        resp.json.return_value = {"elements": elements or []}
+        return resp
+
+    def test_client_and_query_timeouts_are_lowered_together(self, tracker):
+        """Both the client-side requests.post timeout and Overpass's own
+        internal [out:json][timeout:N] budget must be lowered together
+        (~10-12s) — lowering only the client side would abort queries
+        Overpass would've legitimately finished."""
+        from src.coverage_tracker import _OVERPASS_QUERY_TIMEOUT_S, _OVERPASS_REQUEST_TIMEOUT_S
+
+        assert _OVERPASS_REQUEST_TIMEOUT_S <= 12
+        assert _OVERPASS_QUERY_TIMEOUT_S <= 12
+        # Client timeout must not be tighter than Overpass's own query
+        # budget, or we'd abort queries Overpass was about to finish.
+        assert _OVERPASS_REQUEST_TIMEOUT_S >= _OVERPASS_QUERY_TIMEOUT_S
+
+        with patch("requests.post", return_value=self._overpass_response()) as mock_post:
+            tracker._get_or_fetch_water_polygons(self.BOUNDS)
+
+        _, kwargs = mock_post.call_args
+        assert kwargs["timeout"] == _OVERPASS_REQUEST_TIMEOUT_S
+        sent_query = mock_post.call_args[1]["data"]["data"]
+        assert f"[timeout:{_OVERPASS_QUERY_TIMEOUT_S}]" in sent_query
+
+    def test_failure_sets_negative_cache_and_fails_fast_on_next_call(self, tracker):
+        """A failed Overpass call must mark the endpoint so the very next
+        call (different bbox — an outage is endpoint-wide) fails
+        immediately instead of paying out another full timeout."""
+        with patch("requests.post", side_effect=requests.ConnectionError("boom")) as mock_post:
+            with pytest.raises(Exception):
+                tracker._get_or_fetch_water_polygons(self.BOUNDS)
+
+        other_bounds = (10.0, 10.0, 11.0, 11.0)
+        with patch("requests.post", return_value=self._overpass_response()) as mock_post2:
+            with pytest.raises(Exception):
+                tracker._get_or_fetch_water_polygons(other_bounds)
+            # Negative cache means the second bbox's request never even
+            # tried the network.
+            mock_post2.assert_not_called()
+
+    def test_negative_cache_key_is_endpoint_not_bbox(self, tracker):
+        """Regression guard: the marker must be keyed by endpoint URL, not
+        by bbox — a bbox-keyed marker would miss on nearly every call since
+        the bbox changes on every pin placement."""
+        from src.coverage_tracker import _OVERPASS_URL
+
+        with patch("requests.post", side_effect=requests.ConnectionError("boom")):
+            with pytest.raises(Exception):
+                tracker._get_or_fetch_water_polygons(self.BOUNDS)
+
+        assert _OVERPASS_URL in tracker._overpass_failure_until
+        assert self.BOUNDS not in tracker._overpass_failure_until
+
+    def test_negative_cache_expires_after_ttl(self, tracker):
+        """Once the negative-cache window has passed, the next call must
+        hit the network again rather than staying blocked forever."""
+        from src.coverage_tracker import _OVERPASS_URL
+
+        # Simulate a failure marker that already expired.
+        tracker._overpass_failure_until[_OVERPASS_URL] = time.time() - 1
+
+        with patch("requests.post", return_value=self._overpass_response()) as mock_post:
+            polygons = tracker._get_or_fetch_water_polygons(self.BOUNDS)
+
+        assert polygons == []
+        mock_post.assert_called_once()
+
+    def test_success_clears_a_stale_negative_cache_marker(self, tracker):
+        from src.coverage_tracker import _OVERPASS_URL
+
+        with patch("requests.post", side_effect=requests.ConnectionError("boom")):
+            with pytest.raises(Exception):
+                tracker._get_or_fetch_water_polygons(self.BOUNDS)
+        assert _OVERPASS_URL in tracker._overpass_failure_until
+
+        # Manually expire the marker (simulating TTL elapsed) and retry —
+        # a subsequent success should clear it so it doesn't linger.
+        tracker._overpass_failure_until[_OVERPASS_URL] = time.time() - 1
+        other_bounds = (10.0, 10.0, 11.0, 11.0)
+        with patch("requests.post", return_value=self._overpass_response()):
+            tracker._get_or_fetch_water_polygons(other_bounds)
+
+        assert _OVERPASS_URL not in tracker._overpass_failure_until
+
+    def test_water_polygon_cache_write_leaves_no_tmp_file_behind(self, tracker):
+        with patch("requests.post", return_value=self._overpass_response()):
+            tracker._get_or_fetch_water_polygons(self.BOUNDS)
+
+        cache_file = tracker.cache_dir / f"water_{_bbox_cache_key(self.BOUNDS)}.json"
+        assert cache_file.exists()
+        with open(cache_file, "r", encoding="utf-8") as f:
+            json.load(f)  # must be valid, complete JSON
+        tmp_files = list(tracker.cache_dir.glob("water_*.tmp*"))
+        assert tmp_files == []
