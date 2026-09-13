@@ -28,7 +28,10 @@ let selectedAreaBounds = null;
 // (app/api/planner_bp.py MAX_BBOX_DEGREES, #481) to bound Overpass/graph
 // cost. A point-to-point route between far-apart start/end pins can easily
 // exceed that on the straight-line bbox, so kept a hair under so tiled
-// corridor boxes clear the backend check with margin.
+// corridor boxes clear the backend check with margin. computeCorridorBoxes()
+// below subtracts the CORRIDOR_BUFFER_MILES padding from this value *before*
+// splitting (#584) so the padding stays a genuine safety margin instead of
+// being added on top of an already-max-sized box.
 const COVERAGE_MAX_BBOX_DEGREES = 0.45;
 const CORRIDOR_BUFFER_MILES = 3;
 
@@ -538,14 +541,40 @@ function milesToDegLon(miles, atLat) {
 
 /**
  * Split the straight line between two points into a chain of overlapping
- * boxes, each within maxSpanDeg per side and padded by bufferMiles — used
- * when a point-to-point route's own start/end bbox is too large for the
- * coverage endpoints to accept in one request.
+ * boxes, each within maxSpanDeg per side (after padding) and padded by
+ * bufferMiles — used when a point-to-point route's own start/end bbox is too
+ * large for the coverage endpoints to accept in one request.
+ *
+ * #584: the split size fed into `segments` below is maxSpanDeg *minus* the
+ * padding that gets added back to every box afterward — not the raw
+ * maxSpanDeg. Splitting on the raw value and padding afterward let the
+ * padding (meant to be a safety margin under the backend's hard
+ * MAX_BBOX_DEGREES limit) get added on top of an already-maxSpanDeg-sized
+ * box, pushing some boxes' final padded span past the backend limit and
+ * causing an unretried 400 on long point-to-point routes.
  */
 function computeCorridorBoxes(startLatLng, endLatLng, bufferMiles, maxSpanDeg) {
     const latSpan = Math.abs(endLatLng.lat - startLatLng.lat);
     const lonSpan = Math.abs(endLatLng.lng - startLatLng.lng);
-    const segments = Math.max(1, Math.ceil(Math.max(latSpan, lonSpan) / maxSpanDeg));
+
+    // Each box below is padded by bufferMiles on *both* edges of an axis
+    // (e.g. south AND north), so the raw (pre-padding) split size must leave
+    // room for 2x the padding on whichever axis pads wider. milesToDegLon
+    // grows with |latitude| (cos shrinks toward the poles), so use the
+    // higher-magnitude latitude of the two endpoints as the conservative
+    // case — any point interpolated between them has |lat| no greater than
+    // that, so its actual per-box longitude padding can only be smaller.
+    const worstLat = Math.max(Math.abs(startLatLng.lat), Math.abs(endLatLng.lat));
+    const padLatDeg = milesToDegLat(bufferMiles);
+    const padLonDeg = milesToDegLon(bufferMiles, worstLat);
+    const maxPadDeg = Math.max(padLatDeg, padLonDeg);
+    // Floor guards against a degenerate/negative split size at extreme
+    // latitudes where padding alone could approach or exceed maxSpanDeg —
+    // not a realistic case for road rides, but keeps this from producing an
+    // absurd segment count instead of just a wider-than-ideal box.
+    const rawSplitDeg = Math.max(0.05, maxSpanDeg - 2 * maxPadDeg);
+
+    const segments = Math.max(1, Math.ceil(Math.max(latSpan, lonSpan) / rawSplitDeg));
 
     const boxes = [];
     for (let i = 0; i < segments; i++) {
