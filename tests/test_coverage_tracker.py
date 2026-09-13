@@ -747,6 +747,150 @@ class TestPerZoomLocking:
         assert old_entry["activity_ids"] == [1]
 
 
+# ── stale-serving on lock contention (#563) ───────────────────────
+
+class TestStaleServingOnLockContention:
+    """get_tile_coverage() must fail fast rather than block the requesting
+    thread for a full rebuild's duration: if another thread already holds
+    the zoom's lock (a rebuild in progress — cold start, #560 pre-warm, or
+    a concurrent request), it should immediately return the last-published
+    snapshot marked stale=True instead of waiting."""
+
+    @pytest.fixture
+    def mock_config(self):
+        config = MagicMock()
+        config.get = MagicMock(side_effect=lambda key, default=None: default)
+        return config
+
+    @pytest.fixture
+    def tracker(self, mock_config, tmp_path):
+        t = CoverageTracker(mock_config)
+        t.cache_dir = tmp_path
+        return t
+
+    @staticmethod
+    def _activity(act_id, coords, date="2026-01-01"):
+        import polyline as codec
+        return {"id": act_id, "polyline": codec.encode(coords), "start_date": date, "type": "Ride"}
+
+    BOUNDS = (40.0, -75.5, 41.5, -73.0)
+
+    def test_get_tile_coverage_not_stale_when_lock_is_free(self, tracker):
+        a1 = self._activity(1, [(40.7128, -74.0060), (40.7130, -74.0058)])
+        tracker._activities_cache = [a1]
+        result = tracker.get_tile_coverage(self.BOUNDS, zoom=TILE_ZOOM)
+        assert result.stale is False
+        assert "stale" in result.to_dict()
+        assert result.to_dict()["stale"] is False
+
+    def test_get_tile_coverage_serves_stale_snapshot_without_blocking(self, tracker):
+        """While another thread holds TILE_ZOOM's lock mid-rebuild, a
+        concurrent get_tile_coverage() call must return immediately with
+        the previously-published snapshot and stale=True, not block until
+        the slow rebuild finishes."""
+        import threading as th
+
+        a1 = self._activity(1, [(40.7128, -74.0060), (40.7130, -74.0058)])
+        tracker._activities_cache = [a1]
+        # Publish an initial snapshot so there's something to serve as stale.
+        first = tracker.get_tile_coverage(self.BOUNDS, zoom=TILE_ZOOM)
+        assert first.stale is False
+        assert first.visited_count >= 1
+
+        a2 = self._activity(2, [(41.0, -75.0), (41.001, -75.001)])
+        tracker._activities_cache = [a1, a2]
+
+        entered_slow_build = th.Event()
+        release_slow_build = th.Event()
+        real_decode = tracker._decode_activity_coords
+
+        def slow_decode(activity):
+            entered_slow_build.set()
+            release_slow_build.wait(timeout=5)
+            return real_decode(activity)
+
+        with patch.object(tracker, "_decode_activity_coords", side_effect=slow_decode):
+            t = th.Thread(target=tracker._build_or_update_tile_index, args=(TILE_ZOOM,))
+            t.start()
+            assert entered_slow_build.wait(timeout=5), "slow rebuild never started"
+
+            start = time.monotonic()
+            stale_result = tracker.get_tile_coverage(self.BOUNDS, zoom=TILE_ZOOM)
+            elapsed = time.monotonic() - start
+
+            # Must return promptly — well under the time the slow rebuild
+            # would take if this blocked on the same lock.
+            assert elapsed < 1.0
+            assert stale_result.stale is True
+            # Stale snapshot is the pre-rebuild data (activity 2 not yet folded in).
+            assert stale_result.visited_count == first.visited_count
+
+            release_slow_build.set()
+            t.join(timeout=5)
+            assert not t.is_alive()
+
+        # Next call, after the rebuild finished, sees fresh (non-stale) data.
+        fresh_result = tracker.get_tile_coverage(self.BOUNDS, zoom=TILE_ZOOM)
+        assert fresh_result.stale is False
+        assert fresh_result.visited_count > first.visited_count
+
+    def test_falls_back_to_blocking_when_no_snapshot_published_yet(self, tracker):
+        """A genuinely cold zoom (nothing published in memory yet) has no
+        stale snapshot to serve, so this must still block and return a
+        real (non-stale) result rather than an empty one."""
+        import threading as th
+
+        a1 = self._activity(1, [(40.7128, -74.0060), (40.7130, -74.0058)])
+        tracker._activities_cache = [a1]
+
+        entered_slow_build = th.Event()
+        release_slow_build = th.Event()
+        real_decode = tracker._decode_activity_coords
+
+        def slow_decode(activity):
+            entered_slow_build.set()
+            release_slow_build.wait(timeout=5)
+            return real_decode(activity)
+
+        with patch.object(tracker, "_decode_activity_coords", side_effect=slow_decode):
+            t = th.Thread(target=tracker._build_or_update_tile_index, args=(TILE_ZOOM,))
+            t.start()
+            assert entered_slow_build.wait(timeout=5), "slow rebuild never started"
+
+            # No snapshot exists yet in tracker._tile_index_cache — must block
+            # rather than return nothing.
+            release_thread = th.Thread(target=lambda: (time.sleep(0.1), release_slow_build.set()))
+            release_thread.start()
+            result = tracker.get_tile_coverage(self.BOUNDS, zoom=TILE_ZOOM)
+            release_thread.join()
+
+            assert result.stale is False
+            assert result.visited_count >= 1
+
+            t.join(timeout=5)
+            assert not t.is_alive()
+
+    def test_get_tile_index_or_stale_direct(self, tracker):
+        """Direct unit test of _get_tile_index_or_stale()'s (index, stale)
+        contract, independent of get_tile_coverage()'s bbox filtering."""
+        import threading as th
+
+        a1 = self._activity(1, [(40.7128, -74.0060), (40.7130, -74.0058)])
+        tracker._activities_cache = [a1]
+        index, stale = tracker._get_tile_index_or_stale(TILE_ZOOM)
+        assert stale is False
+        assert index["tiles"]
+
+        lock = tracker._get_zoom_lock(TILE_ZOOM)
+        lock.acquire()
+        try:
+            index2, stale2 = tracker._get_tile_index_or_stale(TILE_ZOOM)
+            assert stale2 is True
+            assert index2 is index  # exact same published snapshot object
+        finally:
+            lock.release()
+
+
 # ── roadless (open-water) tile detection (#525) ──────────────────
 
 class TestGetRoadlessTiles:

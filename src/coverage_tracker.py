@@ -42,6 +42,13 @@ class TileCoverage:
     bounds: Optional[Tuple[float, float, float, float]] = None
     computed_at: str = ""
     zoom: int = TILE_ZOOM
+    # True when this snapshot was served from the last-published tile index
+    # instead of waiting on an in-progress rebuild for this zoom (#563) — a
+    # cold rebuild (or a #560 startup pre-warm) can take multiple seconds,
+    # and a caller on a short client-side timeout would rather get an
+    # immediate, possibly-slightly-stale answer than block for the full
+    # rebuild. False for every normal (fresh-or-freshly-built) response.
+    stale: bool = False
 
     @property
     def visited_count(self) -> int:
@@ -69,6 +76,7 @@ class TileCoverage:
             "bounds": self.bounds,
             "computed_at": self.computed_at,
             "zoom": self.zoom,
+            "stale": self.stale,
         }
 
 
@@ -468,57 +476,105 @@ class CoverageTracker:
         elsewhere was iterating.
         """
         with self._get_zoom_lock(zoom):
-            index = self._tile_index_cache.get(zoom)
-            if index is None:
-                index = self._load_tile_index_from_disk(zoom)
-            if index is None:
-                index = {"indexed_activity_ids": set(), "tiles": {}}
+            return self._build_or_update_tile_index_locked(zoom)
 
-            activities = self._load_activities()
-            current_ids = {a.get("id") for a in activities if a.get("id") is not None}
-            new_ids = current_ids - index["indexed_activity_ids"]
+    def _build_or_update_tile_index_locked(self, zoom: int) -> dict:
+        """Body of _build_or_update_tile_index(), assuming the caller
+        already holds self._get_zoom_lock(zoom). Split out so
+        _get_tile_index_or_stale() (#563) can do its own non-blocking
+        `acquire` and then run the exact same build logic, instead of
+        duplicating it."""
+        index = self._tile_index_cache.get(zoom)
+        if index is None:
+            index = self._load_tile_index_from_disk(zoom)
+        if index is None:
+            index = {"indexed_activity_ids": set(), "tiles": {}}
 
-            if new_ids:
-                start = time.monotonic()
-                decoded_count = 0
-                # Shallow copies: existing tile entries are shared objects
-                # with the previously-published index until this loop
-                # touches them, at which point a *new* entry dict/list is
-                # substituted in new_tiles rather than the shared one being
-                # mutated in place (see docstring above).
-                new_tiles = dict(index["tiles"])
-                new_indexed_ids = set(index["indexed_activity_ids"])
-                for act in activities:
-                    act_id = act.get("id")
-                    if act_id not in new_ids:
-                        continue
-                    coords = self._decode_activity_coords(act)
-                    decoded_count += 1
-                    if coords:
-                        act_date = act.get("start_date", "")
-                        for tx, ty in _activity_tiles(coords, zoom):
-                            key = f"{tx},{ty}"
-                            entry = new_tiles.get(key)
-                            if entry is None:
-                                new_tiles[key] = {"first_ridden": act_date, "activity_ids": [act_id]}
-                            elif act_id not in entry["activity_ids"]:
-                                new_tiles[key] = {
-                                    "first_ridden": entry["first_ridden"],
-                                    "activity_ids": entry["activity_ids"] + [act_id],
-                                }
-                    new_indexed_ids.add(act_id)
+        activities = self._load_activities()
+        current_ids = {a.get("id") for a in activities if a.get("id") is not None}
+        new_ids = current_ids - index["indexed_activity_ids"]
 
-                index = {"indexed_activity_ids": new_indexed_ids, "tiles": new_tiles}
+        if new_ids:
+            start = time.monotonic()
+            decoded_count = 0
+            # Shallow copies: existing tile entries are shared objects
+            # with the previously-published index until this loop
+            # touches them, at which point a *new* entry dict/list is
+            # substituted in new_tiles rather than the shared one being
+            # mutated in place (see docstring above).
+            new_tiles = dict(index["tiles"])
+            new_indexed_ids = set(index["indexed_activity_ids"])
+            for act in activities:
+                act_id = act.get("id")
+                if act_id not in new_ids:
+                    continue
+                coords = self._decode_activity_coords(act)
+                decoded_count += 1
+                if coords:
+                    act_date = act.get("start_date", "")
+                    for tx, ty in _activity_tiles(coords, zoom):
+                        key = f"{tx},{ty}"
+                        entry = new_tiles.get(key)
+                        if entry is None:
+                            new_tiles[key] = {"first_ridden": act_date, "activity_ids": [act_id]}
+                        elif act_id not in entry["activity_ids"]:
+                            new_tiles[key] = {
+                                "first_ridden": entry["first_ridden"],
+                                "activity_ids": entry["activity_ids"] + [act_id],
+                            }
+                new_indexed_ids.add(act_id)
 
-                logger.info(
-                    "Tile index (zoom=%d) updated: %d new activities decoded in %.2fs (total indexed=%d, tiles=%d)",
-                    zoom, decoded_count, time.monotonic() - start,
-                    len(index["indexed_activity_ids"]), len(index["tiles"]),
-                )
-                self._write_tile_index_atomic(zoom, index)
+            index = {"indexed_activity_ids": new_indexed_ids, "tiles": new_tiles}
 
-            self._tile_index_cache[zoom] = index
-            return index
+            logger.info(
+                "Tile index (zoom=%d) updated: %d new activities decoded in %.2fs (total indexed=%d, tiles=%d)",
+                zoom, decoded_count, time.monotonic() - start,
+                len(index["indexed_activity_ids"]), len(index["tiles"]),
+            )
+            self._write_tile_index_atomic(zoom, index)
+
+        self._tile_index_cache[zoom] = index
+        return index
+
+    def _get_tile_index_or_stale(self, zoom: int) -> Tuple[dict, bool]:
+        """Non-blocking tile-index fetch for the request path (#563).
+
+        Returns (index, stale). If zoom's lock is free, this acquires it
+        and runs the normal build/update in-line (stale=False) — identical
+        to calling _build_or_update_tile_index(zoom) directly. If the lock
+        is already held (a rebuild — cold start, #560 pre-warm, or another
+        request — is in progress for this zoom), this does NOT block:
+        it immediately returns the last-published in-memory snapshot
+        (stale=True) so the caller can respond right away instead of
+        waiting out the full rebuild. The rebuild already in progress
+        continues in the background under the lock as before and will
+        publish a fresh snapshot for the next request.
+
+        Falls back to the normal blocking build only when there is no
+        snapshot at all yet to serve as "stale" — a genuinely cold zoom
+        with two first-requests racing each other, where returning nothing
+        would be worse than a brief wait.
+        """
+        lock = self._get_zoom_lock(zoom)
+        if lock.acquire(blocking=False):
+            try:
+                return self._build_or_update_tile_index_locked(zoom), False
+            finally:
+                lock.release()
+
+        cached = self._tile_index_cache.get(zoom)
+        if cached is not None:
+            logger.info(
+                "get_tile_coverage(zoom=%d): rebuild already in progress — serving stale snapshot (%d tiles)",
+                zoom, len(cached["tiles"]),
+            )
+            return cached, True
+
+        logger.info(
+            "get_tile_coverage(zoom=%d): rebuild in progress and no snapshot published yet — blocking",
+            zoom,
+        )
+        return self._build_or_update_tile_index(zoom), False
 
     def get_tile_coverage(
         self,
@@ -550,7 +606,7 @@ class CoverageTracker:
             return self.get_tile_coverage_all(zoom=zoom)
 
         start = time.monotonic()
-        index = self._build_or_update_tile_index(zoom)
+        index, stale = self._get_tile_index_or_stale(zoom)
 
         south, west, north, east = bounds
         min_tx, min_ty = lat_lon_to_tile(north, west, zoom)
@@ -566,8 +622,8 @@ class CoverageTracker:
         total_tiles = (max_tx - min_tx + 1) * (max_ty - min_ty + 1)
 
         logger.info(
-            "get_tile_coverage(zoom=%d) served from index in %.3fs (%d/%d tiles in bbox)",
-            zoom, time.monotonic() - start, len(visited), len(index["tiles"]),
+            "get_tile_coverage(zoom=%d) served from index in %.3fs (%d/%d tiles in bbox, stale=%s)",
+            zoom, time.monotonic() - start, len(visited), len(index["tiles"]), stale,
         )
 
         return TileCoverage(
@@ -576,6 +632,7 @@ class CoverageTracker:
             bounds=bounds,
             computed_at=datetime.utcnow().isoformat(),
             zoom=zoom,
+            stale=stale,
         )
 
     def get_tile_coverage_all(self, zoom: Optional[int] = None) -> TileCoverage:
