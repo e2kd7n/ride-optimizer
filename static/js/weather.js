@@ -123,6 +123,27 @@ async function loadForecast() {
     }
 }
 
+/**
+ * Format a commute window's per-hour breakdown ("7 AM 58°/6mph/10% · 8 AM
+ * 61°/9mph/15%") instead of leaving the reader with only the window's
+ * avg/max — the hourly data is already fetched for `optimal_departure` and
+ * the "(7–9 AM)" range label, just not shown (#586). Bolds the optimal
+ * departure hour and caps at MAX_HOURS so a future longer window can't blow
+ * out the card.
+ */
+function formatWindowHourBreakdown(hours, optimalDeparture) {
+    if (!hours || !hours.length) return '';
+    const MAX_HOURS = 4;
+    const parts = hours.slice(0, MAX_HOURS).map(h => {
+        const label = formatHour12(parseInt(h.hour.split(':')[0], 10));
+        const gustSuffix = (h.wind_gust_mph - h.wind_mph >= 5) ? ` (g${h.wind_gust_mph})` : '';
+        const text = `${label} ${h.temp_f}°/${h.wind_mph}mph${gustSuffix}/${h.precip_prob}%`;
+        return h.hour === optimalDeparture ? `<strong>${text}</strong>` : text;
+    });
+    if (hours.length > MAX_HOURS) parts.push(`+${hours.length - MAX_HOURS} more`);
+    return parts.join(' · ');
+}
+
 function renderWindowMetrics(windowData, contentId) {
     const el = document.getElementById(contentId);
     if (!windowData || !windowData.avg_temp_f) {
@@ -149,8 +170,11 @@ function renderWindowMetrics(windowData, contentId) {
         ${windowData.optimal_departure ? `
         <div class="window-metric text-success mt-1">
             <i class="bi bi-clock-history"></i>
-            <span>Best departure: <strong>${windowData.optimal_departure}</strong></span>
+            <span>Best departure: <strong>${formatHour12(parseInt(windowData.optimal_departure.split(':')[0], 10))}</strong></span>
         </div>
+        ` : ''}
+        ${windowData.hours && windowData.hours.length ? `
+        <div class="window-hour-breakdown text-muted small mt-1">${formatWindowHourBreakdown(windowData.hours, windowData.optimal_departure)}</div>
         ` : ''}
     `;
 }
