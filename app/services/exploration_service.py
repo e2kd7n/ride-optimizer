@@ -112,6 +112,26 @@ class ExplorationService:
         )
         thread.start()
 
+    def restart_prewarm(self) -> None:
+        """Reset the single-fire pre-warm guard and kick off a fresh
+        pre-warm (#576).
+
+        start_prewarm() is single-fire so ordinary callers (e.g.
+        ServiceContainer.get_exploration_service()) don't need to track
+        whether they've already triggered it — but that means a manual,
+        user-initiated cache invalidation (POST /api/exploration/invalidate)
+        would otherwise never get a second pre-warm: the guard was already
+        tripped at cold-start, so a plain start_prewarm() call after
+        invalidation would just no-op, leaving the *next* live coverage
+        request to pay for a synchronous rebuild inline — exactly the
+        multi-minute-stall failure mode this epic exists to fix. This resets
+        the guard first so the following start_prewarm() actually spawns a
+        new pre-warm thread.
+        """
+        with self._prewarm_lock:
+            self._prewarm_started = False
+        self.start_prewarm()
+
     def _prewarm_worker(self) -> None:
         from src.coverage_tracker import TILE_ZOOM, SQUADRATINHO_ZOOM
 

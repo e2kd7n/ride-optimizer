@@ -2,6 +2,8 @@
 Unit tests for launch.py API endpoints.
 """
 
+from unittest.mock import Mock
+
 import pytest
 import launch
 
@@ -221,6 +223,50 @@ class TestExplorationTilesAPI:
         assert data['status'] == 'success'
         assert data['zoom'] == 17
         assert data['bounds'] == [41.0, -88.0, 41.4, -87.6]
+
+
+@pytest.mark.unit
+class TestExplorationInvalidateAPI:
+    """Tests for POST /api/exploration/invalidate (#576).
+
+    Unlike every sibling /exploration/* endpoint this had no rate limit —
+    repeatedly hitting it reproduced the full cold-rebuild incident on
+    demand — and it never re-triggered the #560 pre-warm after wiping the
+    cache, leaving the next live coverage request to pay for a synchronous
+    rebuild inline.
+    """
+
+    def test_invalidate_clears_cache_and_rewarms(self, client):
+        from launch import app
+
+        mock_svc = Mock()
+        app.container.exploration_service = mock_svc
+        try:
+            response = client.post('/api/exploration/invalidate')
+            assert response.status_code == 200
+            data = response.get_json()
+            assert data['status'] == 'success'
+            mock_svc.invalidate_caches.assert_called_once()
+            mock_svc.restart_prewarm.assert_called_once()
+        finally:
+            app.container.exploration_service = None
+
+    def test_rate_limit_config_key_is_used(self):
+        """#576: a dedicated config key drives this endpoint's limit,
+        matching the _rate_limit() pattern used by every sibling endpoint
+        (rate_limit_route, rate_limit_tiles, rate_limit_roadless,
+        rate_limit_verify) instead of being left unlimited."""
+        from unittest.mock import MagicMock, patch
+
+        from app.api.planner_bp import _rate_limit
+
+        mock_config = MagicMock()
+        mock_config.get = MagicMock(return_value="5 per minute")
+        with patch("app.api.planner_bp.ConfigManager.get_instance", return_value=mock_config):
+            limit_string = _rate_limit("exploration.rate_limit_invalidate", "10 per minute")()
+
+        assert limit_string == "5 per minute"
+        mock_config.get.assert_called_once_with("exploration.rate_limit_invalidate", "10 per minute")
 
 
 @pytest.mark.unit
