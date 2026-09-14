@@ -269,6 +269,30 @@ def exploration_invalidate():
 MAX_ROUTE_WAYPOINTS = 50
 
 
+def _parse_exclude(exclude_raw):
+    """Parse the exploration/route request's ``exclude`` road-filter param
+    into a normalized tuple of lowercase tokens (#575), or return an error
+    message.
+
+    The frontend (static/js/explore.js) sends this as a comma-separated
+    string, e.g. ``"motorway,trunk"`` (named for an old OSRM integration —
+    field name/shape unchanged by this fix). A list of strings is also
+    accepted for robustness/future callers. Unrecognized tokens are not
+    rejected here — compute_route() maps only the ones with a real ORS
+    equivalent ("motorway"/"trunk") and ignores the rest.
+    """
+    if exclude_raw is None or exclude_raw == '':
+        return (), None
+    if isinstance(exclude_raw, str):
+        raw_tokens = exclude_raw.split(',')
+    elif isinstance(exclude_raw, list) and all(isinstance(t, str) for t in exclude_raw):
+        raw_tokens = exclude_raw
+    else:
+        return None, 'exclude must be a comma-separated string or a list of strings'
+    tokens = tuple(t.strip().lower() for t in raw_tokens if t.strip())
+    return tokens, None
+
+
 def _validate_waypoints(waypoints):
     """Return an error message string if waypoints are malformed, else None."""
     if not waypoints or not isinstance(waypoints, list) or len(waypoints) < 2:
@@ -303,7 +327,12 @@ def exploration_route():
     surface_preference = data.get('surface_preference', 'any')
     if surface_preference not in ('any', 'paved', 'unpaved'):
         return jsonify({'status': 'error', 'message': 'surface_preference must be any, paved, or unpaved'}), 400
-    result = svc.compute_route(waypoints, surface_preference=surface_preference)
+
+    exclude, exclude_error = _parse_exclude(data.get('exclude'))
+    if exclude_error:
+        return jsonify({'status': 'error', 'message': exclude_error}), 400
+
+    result = svc.compute_route(waypoints, surface_preference=surface_preference, exclude=exclude)
     status_code = 200 if result.get('status') == 'success' else 500
     return jsonify(result), status_code
 

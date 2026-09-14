@@ -32,6 +32,22 @@ _PAVED_SURFACE_VALUES = {0, 1, 2, 3, 4, 5, 6}    # asphalt, concrete, paved, ...
 _UNPAVED_SURFACE_VALUES = {7, 8, 9, 10, 11, 12}   # gravel, dirt, grass, ...
 # Values outside both sets are treated as unknown.
 
+# #575 — "No motorways" road-filter mapping. The frontend's `exclude` param
+# (static/js/explore.js's excludeClasses, named for an old OSRM integration)
+# sends road-class tokens like "motorway"/"trunk"; ORS's Directions API has
+# no such per-class concept, only a coarse options.avoid_features toggle
+# whose closest equivalent is "highways". Any exclude token in this set maps
+# onto that toggle; every other token (e.g. "ferry" — already covered by
+# ors_client.get_route's own default avoid_features, and harmless here) is
+# accepted but ignored rather than rejected, since the frontend may send
+# tokens with no backend mapping (unpaved is instead handled via
+# surface_preference, and "avoid traffic" has no ORS equivalent at all — see
+# #575's design note: don't add a param that silently does nothing).
+_MOTORWAY_EXCLUDE_TOKENS = frozenset({"motorway", "trunk"})
+# Matches ors_client.get_route()'s own default avoid_features so callers that
+# pass no exclude get byte-identical behavior to before #575.
+_DEFAULT_AVOID_FEATURES = ("ferries",)
+
 # Cap on retained route-memo entries (#482) — each entry holds a full route
 # polyline, so an unbounded dict is a slow memory leak on a long-running Pi.
 MAX_ROUTE_CACHE_ENTRIES = 200
@@ -319,9 +335,15 @@ class ExplorationService:
             if remaining <= 0:
                 continue
             try:
+                # avoid_features (#575) is a newer field — default to the
+                # pre-#575 behavior (ferries-only) for entries persisted by
+                # an older process, so an in-flight restart doesn't just
+                # drop them.
+                avoid_features = tuple(entry.get("avoid_features") or _DEFAULT_AVOID_FEATURES)
                 cache_key = (
                     tuple((round(lat, 6), round(lon, 6)) for lat, lon in entry["waypoints"]),
                     entry["profile"],
+                    avoid_features,
                 )
             except (KeyError, TypeError, ValueError):
                 continue
@@ -346,13 +368,14 @@ class ExplorationService:
             snapshot = list(self._route_cache.items())
 
         entries = []
-        for (waypoints, profile), (result, expires_at) in snapshot:
+        for (waypoints, profile, avoid_features), (result, expires_at) in snapshot:
             remaining = expires_at - now_mono
             if remaining <= 0:
                 continue
             entries.append({
                 "waypoints": [list(pt) for pt in waypoints],
                 "profile": profile,
+                "avoid_features": list(avoid_features),
                 "result": result,
                 "expires_at": now_wall + remaining,
             })
@@ -445,12 +468,18 @@ class ExplorationService:
         self,
         waypoints: List[Tuple[float, float]],
         surface_preference: str = "any",
+        exclude: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Compute a road-following route via ORS for the given waypoints.
 
         Args:
             waypoints: List of (lat, lon) pairs.
             surface_preference: ``"any"`` | ``"paved"`` | ``"unpaved"``.
+            exclude: Road-class tokens to avoid (#575), e.g. ``["motorway"]``
+                — only ``"motorway"``/``"trunk"`` have a real ORS mapping
+                (options.avoid_features: ["highways"]); anything else is
+                accepted but has no effect. ``None``/empty behaves exactly
+                as before #575.
 
         Returns:
             Dict with ``status``, and on success:
@@ -460,6 +489,15 @@ class ExplorationService:
         profile = _SURFACE_TO_PROFILE.get(surface_preference, "cycling-regular")
         api_key = self.config.get("ors.api_key", "")
         ttl = int(self.config.get("exploration.route_cache_ttl_seconds", 600))
+
+        exclude_tokens = frozenset(
+            t.strip().lower() for t in (exclude or []) if isinstance(t, str) and t.strip()
+        )
+        avoid_features = (
+            _DEFAULT_AVOID_FEATURES + ("highways",)
+            if exclude_tokens & _MOTORWAY_EXCLUDE_TOKENS
+            else _DEFAULT_AVOID_FEATURES
+        )
         # Hard wall-clock budget for this call, across queueing behind any
         # in-flight request (below) AND every retry/fallback ORS attempt.
         # Without this, the unroutable-waypoint retry loop (up to 10
@@ -477,8 +515,15 @@ class ExplorationService:
                 "message": "Road routing is not configured (ORS_API_KEY missing)",
             }
 
-        # Memoization key — waypoints as a tuple of pairs + profile.
-        cache_key = (tuple((round(lat, 6), round(lon, 6)) for lat, lon in waypoints), profile)
+        # Memoization key — waypoints as a tuple of pairs + profile + the
+        # resolved avoid_features (#575), so a "no motorways" request never
+        # returns a cached route computed without that constraint (or
+        # vice versa).
+        cache_key = (
+            tuple((round(lat, 6), round(lon, 6)) for lat, lon in waypoints),
+            profile,
+            avoid_features,
+        )
         cached_result = self._cache_get(cache_key)
         if cached_result is not None:
             logger.debug("ORS cache hit for key %s", cache_key)
@@ -507,7 +552,10 @@ class ExplorationService:
                 logger.debug("ORS cache hit for key %s (post-queue)", cache_key)
                 return cached_result
             call_start = time.monotonic()
-            result = self._compute_route_via_ors(waypoints, profile, api_key, ttl, deadline, max_wait, cache_key)
+            result = self._compute_route_via_ors(
+                waypoints, profile, api_key, ttl, deadline, max_wait, cache_key,
+                avoid_features=avoid_features,
+            )
             logger.info("ORS route computation took %.2fs (status=%s)", time.monotonic() - call_start, result.get("status"))
             return result
         finally:
@@ -522,6 +570,7 @@ class ExplorationService:
         deadline: float,
         max_wait: float,
         cache_key: tuple,
+        avoid_features: tuple = _DEFAULT_AVOID_FEATURES,
     ) -> Dict[str, Any]:
         """Run the actual ORS call(s) for compute_route, holding self._route_lock."""
         from src import ors_client
@@ -541,7 +590,9 @@ class ExplorationService:
         # still let this first call run for a full fresh `timeout`,
         # blowing past the overall wall-clock budget compute_route() exists
         # to enforce.
-        raw = ors_client.get_route(ors_coords, profile, api_key=api_key, timeout=_budget_timeout())
+        raw = ors_client.get_route(
+            ors_coords, profile, avoid_features=avoid_features, api_key=api_key, timeout=_budget_timeout(),
+        )
 
         # Preferred profile not enabled on this account — fall back to cycling-regular.
         if (
@@ -552,7 +603,9 @@ class ExplorationService:
         ):
             logger.info("Profile %s unavailable, falling back to cycling-regular", profile)
             profile = "cycling-regular"
-            raw = ors_client.get_route(ors_coords, profile, api_key=api_key, timeout=_budget_timeout())
+            raw = ors_client.get_route(
+                ors_coords, profile, avoid_features=avoid_features, api_key=api_key, timeout=_budget_timeout(),
+            )
 
         # Unroutable waypoints: drop every interior bad waypoint and retry.
         # "Interior" = not the first (start) or last (end) coordinate.
@@ -580,15 +633,20 @@ class ExplorationService:
             _drop_attempts += 1
             if len(ors_coords) < 2 or _drop_attempts > 10:
                 break
-            # Re-check cache for the pruned list.
+            # Re-check cache for the pruned list. avoid_features carries over
+            # unchanged — dropping an unroutable waypoint doesn't change what
+            # road classes the caller asked to avoid (#575).
             cache_key = (
                 tuple((round(c[1], 6), round(c[0], 6)) for c in ors_coords),
                 profile,
+                avoid_features,
             )
             cached_result = self._cache_get(cache_key)
             if cached_result is not None:
                 return cached_result
-            raw = ors_client.get_route(ors_coords, profile, api_key=api_key, timeout=_budget_timeout())
+            raw = ors_client.get_route(
+                ors_coords, profile, avoid_features=avoid_features, api_key=api_key, timeout=_budget_timeout(),
+            )
 
         if _timed_out:
             logger.warning("ORS route computation exceeded %.0fs budget; giving up gracefully", max_wait)

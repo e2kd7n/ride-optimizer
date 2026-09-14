@@ -496,6 +496,84 @@ class TestExplorationRouteWaypointValidation:
 
 
 @pytest.mark.unit
+class TestExplorationRouteExcludeParam:
+    """Tests for #575 — the "No motorways" road filter. The frontend already
+    sent `exclude` (static/js/explore.js -> api-client.js:351-354) as a
+    comma-separated string, e.g. "motorway,trunk", but nothing on the
+    backend read it: compute_route() had no such parameter and
+    exploration_route() only read waypoints/surface_preference. This checks
+    the endpoint now parses `exclude` and forwards it to compute_route()."""
+
+    def test_exclude_parsed_and_forwarded_to_service(self, client):
+        from launch import app
+
+        mock_svc = Mock()
+        mock_svc.compute_route.return_value = {'status': 'success', 'coordinates': []}
+        app.container.exploration_service = mock_svc
+        try:
+            response = client.post('/api/exploration/route', json={
+                'waypoints': [[40.0, -74.0], [40.1, -74.1]],
+                'exclude': 'motorway,trunk',
+            })
+            assert response.status_code == 200
+            mock_svc.compute_route.assert_called_once_with(
+                [[40.0, -74.0], [40.1, -74.1]],
+                surface_preference='any',
+                exclude=('motorway', 'trunk'),
+            )
+        finally:
+            app.container.exploration_service = None
+
+    def test_omitted_exclude_forwards_empty_tuple(self, client):
+        from launch import app
+
+        mock_svc = Mock()
+        mock_svc.compute_route.return_value = {'status': 'success', 'coordinates': []}
+        app.container.exploration_service = mock_svc
+        try:
+            response = client.post('/api/exploration/route', json={
+                'waypoints': [[40.0, -74.0], [40.1, -74.1]],
+            })
+            assert response.status_code == 200
+            mock_svc.compute_route.assert_called_once_with(
+                [[40.0, -74.0], [40.1, -74.1]],
+                surface_preference='any',
+                exclude=(),
+            )
+        finally:
+            app.container.exploration_service = None
+
+    def test_exclude_as_list_also_accepted(self, client):
+        from launch import app
+
+        mock_svc = Mock()
+        mock_svc.compute_route.return_value = {'status': 'success', 'coordinates': []}
+        app.container.exploration_service = mock_svc
+        try:
+            response = client.post('/api/exploration/route', json={
+                'waypoints': [[40.0, -74.0], [40.1, -74.1]],
+                'exclude': ['motorway'],
+            })
+            assert response.status_code == 200
+            mock_svc.compute_route.assert_called_once_with(
+                [[40.0, -74.0], [40.1, -74.1]],
+                surface_preference='any',
+                exclude=('motorway',),
+            )
+        finally:
+            app.container.exploration_service = None
+
+    def test_malformed_exclude_rejected(self, client):
+        response = client.post('/api/exploration/route', json={
+            'waypoints': [[40.0, -74.0], [40.1, -74.1]],
+            'exclude': {'not': 'a string or list'},
+        })
+        assert response.status_code == 400
+        data = response.get_json()
+        assert 'exclude' in data['message'].lower()
+
+
+@pytest.mark.unit
 class TestSavedPlansAPI:
     """Tests for saved plans CRUD endpoints."""
 
