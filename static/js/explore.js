@@ -926,6 +926,28 @@ async function loadCoverage() {
     }
 }
 
+// #579 — below map zoom 10, loadCoverage() requests full-history coverage
+// with no bounds, and drawTileGrid()/renderNewTiles() can end up building one
+// L.rectangle per visited tile: tens of thousands of individual SVG-backed
+// DOM nodes freezes the map, especially on a phone. Leaflet's canvas
+// renderer batches every vector layer assigned to it onto one shared
+// <canvas> instead of one DOM element each, so sharing a single L.canvas()
+// instance across a grid keeps the tile count high without the per-tile DOM
+// cost. Applied only once a draw call's tile count crosses this threshold —
+// below it, SVG's crisper rendering and per-tile hit-testing (harmless at
+// normal bounded-viewport counts) stay the default.
+const TILE_CANVAS_RENDER_THRESHOLD = 2000;
+const tileCanvasRenderer = L.canvas({ padding: 0.5 });
+
+/** Rectangle style/options for one draw call: adds the shared canvas
+ *  renderer once `tileCount` crosses TILE_CANVAS_RENDER_THRESHOLD so the
+ *  whole batch renders onto one canvas instead of one DOM node per tile. */
+function tileRectOptions(style, tileCount) {
+    return tileCount > TILE_CANVAS_RENDER_THRESHOLD
+        ? { ...style, interactive: false, renderer: tileCanvasRenderer }
+        : { ...style, interactive: false };
+}
+
 // Already-visited tiles: brand cobalt accent (--accent, FAIR_WEATHER_BRAND_BOOK.md),
 // kept visually distinct from the bright Squadrats-green used for newly-claimed
 // tiles (TILE_STYLE_NEW below) so "already have this" and "this route would
@@ -962,17 +984,19 @@ function renderTiles(primary, secondary) {
 function drawTileGrid(layerGroup, visited, zoom, style) {
     if (!visited || typeof visited !== 'object') return;
     const n = Math.pow(2, zoom || 14);
+    const keys = Object.keys(visited);
+    // #579 — one rectOptions computation per draw call (not per tile) so a
+    // large full-history grid shares one canvas renderer instead of paying
+    // per-tile DOM cost.
+    const rectOptions = tileRectOptions(style, keys.length);
 
-    for (const key of Object.keys(visited)) {
+    for (const key of keys) {
         const [x, y] = key.split(',').map(Number);
         const west  = x / n * 360 - 180;
         const east  = (x + 1) / n * 360 - 180;
         const north = Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n)))       * 180 / Math.PI;
         const south = Math.atan(Math.sinh(Math.PI * (1 - 2 * (y + 1) / n))) * 180 / Math.PI;
-        const rect = L.rectangle([[south, west], [north, east]], {
-            ...style,
-            interactive: false,
-        });
+        const rect = L.rectangle([[south, west], [north, east]], rectOptions);
         layerGroup.addLayer(rect);
     }
 }
@@ -1006,6 +1030,11 @@ function renderNewTiles(newTilesByZoom, direction = null, phase = 'claimed') {
         _newTileRectsByDirection[direction].forEach(r => newTilesLayer.removeLayer(r));
     }
     const style = phase === 'candidate' ? TILE_STYLE_CANDIDATE : TILE_STYLE_NEW;
+    // #579 — same canvas-renderer threshold as drawTileGrid(); a frontier/
+    // infill scan over a large full-history grid can also surface a big
+    // candidate-zone tile count.
+    const totalTiles = (newTilesByZoom || []).reduce((sum, g) => sum + (g.tiles ? g.tiles.length : 0), 0);
+    const rectOptions = tileRectOptions(style, totalTiles);
     const rects = [];
     for (const { zoom, tiles } of newTilesByZoom || []) {
         const n = Math.pow(2, zoom);
@@ -1014,10 +1043,7 @@ function renderNewTiles(newTilesByZoom, direction = null, phase = 'claimed') {
             const east  = (x + 1) / n * 360 - 180;
             const north = Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n)))       * 180 / Math.PI;
             const south = Math.atan(Math.sinh(Math.PI * (1 - 2 * (y + 1) / n))) * 180 / Math.PI;
-            const rect = L.rectangle([[south, west], [north, east]], {
-                ...style,
-                interactive: false,
-            });
+            const rect = L.rectangle([[south, west], [north, east]], rectOptions);
             newTilesLayer.addLayer(rect);
             rects.push(rect);
         }
