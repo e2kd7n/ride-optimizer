@@ -696,6 +696,125 @@ function fetchCorridorBox(cache, fetchFn, box, zoom) {
 
 const debouncedLoadCoverage = window.debounce(() => { loadCoverage(); }, 400);
 
+// ── #568: last-known-good routes cache (offline / dropped-connection fallback) ──
+//
+// Aside from an in-session in-memory corridor cache, Explore had no
+// persisted last-known-good result — a dropped connection mid-ride meant
+// starting from zero. Scoped to the routes result only (not coverage tiles):
+// a full-history coverage payload is multi-MB even after #579's tile-render
+// fix and risks blowing the ~5MB localStorage quota, whereas a routes result
+// (a handful of directions' waypoint lists) is small and arguably more
+// useful cached anyway — it's exactly what a rider needs to keep riding.
+
+const LAST_ROUTES_CACHE_KEY = 'explore.lastRoutesCache.v1';
+
+/** Best-effort localStorage write — a private window or blocked/full
+ *  storage must degrade silently, never throw and break the calling flow. */
+function saveLastRoutesCache(data) {
+    try {
+        localStorage.setItem(LAST_ROUTES_CACHE_KEY, JSON.stringify(data));
+    } catch (_) { /* private window, quota exceeded, or storage blocked — ignore */ }
+}
+
+/** Best-effort localStorage read — same degrade-silently contract as
+ *  saveLastRoutesCache(); a corrupt/foreign value just reads back as null. */
+function loadLastRoutesCache() {
+    try {
+        const raw = localStorage.getItem(LAST_ROUTES_CACHE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        return (parsed && Array.isArray(parsed.routes) && parsed.routes.length > 0) ? parsed : null;
+    } catch (_) {
+        return null;
+    }
+}
+
+function formatCacheAge(savedAt) {
+    const ms = Date.now() - (savedAt || 0);
+    if (!(ms >= 0)) return 'recently';
+    const hours = ms / 3600000;
+    if (hours < 1) return `${Math.max(1, Math.round(ms / 60000))}m ago`;
+    if (hours < 48) return `${Math.round(hours)}h ago`;
+    return `${Math.round(hours / 24)}d ago`;
+}
+
+/**
+ * Append a "Show last routes (cached Xh ago)" action into an already-shown
+ * error/status container, when a previously-cached routes result exists —
+ * an actionable alternative to a bare error state (#568). Appends rather
+ * than replacing the container's content, so it composes with whatever
+ * error markup (e.g. showCoverageError()'s renderErrorStateInto alert, or a
+ * plain textContent status line) is already there.
+ */
+function offerCachedRoutesFallback(container) {
+    if (!container) return;
+    const cache = loadLastRoutesCache();
+    if (!cache) return;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'mt-2';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-outline-secondary btn-sm';
+    btn.innerHTML = `<i class="bi bi-clock-history me-1" aria-hidden="true"></i>Show last routes (cached ${formatCacheAge(cache.savedAt)})`;
+    btn.addEventListener('click', () => renderCachedRoutes(cache));
+    wrap.appendChild(btn);
+    container.appendChild(wrap);
+}
+
+/**
+ * Redraw a previously cached routes result (#568) onto the map — the
+ * offline/last-known-good fallback offered by offerCachedRoutesFallback().
+ * Only ever draws the lightweight Phase-1 (straight-line preview) data that
+ * was cached: Phase-2 road-routing/verification both require a live network
+ * call, so those stay available via each badge's own "Plot road route"
+ * button for if/when connectivity returns, rather than being attempted here.
+ */
+function renderCachedRoutes(cache) {
+    if (!cache || !cache.routes || cache.routes.length === 0) return;
+
+    // Restore the pin(s) the cached result was generated against, if they've
+    // since moved or were never set this session (e.g. a fresh page load) —
+    // renderRoute() below computes each route's polyline from the *current*
+    // startMarker/endMarker position, so a mismatch would draw the cached
+    // waypoints from the wrong origin.
+    if (cache.start && (!startMarker || startMarker.getLatLng().lat !== cache.start.lat || startMarker.getLatLng().lng !== cache.start.lon)) {
+        setStart(cache.start.lat, cache.start.lon);
+    }
+    if (cache.uiShape) {
+        document.getElementById('route-type-select').value = cache.uiShape;
+        onRouteTypeChange();
+    }
+    if (cache.uiShape === 'point_to_point' && cache.end &&
+        (!endMarker || endMarker.getLatLng().lat !== cache.end.lat || endMarker.getLatLng().lng !== cache.end.lon)) {
+        setEnd(cache.end.lat, cache.end.lon);
+    }
+
+    clearHighlight();
+    waypointMarkers.clearLayers();
+    newTilesLayer.clearLayers();
+    routeLayer.clearLayers();
+    document.getElementById('route-list').innerHTML = '';
+    _phase1Candidates = {};
+    Object.keys(_phase1Polylines).forEach(k => delete _phase1Polylines[k]);
+    Object.keys(_phase2Polylines).forEach(k => delete _phase2Polylines[k]);
+    Object.keys(_newTileRectsByDirection).forEach(k => delete _newTileRectsByDirection[k]);
+
+    cache.routes.forEach((route, i) => {
+        renderRoute(route, i);
+        addRouteListItem(route, i, cache.distanceKm, '· Cached');
+        if (route.newTilesByZoom) renderNewTiles(route.newTilesByZoom, route.direction, 'candidate');
+    });
+
+    if (routeLayer.getBounds().isValid()) map.fitBounds(routeLayer.getBounds(), { padding: [40, 40] });
+
+    const statusEl = document.getElementById('worker-status');
+    if (statusEl) {
+        statusEl.textContent = `Showing ${cache.routes.length} cached route${cache.routes.length > 1 ? 's' : ''} from ${formatCacheAge(cache.savedAt)} — reconnect and regenerate for fresh coverage.`;
+    }
+    updateWorkflowState();
+}
+
 /**
  * #564 — surface a coverage-load failure both as a toast (so it's noticed
  * even if the rider isn't looking at the sidebar) and as a persistent
@@ -718,6 +837,10 @@ function showCoverageError(message) {
         statusEl.textContent = `Error: ${safeMessage}`;
     }
     if (typeof showToast === 'function') showToast(safeMessage, 'error');
+    // #568 — a coverage load failure (e.g. a dropped connection) leaves the
+    // rider with no fresh coverage to generate against; offer whatever
+    // routes were last successfully generated as an actionable fallback.
+    offerCachedRoutesFallback(statusEl);
 }
 
 /**
@@ -1278,6 +1401,10 @@ async function generateRoute() {
     let bestRoute = null;
     let bestBadge = null;
     let bestScore = -Infinity;
+    // #568 — lightweight Phase-1 route data collected as it streams in, so a
+    // successful generation can be persisted to localStorage as the
+    // last-known-good fallback for a later failed load.
+    const generatedRoutesForCache = [];
 
     const slowHintTimer = setTimeout(() => {
         statusEl.textContent += ' — still working, larger search areas can take longer…';
@@ -1314,6 +1441,7 @@ async function generateRoute() {
                 bestRoute = msg.route;
                 bestBadge = badge;
             }
+            generatedRoutesForCache.push(msg.route);
             routeCount++;
             statusEl.textContent = `Found ${routeCount} route${routeCount > 1 ? 's' : ''} so far…`;
             return;
@@ -1325,6 +1453,16 @@ async function generateRoute() {
                 const bestLabel = DIRECTION_LABELS[bestRoute.direction] || bestRoute.direction;
                 statusEl.textContent = `${routeCount} route${routeCount > 1 ? 's' : ''} generated — auto-plotting the best route (${bestLabel})…`;
                 map.fitBounds(routeLayer.getBounds(), { padding: [40, 40] });
+                // #568 — persist this successful generation's Phase-1 result
+                // as the last-known-good fallback for a later failed load.
+                saveLastRoutesCache({
+                    savedAt: Date.now(),
+                    distanceKm,
+                    uiShape: shape,
+                    start: { lat: startPos.lat, lon: startPos.lng },
+                    end: endPos ? { lat: endPos.lat, lon: endPos.lng } : null,
+                    routes: generatedRoutesForCache,
+                });
                 // Auto-plot the top-scored direction so the common case (any
                 // good new-tile route, now) takes one tap instead of
                 // generate -> compare -> pick -> wait. The other directions'
@@ -1335,6 +1473,7 @@ async function generateRoute() {
                 }
             } else {
                 statusEl.textContent = 'No reachable unvisited tiles found — try increasing distance or moving the start point';
+                offerCachedRoutesFallback(statusEl);
             }
             return;
         }
@@ -1342,12 +1481,14 @@ async function generateRoute() {
         if (msg.type === 'error') {
             stopWorking();
             statusEl.textContent = msg.message || 'Route generation failed';
+            offerCachedRoutesFallback(statusEl);
         }
     };
 
     explorationWorker.onerror = (err) => {
         stopWorking();
         statusEl.textContent = 'Worker error: ' + err.message;
+        offerCachedRoutesFallback(statusEl);
     };
 
     const shape = document.getElementById('route-type-select').value; // 'loop' | 'out_and_back' | 'point_to_point'
