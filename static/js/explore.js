@@ -1755,10 +1755,14 @@ async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
     const bearing = QUADRANT_BEARING[direction] || 45;
 
     // Collect road filter state (#411).
+    // #575: "Avoid traffic" was removed, not fixed — ORS's Directions API
+    // has no traffic-avoidance concept in avoid_features (only highways,
+    // tollways, ferries, fords, steps), so there was never a way to honor
+    // it. roadFilters.avoidTraffic was read here but never consumed by
+    // refineRoute() below or anywhere else.
     const roadFilters = {
         noMotorways: document.getElementById('filter-no-motorways')?.checked || false,
         noUnpaved:   document.getElementById('filter-no-unpaved')?.checked   || false,
-        avoidTraffic: document.getElementById('filter-avoid-traffic')?.checked || false,
     };
 
     const isPtp = route.shape === 'point_to_point' && !!endMarker;
