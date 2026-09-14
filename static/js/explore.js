@@ -646,17 +646,40 @@ function isStale(result) {
     return !!(result && (result.stale || result.is_stale));
 }
 
+/**
+ * #567: previously this always returned {status: 'success', roadless: []}
+ * even when *every* per-segment roadless (water-exclusion) lookup failed —
+ * there was no way for the caller to tell "no water in this corridor" apart
+ * from "the Overpass lookup failed for some/all segments." Now carries a
+ * failedCount/totalCount alongside the merged tile list so the caller can
+ * warn on a genuine failure instead of staying silent.
+ */
 function mergeRoadlessResults(results) {
     const seen = new Set();
     const roadless = [];
+    let failedCount = 0;
     for (const r of results) {
-        if (!r || r.status !== 'success') continue;
+        if (!r || r.status !== 'success') { failedCount++; continue; }
         for (const tile of r.roadless || []) {
             const key = `${tile.x},${tile.y}`;
             if (!seen.has(key)) { seen.add(key); roadless.push(tile); }
         }
     }
-    return { status: 'success', roadless };
+    return { status: 'success', roadless, failedCount, totalCount: results.length };
+}
+
+/**
+ * #567: did a fetchRoadless() result represent a genuine lookup failure, as
+ * opposed to "no water found" (success) or an intentional skip (no bounds
+ * to query, e.g. a full-history load at map zoom < 10)? Handles both the
+ * corridor-merged shape (mergeRoadlessResults, above — a failedCount) and
+ * the single-bbox shape (a plain {status: 'success' | 'error' | 'skipped'}
+ * response from fetchOne's fetchRoadless below).
+ */
+function roadlessLookupFailed(result) {
+    if (!result) return false; // shouldn't happen post-#567, but never false-alarm on it
+    if (typeof result.failedCount === 'number') return result.failedCount > 0;
+    return result.status === 'error';
 }
 
 /** Returns a cached corridor-box result if this exact (rounded) box+zoom was
@@ -697,12 +720,59 @@ function showCoverageError(message) {
     if (typeof showToast === 'function') showToast(safeMessage, 'error');
 }
 
+/**
+ * #567 — the roadless (open-water) tile exclusion is best-effort by design
+ * (a full-history load has no bounds to query, and the Overpass lookup can
+ * fail) so it must never block coverage from loading. But failing silently
+ * meant a suggested route could target open water with no visible
+ * explanation. Mirrors showCoverageError()'s toast + persistent in-place
+ * note pattern (#564), but writes into its own element rather than
+ * #coverage-status — that line already carries the "Updated…" text, the
+ * stale-data suffix (#563), and the retry counter, and this is a soft
+ * degrade (coverage itself still loaded fine), not a replacement for any
+ * of those.
+ */
+function showRoadlessWarning() {
+    const el = document.getElementById('roadless-warning');
+    const message = 'Water exclusion unavailable — some suggested tiles may be unreachable';
+    if (!el) {
+        if (typeof showToast === 'function') showToast(message, 'warning');
+        return;
+    }
+    if (typeof window.renderErrorStateInto === 'function') {
+        window.renderErrorStateInto(el, message, { variant: 'warning', small: true });
+    } else {
+        el.textContent = message;
+    }
+    el.classList.remove('d-none');
+    if (typeof showToast === 'function') showToast(message, 'warning');
+}
+
+function clearRoadlessWarning() {
+    const el = document.getElementById('roadless-warning');
+    if (!el) return;
+    el.innerHTML = '';
+    el.classList.add('d-none');
+}
+
 async function loadCoverage() {
     const requestId = ++_coverageRequestId;
     const statusEl = document.getElementById('coverage-status');
     statusEl.textContent = 'Loading coverage…';
+    clearRoadlessWarning();
+
+    // #566 — once a retry is underway, "Retrying coverage load… (n/3)" is a
+    // more specific, more useful signal than the generic slow-load hint
+    // below, so the hint must not clobber it if it fires afterward (a
+    // request that's already on its 2nd/3rd attempt by 5s is exactly the
+    // case the hint is least helpful for). The reverse direction needs no
+    // guard: onCoverageRetry always overwrites unconditionally, which is
+    // correct — a retry starting after the hint has shown should replace it.
+    let retryInProgress = false;
+
     const slowHintTimer = setTimeout(() => {
         if (requestId !== _coverageRequestId) return; // superseded by a newer request
+        if (retryInProgress) return; // don't stomp the more specific retry counter (#566)
         statusEl.textContent = 'Still loading — first coverage load over your full ride history can take up to a minute…';
     }, 5000);
 
@@ -716,6 +786,7 @@ async function loadCoverage() {
     // response field.
     const onCoverageRetry = (attemptNum, maxAttempts) => {
         if (requestId !== _coverageRequestId) return; // superseded by a newer request
+        retryInProgress = true;
         statusEl.textContent = `Retrying coverage load… (${attemptNum}/${maxAttempts})`;
     };
 
@@ -780,14 +851,19 @@ async function loadCoverage() {
         // no bounds to query against, and the Overpass lookup can fail, so
         // failures here just mean no exclusion rather than blocking coverage
         // entirely.
+        // #567: the two null-producing cases above (no bounds vs. a genuine
+        // fetch failure) used to be indistinguishable, which is exactly what
+        // made the failure silent. Tag them explicitly so loadCoverage() can
+        // warn on 'error' without also warning on the intentional 'skipped'
+        // case (no bounds is not a failure).
         fetchRoadless = (tileZoom) => mapZoom >= 10
             ? api.getRoadlessTiles({
                 south: bounds.getSouth(),
                 west: bounds.getWest(),
                 north: bounds.getNorth(),
                 east: bounds.getEast(),
-            }, tileZoom).catch(() => null)
-            : Promise.resolve(null);
+            }, tileZoom).catch((e) => ({ status: 'error', message: (e && e.message) || 'Water-exclusion lookup failed' }))
+            : Promise.resolve({ status: 'skipped' });
     }
 
     try {
@@ -813,6 +889,16 @@ async function loadCoverage() {
             coverageDataSecondary.roadless = (roadlessResults[1] && roadlessResults[1].status === 'success')
                 ? roadlessResults[1].roadless
                 : [];
+        }
+        // #567 — surface a genuine roadless (water-exclusion) lookup failure
+        // instead of the previous silent degrade: a route generated without
+        // it can target open water with nothing telling the rider why. Not
+        // triggered by "no water found" (a real success with an empty list)
+        // or by the intentional no-bounds skip on a full-history load.
+        if (roadlessResults.some(roadlessLookupFailed)) {
+            showRoadlessWarning();
+        } else {
+            clearRoadlessWarning();
         }
 
         // Clear any stale "new tile" highlight from a previous start point/grid,
@@ -1669,10 +1755,14 @@ async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
     const bearing = QUADRANT_BEARING[direction] || 45;
 
     // Collect road filter state (#411).
+    // #575: "Avoid traffic" was removed, not fixed — ORS's Directions API
+    // has no traffic-avoidance concept in avoid_features (only highways,
+    // tollways, ferries, fords, steps), so there was never a way to honor
+    // it. roadFilters.avoidTraffic was read here but never consumed by
+    // refineRoute() below or anywhere else.
     const roadFilters = {
         noMotorways: document.getElementById('filter-no-motorways')?.checked || false,
         noUnpaved:   document.getElementById('filter-no-unpaved')?.checked   || false,
-        avoidTraffic: document.getElementById('filter-avoid-traffic')?.checked || false,
     };
 
     const isPtp = route.shape === 'point_to_point' && !!endMarker;
