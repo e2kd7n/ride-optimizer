@@ -365,7 +365,11 @@ class TestExplorationNewTilesAPI:
 
 @pytest.mark.unit
 class TestExplorationBboxValidation:
-    """Tests for #481 — bbox sanity checks on /api/exploration/tiles and /api/exploration/roads."""
+    """Tests for #481 — bbox sanity checks on /api/exploration/tiles and
+    /api/exploration/roadless-tiles. (/api/exploration/roads — the osmnx-based
+    road-coverage endpoint — was removed in #581: osmnx/shapely were never in
+    requirements.txt, so it could only ever 500 in production, and nothing in
+    the frontend called it.)"""
 
     def test_tiles_inverted_bounds_rejected(self, client):
         response = client.get(
@@ -385,26 +389,12 @@ class TestExplorationBboxValidation:
         )
         assert response.status_code == 200
 
-    def test_roads_inverted_bounds_rejected(self, client):
+    def test_roads_endpoint_removed(self, client):
+        """#581: the endpoint is gone entirely, not just erroring."""
         response = client.get(
-            '/api/exploration/roads?south=42.0&west=-88.0&north=41.0&east=-87.0'
+            '/api/exploration/roads?south=41.0&west=-88.0&north=41.4&east=-87.6'
         )
-        assert response.status_code == 400
-        data = response.get_json()
-        assert data['status'] == 'error'
-
-    def test_roads_oversized_bbox_rejected(self, client):
-        response = client.get(
-            '/api/exploration/roads?south=30.0&west=-100.0&north=45.0&east=-70.0'
-        )
-        assert response.status_code == 400
-        data = response.get_json()
-        assert data['status'] == 'error'
-        assert 'too large' in data['message'].lower()
-
-    def test_roads_missing_bounds_rejected(self, client):
-        response = client.get('/api/exploration/roads?south=41.0&west=-88.0')
-        assert response.status_code == 400
+        assert response.status_code == 404
 
     def test_roadless_tiles_inverted_bounds_rejected(self, client):
         response = client.get(

@@ -16,14 +16,11 @@ from src.coverage_tracker import (
     lat_lon_to_tile,
     tile_to_bounds,
     _bbox_cache_key,
-    _haversine_m,
-    _interpolate_points,
     _segment_tiles,
     _activity_tiles,
     _robust_tile_range,
     TILE_ZOOM,
     SQUADRATINHO_ZOOM,
-    MAX_ROAD_NETWORK_CACHES,
 )
 
 
@@ -78,47 +75,6 @@ class TestTileToBounds:
         lon_span = east - west
         assert 0.005 < lat_span < 0.025
         assert 0.01 < lon_span < 0.03
-
-
-# ── _interpolate_points ─────────────────────────────────────────
-
-class TestInterpolatePoints:
-    def test_empty_returns_empty(self):
-        assert _interpolate_points([]) == []
-
-    def test_single_point(self):
-        pts = [(40.0, -74.0)]
-        assert _interpolate_points(pts) == pts
-
-    def test_nearby_points_no_interpolation(self):
-        pts = [(40.0, -74.0), (40.0001, -74.0001)]
-        result = _interpolate_points(pts, interval_m=1000)
-        assert len(result) == 2
-
-    def test_distant_points_get_interpolated(self):
-        pts = [(40.0, -74.0), (40.01, -74.0)]
-        result = _interpolate_points(pts, interval_m=80)
-        assert len(result) > 2
-        assert result[0] == pts[0]
-        assert result[-1] == pts[-1]
-
-    def test_preserves_original_endpoints(self):
-        pts = [(40.0, -74.0), (40.005, -74.005), (40.01, -74.01)]
-        result = _interpolate_points(pts, interval_m=80)
-        assert result[0] == pts[0]
-        assert result[-1] == pts[-1]
-        assert pts[1] in result
-
-
-# ── _haversine_m ─────────────────────────────────────────────────
-
-class TestHaversine:
-    def test_same_point_is_zero(self):
-        assert _haversine_m(40.0, -74.0, 40.0, -74.0) == 0.0
-
-    def test_known_distance(self):
-        dist = _haversine_m(40.7128, -74.0060, 40.7580, -73.9855)
-        assert 4800 < dist < 5500
 
 
 # ── _segment_tiles / _activity_tiles (grid traversal) ────────────
@@ -550,12 +506,6 @@ class TestCoverageTracker:
         assert not cache_file.exists()
         assert tracker._activities_cache is None
         assert tracker._tile_index_cache == {}
-
-    def test_road_coverage_graceful_without_osmnx(self, tracker):
-        tracker._activities_cache = []
-        with patch.dict("sys.modules", {"osmnx": None, "shapely": None, "shapely.geometry": None, "shapely.strtree": None}):
-            result = tracker.get_road_coverage((40.0, -74.0, 41.0, -73.0))
-        assert result.get("status") == "error" or "osmnx" in result.get("message", "").lower() or "error" in result.get("status", "")
 
     def test_multiple_activities_same_tile(self, tracker):
         import polyline as codec
@@ -1190,7 +1140,7 @@ class TestRoadlessTilesBboxPrefilter:
         spy.assert_not_called()
 
 
-# ── road_network cache keying / eviction (#481) ──────────────────
+# ── bbox cache key (#481, used for water-polygon caching) ────────
 
 class TestBboxCacheKey:
     def test_different_bounds_give_different_keys(self):
@@ -1207,78 +1157,6 @@ class TestBboxCacheKey:
         k1 = _bbox_cache_key((40.000001, -75.0, 41.0, -74.0))
         k2 = _bbox_cache_key((40.000002, -75.0, 41.0, -74.0))
         assert k1 == k2
-
-
-class TestRoadNetworkCacheEviction:
-    @pytest.fixture
-    def mock_config(self):
-        config = MagicMock()
-        config.get = MagicMock(side_effect=lambda key, default=None: default)
-        return config
-
-    @pytest.fixture
-    def tracker(self, mock_config, tmp_path):
-        t = CoverageTracker(mock_config)
-        t.cache_dir = tmp_path
-        return t
-
-    def test_get_road_coverage_keys_cache_by_bbox(self, tracker):
-        """Different bboxes must not collide on a single fixed cache filename (#481)."""
-        tracker._activities_cache = []
-
-        import pandas as pd
-        edges_df = pd.DataFrame({"geometry": [], "length": []})
-
-        def fake_save_graphml(G, path):
-            Path(path).write_text("fake-graph")
-
-        mock_ox = MagicMock()
-        mock_ox.graph_from_bbox.return_value = MagicMock()
-        mock_ox.save_graphml.side_effect = fake_save_graphml
-        mock_ox.load_graphml.side_effect = OSError("no cache yet")
-        mock_ox.graph_to_gdfs.side_effect = lambda G, nodes=False, edges=True: edges_df
-
-        mock_shapely_geometry = MagicMock(LineString=MagicMock(), Point=MagicMock())
-        mock_shapely_strtree = MagicMock(STRtree=MagicMock())
-
-        with patch.dict("sys.modules", {
-            "osmnx": mock_ox,
-            "shapely": MagicMock(),
-            "shapely.geometry": mock_shapely_geometry,
-            "shapely.strtree": mock_shapely_strtree,
-        }):
-            r1 = tracker.get_road_coverage((40.0, -75.0, 41.0, -74.0))
-            r2 = tracker.get_road_coverage((10.0, 10.0, 11.0, 11.0))
-
-        assert r1.get("status") == "success"
-        assert r2.get("status") == "success"
-        cache_files = list(tracker.cache_dir.glob("road_network_*.graphml"))
-        assert len(cache_files) == 2
-
-    def test_evict_old_road_network_caches_caps_count(self, tracker):
-        for i in range(MAX_ROAD_NETWORK_CACHES + 5):
-            p = tracker.cache_dir / f"road_network_fake{i}.graphml"
-            p.write_text("x")
-        tracker._evict_old_road_network_caches()
-        remaining = list(tracker.cache_dir.glob("road_network_*.graphml"))
-        assert len(remaining) == MAX_ROAD_NETWORK_CACHES
-
-    def test_hard_invalidate_caches_removes_all_bbox_keyed_graphs(self, tracker):
-        for i in range(3):
-            (tracker.cache_dir / f"road_network_fake{i}.graphml").write_text("x")
-        (tracker.cache_dir / "road_network.graphml").write_text("legacy")
-        tracker.hard_invalidate_caches()
-        remaining = list(tracker.cache_dir.glob("road_network*.graphml"))
-        assert remaining == []
-
-    def test_soft_invalidate_caches_leaves_road_network_graphs(self, tracker):
-        """The soft invalidate (automatic post-sync path, #571) only clears
-        in-memory state — road network graphs have their own TTL (#532) and
-        aren't tied to activity sync, so they shouldn't be evicted here."""
-        (tracker.cache_dir / "road_network_fake0.graphml").write_text("x")
-        tracker.invalidate_caches()
-        remaining = list(tracker.cache_dir.glob("road_network*.graphml"))
-        assert len(remaining) == 1
 
 
 # ── legacy coverage_tiles_*.json cleanup (#555) ────────────────────
@@ -1343,12 +1221,12 @@ class TestLegacyCoverageTileSweep:
         assert list(tracker.cache_dir.glob("coverage_tiles_*.json")) == []
 
 
-# ── road_network / water_polygon cache TTL (#532) ─────────────────
+# ── water_polygon cache TTL (#532) ─────────────────────────────────
 
 class TestCacheTtl:
-    """Road-network and water-polygon file caches never expired on their own
-    (only count-based eviction / explicit invalidate_caches()). An optional
-    TTL lets a cached file be treated as stale by age alone."""
+    """The water-polygon file cache never expired on its own (only
+    count-based eviction / explicit invalidate_caches()). An optional TTL
+    lets a cached file be treated as stale by age alone."""
 
     BOUNDS = (40.0, -75.0, 41.0, -74.0)
 
@@ -1364,50 +1242,6 @@ class TestCacheTtl:
     def _age_file(self, path: Path, age_seconds: float) -> None:
         now = time.time()
         os.utime(path, (now - age_seconds, now - age_seconds))
-
-    def test_road_graph_reused_when_default_ttl_disabled(self, tracker):
-        """ttl=0 (default) means never expire, regardless of file age."""
-        cache_file = tracker.cache_dir / f"road_network_{_bbox_cache_key(self.BOUNDS)}.graphml"
-        cache_file.write_text("cached-graph")
-        self._age_file(cache_file, age_seconds=10_000_000)
-
-        mock_ox = MagicMock()
-        mock_ox.load_graphml.return_value = "the-cached-graph"
-        with patch.dict("sys.modules", {"osmnx": mock_ox}):
-            G = tracker._get_or_fetch_road_graph(self.BOUNDS)
-
-        assert G == "the-cached-graph"
-        mock_ox.graph_from_bbox.assert_not_called()
-
-    def test_road_graph_reused_within_ttl(self, tracker):
-        self._config_values["exploration.road_network_cache_ttl_seconds"] = 3600
-        cache_file = tracker.cache_dir / f"road_network_{_bbox_cache_key(self.BOUNDS)}.graphml"
-        cache_file.write_text("cached-graph")
-        self._age_file(cache_file, age_seconds=60)
-
-        mock_ox = MagicMock()
-        mock_ox.load_graphml.return_value = "the-cached-graph"
-        with patch.dict("sys.modules", {"osmnx": mock_ox}):
-            G = tracker._get_or_fetch_road_graph(self.BOUNDS)
-
-        assert G == "the-cached-graph"
-        mock_ox.graph_from_bbox.assert_not_called()
-
-    def test_road_graph_refetched_once_stale(self, tracker):
-        self._config_values["exploration.road_network_cache_ttl_seconds"] = 3600
-        cache_file = tracker.cache_dir / f"road_network_{_bbox_cache_key(self.BOUNDS)}.graphml"
-        cache_file.write_text("stale-graph")
-        self._age_file(cache_file, age_seconds=7200)
-
-        mock_ox = MagicMock()
-        mock_ox.load_graphml.return_value = "should-not-be-used"
-        mock_ox.graph_from_bbox.return_value = "fresh-graph"
-        with patch.dict("sys.modules", {"osmnx": mock_ox}):
-            G = tracker._get_or_fetch_road_graph(self.BOUNDS)
-
-        assert G == "fresh-graph"
-        mock_ox.load_graphml.assert_not_called()
-        mock_ox.graph_from_bbox.assert_called_once()
 
     def test_water_polygons_reused_when_default_ttl_disabled(self, tracker):
         cache_file = tracker.cache_dir / f"water_{_bbox_cache_key(self.BOUNDS)}.json"

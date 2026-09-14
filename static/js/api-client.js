@@ -363,14 +363,6 @@ class APIClient {
         return this.fetch(`/exploration/tiles${qs ? '?' + qs : ''}`, { timeoutMs, onRetry });
     }
 
-    async getRoadCoverage(bounds) {
-        const params = new URLSearchParams({
-            south: bounds.south, west: bounds.west,
-            north: bounds.north, east: bounds.east,
-        });
-        return this.fetch(`/exploration/roads?${params}`);
-    }
-
     async getRoadlessTiles(bounds, zoom) {
         const params = new URLSearchParams({
             south: bounds.south, west: bounds.west,
