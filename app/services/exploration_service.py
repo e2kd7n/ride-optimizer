@@ -534,7 +534,14 @@ class ExplorationService:
 
         # ORS expects [lon, lat] pairs.
         ors_coords = [[lon, lat] for lat, lon in waypoints]
-        raw = ors_client.get_route(ors_coords, profile, api_key=api_key, timeout=timeout)
+        # #578: this first call used the fixed per-call `timeout` instead of
+        # _budget_timeout() — every retry call below already used the
+        # budget-capped version, so a request that spent most of its
+        # ors_max_wait_seconds budget queueing behind the semaphore could
+        # still let this first call run for a full fresh `timeout`,
+        # blowing past the overall wall-clock budget compute_route() exists
+        # to enforce.
+        raw = ors_client.get_route(ors_coords, profile, api_key=api_key, timeout=_budget_timeout())
 
         # Preferred profile not enabled on this account — fall back to cycling-regular.
         if (
