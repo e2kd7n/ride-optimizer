@@ -1180,6 +1180,16 @@ function renderNewTiles(newTilesByZoom, direction = null, phase = 'claimed') {
  * Tonal colour pairs per direction (#409).
  * base  = Phase-2 road polyline + badge swatch.
  * light = Phase-1 dashed preview (lower saturation).
+ *
+ * #569: this is the canonical source — plans/v0.6.0/DESIGN_PRINCIPLES.md §4
+ * "Map Routes" had drifted to a generic, never-implemented Bootstrap
+ * green/red/blue/yellow set that also collided with that doc's own
+ * success/danger semantic colors. The doc was updated to match this palette
+ * rather than the other way around: it's the more deliberate, more recent
+ * design (compass-direction-keyed with a light/base tonal pair per
+ * direction for the two-phase preview), and reusing that doc's success
+ * green / danger red as an arbitrary per-direction identity color would
+ * risk a route reading as "good"/"bad" rather than merely "northeast."
  */
 const ROUTE_PALETTE = {
     NE: { base: '#0d6efd', light: '#7ab5fe' },
