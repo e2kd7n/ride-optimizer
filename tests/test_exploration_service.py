@@ -41,6 +41,20 @@ def service(mock_config, tmp_path):
     return svc
 
 
+def _wait_for_persist(svc, timeout=5):
+    """Block until svc's background route-cache persist thread (#573) has
+    finished its current run(s), so a test can assert on-disk state right
+    after a compute_route() call that scheduled (but didn't synchronously
+    perform) a write."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        thread = svc._persist_thread
+        if thread is None or not thread.is_alive():
+            return
+        time.sleep(0.02)
+    raise AssertionError("route-cache persist did not finish in time")
+
+
 @pytest.fixture
 def service_with_key(mock_config, tmp_path):
     """Service pre-configured with a fake ORS API key."""
@@ -759,6 +773,9 @@ class TestRouteCachePersistence:
     def test_computed_route_is_written_to_disk(self, service_with_key):
         with patch("src.ors_client.get_route", return_value=self._RAW):
             service_with_key.compute_route([[41.98, -87.65], [41.99, -87.64]])
+        # Persist now runs on a background thread (#573) rather than
+        # synchronously inside compute_route().
+        _wait_for_persist(service_with_key)
 
         cache_file = service_with_key._route_cache_path()
         assert cache_file.exists()
@@ -781,6 +798,9 @@ class TestRouteCachePersistence:
         with patch("src.ors_client.get_route", return_value=self._RAW) as mock_get:
             service_with_key.compute_route([[41.98, -87.65], [41.99, -87.64]])
         assert mock_get.call_count == 1
+        # Persist now runs on a background thread (#573) rather than
+        # synchronously inside compute_route().
+        _wait_for_persist(service_with_key)
 
         with patch('app.services.exploration_service.ConfigManager.get_instance', return_value=mock_config):
             fresh = ExplorationService()
@@ -823,6 +843,68 @@ class TestRouteCachePersistence:
         fresh._load_route_cache_from_disk()  # must not raise
 
         assert len(fresh._route_cache) == 0
+
+    def test_persist_does_not_block_semaphore_release(self, service_with_key):
+        """#573: _persist_route_cache() must not run synchronously inside
+        compute_route() while it still holds a _route_semaphore slot — a
+        full-cache disk write there is I/O contention risk on a Pi's SD
+        card, right inside an already-scarce (ors_max_concurrent_calls=2)
+        critical section. Block the disk write and assert the semaphore slot
+        is already released by the time compute_route() returns."""
+        block_persist = threading.Event()
+        real_persist = service_with_key._persist_route_cache
+
+        def slow_persist():
+            block_persist.wait(timeout=5)
+            real_persist()
+
+        with patch("src.ors_client.get_route", return_value=self._RAW), \
+             patch.object(service_with_key, "_persist_route_cache", side_effect=slow_persist):
+            service_with_key.compute_route([[41.98, -87.65], [41.99, -87.64]])
+            # compute_route() returned already — if the persist were still
+            # synchronous/inline this line would be unreachable until
+            # block_persist is set, so getting here at all is the assertion.
+            acquired = service_with_key._route_semaphore.acquire(timeout=1)
+            assert acquired, "semaphore slot was not released — persist is still blocking it"
+            service_with_key._route_semaphore.release()
+
+            block_persist.set()
+        _wait_for_persist(service_with_key)
+
+    def test_bursty_writes_never_persist_concurrently(self, service_with_key):
+        """Rapid successive route computations must coalesce onto whichever
+        background writer is already running/about to run (#573), never run
+        two disk writes at once. The on-disk cache should still end up with
+        every route once things settle."""
+        raw = self._RAW
+        real_persist = service_with_key._persist_route_cache
+        concurrent = 0
+        max_concurrent = 0
+        counter_lock = threading.Lock()
+
+        def counted_persist():
+            nonlocal concurrent, max_concurrent
+            with counter_lock:
+                concurrent += 1
+                max_concurrent = max(max_concurrent, concurrent)
+            try:
+                real_persist()
+            finally:
+                with counter_lock:
+                    concurrent -= 1
+
+        with patch("src.ors_client.get_route", return_value=raw), \
+             patch.object(service_with_key, "_persist_route_cache", side_effect=counted_persist):
+            for i in range(5):
+                service_with_key.compute_route([[41.0, -87.0 - i * 0.001], [41.1, -87.1 - i * 0.001]])
+            # The debounce loop may sleep ROUTE_CACHE_PERSIST_DEBOUNCE_S
+            # between coalesced writes if this burst outran the first write.
+            _wait_for_persist(service_with_key, timeout=10)
+
+        assert max_concurrent <= 1
+        cache_file = service_with_key._route_cache_path()
+        data = json.loads(cache_file.read_text())
+        assert len(data["entries"]) == 5
 
 
 # ── surface_breakdown reduction ──────────────────────────────────

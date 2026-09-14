@@ -286,6 +286,14 @@ class ServiceContainer:
                 if self.exploration_service is None:
                     from app.services.exploration_service import ExplorationService
                     self.exploration_service = ExplorationService()
+                    # Load any still-valid ORS route memo entries persisted
+                    # to disk by a previous process (#532) before this one
+                    # started — recovers routes computed in the
+                    # route_cache_ttl_seconds window before a restart/
+                    # redeploy instead of cold-starting empty. initialize()
+                    # previously had zero callers repo-wide (#573), so this
+                    # recovery never actually ran.
+                    self.exploration_service.initialize()
                     # Cold-start pre-warm (#560): kick off a background
                     # build of both zooms' tile index right away instead of
                     # waiting for the first live Explore request to pay for

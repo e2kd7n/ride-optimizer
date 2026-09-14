@@ -94,3 +94,27 @@ class TestGetExplorationServiceLocking:
             container.get_exploration_service()
 
         mock_instance.start_prewarm.assert_called_once()
+
+    def test_first_construction_calls_initialize(self):
+        """#573: initialize() (which loads the persisted ORS route memo off
+        disk, see ExplorationService._load_route_cache_from_disk) previously
+        had zero callers repo-wide — get_exploration_service() constructed
+        the service and never called it. Wire it in alongside start_prewarm()."""
+        container = ServiceContainer()
+        with patch("app.services.exploration_service.ExplorationService") as mock_cls:
+            mock_instance = MagicMock(name="exploration_service_instance")
+            mock_cls.return_value = mock_instance
+            container.get_exploration_service()
+
+        mock_instance.initialize.assert_called_once()
+
+    def test_repeated_access_does_not_retrigger_initialize(self):
+        container = ServiceContainer()
+        with patch("app.services.exploration_service.ExplorationService") as mock_cls:
+            mock_instance = MagicMock(name="exploration_service_instance")
+            mock_cls.return_value = mock_instance
+            container.get_exploration_service()
+            container.get_exploration_service()
+            container.get_exploration_service()
+
+        mock_instance.initialize.assert_called_once()
