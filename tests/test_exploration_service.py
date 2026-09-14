@@ -608,6 +608,44 @@ class TestComputeRoute:
         # before a second retry, instead of grinding through every candidate.
         assert mock_ors.call_count == 1
 
+    def test_first_ors_call_uses_budget_capped_timeout(self, service_with_key, mock_config):
+        """#578: the *first* ORS call must use the wall-clock-budget-capped
+        timeout (_budget_timeout()), same as every retry call below it —
+        previously it used the fixed per-call ors_timeout_seconds instead,
+        so a request that already spent most of its ors_max_wait_seconds
+        budget (e.g. queueing behind the semaphore) could still let this
+        first call run for a full fresh timeout, blowing past the overall
+        budget compute_route() exists to enforce."""
+        def _get(key, default=None):
+            if key == 'ors.api_key':
+                return 'fake-key'
+            if key == 'exploration.ors_timeout_seconds':
+                return 15
+            if key == 'exploration.ors_max_wait_seconds':
+                return 0.5  # much smaller than ors_timeout_seconds
+            return default
+
+        mock_config.get = MagicMock(side_effect=_get)
+
+        raw = {
+            "features": [{
+                "geometry": {"coordinates": [[-87.65, 41.98], [-87.64, 41.99]]},
+                "properties": {
+                    "summary": {"distance": 1000.0, "duration": 300.0},
+                    "extras": {},
+                },
+            }],
+        }
+        with patch("src.ors_client.get_route", return_value=raw) as mock_get:
+            result = service_with_key.compute_route([[41.98, -87.65], [41.99, -87.64]])
+
+        assert result["status"] == "success"
+        first_call_timeout = mock_get.call_args_list[0].kwargs["timeout"]
+        assert first_call_timeout <= 0.5, (
+            f"first ORS call used timeout={first_call_timeout}, expected it capped to "
+            "the ~0.5s wall-clock budget rather than the full 15s ors_timeout_seconds"
+        )
+
     def test_concurrent_requests_bounded_by_semaphore(self, service_with_key):
         """compute_route calls run concurrently up to ors_max_concurrent_calls
         (default 2, since the fixture's mock config returns the caller's
