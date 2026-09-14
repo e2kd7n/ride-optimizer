@@ -669,7 +669,7 @@ class TestComputeRoute:
             }],
         }
 
-        def fake_get_route(coords, profile, api_key=None, timeout=15):
+        def fake_get_route(coords, profile, avoid_features=None, api_key=None, timeout=15):
             nonlocal in_flight
             with in_flight_lock:
                 in_flight += 1
@@ -847,6 +847,81 @@ class TestComputeRoute:
                 service_with_key.compute_route([[41.0, -87.0 - i * 0.001], [41.1, -87.1 - i * 0.001]])
 
         assert len(service_with_key._route_cache) == MAX_ROUTE_CACHE_ENTRIES
+
+
+# ── exclude -> avoid_features mapping (#575, "No motorways") ─────
+
+
+class TestExcludeAvoidFeatures:
+    """#575: "No motorways" was a silent no-op — the frontend already sent
+    `exclude` but compute_route() had no such parameter. ORS's Directions
+    API only supports avoid_features: highways/tollways/ferries/fords/steps
+    (no traffic-avoidance concept at all — deliberately not implemented
+    here, see the epic's design note), so only "motorway"/"trunk" tokens
+    map onto anything: options.avoid_features: ["highways"]."""
+
+    _RAW = {
+        "features": [{
+            "geometry": {"coordinates": [[-87.65, 41.98], [-87.64, 41.99]]},
+            "properties": {
+                "summary": {"distance": 1000.0, "duration": 300.0},
+                "extras": {},
+            },
+        }],
+    }
+
+    def test_no_exclude_uses_default_avoid_features(self, service_with_key):
+        with patch("src.ors_client.get_route", return_value=self._RAW) as mock_get:
+            service_with_key.compute_route([[41.98, -87.65], [41.99, -87.64]])
+        assert mock_get.call_args.kwargs["avoid_features"] == ("ferries",)
+
+    def test_motorway_exclude_adds_highways_to_avoid_features(self, service_with_key):
+        with patch("src.ors_client.get_route", return_value=self._RAW) as mock_get:
+            service_with_key.compute_route(
+                [[41.98, -87.65], [41.99, -87.64]], exclude=["motorway"],
+            )
+        assert mock_get.call_args.kwargs["avoid_features"] == ("ferries", "highways")
+
+    def test_trunk_exclude_also_adds_highways(self, service_with_key):
+        """explore.js pushes both "motorway" and "trunk" together for the
+        same checkbox — either token alone must still map to highways."""
+        with patch("src.ors_client.get_route", return_value=self._RAW) as mock_get:
+            service_with_key.compute_route(
+                [[41.98, -87.65], [41.99, -87.64]], exclude=["trunk"],
+            )
+        assert mock_get.call_args.kwargs["avoid_features"] == ("ferries", "highways")
+
+    def test_unmapped_exclude_token_is_ignored_not_rejected(self, service_with_key):
+        """Tokens with no ORS equivalent (e.g. "ferry", already covered by
+        the default) must not error or change behavior."""
+        with patch("src.ors_client.get_route", return_value=self._RAW) as mock_get:
+            result = service_with_key.compute_route(
+                [[41.98, -87.65], [41.99, -87.64]], exclude=["ferry"],
+            )
+        assert result["status"] == "success"
+        assert mock_get.call_args.kwargs["avoid_features"] == ("ferries",)
+
+    def test_exclude_and_no_exclude_are_cached_separately(self, service_with_key):
+        """A "no motorways" route must not be served from (or pollute) the
+        cache entry for the same waypoints computed without that
+        constraint — they can legitimately be different routes."""
+        with patch("src.ors_client.get_route", return_value=self._RAW) as mock_get:
+            service_with_key.compute_route([[41.98, -87.65], [41.99, -87.64]])
+            service_with_key.compute_route(
+                [[41.98, -87.65], [41.99, -87.64]], exclude=["motorway"],
+            )
+        assert mock_get.call_count == 2
+        assert len(service_with_key._route_cache) == 2
+
+    def test_repeated_identical_exclude_still_memoized(self, service_with_key):
+        with patch("src.ors_client.get_route", return_value=self._RAW) as mock_get:
+            service_with_key.compute_route(
+                [[41.98, -87.65], [41.99, -87.64]], exclude=["motorway"],
+            )
+            service_with_key.compute_route(
+                [[41.98, -87.65], [41.99, -87.64]], exclude=["motorway"],
+            )
+        assert mock_get.call_count == 1
 
 
 # ── Route cache disk persistence (#532) ───────────────────────────
