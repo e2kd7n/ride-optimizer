@@ -226,8 +226,9 @@ class TestTileCoverage:
         assert tc.coverage_pct == 0.0
 
     def test_coverage_pct(self):
+        # #579: visited values are a trimmed placeholder, not per-tile detail.
         tc = TileCoverage(
-            visited={"1,2": {"first_ridden": "", "activity_ids": [1]}},
+            visited={"1,2": 1},
             total_in_bounds=4,
         )
         assert tc.visited_count == 1
@@ -235,7 +236,7 @@ class TestTileCoverage:
 
     def test_to_dict(self):
         tc = TileCoverage(
-            visited={"1,2": {"first_ridden": "2026-01-01", "activity_ids": [1]}},
+            visited={"1,2": 1},
             total_in_bounds=10,
             bounds=(40.0, -74.0, 41.0, -73.0),
             computed_at="2026-01-01T00:00:00",
@@ -250,7 +251,7 @@ class TestTileCoverage:
         total_in_bounds while keeping them in `visited`, which can push the
         raw ratio above 100%. Capped rather than shown as nonsensical."""
         tc = TileCoverage(
-            visited={f"{i},0": {"first_ridden": "", "activity_ids": [1]} for i in range(10)},
+            visited={f"{i},0": 1 for i in range(10)},
             total_in_bounds=5,
         )
         assert tc.coverage_pct == 100.0
@@ -355,6 +356,65 @@ class TestGetTileCoverageAllOutlierBounds:
         assert result.total_in_bounds == 30 * 5  # 30 x-values x 5 y-values
 
 
+# ── trimmed per-tile response payload (#579) ──────────────────────
+
+class TestTrimmedTileCoverageResponse:
+    """The frontend (exploration-worker.js, explore.js's drawTileGrid) only
+    ever reads Object.keys(coverageData.visited) — per-tile
+    first_ridden/activity_ids detail was shipped over the wire and
+    silently discarded on every request, several MB of wasted payload at
+    full-history scale. Response-building trims tile values to a
+    placeholder; the tile index itself keeps full detail for incremental
+    updates."""
+
+    @pytest.fixture
+    def mock_config(self):
+        config = MagicMock()
+        config.get = MagicMock(side_effect=lambda key, default=None: default)
+        return config
+
+    @pytest.fixture
+    def tracker(self, mock_config, tmp_path):
+        t = CoverageTracker(mock_config)
+        t.cache_dir = tmp_path
+        return t
+
+    @staticmethod
+    def _activity(act_id, coords, date="2026-01-01"):
+        import polyline as codec
+        return {"id": act_id, "polyline": codec.encode(coords), "start_date": date, "type": "Ride"}
+
+    def test_get_tile_coverage_all_trims_per_tile_detail(self, tracker):
+        a1 = self._activity(1, [(40.7128, -74.0060), (40.7130, -74.0058)])
+        tracker._activities_cache = [a1]
+        result = tracker.get_tile_coverage_all()
+        assert result.visited_count >= 1
+        for value in result.visited.values():
+            assert not isinstance(value, dict)
+
+    def test_get_tile_coverage_trims_per_tile_detail(self, tracker):
+        a1 = self._activity(1, [(40.7128, -74.0060), (40.7130, -74.0058)])
+        tracker._activities_cache = [a1]
+        bounds = (40.0, -75.0, 41.0, -73.0)
+        result = tracker.get_tile_coverage(bounds)
+        assert result.visited_count >= 1
+        for value in result.visited.values():
+            assert not isinstance(value, dict)
+
+    def test_internal_tile_index_retains_full_detail(self, tracker):
+        """The trim applies only to the response-building path — the
+        on-disk/in-memory tile index still needs first_ridden/activity_ids
+        for incremental updates and cross-activity dedup."""
+        a1 = self._activity(1, [(40.7128, -74.0060), (40.7130, -74.0058)])
+        tracker._activities_cache = [a1]
+        tracker.get_tile_coverage_all()
+        index = tracker._tile_index_cache[TILE_ZOOM]
+        assert index["tiles"]
+        for meta in index["tiles"].values():
+            assert "first_ridden" in meta
+            assert "activity_ids" in meta
+
+
 # ── CoverageTracker ─────────────────────────────────────────────
 
 class TestCoverageTracker:
@@ -392,7 +452,10 @@ class TestCoverageTracker:
         }]
         result = tracker.get_tile_coverage_all()
         assert result.visited_count >= 1
-        for key, meta in result.visited.items():
+        # Response values are trimmed (#579) — the underlying tile index
+        # still tracks which activities touched each tile.
+        index = tracker._tile_index_cache[TILE_ZOOM]
+        for key, meta in index["tiles"].items():
             assert 1 in meta["activity_ids"]
 
     def test_bounds_filter_excludes_outside(self, tracker):
@@ -503,7 +566,11 @@ class TestCoverageTracker:
             {"id": 2, "polyline": encoded, "start_date": "2026-01-02", "type": "Ride"},
         ]
         result = tracker.get_tile_coverage_all()
-        for meta in result.visited.values():
+        assert result.visited_count >= 1
+        # Response values are trimmed (#579) — the underlying tile index
+        # still tracks which activities touched each tile.
+        index = tracker._tile_index_cache[TILE_ZOOM]
+        for meta in index["tiles"].values():
             assert 1 in meta["activity_ids"]
             assert 2 in meta["activity_ids"]
 
