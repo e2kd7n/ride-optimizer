@@ -1,8 +1,8 @@
 """
 Exploration Service — wraps CoverageTracker for API consumption.
 
-Provides tile coverage, road coverage, route computation via ORS, and cache
-management following the existing service patterns (constructor + initialize).
+Provides tile coverage, route computation via ORS, and cache management
+following the existing service patterns (constructor + initialize).
 """
 
 from src.secure_logger import SecureLogger
@@ -190,12 +190,6 @@ class ExplorationService:
         except Exception as exc:
             logger.error("Full tile coverage failed: %s", exc, exc_info=True)
             return {"status": "error", "message": str(exc)}
-
-    def get_road_coverage(
-        self,
-        bounds: Tuple[float, float, float, float],
-    ) -> Dict[str, Any]:
-        return self._tracker.get_road_coverage(bounds)
 
     def get_roadless_tiles(
         self,

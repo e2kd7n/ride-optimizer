@@ -6,7 +6,6 @@ Routes:
   GET  /api/planner/rides/<ride_id>
   POST /api/planner/analyze
   GET  /api/exploration/tiles
-  GET  /api/exploration/roads
   GET  /api/exploration/roadless-tiles
   POST /api/exploration/invalidate
   POST /api/exploration/route
@@ -187,29 +186,6 @@ def exploration_tiles():
     else:
         result = svc.get_tile_coverage_all(zoom=zoom)
 
-    status_code = 200 if result.get('status') == 'success' else 500
-    return jsonify(result), status_code
-
-
-@bp.route('/exploration/roads')
-@limiter.limit("20 per minute")
-def exploration_roads():
-    """Road coverage within a bounding box (requires osmnx)."""
-    svc = current_app.container.get_exploration_service()
-
-    south = request.args.get('south', type=float)
-    west = request.args.get('west', type=float)
-    north = request.args.get('north', type=float)
-    east = request.args.get('east', type=float)
-
-    if any(v is None for v in (south, west, north, east)):
-        return jsonify({'status': 'error', 'message': 'south, west, north, east are required'}), 400
-
-    bbox_error = _validate_bbox(south, west, north, east)
-    if bbox_error:
-        return jsonify({'status': 'error', 'message': bbox_error}), 400
-
-    result = svc.get_road_coverage((south, west, north, east))
     status_code = 200 if result.get('status') == 'success' else 500
     return jsonify(result), status_code
 

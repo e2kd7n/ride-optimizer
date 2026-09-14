@@ -1,8 +1,11 @@
 """
 Coverage tracking for exploration route generation.
 
-Computes which map tiles and road segments have been ridden
-based on cached Strava activity GPS tracks.
+Computes which map tiles have been ridden based on cached Strava activity
+GPS tracks. (An earlier osmnx-based road-segment coverage feature was
+removed in #581 — it required osmnx/shapely, which were never added to
+requirements.txt, so it could only ever 500 in production; superseded by
+the tile-coverage/squadrat approach below.)
 """
 
 import json
@@ -27,9 +30,6 @@ logger = SecureLogger(__name__)
 
 TILE_ZOOM = 14              # "squadrat" granularity (squadrat.at / squadrat.com default)
 SQUADRATINHO_ZOOM = 17      # "squadratinho" granularity — each squadrat = 8x8 squadratinhos
-INTERPOLATION_INTERVAL_M = 80
-EARTH_RADIUS_M = 6_371_000
-MAX_ROAD_NETWORK_CACHES = 20  # cap on retained road_network_<hash>.graphml files
 MAX_WATER_POLYGON_CACHES = 20  # cap on retained water_<hash>.json files
 _OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 # Overpass's own internal query budget ([out:json][timeout:N]) and the
@@ -177,74 +177,6 @@ def tile_to_bounds(x: int, y: int, zoom: int = TILE_ZOOM) -> Tuple[float, float,
     return south, west, north, east
 
 
-def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Great-circle distance in metres between two points."""
-    rlat1, rlon1, rlat2, rlon2 = map(math.radians, (lat1, lon1, lat2, lon2))
-    dlat = rlat2 - rlat1
-    dlon = rlon2 - rlon1
-    a = math.sin(dlat / 2) ** 2 + math.cos(rlat1) * math.cos(rlat2) * math.sin(dlon / 2) ** 2
-    return 2 * EARTH_RADIUS_M * math.asin(math.sqrt(a))
-
-
-def _haversine_m_np(lat1: np.ndarray, lon1: np.ndarray, lat2: np.ndarray, lon2: np.ndarray) -> np.ndarray:
-    """Vectorized great-circle distance in metres between two point arrays."""
-    rlat1, rlon1, rlat2, rlon2 = np.radians(lat1), np.radians(lon1), np.radians(lat2), np.radians(lon2)
-    dlat = rlat2 - rlat1
-    dlon = rlon2 - rlon1
-    a = np.sin(dlat / 2) ** 2 + np.cos(rlat1) * np.cos(rlat2) * np.sin(dlon / 2) ** 2
-    return 2 * EARTH_RADIUS_M * np.arcsin(np.sqrt(a))
-
-
-def _interpolate_points(
-    coords: List[Tuple[float, float]], interval_m: float = INTERPOLATION_INTERVAL_M
-) -> List[Tuple[float, float]]:
-    """
-    Fill in points along a polyline so no gap exceeds *interval_m* metres.
-
-    Prevents tile-skipping when summary polylines have sparse GPS points.
-    Interior interpolated points are computed for all segments at once with
-    numpy; only the (cheap) interleaving with the original endpoints stays
-    in Python, since it does no math — just list assembly.
-    """
-    if len(coords) < 2:
-        return list(coords)
-
-    n_segs = len(coords) - 1
-    arr = np.asarray(coords, dtype=np.float64)
-    lat1, lon1 = arr[:-1, 0], arr[:-1, 1]
-    lat2, lon2 = arr[1:, 0], arr[1:, 1]
-
-    seg_dist = _haversine_m_np(lat1, lon1, lat2, lon2)
-    steps = np.maximum(np.ceil(seg_dist / interval_m).astype(np.int64), 1)
-    interior_counts = steps - 1
-
-    result: List[Tuple[float, float]] = [coords[0]]
-    total_interior = int(interior_counts.sum())
-
-    if total_interior == 0:
-        result.extend(coords[1:])
-        return result
-
-    seg_idx = np.repeat(np.arange(n_segs), interior_counts)
-    seg_starts = np.repeat(np.cumsum(interior_counts) - interior_counts, interior_counts)
-    local_pos = (np.arange(total_interior) - seg_starts) + 1  # 1-indexed within segment
-    fracs = local_pos / steps[seg_idx]
-
-    interp_lat = (lat1[seg_idx] + fracs * (lat2[seg_idx] - lat1[seg_idx])).tolist()
-    interp_lon = (lon1[seg_idx] + fracs * (lon2[seg_idx] - lon1[seg_idx])).tolist()
-    interior_counts_list = interior_counts.tolist()
-
-    pos = 0
-    for i in range(n_segs):
-        c = interior_counts_list[i]
-        if c:
-            result.extend(zip(interp_lat[pos:pos + c], interp_lon[pos:pos + c]))
-            pos += c
-        result.append(coords[i + 1])
-
-    return result
-
-
 def _segment_tiles(lat1: float, lon1: float, lat2: float, lon2: float, zoom: int) -> List[Tuple[int, int]]:
     """
     Exact set of tiles a GPS segment passes through, via grid traversal
@@ -324,7 +256,7 @@ def _activity_tiles(coords: List[Tuple[float, float]], zoom: int) -> Set[Tuple[i
 
 
 class CoverageTracker:
-    """Compute tile and road coverage from Strava activity GPS data."""
+    """Compute tile coverage from Strava activity GPS data."""
 
     def __init__(self, config):
         self.config = config
@@ -701,126 +633,8 @@ class CoverageTracker:
         )
 
     # ------------------------------------------------------------------
-    # Road coverage (Phase 1B — osmnx-based map matching)
+    # Water polygons (open-water tile exclusion, #525)
     # ------------------------------------------------------------------
-
-    def _get_or_fetch_road_graph(self, bounds: Tuple[float, float, float, float]):
-        """Load the cached bike-network graph for `bounds`, fetching from OSM
-        via osmnx if no cache exists yet. Used by road coverage (#481).
-
-        Returns the graph, or raises whatever osmnx raises on fetch failure.
-        """
-        import osmnx as ox
-
-        south, west, north, east = bounds
-        graph_cache = self.cache_dir / f"road_network_{_bbox_cache_key(bounds)}.graphml"
-        ttl = int(self.config.get("exploration.road_network_cache_ttl_seconds", 0))
-
-        if graph_cache.exists():
-            age_s = time.time() - graph_cache.stat().st_mtime
-            if ttl <= 0 or age_s <= ttl:
-                try:
-                    G = ox.load_graphml(graph_cache)
-                    logger.info("Loaded cached road network from %s", graph_cache)
-                    return G
-                except Exception:
-                    pass
-            else:
-                logger.info(
-                    "Road network cache %s is %.0fs old (TTL %ds) — refetching",
-                    graph_cache, age_s, ttl,
-                )
-
-        logger.info("Fetching road network from OSM for bounds %s", bounds)
-        G = ox.graph_from_bbox(
-            bbox=(north, south, east, west),
-            network_type="bike",
-            simplify=True,
-        )
-        ox.save_graphml(G, graph_cache)
-        secure_chmod(graph_cache)
-        self._evict_old_road_network_caches()
-        return G
-
-    def get_road_coverage(
-        self,
-        bounds: Tuple[float, float, float, float],
-    ) -> dict:
-        """
-        Compute road coverage within a bounding box using OSM data.
-
-        Requires osmnx and shapely. Falls back gracefully if unavailable.
-        """
-        try:
-            import osmnx as ox
-            from shapely.geometry import LineString, Point
-            from shapely.strtree import STRtree
-        except ImportError:
-            logger.warning("osmnx/shapely not installed — road coverage unavailable")
-            return {"status": "error", "message": "Road coverage requires osmnx and shapely"}
-
-        south, west, north, east = bounds
-
-        try:
-            G = self._get_or_fetch_road_graph(bounds)
-        except Exception as exc:
-            logger.error("Failed to fetch road network: %s", exc)
-            return {"status": "error", "message": str(exc)}
-
-        edges = ox.graph_to_gdfs(G, nodes=False, edges=True)
-        snap_tolerance = self.config.get("exploration.snap_tolerance_meters", 30)
-        snap_deg = snap_tolerance / 111_000
-
-        valid_geoms = edges["geometry"].dropna()
-        edge_geoms = list(valid_geoms)
-        edge_keys = list(valid_geoms.index)
-
-        tree = STRtree(edge_geoms)
-        ridden_set: Set[int] = set()
-
-        activities = self._load_activities()
-        for act in activities:
-            coords = self._decode_activity_coords(act)
-            if not coords:
-                continue
-            interpolated = _interpolate_points(coords)
-            for lat, lon in interpolated:
-                if lat < south or lat > north or lon < west or lon > east:
-                    continue
-                pt = Point(lon, lat)
-                nearest_idx = tree.nearest(pt)
-                nearest_geom = edge_geoms[nearest_idx]
-                if pt.distance(nearest_geom) <= snap_deg:
-                    ridden_set.add(nearest_idx)
-
-        ridden_edges = []
-        unridden_edges = []
-        for i, geom in enumerate(edge_geoms):
-            coords_list = list(geom.coords)
-            edge_data = {
-                "coordinates": [(lat, lon) for lon, lat in coords_list],
-                "length_m": edges.iloc[i].get("length", 0),
-            }
-            if i in ridden_set:
-                ridden_edges.append(edge_data)
-            else:
-                unridden_edges.append(edge_data)
-
-        total = len(edge_geoms)
-        ridden_count = len(ridden_set)
-        return {
-            "status": "success",
-            "ridden": ridden_edges,
-            "unridden": unridden_edges,
-            "stats": {
-                "total_edges": total,
-                "ridden_edges": ridden_count,
-                "unridden_edges": total - ridden_count,
-                "coverage_pct": round(ridden_count / max(total, 1) * 100, 1),
-            },
-            "bounds": bounds,
-            "computed_at": datetime.utcnow().isoformat(),
-        }
 
     def _get_or_fetch_water_polygons(
         self, bounds: Tuple[float, float, float, float]
@@ -1019,20 +833,6 @@ class CoverageTracker:
     # Cache helpers
     # ------------------------------------------------------------------
 
-    def _evict_old_road_network_caches(self) -> None:
-        """Keep at most MAX_ROAD_NETWORK_CACHES road_network_*.graphml files,
-        evicting the least-recently-modified ones beyond that cap."""
-        caches = sorted(
-            self.cache_dir.glob("road_network_*.graphml"),
-            key=lambda p: p.stat().st_mtime,
-            reverse=True,
-        )
-        for p in caches[MAX_ROAD_NETWORK_CACHES:]:
-            try:
-                p.unlink()
-            except OSError:
-                pass
-
     def _evict_old_water_polygon_caches(self) -> None:
         """Keep at most MAX_WATER_POLYGON_CACHES water_*.json files,
         evicting the least-recently-modified ones beyond that cap."""
@@ -1138,17 +938,5 @@ class CoverageTracker:
                     pass
 
         self._sweep_legacy_coverage_tile_files()
-        for p in self.cache_dir.glob("road_network_*.graphml"):
-            try:
-                p.unlink()
-            except OSError:
-                pass
         # Water polygons don't change with new activities — not evicted here.
-        # Legacy unkeyed cache filename from before bbox-keyed caching (#481).
-        legacy_cache = self.cache_dir / "road_network.graphml"
-        if legacy_cache.exists():
-            try:
-                legacy_cache.unlink()
-            except OSError:
-                pass
         logger.info("Coverage caches hard-invalidated (on-disk index cleared)")
