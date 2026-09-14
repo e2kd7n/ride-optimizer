@@ -46,10 +46,28 @@ _OVERPASS_REQUEST_TIMEOUT_S = 12
 _OVERPASS_NEGATIVE_CACHE_TTL_S = 60
 
 
+#: Placeholder value for a visited tile in a TileCoverage response (#579).
+#: Every consumer (exploration-worker.js, explore.js's drawTileGrid) only
+#: ever reads Object.keys(coverageData.visited) — the per-tile
+#: {"first_ridden": ..., "activity_ids": [...]} detail the tile index keeps
+#: internally was being shipped over the wire and silently discarded on
+#: every request. At full-history scale (65k+ tiles observed in
+#: production) that's several MB of wasted payload over cellular. The full
+#: detail still lives in the on-disk/in-memory tile index (see
+#: _build_or_update_tile_index) for incremental-update bookkeeping — only
+#: the response-building path (get_tile_coverage/get_tile_coverage_all)
+#: drops it before handing tiles to a caller.
+_TRIMMED_TILE_VALUE = 1
+
+
 @dataclass
 class TileCoverage:
-    """Result of tile coverage computation."""
-    visited: Dict[str, dict] = field(default_factory=dict)
+    """Result of tile coverage computation.
+
+    `visited` maps tile key ("x,y") to a trimmed placeholder value (#579),
+    not the tile index's full per-tile detail — see _TRIMMED_TILE_VALUE.
+    """
+    visited: Dict[str, int] = field(default_factory=dict)
     total_in_bounds: int = 0
     bounds: Optional[Tuple[float, float, float, float]] = None
     computed_at: str = ""
@@ -628,12 +646,12 @@ class CoverageTracker:
         min_tx, min_ty = lat_lon_to_tile(north, west, zoom)
         max_tx, max_ty = lat_lon_to_tile(south, east, zoom)
 
-        visited: Dict[str, dict] = {}
-        for key, entry in index["tiles"].items():
+        visited: Dict[str, int] = {}
+        for key in index["tiles"]:
             tx_str, ty_str = key.split(",")
             tx, ty = int(tx_str), int(ty_str)
             if min_tx <= tx <= max_tx and min_ty <= ty <= max_ty:
-                visited[key] = entry
+                visited[key] = _TRIMMED_TILE_VALUE
 
         total_tiles = (max_tx - min_tx + 1) * (max_ty - min_ty + 1)
 
@@ -659,7 +677,7 @@ class CoverageTracker:
         """
         zoom = zoom or self.zoom
         index = self._build_or_update_tile_index(zoom)
-        visited = dict(index["tiles"])
+        visited = {key: _TRIMMED_TILE_VALUE for key in index["tiles"]}
 
         bounds = None
         total_in_bounds = len(visited)
