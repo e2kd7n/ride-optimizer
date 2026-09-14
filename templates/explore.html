@@ -70,6 +70,11 @@
                                 </button>
                             </div>
                             <div class="text-muted small" id="coverage-status"></div>
+                            <!-- #567: separate from #coverage-status above so a roadless
+                                 (water-exclusion) lookup failure doesn't clobber — or get
+                                 clobbered by — the "Updated…"/stale-suffix/retry-counter
+                                 text that already shares that line. -->
+                            <div class="small d-none" id="roadless-warning"></div>
                         </div>
 
                         <hr>
