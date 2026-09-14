@@ -1741,6 +1741,31 @@ function flattenNewTilesByZoom(newTilesByZoom) {
     return out;
 }
 
+// #585 — mirrors GRID_LABELS in exploration-worker.js (a separate Worker
+// scope, so not directly shareable) and the legend in templates/explore.html.
+const TILE_ZOOM_LABELS = { 14: 'squadrat', 17: 'squadratinho' };
+
+/**
+ * Format a flat [{x, y, zoom}] claimed-tile list as a per-granularity count
+ * ("3 squadrats · 9 squadratinhos") instead of a single opaque total — a
+ * squadrat (~1.2 km²) and a squadratinho (~0.15 km²) represent very
+ * different amounts of new ground, so collapsing them loses information
+ * the backend already computed (#585).
+ */
+function formatTileBreakdown(claimed) {
+    if (claimed == null) return '';
+    if (claimed.length === 0) return '· 0 new tiles';
+    const countByZoom = new Map();
+    for (const t of claimed) countByZoom.set(t.zoom, (countByZoom.get(t.zoom) || 0) + 1);
+    const parts = [...countByZoom.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([zoom, count]) => {
+            const label = TILE_ZOOM_LABELS[zoom] || `zoom-${zoom} tile`;
+            return `${count} ${label}${count === 1 ? '' : 's'}`;
+        });
+    return `· ${parts.join(' · ')}`;
+}
+
 async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
     const plotBtn = badgeEl.querySelector('.plot-road-btn');
     const infoEl = badgeEl.querySelector('.route-phase2-info');
@@ -1889,7 +1914,7 @@ async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
         const surfText = (sb.paved_pct != null)
             ? `${sb.paved_pct}% paved · ${sb.unpaved_pct}% unpaved · ${sb.unknown_pct}% unknown`
             : '';
-        const tilesText = claimed == null ? '' : `· ${claimed.length} new tile${claimed.length === 1 ? '' : 's'}`;
+        const tilesText = formatTileBreakdown(claimed);
         // #452: distinguish a route that efficiently covers new tiles both
         // ways from one where ORS genuinely found no alternate road for the
         // return leg — both look identical on the map/card otherwise.
@@ -1924,7 +1949,7 @@ async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
         if (short) parts.push(`${short.distLabel} (−)`);
         if (long)  parts.push(skipExpansion ? `${long.distLabel} (direct)` : `${long.distLabel} (+)`);
         const tilesSuffix = verified
-            ? ` · ${unionMap.size} new tile${unionMap.size === 1 ? '' : 's'}${unionMap.size === 0 ? ' reached' : ''}`
+            ? (unionMap.size === 0 ? ' · 0 new tiles reached' : ` ${formatTileBreakdown([...unionMap.values()])}`)
             : '';
         labelEl.textContent = `${routeDirLabel(route)} · ${parts.join(' / ')}${tilesSuffix}`;
     }

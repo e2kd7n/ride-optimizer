@@ -1161,7 +1161,8 @@
                         const r = job.result || {};
                         const acts = (r.activities_count || 0).toLocaleString();
                         const groups = r.route_groups_count || 0;
-                        statusEl.textContent = `Done — ${acts} activities, ${groups} route group${groups !== 1 ? 's' : ''}`;
+                        const longRides = r.long_rides_count || 0;
+                        statusEl.textContent = `Done — ${acts} activities, ${groups} route group${groups !== 1 ? 's' : ''}, ${longRides} long ride${longRides !== 1 ? 's' : ''}`;
                         if (typeof showToast === 'function') showToast('Analysis complete', 'success');
                         loadCacheInfo();
                         return 'done';

@@ -303,13 +303,18 @@ function renderWorkoutFitCompact(rec) {
                       : rating === 'Moderate' ? 'bg-warning-subtle text-dark'
                       : 'bg-danger-subtle text-danger';
     const wName = esc(workoutFit.workout_name || 'Workout');
+    // #587 — reuse the same workout-fit-row-reasons caption the hero card
+    // (renderWorkoutFitRow, above) and #519's ride-option cards already use,
+    // instead of leaving this card's rating unexplained.
+    const reasons = (workoutFit.fit_reasons || []).map(r => esc(r)).join(' · ');
 
     return `
         <div class="workout-fit-compact">
             <i class="bi bi-heart-pulse" aria-hidden="true"></i>
             <span>${wName} fit:</span>
             <span class="badge ${ratingClass}">${rating}</span>
-        </div>`;
+        </div>
+        ${reasons ? `<div class="workout-fit-row-reasons">${reasons}</div>` : ''}`;
 }
 
 /**
