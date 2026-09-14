@@ -249,10 +249,20 @@ def exploration_roadless_tiles():
 
 
 @bp.route('/exploration/invalidate', methods=['POST'])
+@limiter.limit(_rate_limit("exploration.rate_limit_invalidate", "10 per minute"))
 def exploration_invalidate():
-    """Clear coverage caches (call after fetching new activities)."""
+    """Clear coverage caches (call after fetching new activities).
+
+    Unlike every sibling /exploration/* endpoint, this had no rate limit
+    (#576) — repeatedly hitting it reproduces the full cold-rebuild
+    incident on demand. Also re-triggers the cold-start pre-warm (#560)
+    after invalidating, since start_prewarm() is single-fire and would
+    otherwise never build a fresh index again — leaving the next live
+    coverage request to pay for a synchronous rebuild inline.
+    """
     svc = current_app.container.get_exploration_service()
     svc.invalidate_caches()
+    svc.restart_prewarm()
     return jsonify({'status': 'success', 'message': 'Coverage caches invalidated'})
 
 

@@ -18,6 +18,7 @@ exploration:
   rate_limit_tiles: "60 per minute"  # /api/exploration/tiles — no per-user limit before this; sized above the route limit since coverage checks fire more often per interaction
   rate_limit_roadless: "40 per minute"  # /api/exploration/roadless-tiles — #580: was 20/min, tight for multi-zoom (squadrat + squadratinho) and multi-bbox corridor coverage loads that can fire several roadless-tile requests per Explore interaction. Raised to match rate_limit_route's headroom.
   rate_limit_verify: "30 per minute"  # /api/exploration/verify-tiles, /api/exploration/new-tiles
+  rate_limit_invalidate: "10 per minute"  # /api/exploration/invalidate — #576: previously unlimited, so repeatedly hitting it reproduced the full cold-rebuild incident on demand. Low limit since this is a rare, heavy, user-initiated action (wipes the coverage cache + re-triggers a pre-warm), not a per-interaction call like the others above.
 
   oauth_callback_host: "localhost"  # Host for OAuth callback server
   oauth_callback_port: 8000  # Port for OAuth callback server

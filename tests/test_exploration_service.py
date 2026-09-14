@@ -188,6 +188,31 @@ class TestStartPrewarm:
 
         assert calls == [TILE_ZOOM, SQUADRATINHO_ZOOM]
 
+    def test_restart_prewarm_fires_again_after_single_fire_guard_tripped(self, service):
+        """#576: restart_prewarm() must actually trigger a fresh pre-warm
+        even after start_prewarm()'s single-fire guard has already tripped —
+        the manual "clear coverage cache" action needs the next live
+        request to hit a warm index, not pay for a synchronous rebuild."""
+        service._tracker._activities_cache = []
+        with patch.object(
+            service._tracker, "_build_or_update_tile_index",
+            return_value={"indexed_activity_ids": set(), "tiles": {}},
+        ) as mock_build:
+            service.start_prewarm()
+            for _ in range(50):
+                if mock_build.call_count >= 2:
+                    break
+                time.sleep(0.05)
+            assert mock_build.call_count == 2
+
+            service.restart_prewarm()
+            for _ in range(50):
+                if mock_build.call_count >= 4:
+                    break
+                time.sleep(0.05)
+
+        assert mock_build.call_count == 4, "restart_prewarm() should have re-warmed both zooms"
+
     def test_prewarm_thread_is_a_daemon(self, service):
         service._tracker._activities_cache = []
         created_threads = []
