@@ -67,6 +67,12 @@ class ExplorationService:
         # full activity-polyline decode synchronously. See start_prewarm().
         self._prewarm_started = False
         self._prewarm_lock = threading.Lock()
+        # Background/debounced disk persistence for the route cache (#573).
+        # See _schedule_persist() for why this can't just call
+        # _persist_route_cache() synchronously from _store_route_cache().
+        self._persist_state_lock = threading.Lock()
+        self._persist_thread: Optional[threading.Thread] = None
+        self._persist_dirty = False
 
     def initialize(self):
         self._load_route_cache_from_disk()
@@ -180,7 +186,59 @@ class ExplorationService:
             for k in list(self._route_cache.keys())[:overflow]:
                 del self._route_cache[k]
 
-        self._persist_route_cache()
+        self._schedule_persist()
+
+    # Minimum spacing between background persist writes when calls keep
+    # arriving faster than the disk can be written to (#573).
+    ROUTE_CACHE_PERSIST_DEBOUNCE_S = 2.0
+
+    def _schedule_persist(self) -> None:
+        """Persist the route cache to disk on a background thread instead of
+        inline (#573).
+
+        _store_route_cache() runs while compute_route() still holds one of
+        only ``ors_max_concurrent_calls`` (default 2) semaphore slots — the
+        route semaphore isn't released (see its `finally`) until
+        _compute_route_via_ors() -> _store_route_cache() returns. A
+        synchronous full-cache disk write here (up to MAX_ROUTE_CACHE_ENTRIES
+        route polylines re-serialized) happened on every successful route,
+        inside that scarce concurrency slot — real I/O contention risk on a
+        Pi's SD card, and it delayed releasing the slot for no reason a
+        caller waiting on it would care about.
+
+        Debounced + coalesced: a burst of route computations (e.g. the
+        several ORS calls one "plot road route" interaction can fire, #565)
+        share a single background writer rather than spawning one thread per
+        route. If a persist is already running (or about to run) when this
+        is called, this just marks the cache dirty so that run picks up the
+        latest state before exiting instead of spawning a second thread.
+        """
+        with self._persist_state_lock:
+            self._persist_dirty = True
+            if self._persist_thread is not None and self._persist_thread.is_alive():
+                return
+            self._persist_thread = threading.Thread(
+                target=self._persist_worker, name="route-cache-persist", daemon=True
+            )
+            self._persist_thread.start()
+
+    def _persist_worker(self) -> None:
+        """Background loop backing _schedule_persist() — writes the cache to
+        disk, then re-writes once more if it went dirty again while writing,
+        spaced at least ROUTE_CACHE_PERSIST_DEBOUNCE_S apart."""
+        while True:
+            with self._persist_state_lock:
+                self._persist_dirty = False
+            try:
+                self._persist_route_cache()
+            except Exception as exc:
+                logger.error("Background route-cache persist failed: %s", exc, exc_info=True)
+
+            with self._persist_state_lock:
+                if not self._persist_dirty:
+                    self._persist_thread = None
+                    return
+            time.sleep(self.ROUTE_CACHE_PERSIST_DEBOUNCE_S)
 
     def _route_cache_path(self) -> Path:
         return self._tracker.cache_dir / ROUTE_CACHE_FILENAME
