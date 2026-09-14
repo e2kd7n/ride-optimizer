@@ -48,7 +48,17 @@ class ExplorationService:
         self.config = ConfigManager.get_instance()
         self._tracker = CoverageTracker(self.config)
         # Route memoization: {(waypoints_key, profile): (result_dict, expires_at)}
+        # Guarded by _route_cache_lock (#577) — self._route_semaphore allows
+        # up to ors_max_concurrent_calls computations to run at once, so a
+        # cache write from one thread (_store_route_cache's eviction scan
+        # iterates .items()/.keys()) could otherwise race a write from
+        # another, raising "dictionary changed size during iteration". Same
+        # crash class as the tile-index race fixed in #558, just a plain
+        # lock here rather than that fix's copy-on-write per-zoom locks —
+        # this is a single flat dict, not per-zoom state, so there's nothing
+        # for copy-on-write to buy beyond what one lock already gives us.
         self._route_cache: Dict[tuple, Tuple[dict, float]] = {}
+        self._route_cache_lock = threading.Lock()
         # Bounds concurrent ORS "plot road route" calls (#compute_route).
         # Unbounded concurrency was the other half of the thread-starvation
         # freeze: each call already burns up to ors_max_wait_seconds of a
@@ -190,21 +200,43 @@ class ExplorationService:
         user-initiated "clear my coverage cache" action (#576)."""
         self._tracker.hard_invalidate_caches()
 
+    def _cache_get(self, cache_key: tuple) -> Optional[dict]:
+        """Thread-safe read of a non-expired route cache entry, or None
+        (#577) — shared by every cache-hit check in compute_route() /
+        _compute_route_via_ors() so none of them read self._route_cache
+        directly."""
+        with self._route_cache_lock:
+            cached = self._route_cache.get(cache_key)
+        if cached is None:
+            return None
+        result, expires_at = cached
+        if time.monotonic() < expires_at:
+            return result
+        return None
+
     def _store_route_cache(self, cache_key: tuple, result: dict, expires_at: float) -> None:
         """Store a route memo entry, evicting expired entries first and then
-        the oldest entries if still over the cap (#482)."""
-        now = time.monotonic()
-        expired = [k for k, (_, exp) in self._route_cache.items() if exp <= now]
-        for k in expired:
-            del self._route_cache[k]
+        the oldest entries if still over the cap (#482).
 
-        self._route_cache[cache_key] = (result, expires_at)
-
-        if len(self._route_cache) > MAX_ROUTE_CACHE_ENTRIES:
-            # dicts preserve insertion order — oldest entries were inserted first.
-            overflow = len(self._route_cache) - MAX_ROUTE_CACHE_ENTRIES
-            for k in list(self._route_cache.keys())[:overflow]:
+        Locked end-to-end (#577): self._route_semaphore allows up to
+        ors_max_concurrent_calls computations to run at once, so without a
+        lock a write here could race an eviction scan from another thread's
+        concurrent _store_route_cache() call — "dictionary changed size
+        during iteration".
+        """
+        with self._route_cache_lock:
+            now = time.monotonic()
+            expired = [k for k, (_, exp) in self._route_cache.items() if exp <= now]
+            for k in expired:
                 del self._route_cache[k]
+
+            self._route_cache[cache_key] = (result, expires_at)
+
+            if len(self._route_cache) > MAX_ROUTE_CACHE_ENTRIES:
+                # dicts preserve insertion order — oldest entries were inserted first.
+                overflow = len(self._route_cache) - MAX_ROUTE_CACHE_ENTRIES
+                for k in list(self._route_cache.keys())[:overflow]:
+                    del self._route_cache[k]
 
         self._schedule_persist()
 
@@ -293,7 +325,8 @@ class ExplorationService:
                 )
             except (KeyError, TypeError, ValueError):
                 continue
-            self._route_cache[cache_key] = (entry["result"], now_mono + remaining)
+            with self._route_cache_lock:
+                self._route_cache[cache_key] = (entry["result"], now_mono + remaining)
             loaded += 1
         logger.info("Loaded %d cached ORS route(s) from disk", loaded)
 
@@ -302,8 +335,18 @@ class ExplorationService:
         path = self._route_cache_path()
         now_mono = time.monotonic()
         now_wall = time.time()
+        # Snapshot under the lock (#577) — .items() would otherwise iterate
+        # the live dict while a concurrent _store_route_cache() call (up to
+        # ors_max_concurrent_calls requests can be writing at once) mutates
+        # it, raising "dictionary changed size during iteration". The actual
+        # disk write below runs unlocked so it doesn't hold up request
+        # threads doing in-memory cache reads/writes for the duration of the
+        # (much slower) I/O.
+        with self._route_cache_lock:
+            snapshot = list(self._route_cache.items())
+
         entries = []
-        for (waypoints, profile), (result, expires_at) in self._route_cache.items():
+        for (waypoints, profile), (result, expires_at) in snapshot:
             remaining = expires_at - now_mono
             if remaining <= 0:
                 continue
@@ -436,12 +479,10 @@ class ExplorationService:
 
         # Memoization key — waypoints as a tuple of pairs + profile.
         cache_key = (tuple((round(lat, 6), round(lon, 6)) for lat, lon in waypoints), profile)
-        cached = self._route_cache.get(cache_key)
-        if cached is not None:
-            result, expires_at = cached
-            if time.monotonic() < expires_at:
-                logger.debug("ORS cache hit for key %s", cache_key)
-                return result
+        cached_result = self._cache_get(cache_key)
+        if cached_result is not None:
+            logger.debug("ORS cache hit for key %s", cache_key)
+            return cached_result
 
         # Only up to `ors_max_concurrent_calls` computations run at once (see
         # self._route_semaphore) — unbounded concurrent ORS calls were the
@@ -461,12 +502,10 @@ class ExplorationService:
         try:
             # Another request may have computed (and cached) this exact
             # route while we were waiting for a slot.
-            cached = self._route_cache.get(cache_key)
-            if cached is not None:
-                result, expires_at = cached
-                if time.monotonic() < expires_at:
-                    logger.debug("ORS cache hit for key %s (post-queue)", cache_key)
-                    return result
+            cached_result = self._cache_get(cache_key)
+            if cached_result is not None:
+                logger.debug("ORS cache hit for key %s (post-queue)", cache_key)
+                return cached_result
             call_start = time.monotonic()
             result = self._compute_route_via_ors(waypoints, profile, api_key, ttl, deadline, max_wait, cache_key)
             logger.info("ORS route computation took %.2fs (status=%s)", time.monotonic() - call_start, result.get("status"))
@@ -539,11 +578,9 @@ class ExplorationService:
                 tuple((round(c[1], 6), round(c[0], 6)) for c in ors_coords),
                 profile,
             )
-            cached = self._route_cache.get(cache_key)
-            if cached is not None:
-                result, expires_at = cached
-                if time.monotonic() < expires_at:
-                    return result
+            cached_result = self._cache_get(cache_key)
+            if cached_result is not None:
+                return cached_result
             raw = ors_client.get_route(ors_coords, profile, api_key=api_key, timeout=_budget_timeout())
 
         if _timed_out:

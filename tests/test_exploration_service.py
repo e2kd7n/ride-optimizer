@@ -758,6 +758,41 @@ class TestComputeRoute:
         # The expired entry should have been evicted, leaving only the new one.
         assert len(service_with_key._route_cache) == 1
 
+    def test_concurrent_cache_writes_do_not_raise(self, service_with_key):
+        """#577: self._route_semaphore allows up to ors_max_concurrent_calls
+        route computations to run at once, so concurrent
+        _store_route_cache() calls (each doing an eviction scan over
+        .items()/.keys()) could previously race and raise "dictionary
+        changed size during iteration". Many distinct routes computed
+        concurrently must not crash any worker thread."""
+        raw = {
+            "features": [{
+                "geometry": {"coordinates": [[-87.65, 41.98], [-87.64, 41.99]]},
+                "properties": {
+                    "summary": {"distance": 1000.0, "duration": 300.0},
+                    "extras": {},
+                },
+            }],
+        }
+        errors = []
+
+        def worker(i):
+            try:
+                service_with_key.compute_route([
+                    [41.0, -87.0 - i * 0.001], [41.1, -87.1 - i * 0.001],
+                ])
+            except Exception as exc:  # pragma: no cover - failure path
+                errors.append(exc)
+
+        with patch("src.ors_client.get_route", return_value=raw):
+            threads = [threading.Thread(target=worker, args=(i,)) for i in range(40)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(timeout=10)
+
+        assert not errors, f"concurrent cache writes raised: {errors}"
+
     def test_route_cache_caps_total_entries(self, service_with_key):
         """Once over the cap, oldest entries are evicted rather than growing forever (#482)."""
         raw = {
