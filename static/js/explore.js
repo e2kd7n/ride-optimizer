@@ -682,6 +682,30 @@ function roadlessLookupFailed(result) {
     return result.status === 'error';
 }
 
+/** Clamp an oversized bbox to maxSpanDeg per side, keeping it centered on
+ *  the input box's center — the map viewport itself has no size limit (a
+ *  zoomed-out view on a wide screen can exceed COVERAGE_MAX_BBOX_DEGREES
+ *  even when the start/end pins are close together and never trigger
+ *  corridor mode), so this guards the non-corridor coverage fetch below
+ *  from the same backend "bounding box too large" rejection (#592). */
+function clampBoxSpan(south, west, north, east, maxSpanDeg) {
+    const latSpan = north - south;
+    const lonSpan = east - west;
+    if (latSpan <= maxSpanDeg && lonSpan <= maxSpanDeg) {
+        return { south, west, north, east };
+    }
+    const centerLat = (south + north) / 2;
+    const centerLon = (west + east) / 2;
+    const halfLat = Math.min(latSpan, maxSpanDeg) / 2;
+    const halfLon = Math.min(lonSpan, maxSpanDeg) / 2;
+    return {
+        south: centerLat - halfLat,
+        north: centerLat + halfLat,
+        west: centerLon - halfLon,
+        east: centerLon + halfLon,
+    };
+}
+
 /** Returns a cached corridor-box result if this exact (rounded) box+zoom was
  *  already fetched this session, else fetches it and caches the result. */
 function fetchCorridorBox(cache, fetchFn, box, zoom) {
@@ -958,14 +982,17 @@ async function loadCoverage() {
     } else {
         const bounds = map.getBounds();
         const mapZoom = map.getZoom();
+        // The viewport itself has no size limit — a zoomed-out view on a wide
+        // screen can exceed COVERAGE_MAX_BBOX_DEGREES even when the start/end
+        // pins are close together and never trigger corridor mode above, so
+        // clamp it the same way a corridor box is bounded (#592).
+        const clampedBounds = clampBoxSpan(
+            bounds.getSouth(), bounds.getWest(), bounds.getNorth(), bounds.getEast(),
+            COVERAGE_MAX_BBOX_DEGREES,
+        );
 
         fetchOne = (tileZoom) => mapZoom >= 10
-            ? api.getTileCoverage({
-                south: bounds.getSouth(),
-                west: bounds.getWest(),
-                north: bounds.getNorth(),
-                east: bounds.getEast(),
-            }, tileZoom, onCoverageRetry)
+            ? api.getTileCoverage(clampedBounds, tileZoom, onCoverageRetry)
             : api.getTileCoverage(null, tileZoom, onCoverageRetry);
 
         // #525: roadless tiles (open water, e.g. lakes) get excluded from
@@ -980,12 +1007,7 @@ async function loadCoverage() {
         // warn on 'error' without also warning on the intentional 'skipped'
         // case (no bounds is not a failure).
         fetchRoadless = (tileZoom) => mapZoom >= 10
-            ? api.getRoadlessTiles({
-                south: bounds.getSouth(),
-                west: bounds.getWest(),
-                north: bounds.getNorth(),
-                east: bounds.getEast(),
-            }, tileZoom).catch((e) => ({ status: 'error', message: (e && e.message) || 'Water-exclusion lookup failed' }))
+            ? api.getRoadlessTiles(clampedBounds, tileZoom).catch((e) => ({ status: 'error', message: (e && e.message) || 'Water-exclusion lookup failed' }))
             : Promise.resolve({ status: 'skipped' });
     }
 
