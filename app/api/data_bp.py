@@ -147,9 +147,14 @@ def trigger_analysis():
             # instance, mutated in place by run_full_analysis) — only the
             # services that derive their state from it need rebuilding (#461).
             container.refresh_services('commute', 'planner')
-            # Coverage tiles are cached off activities.json and don't
-            # self-invalidate — drop them so Explore picks up any
-            # newly-fetched rides instead of serving stale coverage.
+            # Coverage tiles are cached off activities.json — this call is
+            # what lets the tile index notice newly-fetched rides.
+            # invalidate_caches() only clears in-memory state (the
+            # activities cache and tile index), so the next Explore-page
+            # read reloads from disk and diffs in the new activities
+            # (#571) instead of forcing a full on-disk rebuild; without
+            # this call the in-memory activities cache would keep serving
+            # the pre-fetch activity list for the life of the process.
             if container.exploration_service is not None:
                 container.exploration_service.invalidate_caches()
         except Exception as e:

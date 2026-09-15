@@ -16,7 +16,7 @@ import math
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
@@ -289,7 +289,7 @@ class CoverageTracker:
     # ------------------------------------------------------------------
 
     def _load_activities(self) -> List[dict]:
-        """Load cached Strava activities (lazy, cached in memory per request)."""
+        """Load cached Strava activities (lazy, cached in memory per process)."""
         if self._activities_cache is not None:
             return self._activities_cache
 
@@ -368,7 +368,7 @@ class CoverageTracker:
         payload = {
             "indexed_activity_ids": sorted(index["indexed_activity_ids"]),
             "tiles": index["tiles"],
-            "computed_at": datetime.utcnow().isoformat(),
+            "computed_at": datetime.now(timezone.utc).isoformat(),
         }
         tmp_path = path.with_name(f"{path.name}.tmp{os.getpid()}")
         try:
@@ -588,7 +588,8 @@ class CoverageTracker:
         total_tiles = (max_tx - min_tx + 1) * (max_ty - min_ty + 1)
 
         logger.info(
-            "get_tile_coverage(zoom=%d) served from index in %.3fs (%d/%d tiles in bbox, stale=%s)",
+            "get_tile_coverage(zoom=%d) served from index in %.3fs "
+            "(%d visited-in-bbox / %d total tiles indexed, stale=%s)",
             zoom, time.monotonic() - start, len(visited), len(index["tiles"]), stale,
         )
 
@@ -596,7 +597,7 @@ class CoverageTracker:
             visited=visited,
             total_in_bounds=max(total_tiles, 1),
             bounds=bounds,
-            computed_at=datetime.utcnow().isoformat(),
+            computed_at=datetime.now(timezone.utc).isoformat(),
             zoom=zoom,
             stale=stale,
         )
@@ -628,7 +629,7 @@ class CoverageTracker:
             visited=visited,
             total_in_bounds=total_in_bounds,
             bounds=bounds,
-            computed_at=datetime.utcnow().isoformat(),
+            computed_at=datetime.now(timezone.utc).isoformat(),
             zoom=zoom,
         )
 
@@ -638,13 +639,18 @@ class CoverageTracker:
 
     def _get_or_fetch_water_polygons(
         self, bounds: Tuple[float, float, float, float]
-    ) -> List[List[Tuple[float, float]]]:
+    ) -> List[List[List[float]]]:
         """Load cached open-water polygons for `bounds`, querying Overpass
         (OSM `natural=water` ways/relations) if no cache exists yet.
 
-        Returns a list of polygons, each a list of (lat, lon) ring points.
-        Pure-Python/`requests` only — no osmnx/shapely — so this works
-        without a full bike-network graph fetch.
+        Returns a list of polygons, each a list of [lat, lon] ring points.
+        A freshly-fetched result builds these as (lat, lon) tuples, but the
+        far more common cache-hit path returns whatever json.load() gave
+        back — plain lists, since JSON has no tuple type — so the
+        annotation reflects that actual (list-of-lists) shape rather than
+        the tuple type only the cold-fetch path produces. Pure-Python/
+        `requests` only — no osmnx/shapely — so this works without a full
+        bike-network graph fetch.
         """
         cache_file = self.cache_dir / f"water_{_bbox_cache_key(bounds)}.json"
         ttl = int(self.config.get("exploration.water_polygon_cache_ttl_seconds", 0))
@@ -826,7 +832,7 @@ class CoverageTracker:
             "zoom": zoom,
             "roadless": roadless,
             "bounds": bounds,
-            "computed_at": datetime.utcnow().isoformat(),
+            "computed_at": datetime.now(timezone.utc).isoformat(),
         }
 
     # ------------------------------------------------------------------
