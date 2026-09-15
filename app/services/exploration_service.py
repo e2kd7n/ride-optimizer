@@ -566,7 +566,8 @@ class ExplorationService:
         cache_key: tuple,
         avoid_features: tuple = _DEFAULT_AVOID_FEATURES,
     ) -> Dict[str, Any]:
-        """Run the actual ORS call(s) for compute_route, holding self._route_lock."""
+        """Run the actual ORS call(s) for compute_route, holding one of
+        self._route_semaphore's slots (acquired by the caller, compute_route())."""
         from src import ors_client
 
         timeout = int(self.config.get("exploration.ors_timeout_seconds", 15))

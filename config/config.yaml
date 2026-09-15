@@ -6,6 +6,7 @@ ors:
   api_key: ${ORS_API_KEY}
 
 exploration:
+  tile_zoom_level: 14  # "squadrat" grid zoom (TILE_ZOOM in src/coverage_tracker.py) — squadratinho (finer-grained) view uses the separate, non-configurable SQUADRATINHO_ZOOM=17 constant.
   ors_timeout_seconds: 15
   ors_max_wait_seconds: 40  # Overall budget for compute_route(), across queueing + every retry/fallback attempt
   ors_max_concurrent_calls: 2  # Cap on simultaneous ORS calls — leaves headroom under GUNICORN_THREADS (gunicorn.conf.py)
