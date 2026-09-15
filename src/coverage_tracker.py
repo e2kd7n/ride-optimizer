@@ -312,6 +312,14 @@ class CoverageTracker:
         # timestamp until which fresh requests fail fast instead of retrying.
         self._overpass_failure_until: Dict[str, float] = {}
         self._overpass_failure_lock = threading.Lock()
+        # Per-(snapped-bbox) locks so concurrent requests for the same water-
+        # polygon cache key (e.g. explore.js "both" mode's zoom=14 and
+        # zoom=17 roadless-tile calls, which share identical bounds) share
+        # one Overpass fetch instead of each firing its own redundant query
+        # and racing to write the same cache file. Same lazy-creation
+        # pattern as _get_zoom_lock/_tile_index_locks_lock above.
+        self._water_polygon_locks: Dict[str, threading.Lock] = {}
+        self._water_polygon_locks_lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # Activity loading
@@ -428,6 +436,22 @@ class CoverageTracker:
             if lock is None:
                 lock = threading.Lock()
                 self._tile_index_locks[zoom] = lock
+            return lock
+
+    def _get_water_polygon_lock(self, key: str) -> threading.Lock:
+        """Return the lock guarding water-polygon cache key `key` (a snapped
+        bbox's cache key), creating it on first use. Per-key rather than one
+        global lock so concurrent requests for different areas stay
+        independent; only requests for the same snapped bbox serialize
+        behind one Overpass fetch."""
+        lock = self._water_polygon_locks.get(key)
+        if lock is not None:
+            return lock
+        with self._water_polygon_locks_lock:
+            lock = self._water_polygon_locks.get(key)
+            if lock is None:
+                lock = threading.Lock()
+                self._water_polygon_locks[key] = lock
             return lock
 
     def _build_or_update_tile_index(self, zoom: int) -> dict:
@@ -685,102 +709,113 @@ class CoverageTracker:
         before it's used as a cache key or an Overpass query bbox, so a
         pan/zoom within the same area reuses one cached fetch instead of
         each exact viewport paying out its own Overpass round-trip.
+
+        The whole cache-check/fetch/write sequence runs under a per-key
+        lock (_get_water_polygon_lock) so two concurrent requests for the
+        same snapped bbox — e.g. explore.js "both" mode's zoom=14 and
+        zoom=17 roadless-tile calls, which share identical bounds — share
+        one Overpass round-trip and one outcome, instead of each firing its
+        own redundant query, doubling load on an already-slow endpoint, and
+        potentially racing to write the same cache file.
         """
         bounds = _snap_bbox_to_grid(bounds, _WATER_POLYGON_GRID_DEGREES)
-        cache_file = self.cache_dir / f"water_{_bbox_cache_key(bounds)}.json"
+        key = _bbox_cache_key(bounds)
+        cache_file = self.cache_dir / f"water_{key}.json"
         ttl = int(self.config.get("exploration.water_polygon_cache_ttl_seconds", 0))
-        if cache_file.exists():
-            age_s = time.time() - cache_file.stat().st_mtime
-            if ttl <= 0 or age_s <= ttl:
-                try:
-                    with open(cache_file, "r", encoding="utf-8") as f:
-                        return json.load(f)
-                except (json.JSONDecodeError, OSError):
-                    pass
-            else:
-                logger.info(
-                    "Water polygon cache %s is %.0fs old (TTL %ds) — refetching",
-                    cache_file, age_s, ttl,
+
+        with self._get_water_polygon_lock(key):
+            if cache_file.exists():
+                age_s = time.time() - cache_file.stat().st_mtime
+                if ttl <= 0 or age_s <= ttl:
+                    try:
+                        with open(cache_file, "r", encoding="utf-8") as f:
+                            return json.load(f)
+                    except (json.JSONDecodeError, OSError):
+                        pass
+                else:
+                    logger.info(
+                        "Water polygon cache %s is %.0fs old (TTL %ds) — refetching",
+                        cache_file, age_s, ttl,
+                    )
+
+            # Negative cache (#562): skip straight to failure if Overpass
+            # failed recently rather than paying out another ~12s timeout
+            # for a query that's very likely to fail again during an outage.
+            with self._overpass_failure_lock:
+                failure_until = self._overpass_failure_until.get(_OVERPASS_URL)
+            if failure_until is not None and time.time() < failure_until:
+                remaining = failure_until - time.time()
+                logger.warning(
+                    "Overpass endpoint recently failed — skipping retry for %.0fs more", remaining,
+                )
+                raise RuntimeError(
+                    f"Overpass water-polygon lookup temporarily unavailable ({remaining:.0f}s)"
                 )
 
-        # Negative cache (#562): skip straight to failure if Overpass failed
-        # recently rather than paying out another ~12s timeout for a query
-        # that's very likely to fail again during an outage.
-        with self._overpass_failure_lock:
-            failure_until = self._overpass_failure_until.get(_OVERPASS_URL)
-        if failure_until is not None and time.time() < failure_until:
-            remaining = failure_until - time.time()
-            logger.warning(
-                "Overpass endpoint recently failed — skipping retry for %.0fs more", remaining,
+            south, west, north, east = bounds
+            query = (
+                f"[out:json][timeout:{_OVERPASS_QUERY_TIMEOUT_S}];"
+                "("
+                f'way["natural"="water"]({south},{west},{north},{east});'
+                f'relation["natural"="water"]({south},{west},{north},{east});'
+                ");"
+                "out geom;"
             )
-            raise RuntimeError(
-                f"Overpass water-polygon lookup temporarily unavailable ({remaining:.0f}s)"
-            )
-
-        south, west, north, east = bounds
-        query = (
-            f"[out:json][timeout:{_OVERPASS_QUERY_TIMEOUT_S}];"
-            "("
-            f'way["natural"="water"]({south},{west},{north},{east});'
-            f'relation["natural"="water"]({south},{west},{north},{east});'
-            ");"
-            "out geom;"
-        )
-        # Overpass rejects requests with no/default User-Agent (406).
-        headers = {"User-Agent": "ride-optimizer (exploration water-tile lookup)"}
-        try:
-            response = requests.post(
-                _OVERPASS_URL, data={"data": query}, headers=headers,
-                timeout=_OVERPASS_REQUEST_TIMEOUT_S,
-            )
-            response.raise_for_status()
-            elements = response.json().get("elements", [])
-        except (requests.RequestException, ValueError, OSError) as exc:
-            with self._overpass_failure_lock:
-                self._overpass_failure_until[_OVERPASS_URL] = time.time() + _OVERPASS_NEGATIVE_CACHE_TTL_S
-            logger.warning(
-                "Overpass water-polygon query failed: %s — negative-caching endpoint for %ds",
-                exc, _OVERPASS_NEGATIVE_CACHE_TTL_S,
-            )
-            raise
-
-        # A successful call clears any earlier failure marker so the next
-        # request isn't held back by a now-stale negative cache entry.
-        with self._overpass_failure_lock:
-            self._overpass_failure_until.pop(_OVERPASS_URL, None)
-
-        polygons: List[List[Tuple[float, float]]] = []
-        for element in elements:
-            if element.get("type") == "way" and element.get("geometry"):
-                ring = [(pt["lat"], pt["lon"]) for pt in element["geometry"]]
-                if len(ring) >= 3:
-                    polygons.append(ring)
-            elif element.get("type") == "relation":
-                for member in element.get("members", []):
-                    if member.get("role") == "outer" and member.get("geometry"):
-                        ring = [(pt["lat"], pt["lon"]) for pt in member["geometry"]]
-                        if len(ring) >= 3:
-                            polygons.append(ring)
-
-        # Atomic write (temp file + os.replace, #562) — like the tile index
-        # and route cache already do — so a concurrent reader can never
-        # observe a truncated/partial JSON file mid-write.
-        tmp_path = cache_file.with_name(f"{cache_file.name}.tmp{os.getpid()}")
-        try:
-            with open(tmp_path, "w", encoding="utf-8") as f:
-                json.dump(polygons, f)
-            secure_chmod(tmp_path)
-            os.replace(tmp_path, cache_file)
-            secure_chmod(cache_file)
-            self._evict_old_water_polygon_caches()
-        except OSError as exc:
-            logger.warning("Failed to write water polygon cache: %s", exc)
+            # Overpass rejects requests with no/default User-Agent (406).
+            headers = {"User-Agent": "ride-optimizer (exploration water-tile lookup)"}
             try:
-                tmp_path.unlink()
-            except OSError:
-                pass
+                response = requests.post(
+                    _OVERPASS_URL, data={"data": query}, headers=headers,
+                    timeout=_OVERPASS_REQUEST_TIMEOUT_S,
+                )
+                response.raise_for_status()
+                elements = response.json().get("elements", [])
+            except (requests.RequestException, ValueError, OSError) as exc:
+                with self._overpass_failure_lock:
+                    self._overpass_failure_until[_OVERPASS_URL] = time.time() + _OVERPASS_NEGATIVE_CACHE_TTL_S
+                logger.warning(
+                    "Overpass water-polygon query failed: %s — negative-caching endpoint for %ds",
+                    exc, _OVERPASS_NEGATIVE_CACHE_TTL_S,
+                )
+                raise
 
-        return polygons
+            # A successful call clears any earlier failure marker so the next
+            # request isn't held back by a now-stale negative cache entry.
+            with self._overpass_failure_lock:
+                self._overpass_failure_until.pop(_OVERPASS_URL, None)
+
+            polygons: List[List[Tuple[float, float]]] = []
+            for element in elements:
+                if element.get("type") == "way" and element.get("geometry"):
+                    ring = [(pt["lat"], pt["lon"]) for pt in element["geometry"]]
+                    if len(ring) >= 3:
+                        polygons.append(ring)
+                elif element.get("type") == "relation":
+                    for member in element.get("members", []):
+                        if member.get("role") == "outer" and member.get("geometry"):
+                            ring = [(pt["lat"], pt["lon"]) for pt in member["geometry"]]
+                            if len(ring) >= 3:
+                                polygons.append(ring)
+
+            # Atomic write (temp file + os.replace, #562) — like the tile
+            # index and route cache already do — so a concurrent reader can
+            # never observe a truncated/partial JSON file mid-write.
+            tmp_path = cache_file.with_name(f"{cache_file.name}.tmp{os.getpid()}")
+            try:
+                with open(tmp_path, "w", encoding="utf-8") as f:
+                    json.dump(polygons, f)
+                secure_chmod(tmp_path)
+                os.replace(tmp_path, cache_file)
+                secure_chmod(cache_file)
+                self._evict_old_water_polygon_caches()
+            except OSError as exc:
+                logger.warning("Failed to write water polygon cache: %s", exc)
+                try:
+                    tmp_path.unlink()
+                except OSError:
+                    pass
+
+            return polygons
 
     @staticmethod
     def _point_in_polygon(lat: float, lon: float, polygon: List[Tuple[float, float]]) -> bool:
