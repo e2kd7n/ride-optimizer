@@ -153,6 +153,33 @@
                 </div>
             </div>
 
+            <!-- Long Ride Planner (#596): weather-scored recommendation for the week
+                 ahead, folded into the Dashboard rather than a standalone page (see
+                 issue's design note) — avoids reopening the mobile bottom-nav
+                 crowding #362 already fixed. Multi-day planning content, so it
+                 renders after the same-day commute decision row per the
+                 time-urgency ordering principle (Design Principles §2). -->
+            <div class="row mb-2">
+                <div class="col-12 mb-3">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title mb-3">
+                                <i class="bi bi-bicycle" aria-hidden="true"></i> This Week's Long Ride
+                            </h5>
+                            <div id="long-ride-recommendation">
+                                <div class="skeleton-recommendation-card" aria-busy="true" aria-label="Loading long ride recommendation">
+                                    <div class="skeleton-recommendation-header">
+                                        <div class="skeleton skeleton-recommendation-title"></div>
+                                        <div class="skeleton skeleton-recommendation-score"></div>
+                                    </div>
+                                    <div class="skeleton skeleton-card-line long"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Muted help row (#363: moved out of above-the-fold) -->
             <div class="help-row d-flex justify-content-center">
                 <button type="button" class="btn btn-sm btn-link text-muted"

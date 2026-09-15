@@ -224,6 +224,10 @@
         .commute-chevron { transition: transform 0.2s; display: inline-block; }
         [data-bs-target="#commute-detail"][aria-expanded="true"] .commute-chevron { transform: rotate(180deg); }
 
+        /* Long ride planner "more days" chevron rotation (#596) */
+        .long-ride-chevron { transition: transform 0.2s; display: inline-block; }
+        [data-bs-target="#long-ride-other-days"][aria-expanded="true"] .long-ride-chevron { transform: rotate(180deg); }
+
         .card {
             border-radius: 16px;
             box-shadow: 0 1px 2px rgba(0,0,0,0.08);
