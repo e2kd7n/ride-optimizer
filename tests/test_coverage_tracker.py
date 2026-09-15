@@ -16,6 +16,8 @@ from src.coverage_tracker import (
     lat_lon_to_tile,
     tile_to_bounds,
     _bbox_cache_key,
+    _snap_bbox_to_grid,
+    _WATER_POLYGON_GRID_DEGREES,
     _segment_tiles,
     _activity_tiles,
     _robust_tile_range,
@@ -1018,6 +1020,22 @@ class TestGetRoadlessTiles:
             result = tracker.get_roadless_tiles(self.BOUNDS, zoom=TILE_ZOOM)
         assert result["status"] == "error"
 
+    def test_nearby_viewport_reuses_cached_water_polygons(self, tracker):
+        # Two distinct-but-nearby bboxes, as explore.js would send for a
+        # small pan/zoom — both fall in the same grid cell, so this should
+        # be one Overpass call, not two (the bug this guards against: keying
+        # the cache on the exact viewport bbox made it an almost-always-miss,
+        # so every pan/zoom paid out a fresh Overpass round-trip).
+        south, west, north, east = self.BOUNDS
+        nudged = (south + 0.001, west + 0.001, north + 0.001, east + 0.001)
+        assert nudged != self.BOUNDS
+
+        with patch("requests.post", return_value=self._overpass_response([])) as mock_post:
+            tracker.get_roadless_tiles(self.BOUNDS, zoom=TILE_ZOOM)
+            tracker.get_roadless_tiles(nudged, zoom=TILE_ZOOM)
+
+        mock_post.assert_called_once()
+
 
 # ── get_roadless_tiles() bbox prefilter (#574) ─────────────────────
 
@@ -1157,6 +1175,30 @@ class TestBboxCacheKey:
         k1 = _bbox_cache_key((40.000001, -75.0, 41.0, -74.0))
         k2 = _bbox_cache_key((40.000002, -75.0, 41.0, -74.0))
         assert k1 == k2
+
+
+# ── water-polygon cache grid snapping ─────────────────────────────
+
+class TestSnapBboxToGrid:
+    def test_already_aligned_bbox_is_unchanged(self):
+        bounds = (40.0, -75.0, 41.0, -74.0)
+        assert _snap_bbox_to_grid(bounds, 0.5) == bounds
+
+    def test_unaligned_bbox_expands_outward(self):
+        bounds = (40.1, -74.9, 40.4, -74.6)
+        snapped = _snap_bbox_to_grid(bounds, 0.5)
+        south, west, north, east = snapped
+        # Contains the original bbox...
+        assert south <= bounds[0] and west <= bounds[1]
+        assert north >= bounds[2] and east >= bounds[3]
+        # ...and lands exactly on the grid.
+        for v in snapped:
+            assert math.isclose(v / 0.5, round(v / 0.5), abs_tol=1e-9)
+
+    def test_nearby_bboxes_snap_to_same_cell(self):
+        a = _snap_bbox_to_grid((40.10, -74.90, 40.40, -74.60), _WATER_POLYGON_GRID_DEGREES)
+        b = _snap_bbox_to_grid((40.15, -74.95, 40.45, -74.65), _WATER_POLYGON_GRID_DEGREES)
+        assert a == b
 
 
 # ── legacy coverage_tiles_*.json cleanup (#555) ────────────────────
