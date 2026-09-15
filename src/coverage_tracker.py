@@ -117,6 +117,35 @@ def _bbox_cache_key(bounds: Tuple[float, float, float, float]) -> str:
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
 
 
+# Grid size (degrees) that a water-polygon fetch's bounds get snapped to
+# before keying/querying its on-disk cache (see _snap_bbox_to_grid). #562
+# and #574 sped up what happens on a water-polygon cache miss (tighter
+# Overpass timeouts, a bbox-prefilter ahead of the ray-cast) but neither
+# touched _get_or_fetch_water_polygons's cache key itself, which is still
+# the exact, pixel-precise viewport bbox explore.js sends on every
+# pan/zoom — the same almost-always-miss pattern get_tile_coverage()'s
+# docstring describes, just in the one cache that pattern wasn't fixed in.
+# 0.5 is a bit larger than explore.js's COVERAGE_MAX_BBOX_DEGREES (0.45)
+# so a typical single-viewport request lands inside one grid cell.
+_WATER_POLYGON_GRID_DEGREES = 0.5
+
+
+def _snap_bbox_to_grid(
+    bounds: Tuple[float, float, float, float], grid_degrees: float
+) -> Tuple[float, float, float, float]:
+    """Expand `bounds` outward to the nearest enclosing multiple of
+    `grid_degrees`, so nearby requests (a pan/zoom that only shifts the
+    viewport slightly) resolve to the same snapped bbox and reuse the same
+    cache entry instead of each keying its own."""
+    south, west, north, east = bounds
+    return (
+        math.floor(south / grid_degrees) * grid_degrees,
+        math.floor(west / grid_degrees) * grid_degrees,
+        math.ceil(north / grid_degrees) * grid_degrees,
+        math.ceil(east / grid_degrees) * grid_degrees,
+    )
+
+
 # Tukey's-fences trimming for _robust_tile_range (#556): a single activity
 # geographically far from a rider's normal riding area (a trip, or a
 # corrupted/erroneous GPS point) otherwise balloons get_tile_coverage_all()'s
@@ -651,7 +680,13 @@ class CoverageTracker:
         the tuple type only the cold-fetch path produces. Pure-Python/
         `requests` only — no osmnx/shapely — so this works without a full
         bike-network graph fetch.
+
+        `bounds` is snapped outward to a fixed grid (_snap_bbox_to_grid)
+        before it's used as a cache key or an Overpass query bbox, so a
+        pan/zoom within the same area reuses one cached fetch instead of
+        each exact viewport paying out its own Overpass round-trip.
         """
+        bounds = _snap_bbox_to_grid(bounds, _WATER_POLYGON_GRID_DEGREES)
         cache_file = self.cache_dir / f"water_{_bbox_cache_key(bounds)}.json"
         ttl = int(self.config.get("exploration.water_polygon_cache_ttl_seconds", 0))
         if cache_file.exists():
