@@ -549,6 +549,20 @@ function bestCornerPoint(zone, zoom, fromLat, fromLon) {
 
 // ── Flood-fill zone detection ───────────────────────────────────
 
+// Caps how large a single contiguous unclaimed region is allowed to grow
+// before it's split into multiple zones. Without this, one big unbroken
+// swath of unridden tiles (common right after a fresh area opens up)
+// flood-fills into a single "zone" — but each zone only ever contributes
+// one waypoint (bestCornerPoint, which itself only scores ~4 tiles at the
+// chosen corner) to the route. The zone's full tile count still drives its
+// score, so an enormous zone out-competes everything else for a route slot
+// while the road route can only physically sweep a sliver of it, leaving
+// the rest of that same contiguous area — tiles just one or two off the
+// plotted path — unclaimed. Chunking a big region into capped-size zones
+// gives the insertion tour multiple independent waypoints spread across it
+// instead of collapsing it to one.
+const MAX_ZONE_TILES = 40;
+
 function floodFillZones(tiles) {
     const lookup = new Map();
     for (const t of tiles) lookup.set(t.key, t);
@@ -563,7 +577,7 @@ function floodFillZones(tiles) {
         const queue = [t];
         visited.add(t.key);
 
-        while (queue.length > 0) {
+        while (queue.length > 0 && zone.length < MAX_ZONE_TILES) {
             const curr = queue.shift();
             zone.push(curr);
 
@@ -574,6 +588,13 @@ function floodFillZones(tiles) {
                     queue.push(lookup.get(nk));
                 }
             }
+        }
+        // Tiles still queued when the cap hit belong to the same contiguous
+        // region but weren't consumed by this zone — release them so the
+        // outer loop starts fresh (still spatially adjacent) zones from them
+        // instead of the whole region collapsing into one oversized zone.
+        for (const leftover of queue) {
+            visited.delete(leftover.key);
         }
 
         const centroid = {
