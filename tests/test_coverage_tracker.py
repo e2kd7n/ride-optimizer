@@ -3,6 +3,7 @@
 import json
 import math
 import os
+import threading
 import time
 from pathlib import Path
 from unittest.mock import patch, MagicMock
@@ -1035,6 +1036,45 @@ class TestGetRoadlessTiles:
             tracker.get_roadless_tiles(nudged, zoom=TILE_ZOOM)
 
         mock_post.assert_called_once()
+
+    def test_concurrent_requests_for_same_bbox_share_one_overpass_call(self, tracker):
+        """explore.js "both" mode fires zoom=14 and zoom=17 roadless-tile
+        requests for the identical viewport bounds, from separate threads
+        (gthread workers) at effectively the same time. Without a per-key
+        lock, both would independently miss the cache and each fire their
+        own Overpass query; this asserts they instead share one."""
+        call_count = 0
+        both_started = threading.Barrier(2, timeout=5)
+
+        def slow_post(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            # Give the second thread a chance to reach the lock while the
+            # first is "mid-request" — proves the second waits for the
+            # first's result rather than firing its own concurrent query.
+            time.sleep(0.05)
+            return self._overpass_response([])
+
+        results = {}
+
+        def worker(name, zoom):
+            try:
+                both_started.wait()
+            except threading.BrokenBarrierError:
+                pass
+            results[name] = tracker.get_roadless_tiles(self.BOUNDS, zoom=zoom)
+
+        with patch("requests.post", side_effect=slow_post):
+            t14 = threading.Thread(target=worker, args=("zoom14", TILE_ZOOM))
+            t17 = threading.Thread(target=worker, args=("zoom17", SQUADRATINHO_ZOOM))
+            t14.start()
+            t17.start()
+            t14.join(timeout=5)
+            t17.join(timeout=5)
+
+        assert call_count == 1
+        assert results["zoom14"]["status"] == "success"
+        assert results["zoom17"]["status"] == "success"
 
 
 # ── get_roadless_tiles() bbox prefilter (#574) ─────────────────────
