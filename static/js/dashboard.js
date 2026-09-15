@@ -17,7 +17,8 @@ async function loadDashboard() {
         loadWorkoutStrip(),
         loadRecommendation(),
         loadRouteStatus(),
-        loadHourlyForecast()
+        loadHourlyForecast(),
+        loadLongRideRecommendation()
     ]);
 }
 
@@ -897,6 +898,121 @@ async function loadRouteStatus() {
     } catch (error) {
         console.error('Failed to load route status:', error);
         window.renderErrorStateInto(container, 'Route status unavailable.', { small: true, retry: loadRouteStatus });
+    }
+}
+
+/**
+ * Weather-fit badge class for a long ride day, sharing the same three
+ * semantic tiers (success/warning/danger) the rest of the dashboard uses —
+ * mirrors PlannerService's own 'favorable'/'neutral'/'unfavorable' buckets.
+ */
+function longRideFitClass(favorability) {
+    return favorability === 'favorable' ? 'bg-success-subtle text-success'
+         : favorability === 'unfavorable' ? 'bg-danger-subtle text-danger'
+         : 'bg-warning-subtle text-dark';
+}
+
+/** Wind speed in the user's preferred unit, matching window.formatDistance's convention. */
+function formatWindKph(kph) {
+    if (kph == null) return null;
+    return window.getUnitSystem() === 'imperial'
+        ? `${Math.round(window.kmToMiles(kph))} mph`
+        : `${Math.round(kph)} km/h`;
+}
+
+/**
+ * Render one day of the long ride planner — the best-scoring ride for that
+ * date, its weather fit, and (per Design Principles §2) wind/precipitation
+ * alongside temperature rather than temperature alone, shown even at zero
+ * since this is a single-instance card per day, not a repeated hourly cell.
+ */
+function renderLongRideDay(dayRec, isPrimary) {
+    const esc = window.escapeHtml;
+    const ride = dayRec.best_ride;
+    const weather = ride.weather || {};
+    const favorability = weather.cycling_favorability || 'neutral';
+    const fitLabel = favorability.charAt(0).toUpperCase() + favorability.slice(1);
+    const dayLabel = new Date(dayRec.date + 'T00:00:00')
+        .toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+
+    const windStr = formatWindKph(weather.wind_speed_kph);
+    const precipMm = weather.precipitation_mm;
+    const precipStr = precipMm != null
+        ? (precipMm > 0 ? `${precipMm.toFixed(1)} mm rain` : 'No rain expected')
+        : null;
+
+    return `
+        <div class="${isPrimary ? '' : 'secondary-commute-card border rounded p-2 mt-2'}">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-1">
+                <span class="${isPrimary ? 'hero-route-name' : 'small fw-semibold'}">
+                    <i class="bi bi-calendar-check me-1"></i>${esc(dayLabel)}
+                </span>
+                <span class="badge ${longRideFitClass(favorability)}">${fitLabel}</span>
+            </div>
+            <div class="${isPrimary ? '' : 'small'} mt-1">${esc(ride.name || 'Ride')}</div>
+            <div class="hero-meta small text-muted mt-1">
+                <span><i class="bi bi-signpost"></i> ${window.formatDistance(ride.distance)}</span>
+                <span class="ms-3"><i class="bi bi-clock"></i> ${window.formatDuration(ride.duration * 60)}</span>
+                <span class="ms-3"><i class="bi bi-graph-up"></i> ${window.formatElevation(ride.elevation)}</span>
+            </div>
+            ${weather.temperature_c != null ? `
+            <div class="small text-muted mt-1">
+                <i class="bi bi-cloud-sun me-1"></i>${window.formatTemperature(weather.temperature_c)}
+                ${windStr ? ` &middot; <i class="bi bi-wind ms-1 me-1"></i>${windStr}` : ''}
+                ${precipStr ? ` &middot; <i class="bi bi-cloud-rain ms-1 me-1"></i>${esc(precipStr)}` : ''}
+            </div>` : ''}
+        </div>`;
+}
+
+/**
+ * Load and display the week-ahead long ride recommendation (#596) — the
+ * PlannerService.get_recommendations() surface that had a backend and API
+ * client but no UI since its old frontend was deleted as dead code in
+ * commit 250c9aa (#282's Smart Static cleanup). Multi-day planning content,
+ * so this loads alongside the other dashboard cards but renders below the
+ * same-day commute hero per the time-urgency ordering principle.
+ */
+async function loadLongRideRecommendation() {
+    const container = document.getElementById('long-ride-recommendation');
+    if (!container) return;
+
+    try {
+        const data = await window.apiClient.getLongRideRecommendations({ forecastDays: 7 });
+
+        const days = (data.recommendations || []).filter(d => d.best_ride);
+        if (data.status === 'error' || days.length === 0) {
+            container.innerHTML = window.renderEmptyState(
+                data.message || 'No long rides found in your history yet.',
+                'Rides between 30-100 miles show up here once logged.',
+                'bi-bicycle'
+            );
+            return;
+        }
+
+        const bestDayRec = days.find(d => d.date === data.best_day) || days[0];
+        const otherDays = days.filter(d => d !== bestDayRec);
+
+        // Teaser-before-collapse per Design Principles §2 — the toggle always
+        // carries a count, never a bare chevron (mirrors commute-compare-toggle
+        // and the route-status-summary-toggle above).
+        container.innerHTML = `
+            ${renderLongRideDay(bestDayRec, true)}
+            ${otherDays.length ? `
+                <div class="mt-2">
+                    <button type="button" class="btn btn-outline-secondary btn-sm long-ride-toggle"
+                            data-bs-toggle="collapse" data-bs-target="#long-ride-other-days"
+                            aria-expanded="false" aria-controls="long-ride-other-days">
+                        <i class="bi bi-calendar-week"></i> ${otherDays.length} more day${otherDays.length === 1 ? '' : 's'} this week
+                        <i class="bi bi-chevron-down ms-1 long-ride-chevron"></i>
+                    </button>
+                </div>
+                <div class="collapse mt-2" id="long-ride-other-days">
+                    ${otherDays.map(d => renderLongRideDay(d, false)).join('')}
+                </div>
+            ` : ''}`;
+    } catch (error) {
+        console.error('Failed to load long ride recommendation:', error);
+        window.renderErrorStateInto(container, 'Long ride recommendation unavailable.', { retry: loadLongRideRecommendation });
     }
 }
 
