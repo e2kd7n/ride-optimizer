@@ -1,7 +1,7 @@
 # Design Principles & Guidelines
 
-**Version:** 2.4
-**Last Updated:** 2026-09-03
+**Version:** 2.5
+**Last Updated:** 2026-09-14
 **Status:** Active
 
 ---
@@ -159,12 +159,13 @@ The app's visual identity is **Fair Weather** — built around the one decision 
    - Unfavorable (Headwind): Danger-tinted background, danger border
    - Neutral: Line-colored background, ink-soft border
 
-3. **Map Routes:** Functional categorical palette for showing multiple simultaneous route overlays — kept constant across Day/Night since it's a data-encoding palette, not a brand one:
-   - Route 1 (Primary): `#28a745` (green)
-   - Route 2: `#dc3545` (red)
-   - Route 3: `#007bff` (blue)
-   - Route 4: `#ffc107` (yellow)
+3. **Map Routes:** Functional categorical palette for showing multiple simultaneous route overlays (Explore's up-to-4 compass-direction routes) — kept constant across Day/Night since it's a data-encoding palette, not a brand one. Keyed by compass direction (not an arbitrary "Route 1/2/3/4" ordinal) so the same direction always reads as the same color across a session, with a lighter tonal variant per direction for the Phase-1 dashed straight-line preview and the full-saturation `base` for the Phase-2 road-routed line (`ROUTE_PALETTE`, `static/js/explore.js`):
+   - NE: `#0d6efd` base / `#7ab5fe` light (blue)
+   - SE: `#e8690e` base / `#f5ac71` light (orange)
+   - SW: `#6f42c1` base / `#b094dd` light (purple)
+   - NW: `#0f9e7a` base / `#6fd4bb` light (teal)
    - Unselected: `#808080` at 40% opacity
+   - As of v2.5 (#569): reconciled with what `static/js/explore.js` actually ships — the previously documented generic Bootstrap `#28a745`/`#dc3545`/`#007bff`/`#ffc107` set was never implemented and, worse, reused this same document's own success-green/danger-red hues (§4 above) for what is here an arbitrary per-direction identity color, risking a route reading as "good"/"bad" rather than merely "northeast." The shipped palette is also the more deliberate, more recent design (#409/#489): it's keyed by compass direction rather than ordinal position, and pairs a light/base tone per direction for the two-phase (straight-line preview → road-routed) rendering the ordinal palette had no answer for.
 
 4. **Accessibility:**
    - All color combinations must meet WCAG AA contrast ratio (4.5:1 for text)
@@ -462,6 +463,7 @@ Before merging UI/UX changes:
 
 ## Version History
 
+- **v2.5** (2026-09-14): §4 Map Routes categorical palette reconciled with what `static/js/explore.js`'s `ROUTE_PALETTE` actually ships (#569) — the doc's generic Bootstrap green/red/blue/yellow set was undocumented drift that also collided with this doc's own success/danger semantic colors; replaced with the shipped compass-direction-keyed blue/orange/purple/teal light+base pairs. See §4 for full reasoning.
 - **v2.4** (2026-09-03): Doc-drift cleanup (#547). §10 Buttons/Cards bullet lists no longer duplicate hardcoded values (`#667eea`, `#dc3545`, `10px` radius, mismatched shadow) that had drifted from the Common Patterns Library CSS — they now point at the CSS instead. Added "Resolved" annotations to the v0.17.0 field notes for PLACE-DASH-2 (Dashboard hero row, `templates/index.html:92,131`) and the v2.3 Route Detail column-ratio correction (`static/js/route-detail.js:474,534`), both confirmed fixed in code.
 - **v2.3** (2026-07-05): Corrected an internal contradiction in §3 — the v2.2 field note called Route Detail's `col-lg-5`/`col-lg-7` split "the reference implementation" for the map+controls side-by-side rule, but the v0.17.0 field note directly above it (finding PLACE-DETAIL-2) already flagged that same split as violating the column-ratio rule's `col-lg-6` minimum. Route Detail remains the reference example for side-by-side *placement* only; the ratio itself is a known, uncorrected deviation.
 - **v2.2** (2026-07-05): Fair Weather brand identity adopted — new Brand Identity section (mark, wordmark, type, tagline); Primary/Semantic Colors in §4 replaced with Day/Night cobalt/coral tokens (full spec: [`docs/designs/FAIR_WEATHER_BRAND_BOOK.md`](../../docs/designs/FAIR_WEATHER_BRAND_BOOK.md)); §2 new guideline that weather cards show wind and precipitation alongside temperature whenever meaningful; §3 new guideline that map controls/lists sit beside the map on desktop (`lg`+), not stacked above or below it, formalizing prior ad hoc recommendations in #365 and #367; Common Patterns Library CSS snippets updated to the new tokens and 999px/16px shape language.
