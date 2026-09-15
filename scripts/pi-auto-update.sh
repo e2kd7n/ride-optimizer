@@ -54,6 +54,36 @@ podman container prune -f 2>/dev/null || true
 podman image prune -f 2>/dev/null || true
 stop_spinner ok
 
+# ── Sync config ──────────────────────────────────────────────────────────────
+# config/ (and this whole checkout) is bind-mounted, not baked into the image
+# (docker-compose.yml) — pulling a new image alone leaves config.yaml frozen at
+# whatever it was when this checkout was last updated, so any config-touching
+# fix silently never takes effect on the Pi until someone happens to git pull
+# by hand (#596). Fast-forward only: never clobber a diverged checkout.
+section "Syncing Config" "🔄"
+
+if git fetch origin main --quiet 2>/dev/null; then
+    if [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ]; then
+        echo -e "  ${GREEN}✓${NC}  Checkout already up to date"
+    elif git merge-base --is-ancestor HEAD origin/main 2>/dev/null; then
+        # config/ is owned by the rootless-Podman subuid, not this user —
+        # open it up long enough for git to write; the chown step below
+        # (after podman-compose down) restores the subuid ownership, and
+        # this closes the world-write bit back up right after the merge.
+        sudo chmod -R o+w config 2>/dev/null || true
+        if git merge --ff-only origin/main &>/dev/null; then
+            echo -e "  ${GREEN}✓${NC}  Checkout fast-forwarded to $(git rev-parse --short HEAD)"
+        else
+            echo -e "  ${YELLOW}⚠️  Fast-forward failed — config may be stale. Investigate manually.${NC}"
+        fi
+        sudo chmod -R o-w config 2>/dev/null || true
+    else
+        echo -e "  ${YELLOW}⚠️  Local checkout has diverged from origin/main — not auto-updating. Investigate manually.${NC}"
+    fi
+else
+    echo -e "  ${YELLOW}⚠️  git fetch failed — skipping checkout sync, config may be stale${NC}"
+fi
+
 # ── Pull image ───────────────────────────────────────────────────────────────
 
 section "Pulling Image" "📥"
