@@ -244,6 +244,22 @@ async function resolveTargetDistanceKm() {
     return parseFloat(document.getElementById('distance-slider').value);
 }
 
+/**
+ * Phrases a distanceKm target for a user-facing message, crediting the
+ * duration-mode conversion (#490) when it's active — a rider who picked a
+ * TIME target should never see a message talk about "your distance target"
+ * as if they'd typed a km/mile number themselves; it's a budget the app
+ * derived from their average speed, not something they set directly.
+ */
+function targetDistancePhrase(targetKm) {
+    const km = window.formatDistance ? window.formatDistance(targetKm, 1) : `${targetKm.toFixed(1)} km`;
+    if (document.getElementById('target-type-select').value === 'duration') {
+        const minutes = document.getElementById('duration-slider').value;
+        return `the ${km} needed for your ${minutes}-minute target`;
+    }
+    return `your ${km} target`;
+}
+
 // ── Map setup ───────────────────────────────────────────────────
 
 function initMap() {
@@ -1904,7 +1920,7 @@ async function refineRoute(baseWaypoints, targetKm, surfacePref, candidateList, 
     // stuck results are still returned above (getting a longer ride than
     // asked isn't nearly as broken as a near-zero-length one).
     if (!skipExpansion && result && result.distance_km / targetKm < 1 - TOLERANCE) {
-        return { route: null, message: 'Route came back far short of the target distance' };
+        return { route: null, message: `Route came back far short of ${targetDistancePhrase(targetKm)}` };
     }
 
     return { route: result, message: null };
@@ -2123,9 +2139,8 @@ async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
         // #540: when skipExpansion fired, this result is the efficient direct
         // route, not a distance-matched variant — flag the mismatch instead
         // of silently showing a distance that doesn't match the target.
-        const targetLabel = window.formatDistance ? window.formatDistance(targetDistanceKm, 1) : `${targetDistanceKm} km`;
         const directBadge = skipExpansion
-            ? `<span class="badge bg-secondary-subtle text-secondary-emphasis" title="Origin and destination are already ${v.distLabel} apart by road — showing the efficient route instead of padding to your ${targetLabel} target.">Direct route</span>`
+            ? `<span class="badge bg-secondary-subtle text-secondary-emphasis" title="Origin and destination are already ${v.distLabel} apart by road — showing the efficient route instead of padding to ${targetDistancePhrase(targetDistanceKm)}.">Direct route</span>`
             : '';
         const dataKey = `${direction}-${suffix}`;
         return `
