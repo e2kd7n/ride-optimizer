@@ -19,33 +19,40 @@ from typing import Any, Dict, List, Optional
 
 def sanitize_coordinates(text: str) -> str:
     """
-    Mask GPS coordinates to 2 decimal places (~1.1km precision).
-    
+    Mask a GPS coordinate pair to 2 decimal places (~1.1km precision).
+
     Protects exact location while preserving general area for debugging.
-    
+
     Examples:
         "41.8781136, -87.6297982" -> "41.87xx, -87.62xx"
         "Location: (41.878, -87.630)" -> "Location: (41.87xx, -87.63xx)"
-    
+        "lat: 41.878, lon: -87.630" -> "lat: 41.87xx, lon: -87.63xx"
+
     Args:
         text: Text potentially containing coordinates
-        
+
     Returns:
-        Text with coordinates masked
+        Text with coordinate pairs masked
     """
-    # Match various coordinate formats:
-    # - "41.8781136, -87.6297982"
-    # - "(41.878, -87.630)"
-    # - "lat: 41.878, lon: -87.630"
-    
-    # Pattern for decimal coordinates with 2+ decimal places
-    pattern = r'(-?\d+\.\d{2})\d+'
-    
-    def mask_coord(match):
-        """Replace digits after 2nd decimal place with 'xx'"""
-        return match.group(1) + 'xx'
-    
-    return re.sub(pattern, mask_coord, text)
+    # Requires two decimal numbers (2+ fractional digits) appearing
+    # together as a pair — plain comma-separated, in parentheses, or with
+    # a lat/lon label on the second number — not just any lone number that
+    # happens to have 3+ decimal digits. An earlier version matched any
+    # such number on its own, which meant ordinary numeric log output with
+    # no coordinate involved (e.g. a duration like "served from index in
+    # 0.573s") got mangled into "0.57xxs".
+    pattern = re.compile(
+        r'(-?\d+\.\d{2})\d+'
+        r'(,\s*(?:(?:lat|lon|latitude|longitude)\s*[:=]?\s*)?)'
+        r'(-?\d+\.\d{2})\d+',
+        re.IGNORECASE,
+    )
+
+    def mask_pair(match):
+        """Replace digits after each number's 2nd decimal place with 'xx'"""
+        return f"{match.group(1)}xx{match.group(2)}{match.group(3)}xx"
+
+    return pattern.sub(mask_pair, text)
 
 
 def sanitize_address(text: str) -> str:

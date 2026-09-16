@@ -60,6 +60,23 @@ class TestCoordinateSanitization:
         assert "41.90xx" in result
         assert "-87.65xx" in result
 
+    def test_lone_duration_number_is_not_mangled(self):
+        """Regression: a lone 3+-decimal number with no paired second
+        number (e.g. a "%.3fs" duration) is not a coordinate and must be
+        left alone. The old pattern matched any such number on its own —
+        confirmed in production logs, where
+        "served from index in 0.573s" was rendering as "0.57xxs"."""
+        text = "get_tile_coverage(zoom=17) served from index in 3.634s (2898 tiles)"
+        result = sanitize_coordinates(text)
+        assert result == text
+
+    def test_two_unrelated_nearby_decimals_are_not_paired(self):
+        """Two unrelated decimal metrics separated by a comma and a plain
+        label (not lat/lon) must not be treated as a coordinate pair."""
+        text = "distance: 15.523, elevation: 245.891"
+        result = sanitize_coordinates(text)
+        assert result == text
+
 
 class TestAddressSanitization:
     """Test street address sanitization."""
