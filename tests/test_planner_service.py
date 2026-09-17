@@ -516,33 +516,55 @@ class TestWeatherIntegration:
     """Test weather-related functionality."""
     
     def test_get_weather_for_ride(self, app, initialized_service, mock_long_ride):
-        """Test getting weather for a ride."""
+        """Test getting weather for a ride.
+
+        Patches weather_service.get_daily_forecast (not weather_fetcher) —
+        that's the actual call path since #598 follow-up; the enriched
+        shape (temperature_c/comfort_score/etc. already present) is what
+        the real WeatherService.get_daily_forecast() returns. The
+        key-normalization logic itself (temp_max_c -> temperature_c) is
+        covered directly in test_weather_service.py."""
         mock_forecast = [{
             'date': str(date.today()),
-            'temp_max_c': 22.0,
-            'temp_min_c': 15.0,
-            'precipitation_sum_mm': 0.5,
-            'precipitation_prob_max': 10,
-            'wind_speed_max_kph': 15.0,
-            'wind_direction_dominant_deg': 180,
-            'temperature': 18.5,
-            'conditions': 'Clear',
-            'wind_speed': 15.0,
-            'wind_direction': 180,
-            'precipitation': 0.5,
+            'temp_max_c': 22.0, 'temp_min_c': 15.0,
+            'precipitation_sum_mm': 0.5, 'precipitation_prob_max': 10,
+            'wind_speed_max_kph': 15.0, 'wind_direction_dominant_deg': 180,
+            'temperature_c': 22.0, 'wind_speed_kph': 15.0, 'precipitation_mm': 0.5,
+            'comfort_score': 1.0, 'cycling_favorability': 'favorable',
         }]
-        with patch.object(initialized_service.weather_fetcher, 'get_daily_forecast', return_value=mock_forecast):
+        with patch.object(initialized_service.weather_service, 'get_daily_forecast', return_value=mock_forecast):
             # Need Flask app context for WeatherSnapshot
             with app.app_context():
                 target_date = date.today()
                 weather = initialized_service._get_weather_for_ride(mock_long_ride, target_date, {})
 
                 assert weather is not None
-                assert 'temperature_c' in weather
-                assert 'conditions' in weather
-                assert 'wind_speed_kph' in weather
-                assert 'wind_direction_deg' in weather
-                assert 'precipitation_mm' in weather
+                assert weather['temperature_c'] == 22.0
+                assert weather['wind_speed_kph'] == 15.0
+                assert weather['precipitation_mm'] == 0.5
+                assert weather['comfort_score'] == 1.0
+                assert weather['cycling_favorability'] == 'favorable'
+
+    def test_get_weather_for_ride_scores_bad_weather_as_unfavorable(self, app, initialized_service, mock_long_ride):
+        """Regression: a hot, windy, rainy day must NOT come back as
+        'favorable' — the bug this test guards against silently defaulted
+        every ride's weather to a fixed comfort_score of 1.0 regardless of
+        actual forecast, because of a key-name mismatch."""
+        mock_forecast = [{
+            'date': str(date.today()),
+            'temp_max_c': 38.0, 'temp_min_c': 28.0,
+            'precipitation_sum_mm': 12.0, 'precipitation_prob_max': 90,
+            'wind_speed_max_kph': 45.0, 'wind_direction_dominant_deg': 180,
+            'temperature_c': 38.0, 'wind_speed_kph': 45.0, 'precipitation_mm': 12.0,
+            'comfort_score': 0.0, 'cycling_favorability': 'unfavorable',
+        }]
+        with patch.object(initialized_service.weather_service, 'get_daily_forecast', return_value=mock_forecast):
+            with app.app_context():
+                target_date = date.today()
+                weather = initialized_service._get_weather_for_ride(mock_long_ride, target_date, {})
+
+                assert weather['cycling_favorability'] == 'unfavorable'
+                assert weather['comfort_score'] < 0.4
     
     def test_calculate_weather_score(self, initialized_service):
         """Test weather score calculation."""
@@ -595,8 +617,12 @@ class TestWeatherCacheMemoization:
             'temp_max_c': 22.0, 'temp_min_c': 15.0,
             'precipitation_sum_mm': 0.0, 'precipitation_prob_max': 10,
             'wind_speed_max_kph': 15.0, 'wind_direction_dominant_deg': 180,
+            'temperature_c': 22.0, 'wind_speed_kph': 15.0, 'precipitation_mm': 0.0,
+            'comfort_score': 1.0, 'cycling_favorability': 'favorable',
         }]
-        with patch.object(planner_service.weather_fetcher, 'get_daily_forecast',
+        # weather_service.get_daily_forecast (not the raw weather_fetcher) is
+        # the actual call path — see PlannerService._get_weather_for_ride.
+        with patch.object(planner_service.weather_service, 'get_daily_forecast',
                            return_value=mock_forecast) as mock_fetch:
             scored = planner_service._score_rides_for_day(
                 [mock_hilly_ride, mock_flat_ride], target_date, None, weather_cache,
@@ -620,12 +646,16 @@ class TestWeatherCacheMemoization:
         mock_forecast = [
             {'date': str(today), 'temp_max_c': 22.0, 'temp_min_c': 15.0,
              'precipitation_sum_mm': 0.0, 'precipitation_prob_max': 10,
-             'wind_speed_max_kph': 15.0, 'wind_direction_dominant_deg': 180},
+             'wind_speed_max_kph': 15.0, 'wind_direction_dominant_deg': 180,
+             'temperature_c': 22.0, 'wind_speed_kph': 15.0, 'precipitation_mm': 0.0,
+             'comfort_score': 1.0, 'cycling_favorability': 'favorable'},
             {'date': str(today + timedelta(days=1)), 'temp_max_c': 20.0, 'temp_min_c': 12.0,
              'precipitation_sum_mm': 0.0, 'precipitation_prob_max': 5,
-             'wind_speed_max_kph': 10.0, 'wind_direction_dominant_deg': 90},
+             'wind_speed_max_kph': 10.0, 'wind_direction_dominant_deg': 90,
+             'temperature_c': 20.0, 'wind_speed_kph': 10.0, 'precipitation_mm': 0.0,
+             'comfort_score': 1.0, 'cycling_favorability': 'favorable'},
         ]
-        with patch.object(planner_service.weather_fetcher, 'get_daily_forecast',
+        with patch.object(planner_service.weather_service, 'get_daily_forecast',
                            return_value=mock_forecast) as mock_fetch:
             planner_service._score_rides_for_day(
                 [mock_hilly_ride, mock_flat_ride], today, None, weather_cache,
@@ -647,9 +677,11 @@ class TestWeatherCacheMemoization:
             'date': str(target_date), 'temp_max_c': 22.0, 'temp_min_c': 15.0,
             'precipitation_sum_mm': 0.0, 'precipitation_prob_max': 10,
             'wind_speed_max_kph': 15.0, 'wind_direction_dominant_deg': 180,
+            'temperature_c': 22.0, 'wind_speed_kph': 15.0, 'precipitation_mm': 0.0,
+            'comfort_score': 1.0, 'cycling_favorability': 'favorable',
         }]
         with app.app_context():
-            with patch.object(planner_service.weather_fetcher, 'get_daily_forecast',
+            with patch.object(planner_service.weather_service, 'get_daily_forecast',
                                return_value=mock_forecast) as mock_fetch:
                 planner_service._get_weather_for_ride(mock_hilly_ride, target_date, {})
                 planner_service._get_weather_for_ride(mock_hilly_ride, target_date, {})
@@ -666,8 +698,10 @@ class TestWeatherCacheMemoization:
             'date': str(date.today()), 'temp_max_c': 22.0, 'temp_min_c': 15.0,
             'precipitation_sum_mm': 0.0, 'precipitation_prob_max': 10,
             'wind_speed_max_kph': 15.0, 'wind_direction_dominant_deg': 180,
+            'temperature_c': 22.0, 'wind_speed_kph': 15.0, 'precipitation_mm': 0.0,
+            'comfort_score': 1.0, 'cycling_favorability': 'favorable',
         }] * 7
-        with patch.object(initialized_service.weather_fetcher, 'get_daily_forecast',
+        with patch.object(initialized_service.weather_service, 'get_daily_forecast',
                            return_value=mock_forecast):
             first = initialized_service.get_recommendations(forecast_days=3)
             second = initialized_service.get_recommendations(forecast_days=3)
