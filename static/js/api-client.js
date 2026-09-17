@@ -145,6 +145,20 @@ class APIClient {
                     status: error.status
                 });
                 
+                // A CSRF failure is very likely a stale/missing session token
+                // (e.g. the initial /api/csrf-token fetch got served from
+                // browser cache instead of hitting the server — see
+                // core_bp.py's Cache-Control: no-store) rather than a real
+                // client error. Refresh the token and retry once before
+                // giving up, instead of surfacing a dead-end "Invalid
+                // request" to the user for something a silent retry fixes.
+                if (error.status === 400 && isMutation && attempt === 0 && /csrf/i.test(error.message)) {
+                    console.warn('CSRF token rejected — refreshing and retrying once');
+                    this._csrfReady = this._fetchCsrfToken();
+                    await this._csrfReady;
+                    continue;
+                }
+
                 // Don't retry on client errors (4xx) except 408 (timeout) and 429 (rate limit)
                 if (error.status && error.status >= 400 && error.status < 500) {
                     if (error.status !== 408 && error.status !== 429) {
