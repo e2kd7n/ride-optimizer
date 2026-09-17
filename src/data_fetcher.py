@@ -19,7 +19,7 @@ from stravalib.client import Client
 import polyline
 
 from src.secure_logger import SecureLogger
-from src.json_storage import secure_chmod
+from src.json_storage import JSONStorage, secure_chmod
 
 logger = SecureLogger(__name__)
 
@@ -297,7 +297,31 @@ class StravaDataFetcher:
             logger.info("Using TEST cache: data/cache/activities_test.json")
         else:
             self.cache_path = Path("data/cache/activities.json")
-        
+
+        # Cross-thread/cross-process locked, atomic access to self.cache_path
+        # (#598 follow-up). cache_activities()/backfill_gear_ids() both used
+        # to do an unlocked read-modify-write with a plain open()+json.dump()
+        # write — a Garmin sync (app/api/integrations_bp.py) and a Strava
+        # fetch/backfill landing in the same window could each read the same
+        # pre-write state and the second write would silently discard the
+        # first's new activities; a reader could also observe a torn/partial
+        # file mid-write. JSONStorage.update() holds one exclusive lock
+        # across the whole read-modify-write and writes via temp-file+rename.
+        # _storage/_cache_filename are properties (below), not attributes
+        # set here, so reassigning self.cache_path after construction (as
+        # the test suite's fixtures do, pointing it at a tmp_path) keeps
+        # working — nothing would notice a stale attribute captured at
+        # __init__ time.
+        self.cache_path.parent.mkdir(parents=True, exist_ok=True)
+
+    @property
+    def _storage(self) -> JSONStorage:
+        return JSONStorage(data_dir=str(self.cache_path.parent))
+
+    @property
+    def _cache_filename(self) -> str:
+        return self.cache_path.name
+
     def fetch_activities(self, limit: Optional[int] = None,
                         after: Optional[datetime] = None,
                         before: Optional[datetime] = None,
@@ -498,8 +522,6 @@ class StravaDataFetcher:
                 'previous_total': int
             }
         """
-        self.cache_path.parent.mkdir(parents=True, exist_ok=True)
-        
         stats = {
             'new': 0,
             'updated': 0,
@@ -507,92 +529,95 @@ class StravaDataFetcher:
             'previous_total': 0,
             'cross_source_duplicates': 0,
         }
-        
-        if merge and self.cache_path.exists():
-            # Load existing cache
-            try:
-                existing_activities = self.load_cached_activities()
-                stats['previous_total'] = len(existing_activities)
-                logger.info(f"Loaded {len(existing_activities)} existing activities from cache")
-                
-                # Create a dict of existing activities by ID for fast lookup
-                existing_by_id = {act.id: act for act in existing_activities}
-                
-                # Add new activities, replacing any duplicates. A cross-source
-                # duplicate (same physical ride ingested from a different
-                # source, e.g. a Garmin device that also auto-uploads to
-                # Strava) never shares an ID with its counterpart, so it
-                # always looks "new" by ID alone — catch it via a fuzzy
-                # time/distance/moving-time match before adding it (#557).
-                for act in activities:
-                    if act.id in existing_by_id:
-                        stats['updated'] += 1
+
+        def _mutator(current: Optional[dict]) -> dict:
+            # Runs inside JSONStorage's exclusive lock, against whatever is
+            # actually on disk *right now* — not a snapshot read before the
+            # lock was acquired — so a concurrent writer's changes (e.g. a
+            # Garmin sync merging in new activities while this Strava fetch
+            # was in flight) are merged against, not silently clobbered.
+            if merge and current:
+                try:
+                    existing_activities = [Activity.from_dict(a) for a in current.get('activities', [])]
+                    stats['previous_total'] = len(existing_activities)
+                    logger.info(f"Loaded {len(existing_activities)} existing activities from cache")
+
+                    existing_by_id = {act.id: act for act in existing_activities}
+
+                    # Add new activities, replacing any duplicates. A cross-source
+                    # duplicate (same physical ride ingested from a different
+                    # source, e.g. a Garmin device that also auto-uploads to
+                    # Strava) never shares an ID with its counterpart, so it
+                    # always looks "new" by ID alone — catch it via a fuzzy
+                    # time/distance/moving-time match before adding it (#557).
+                    for act in activities:
+                        if act.id in existing_by_id:
+                            stats['updated'] += 1
+                            existing_by_id[act.id] = act
+                            continue
+
+                        duplicate_of = find_cross_source_duplicate(act, existing_by_id)
+                        if duplicate_of is not None:
+                            stats['cross_source_duplicates'] += 1
+                            logger.info(
+                                f"Skipping activity id={act.id} source={act.source}: matches "
+                                f"existing id={duplicate_of.id} source={duplicate_of.source} "
+                                "(same ride, different source)"
+                            )
+                            continue
+
+                        stats['new'] += 1
                         existing_by_id[act.id] = act
-                        continue
 
-                    duplicate_of = find_cross_source_duplicate(act, existing_by_id)
-                    if duplicate_of is not None:
-                        stats['cross_source_duplicates'] += 1
-                        logger.info(
-                            f"Skipping activity id={act.id} source={act.source}: matches "
-                            f"existing id={duplicate_of.id} source={duplicate_of.source} "
-                            "(same ride, different source)"
-                        )
-                        continue
+                    merged_activities = list(existing_by_id.values())
+                    merged_activities.sort(key=lambda x: x.start_date or "", reverse=True)
 
-                    stats['new'] += 1
-                    existing_by_id[act.id] = act
-                
-                # Convert back to list and sort by date (newest first)
-                merged_activities = list(existing_by_id.values())
-                merged_activities.sort(key=lambda x: x.start_date or "", reverse=True)
-                
-                stats['total'] = len(merged_activities)
-                
-                print("="*70)
-                print("💾 CACHE UPDATE SUMMARY")
-                print("="*70)
-                print(f"Previous cache size: {stats['previous_total']} activities")
-                print(f"New activities added: {stats['new']}")
-                print(f"Existing activities updated: {stats['updated']}")
-                if stats['cross_source_duplicates']:
-                    print(f"Cross-source duplicates skipped: {stats['cross_source_duplicates']}")
-                print(f"Total cache size: {stats['total']} activities")
-                print(f"Net change: +{stats['total'] - stats['previous_total']} activities")
-                print("="*70 + "\n")
+                    stats['total'] = len(merged_activities)
 
-                logger.info(f"Merged cache: {stats['new']} new, {stats['updated']} updated, "
-                            f"{stats['cross_source_duplicates']} cross-source duplicates skipped, "
-                            f"{stats['total']} total")
-                activities = merged_activities
-                
-            except Exception as e:
-                logger.warning(f"Failed to merge with existing cache: {e}. Replacing cache.")
+                    print("="*70)
+                    print("💾 CACHE UPDATE SUMMARY")
+                    print("="*70)
+                    print(f"Previous cache size: {stats['previous_total']} activities")
+                    print(f"New activities added: {stats['new']}")
+                    print(f"Existing activities updated: {stats['updated']}")
+                    if stats['cross_source_duplicates']:
+                        print(f"Cross-source duplicates skipped: {stats['cross_source_duplicates']}")
+                    print(f"Total cache size: {stats['total']} activities")
+                    print(f"Net change: +{stats['total'] - stats['previous_total']} activities")
+                    print("="*70 + "\n")
+
+                    logger.info(f"Merged cache: {stats['new']} new, {stats['updated']} updated, "
+                                f"{stats['cross_source_duplicates']} cross-source duplicates skipped, "
+                                f"{stats['total']} total")
+                    final_activities = merged_activities
+
+                except Exception as e:
+                    logger.warning(f"Failed to merge with existing cache: {e}. Replacing cache.")
+                    stats['new'] = len(activities)
+                    stats['total'] = len(activities)
+                    final_activities = activities
+            else:
+                # Not merging or no existing cache
                 stats['new'] = len(activities)
                 stats['total'] = len(activities)
-        else:
-            # Not merging or no existing cache
-            stats['new'] = len(activities)
-            stats['total'] = len(activities)
-            
-            print("="*70)
-            print("💾 CACHE CREATED")
-            print("="*70)
-            print(f"Total activities cached: {stats['total']}")
-            print("="*70 + "\n")
-        
-        cache_data = {
-            'timestamp': datetime.now().isoformat(),
-            'count': len(activities),
-            'activities': [act.to_dict() for act in activities]
-        }
-        
-        with open(self.cache_path, 'w') as f:
-            json.dump(cache_data, f, indent=2)
-        secure_chmod(self.cache_path)
 
-        logger.info(f"Cached {len(activities)} activities to {self.cache_path}")
-        
+                print("="*70)
+                print("💾 CACHE CREATED")
+                print("="*70)
+                print(f"Total activities cached: {stats['total']}")
+                print("="*70 + "\n")
+                final_activities = activities
+
+            return {
+                'timestamp': datetime.now().isoformat(),
+                'count': len(final_activities),
+                'activities': [act.to_dict() for act in final_activities],
+            }
+
+        self._storage.update(self._cache_filename, _mutator, default=None)
+
+        logger.info(f"Cached {stats['total']} activities to {self.cache_path}")
+
         return stats
     
     def load_cached_activities(self) -> List[Activity]:
@@ -602,18 +627,16 @@ class StravaDataFetcher:
         Returns:
             List of Activity objects
         """
-        if not self.cache_path.exists():
+        cache_data = self._storage.read(self._cache_filename)
+        if cache_data is None:
             logger.warning("No cache file found")
             return []
-        
-        with open(self.cache_path, 'r') as f:
-            cache_data = json.load(f)
-        
+
         activities = [Activity.from_dict(act) for act in cache_data['activities']]
-        
+
         logger.info(f"Loaded {len(activities)} activities from cache")
         logger.info(f"Cache timestamp: {cache_data['timestamp']}")
-        
+
         return activities
     
     def is_cache_valid(self) -> bool:
@@ -797,12 +820,9 @@ class StravaDataFetcher:
         Returns:
             Dict with 'updated', 'skipped', 'total_cached' counts.
         """
-        if not self.cache_path.exists():
+        cache_data = self._storage.read(self._cache_filename)
+        if cache_data is None:
             return {'updated': 0, 'skipped': 0, 'total_cached': 0}
-
-        # Load cache into a mutable dict keyed by activity id
-        with open(self.cache_path, 'r') as f:
-            cache_data = json.load(f)
 
         by_id: Dict[int, dict] = {a['id']: a for a in cache_data.get('activities', [])}
         missing_ids = {aid for aid, a in by_id.items() if not a.get('gear_id')}
@@ -813,6 +833,13 @@ class StravaDataFetcher:
 
         logger.info(f"Backfilling gear_id for {len(missing_ids)} of {len(by_id)} cached activities")
 
+        # Collect patches in memory rather than mutating by_id/cache_data
+        # directly — this loop pages through Strava (potentially many
+        # seconds) with no lock held, so the on-disk cache can legitimately
+        # change underneath it (e.g. a concurrent Garmin/Strava fetch adding
+        # new activities). The actual merge happens under the storage lock
+        # below, against whatever is on disk at that moment.
+        gear_updates: Dict[int, str] = {}
         updated = 0
         fetched = 0
 
@@ -825,7 +852,7 @@ class StravaDataFetcher:
                 gear_id = str(raw_gear) if raw_gear else None
 
                 if aid in by_id and not by_id[aid].get('gear_id') and gear_id:
-                    by_id[aid]['gear_id'] = gear_id
+                    gear_updates[aid] = gear_id
                     updated += 1
 
                 if progress_callback:
@@ -839,12 +866,17 @@ class StravaDataFetcher:
             logger.error(f"Backfill failed after {fetched} activities: {e}")
             raise
 
-        # Write updated cache back
-        cache_data['activities'] = list(by_id.values())
-        cache_data['timestamp'] = datetime.now().isoformat()
-        with open(self.cache_path, 'w') as f:
-            json.dump(cache_data, f, indent=2)
-        secure_chmod(self.cache_path)
+        def _mutator(current: Optional[dict]) -> dict:
+            if not current:
+                return current
+            for act in current.get('activities', []):
+                gid = gear_updates.get(act.get('id'))
+                if gid and not act.get('gear_id'):
+                    act['gear_id'] = gid
+            current['timestamp'] = datetime.now().isoformat()
+            return current
+
+        self._storage.update(self._cache_filename, _mutator, default=None)
 
         logger.info(f"Backfill complete: {updated} updated, {fetched} fetched from Strava")
         return {'updated': updated, 'skipped': len(by_id) - updated, 'total_cached': len(by_id)}
