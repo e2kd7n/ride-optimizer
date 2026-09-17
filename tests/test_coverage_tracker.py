@@ -19,6 +19,8 @@ from src.coverage_tracker import (
     _bbox_cache_key,
     _snap_bbox_to_grid,
     _WATER_POLYGON_GRID_DEGREES,
+    _MAX_CONCURRENT_OVERPASS_CALLS,
+    _OVERPASS_SEMAPHORE_WAIT_S,
     _segment_tiles,
     _activity_tiles,
     _robust_tile_range,
@@ -1075,6 +1077,72 @@ class TestGetRoadlessTiles:
         assert call_count == 1
         assert results["zoom14"]["status"] == "success"
         assert results["zoom17"]["status"] == "success"
+
+    def test_concurrency_cap_fails_fast_when_exceeded(self, tracker):
+        """#598: the app's whole 4-thread pool is shared across every
+        endpoint, so a handful of concurrent Overpass cache misses for
+        *different* bboxes must not be able to occupy every thread. Once
+        _MAX_CONCURRENT_OVERPASS_CALLS requests are genuinely in flight, one
+        more must fail fast rather than queue behind them."""
+        release_event = threading.Event()
+        # Parties = the in-flight calls + this test thread, so the test
+        # thread only proceeds once both workers are confirmed blocked
+        # inside their "Overpass" call.
+        both_in_flight = threading.Barrier(_MAX_CONCURRENT_OVERPASS_CALLS + 1, timeout=5)
+
+        def blocking_post(*args, **kwargs):
+            both_in_flight.wait(timeout=5)
+            # No timeout here deliberately: this must only unblock when the
+            # test calls release_event.set(), *after* it has confirmed the
+            # overflow request failed fast. A timeout here would race
+            # against the overflow request's own semaphore wait — if this
+            # fired first, the in-flight calls would free their semaphore
+            # slots mid-wait and let the overflow request sneak through,
+            # making the test flaky.
+            assert release_event.wait(timeout=30)
+            return self._overpass_response([])
+
+        # Pure translations of the same tiny bbox (not expansions — the
+        # span stays whatever self.BOUNDS is), well within valid lat/lon
+        # range, just far enough apart (> the 0.5-degree water-polygon
+        # grid) to land in different snapped cells and avoid the per-key
+        # lock from the dedup test above.
+        south, west, north, east = self.BOUNDS
+        in_flight_bboxes = [
+            (south + i * 1.0, west + i * 1.0, north + i * 1.0, east + i * 1.0)
+            for i in range(_MAX_CONCURRENT_OVERPASS_CALLS)
+        ]
+        overflow_bounds = (south + 3.0, west + 3.0, north + 3.0, east + 3.0)
+
+        results = {}
+
+        def worker(name, bounds):
+            results[name] = tracker.get_roadless_tiles(bounds, zoom=TILE_ZOOM)
+
+        with patch("requests.post", side_effect=blocking_post):
+            threads = [
+                threading.Thread(target=worker, args=(f"inflight{i}", b))
+                for i, b in enumerate(in_flight_bboxes)
+            ]
+            for t in threads:
+                t.start()
+            both_in_flight.wait(timeout=5)  # both workers are now mid-call
+
+            start = time.monotonic()
+            overflow_result = tracker.get_roadless_tiles(overflow_bounds, zoom=TILE_ZOOM)
+            elapsed = time.monotonic() - start
+
+            release_event.set()
+            for t in threads:
+                t.join(timeout=5)
+
+        assert overflow_result["status"] == "error"
+        assert "busy" in overflow_result["message"].lower()
+        # Fails fast — bounded by the wait budget, not left to queue
+        # indefinitely behind the in-flight calls.
+        assert elapsed < _OVERPASS_SEMAPHORE_WAIT_S + 3
+        for i in range(_MAX_CONCURRENT_OVERPASS_CALLS):
+            assert results[f"inflight{i}"]["status"] == "success"
 
 
 # ── get_roadless_tiles() bbox prefilter (#574) ─────────────────────
