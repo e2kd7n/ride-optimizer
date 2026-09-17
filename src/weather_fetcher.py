@@ -5,7 +5,9 @@ Fetches weather data from Open-Meteo API (free, no API key required)
 to analyze wind conditions and their impact on cycling routes.
 """
 
+import contextlib
 import requests
+import threading
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime, timedelta
 import numpy as np
@@ -18,6 +20,20 @@ from src.secure_logger import SecureLogger
 from src.json_storage import secure_chmod
 
 logger = SecureLogger(__name__)
+
+# Caps how many threads can be blocked inside an Open-Meteo call at once,
+# across all four fetch methods (current conditions, hourly/daily forecast,
+# air quality) and both Open-Meteo hosts. The app runs a single gunicorn
+# worker with only 4 threads total, shared across every endpoint — the same
+# exposure that let Overpass calls starve the app for minutes (#598) applies
+# here: a handful of concurrent cache misses during an Open-Meteo slowdown
+# could otherwise occupy every thread at once, each blocked for up to the
+# request's own 10s timeout. Kept well under the thread count so fast,
+# local-only endpoints always keep headroom.
+_MAX_CONCURRENT_WEATHER_CALLS = 2
+# How long a request waits for a free slot before giving up, mirroring
+# _OVERPASS_SEMAPHORE_WAIT_S in src/coverage_tracker.py.
+_WEATHER_SEMAPHORE_WAIT_S = 5
 
 
 class WeatherFetcher:
@@ -90,7 +106,27 @@ class WeatherFetcher:
 
         self.aqi_cache = self._load_aqi_cache()
         logger.info(f"Loaded {len(self.aqi_cache)} air-quality cache entries from {self.aqi_cache_file}")
-    
+
+        self._semaphore = threading.Semaphore(_MAX_CONCURRENT_WEATHER_CALLS)
+
+    @contextlib.contextmanager
+    def _limited_call(self):
+        """Bound concurrent Open-Meteo calls to _MAX_CONCURRENT_WEATHER_CALLS
+        (see module docstring constant) so a slow/degraded endpoint can't tie
+        up more than that many of the app's small shared thread pool at once.
+        Raises TimeoutError — caught by callers alongside RequestException —
+        if no slot frees up within the wait budget, so a caller fails fast
+        instead of queueing behind requests already in flight.
+        """
+        if not self._semaphore.acquire(timeout=_WEATHER_SEMAPHORE_WAIT_S):
+            raise TimeoutError(
+                f"Open-Meteo call busy ({_MAX_CONCURRENT_WEATHER_CALLS} requests already in flight)"
+            )
+        try:
+            yield
+        finally:
+            self._semaphore.release()
+
     def _load_cache(self) -> Dict:
         """
         Load weather cache from JSON file.
@@ -407,10 +443,10 @@ class WeatherFetcher:
                 'timezone': 'auto',
             }
 
-            response = self.session.get(self.aqi_base_url, params=params, timeout=10)
-            response.raise_for_status()
-
-            data = response.json()
+            with self._limited_call():
+                response = self.session.get(self.aqi_base_url, params=params, timeout=10)
+                response.raise_for_status()
+                data = response.json()
 
             if 'current' not in data:
                 return None
@@ -438,7 +474,7 @@ class WeatherFetcher:
 
             return aqi_data
 
-        except requests.exceptions.RequestException as e:
+        except (requests.exceptions.RequestException, TimeoutError) as e:
             logger.error(f"Error fetching air quality: {e}")
             return None
 
@@ -472,10 +508,10 @@ class WeatherFetcher:
                 'timezone': 'auto'
             }
 
-            response = self.session.get(self.base_url, params=params, timeout=10)
-            response.raise_for_status()
-
-            data = response.json()
+            with self._limited_call():
+                response = self.session.get(self.base_url, params=params, timeout=10)
+                response.raise_for_status()
+                data = response.json()
 
             if 'current' not in data:
                 return None
@@ -513,8 +549,8 @@ class WeatherFetcher:
                 self._save_cache()
 
             return conditions
-            
-        except requests.exceptions.RequestException as e:
+
+        except (requests.exceptions.RequestException, TimeoutError) as e:
             logger.error(f"Error fetching weather conditions: {e}")
             return None
     
@@ -542,11 +578,11 @@ class WeatherFetcher:
                 'forecast_days': min((hours // 24) + 1, 7)
             }
             
-            response = self.session.get(self.base_url, params=params, timeout=10)
-            response.raise_for_status()
-            
-            data = response.json()
-            
+            with self._limited_call():
+                response = self.session.get(self.base_url, params=params, timeout=10)
+                response.raise_for_status()
+                data = response.json()
+
             if 'hourly' not in data:
                 return None
             
@@ -565,8 +601,8 @@ class WeatherFetcher:
                 forecasts.append(forecast)
             
             return forecasts
-            
-        except requests.exceptions.RequestException as e:
+
+        except (requests.exceptions.RequestException, TimeoutError) as e:
             logger.error(f"Error fetching hourly forecast: {e}")
             return None
     
@@ -609,10 +645,10 @@ class WeatherFetcher:
                 'forecast_days': days
             }
 
-            response = self.session.get(self.base_url, params=params, timeout=10)
-            response.raise_for_status()
-
-            data = response.json()
+            with self._limited_call():
+                response = self.session.get(self.base_url, params=params, timeout=10)
+                response.raise_for_status()
+                data = response.json()
 
             if 'daily' not in data:
                 return None
@@ -645,7 +681,7 @@ class WeatherFetcher:
 
             return forecasts
 
-        except requests.exceptions.RequestException as e:
+        except (requests.exceptions.RequestException, TimeoutError) as e:
             logger.error(f"Error fetching daily forecast: {e}")
             return None
     
