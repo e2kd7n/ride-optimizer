@@ -24,62 +24,6 @@ from app.services.weather_service import WeatherService
 logger = SecureLogger(__name__)
 
 
-def _weather_data_to_dict(weather_data: Dict[str, Any],
-                          location_name: Optional[str] = None) -> Dict[str, Any]:
-    """Convert raw weather data into a scored dict with cycling comfort metrics."""
-    temp = weather_data.get('temperature')
-    wind = weather_data.get('wind_speed')
-    precip = weather_data.get('precipitation')
-
-    score = 1.0
-    if temp is not None:
-        if temp < 0:
-            score -= 0.4
-        elif temp < 10:
-            score -= 0.2
-        elif temp > 30:
-            score -= 0.3
-        elif temp > 25:
-            score -= 0.1
-    if wind is not None:
-        if wind > 30:
-            score -= 0.3
-        elif wind > 20:
-            score -= 0.15
-    if precip is not None and precip > 0:
-        if precip > 5:
-            score -= 0.4
-        elif precip > 1:
-            score -= 0.3
-        else:
-            score -= 0.2
-    score = max(0.0, min(1.0, score))
-
-    if score >= 0.7:
-        favorability = 'favorable'
-    elif score >= 0.4:
-        favorability = 'neutral'
-    else:
-        favorability = 'unfavorable'
-
-    return {
-        'location': {
-            'lat': weather_data.get('latitude', 0.0),
-            'lon': weather_data.get('longitude', 0.0),
-            'name': location_name,
-        },
-        'temperature_c': temp,
-        'conditions': weather_data.get('conditions'),
-        'wind_speed_kph': wind,
-        'wind_direction_deg': weather_data.get('wind_direction'),
-        'precipitation_mm': precip,
-        'humidity_pct': weather_data.get('humidity'),
-        'comfort_score': score,
-        'cycling_favorability': favorability,
-        'is_current': False,
-    }
-
-
 class PlannerService:
     """
     Service for long ride planning and recommendations.
@@ -899,8 +843,16 @@ class PlannerService:
             if cache_key in weather_cache:
                 return weather_cache[cache_key]
 
-            # Get forecast from WeatherFetcher (uses get_daily_forecast, not get_forecast)
-            forecast_data = self.weather_fetcher.get_daily_forecast(lat, lon, days=min(days_ahead + 1, 7))
+            # Use the service-level forecast (not the raw WeatherFetcher) —
+            # WeatherService.get_daily_forecast() enriches each day with a
+            # real comfort_score/cycling_favorability via
+            # _normalize_daily_forecast_keys(); the raw fetcher's dicts use
+            # temp_max_c/wind_speed_max_kph/precipitation_sum_mm, which the
+            # old _weather_data_to_dict() here read as temperature/wind_speed/
+            # precipitation — a total key mismatch that silently produced a
+            # fixed comfort_score of 1.0 ("favorable") for every ride,
+            # regardless of actual forecast.
+            forecast_data = self.weather_service.get_daily_forecast(lat, lon, days=min(days_ahead + 1, 7))
 
             if not forecast_data:
                 logger.warning(f"No forecast data available for {target_date}")
@@ -909,9 +861,7 @@ class PlannerService:
 
             # Find the forecast for target date (forecast_data is a list of daily forecasts)
             if days_ahead < len(forecast_data):
-                day_forecast = forecast_data[days_ahead]
-
-                result = _weather_data_to_dict(day_forecast, location_name=ride.name)
+                result = forecast_data[days_ahead]
                 weather_cache[cache_key] = result
                 return result
 

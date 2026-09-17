@@ -111,6 +111,8 @@ class TestJobRegistry:
         assert reg.analysis.snapshot() == {'status': 'idle', 'started_at': None, 'result': None}
         assert reg.fetch.snapshot() == {'status': 'idle', 'fetched': 0, 'label': '', 'started_at': None}
         assert reg.backfill.snapshot() == {'status': 'idle'}
+        assert reg.refresh_gear.snapshot() == {'status': 'idle'}
+        assert reg.garmin_sync.snapshot() == {'status': 'idle'}
         assert not reg.analysis_stop.is_set()
 
 
@@ -135,6 +137,8 @@ class TestJobEndpoints:
         assert client.get('/api/analyze/status').get_json()['status'] == 'idle'
         assert client.get('/api/fetch/status').get_json()['status'] == 'idle'
         assert client.get('/api/stats/backfill-gear-ids/status').get_json()['status'] == 'idle'
+        assert client.get('/api/stats/refresh-gear/status').get_json()['status'] == 'idle'
+        assert client.get('/api/garmin/sync/status').get_json()['status'] == 'idle'
 
     def test_stop_when_not_running_returns_400(self, job_client):
         client, _ = job_client
@@ -220,6 +224,155 @@ class TestJobEndpoints:
         app.container.jobs.backfill.update(status='running')
         resp = client.post('/api/stats/backfill-gear-ids')
         assert resp.status_code == 409
+
+    def test_refresh_gear_rejects_when_registry_says_running(self, job_client):
+        client, app = job_client
+        app.container.jobs.refresh_gear.update(status='running')
+        resp = client.post('/api/stats/refresh-gear')
+        assert resp.status_code == 409
+        assert resp.get_json()['status'] == 'already_running'
+
+    def test_refresh_gear_runs_in_background_and_updates_job_state(self, job_client, monkeypatch):
+        """#598 follow-up: refresh-gear previously called Strava synchronously
+        on the request thread — a stravalib rate-limit hit could sleep that
+        thread for up to Strava's rate-limit window. It must now background
+        the call like every sibling Strava-fetch endpoint and report
+        progress via /api/stats/refresh-gear/status."""
+        client, app = job_client
+        app.container._initialised = True
+        mock_analysis_service = Mock()
+        mock_analysis_service.data_fetcher.fetch_athlete_gear.return_value = {
+            'bikes': [{'id': '1'}, {'id': '2'}],
+            'shoes': [{'id': '3'}],
+        }
+        monkeypatch.setattr(app.container, 'analysis_service', mock_analysis_service)
+
+        class SyncThread:
+            def __init__(self, target=None, daemon=None):
+                self._target = target
+
+            def start(self):
+                self._target()
+
+        fake_threading = types.SimpleNamespace(Thread=SyncThread)
+        monkeypatch.setattr('app.api.stats_bp.threading', fake_threading)
+
+        resp = client.post('/api/stats/refresh-gear')
+        assert resp.status_code == 200
+        assert resp.get_json()['status'] == 'started'
+        mock_analysis_service.data_fetcher.fetch_athlete_gear.assert_called_once()
+
+        status = client.get('/api/stats/refresh-gear/status').get_json()
+        assert status['status'] == 'done'
+        assert status['bikes'] == 2
+        assert status['shoes'] == 1
+
+    def test_garmin_sync_rejects_when_registry_says_running(self, job_client):
+        client, app = job_client
+        app.container.jobs.garmin_sync.update(status='running')
+        resp = client.post('/api/garmin/sync', json={})
+        assert resp.status_code == 409
+        assert resp.get_json()['status'] == 'already_running'
+
+    def test_garmin_sync_runs_in_background_and_updates_job_state(self, job_client, monkeypatch):
+        """#598 follow-up: garmin_sync previously called Garmin synchronously
+        on the request thread — GarminService.fetch_activities() makes one
+        HTTP call per activity (polyline fetch), all sequential. It must now
+        background the call like every Strava-fetch endpoint and report
+        progress via /api/garmin/sync/status."""
+        client, app = job_client
+        app.container._initialised = True
+
+        mock_activity = Mock(id=123)
+        mock_garmin_service = Mock()
+        mock_garmin_service.is_connected.return_value = True
+        mock_garmin_service.fetch_activities.return_value = [mock_activity]
+        app.container.garmin_service = mock_garmin_service
+
+        mock_analysis_service = Mock()
+        mock_analysis_service.data_fetcher.load_cached_activities.return_value = []
+        monkeypatch.setattr(app.container, 'analysis_service', mock_analysis_service)
+
+        class SyncThread:
+            def __init__(self, target=None, daemon=None):
+                self._target = target
+
+            def start(self):
+                self._target()
+
+        fake_threading = types.SimpleNamespace(Thread=SyncThread)
+        monkeypatch.setattr('app.api.integrations_bp.threading', fake_threading)
+
+        resp = client.post('/api/garmin/sync', json={'days': 90})
+        assert resp.status_code == 200
+        assert resp.get_json()['status'] == 'started'
+        mock_garmin_service.fetch_activities.assert_called_once()
+        mock_analysis_service.data_fetcher.cache_activities.assert_called_once()
+
+        status = client.get('/api/garmin/sync/status').get_json()
+        assert status['status'] == 'done'
+        assert status['fetched'] == 1
+        assert status['new'] == 1
+
+    def test_garmin_sync_not_connected_resets_job_and_returns_400(self, job_client):
+        client, app = job_client
+        app.container._initialised = True
+        mock_garmin_service = Mock()
+        mock_garmin_service.is_connected.return_value = False
+        app.container.garmin_service = mock_garmin_service
+
+        resp = client.post('/api/garmin/sync', json={})
+        assert resp.status_code == 400
+        assert app.container.jobs.garmin_sync.get('status') == 'idle'
+
+    def test_garmin_sync_failure_reports_error_status(self, job_client, monkeypatch):
+        client, app = job_client
+        app.container._initialised = True
+        mock_garmin_service = Mock()
+        mock_garmin_service.is_connected.return_value = True
+        mock_garmin_service.fetch_activities.side_effect = RuntimeError("Garmin unavailable")
+        app.container.garmin_service = mock_garmin_service
+
+        class SyncThread:
+            def __init__(self, target=None, daemon=None):
+                self._target = target
+
+            def start(self):
+                self._target()
+
+        fake_threading = types.SimpleNamespace(Thread=SyncThread)
+        monkeypatch.setattr('app.api.integrations_bp.threading', fake_threading)
+
+        resp = client.post('/api/garmin/sync', json={})
+        assert resp.get_json()['status'] == 'started'
+
+        status = client.get('/api/garmin/sync/status').get_json()
+        assert status['status'] == 'error'
+        assert 'Garmin unavailable' in status['label']
+
+    def test_refresh_gear_failure_reports_error_status(self, job_client, monkeypatch):
+        client, app = job_client
+        app.container._initialised = True
+        mock_analysis_service = Mock()
+        mock_analysis_service.data_fetcher.fetch_athlete_gear.side_effect = RuntimeError("Strava unavailable")
+        monkeypatch.setattr(app.container, 'analysis_service', mock_analysis_service)
+
+        class SyncThread:
+            def __init__(self, target=None, daemon=None):
+                self._target = target
+
+            def start(self):
+                self._target()
+
+        fake_threading = types.SimpleNamespace(Thread=SyncThread)
+        monkeypatch.setattr('app.api.stats_bp.threading', fake_threading)
+
+        resp = client.post('/api/stats/refresh-gear')
+        assert resp.get_json()['status'] == 'started'
+
+        status = client.get('/api/stats/refresh-gear/status').get_json()
+        assert status['status'] == 'error'
+        assert 'Strava unavailable' in status['label']
 
     def test_stop_sets_event_and_updates_label(self, job_client):
         client, app = job_client

@@ -498,3 +498,67 @@ class TestGetAirQuality:
         assert result is None
 
 
+class TestGetDailyForecastScoring:
+    """#598 follow-up: get_daily_forecast() enriches each day via
+    _enrich_weather_data(), which was written against get_current_conditions()'s
+    shape (temp_c/wind_speed_kph/precipitation_mm) — but WeatherFetcher.
+    get_daily_forecast() actually returns temp_max_c/wind_speed_max_kph/
+    precipitation_sum_mm. None of _calculate_comfort_score's key names
+    matched, so every daily-forecast day silently scored a fixed 1.0/
+    'favorable' regardless of the actual forecast. These exercise the real
+    WeatherService.get_daily_forecast() call path end-to-end (only the
+    underlying WeatherFetcher is mocked) to guard against that key mismatch
+    coming back."""
+
+    def _raw_day(self, **overrides):
+        day = {
+            'date': '2026-09-20',
+            'temp_max_c': 20.0, 'temp_min_c': 12.0,
+            'precipitation_sum_mm': 0.0, 'precipitation_prob_max': 5,
+            'wind_speed_max_kph': 8.0, 'wind_direction_dominant_deg': 200,
+        }
+        day.update(overrides)
+        return day
+
+    def test_favorable_day_scores_favorable(self, weather_service):
+        weather_service.fetcher.get_daily_forecast = Mock(return_value=[self._raw_day()])
+
+        result = weather_service.get_daily_forecast(42.3601, -71.0589, days=1)
+
+        assert result[0]['temperature_c'] == 20.0
+        assert result[0]['wind_speed_kph'] == 8.0
+        assert result[0]['precipitation_mm'] == 0.0
+        assert result[0]['comfort_score'] == 1.0
+        assert result[0]['cycling_favorability'] == 'favorable'
+
+    def test_hot_windy_rainy_day_scores_unfavorable(self, weather_service):
+        """The concrete failure scenario: before the fix, this scored 1.0
+        ('favorable') despite 38C, 45kph wind, and 12mm of rain."""
+        bad_day = self._raw_day(
+            temp_max_c=38.0, temp_min_c=28.0,
+            precipitation_sum_mm=12.0, precipitation_prob_max=90,
+            wind_speed_max_kph=45.0,
+        )
+        weather_service.fetcher.get_daily_forecast = Mock(return_value=[bad_day])
+
+        result = weather_service.get_daily_forecast(42.3601, -71.0589, days=1)
+
+        assert result[0]['temperature_c'] == 38.0
+        assert result[0]['wind_speed_kph'] == 45.0
+        assert result[0]['precipitation_mm'] == 12.0
+        assert result[0]['comfort_score'] < 0.4
+        assert result[0]['cycling_favorability'] == 'unfavorable'
+
+    def test_multi_day_forecast_scores_each_day_independently(self, weather_service):
+        weather_service.fetcher.get_daily_forecast = Mock(return_value=[
+            self._raw_day(date='2026-09-20'),  # nice
+            self._raw_day(date='2026-09-21', temp_max_c=38.0, wind_speed_max_kph=45.0,
+                          precipitation_sum_mm=12.0),  # awful
+        ])
+
+        result = weather_service.get_daily_forecast(42.3601, -71.0589, days=2)
+
+        assert result[0]['cycling_favorability'] == 'favorable'
+        assert result[1]['cycling_favorability'] == 'unfavorable'
+
+

@@ -605,46 +605,58 @@
                 }
             }, { once: true });
 
-            document.getElementById('icu-connect-btn').addEventListener('click', async () => {
-                const btn = document.getElementById('icu-connect-btn');
-                const feedback = document.getElementById('icu-connect-feedback');
-                const athleteId = athleteInput.value.trim();
-                const apiKey = keyInput.value.trim();
+            document.getElementById('icu-connect-btn').addEventListener('click', connectIcu);
+        }
 
-                if (!athleteId || !apiKey) {
+        // loadIcuStatus() re-runs after every connect/disconnect (and on
+        // initial page load), each time calling addEventListener again — a
+        // fresh inline arrow function would accumulate a new listener on
+        // every reload (repeated failed-then-retried connects would fire
+        // once per accumulated listener). A named, stable function
+        // reference doesn't: the DOM dedupes addEventListener calls with
+        // the same (type, listener) pair, so re-binding this exact
+        // reference on reload is a no-op instead of stacking up.
+        async function connectIcu() {
+            const btn = document.getElementById('icu-connect-btn');
+            const feedback = document.getElementById('icu-connect-feedback');
+            const athleteInput = document.getElementById('icu-athlete-id');
+            const keyInput = document.getElementById('icu-api-key');
+            const athleteId = athleteInput.value.trim();
+            const apiKey = keyInput.value.trim();
+
+            if (!athleteId || !apiKey) {
+                feedback.style.display = '';
+                feedback.innerHTML = '<span class="text-danger small"><i class="bi bi-exclamation-triangle"></i> Both Athlete ID and API Key are required.</span>';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Connecting…';
+            feedback.style.display = 'none';
+
+            try {
+                const res = await window.apiClient.fetch('/intervals/connect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ athlete_id: athleteId, api_key: apiKey })
+                });
+                if (res.success) {
                     feedback.style.display = '';
-                    feedback.innerHTML = '<span class="text-danger small"><i class="bi bi-exclamation-triangle"></i> Both Athlete ID and API Key are required.</span>';
-                    return;
-                }
-
-                btn.disabled = true;
-                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Connecting…';
-                feedback.style.display = 'none';
-
-                try {
-                    const res = await window.apiClient.fetch('/intervals/connect', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ athlete_id: athleteId, api_key: apiKey })
-                    });
-                    if (res.success) {
-                        feedback.style.display = '';
-                        feedback.innerHTML = `<span class="text-success small"><i class="bi bi-check-circle"></i> Connected as <strong>${res.athlete_name || athleteId}</strong>.</span>`;
-                        keyInput.value = '';
-                        await loadIcuStatus();
-                        if (typeof showToast === 'function') showToast('intervals.icu connected!', 'success');
-                    } else {
-                        feedback.style.display = '';
-                        feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${res.error || 'Connection failed'}</span>`;
-                    }
-                } catch (e) {
+                    feedback.innerHTML = `<span class="text-success small"><i class="bi bi-check-circle"></i> Connected as <strong>${res.athlete_name || athleteId}</strong>.</span>`;
+                    keyInput.value = '';
+                    await loadIcuStatus();
+                    if (typeof showToast === 'function') showToast('intervals.icu connected!', 'success');
+                } else {
                     feedback.style.display = '';
-                    feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${e.message || 'Connection failed'}</span>`;
-                } finally {
-                    btn.disabled = false;
-                    btn.innerHTML = '<i class="bi bi-link-45deg"></i> Connect';
+                    feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${res.error || 'Connection failed'}</span>`;
                 }
-            });
+            } catch (e) {
+                feedback.style.display = '';
+                feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${e.message || 'Connection failed'}</span>`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-link-45deg"></i> Connect';
+            }
         }
 
         // ── OpenRouteService ─────────────────────────────────────
@@ -680,46 +692,50 @@
                 }
             }, { once: true });
 
-            document.getElementById('ors-save-btn').addEventListener('click', async () => {
-                const btn = document.getElementById('ors-save-btn');
-                const feedback = document.getElementById('ors-save-feedback');
-                const keyInput = document.getElementById('ors-api-key');
-                const apiKey = keyInput.value.trim();
+            document.getElementById('ors-save-btn').addEventListener('click', saveOrsKey);
+        }
 
-                if (!apiKey) {
+        // See connectIcu()'s comment above: named reference so repeated
+        // loadOrsStatus() reloads don't stack up duplicate listeners.
+        async function saveOrsKey() {
+            const btn = document.getElementById('ors-save-btn');
+            const feedback = document.getElementById('ors-save-feedback');
+            const keyInput = document.getElementById('ors-api-key');
+            const apiKey = keyInput.value.trim();
+
+            if (!apiKey) {
+                feedback.style.display = '';
+                feedback.innerHTML = '<span class="text-danger small"><i class="bi bi-exclamation-triangle"></i> API key is required.</span>';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Saving…';
+            feedback.style.display = 'none';
+
+            try {
+                const res = await window.apiClient.fetch('/ors/connect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ api_key: apiKey })
+                });
+                if (res.success) {
                     feedback.style.display = '';
-                    feedback.innerHTML = '<span class="text-danger small"><i class="bi bi-exclamation-triangle"></i> API key is required.</span>';
-                    return;
-                }
-
-                btn.disabled = true;
-                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Saving…';
-                feedback.style.display = 'none';
-
-                try {
-                    const res = await window.apiClient.fetch('/ors/connect', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ api_key: apiKey })
-                    });
-                    if (res.success) {
-                        feedback.style.display = '';
-                        feedback.innerHTML = '<span class="text-success small"><i class="bi bi-check-circle"></i> API key saved. Road routing is now available on the Explore page.</span>';
-                        keyInput.value = '';
-                        await loadOrsStatus();
-                        if (typeof showToast === 'function') showToast('ORS API key saved!', 'success');
-                    } else {
-                        feedback.style.display = '';
-                        feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${res.error || 'Save failed'}</span>`;
-                    }
-                } catch (e) {
+                    feedback.innerHTML = '<span class="text-success small"><i class="bi bi-check-circle"></i> API key saved. Road routing is now available on the Explore page.</span>';
+                    keyInput.value = '';
+                    await loadOrsStatus();
+                    if (typeof showToast === 'function') showToast('ORS API key saved!', 'success');
+                } else {
                     feedback.style.display = '';
-                    feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${e.message || 'Save failed'}</span>`;
-                } finally {
-                    btn.disabled = false;
-                    btn.innerHTML = '<i class="bi bi-floppy"></i> Save';
+                    feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${res.error || 'Save failed'}</span>`;
                 }
-            });
+            } catch (e) {
+                feedback.style.display = '';
+                feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${e.message || 'Save failed'}</span>`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-floppy"></i> Save';
+            }
         }
 
         // ── Garmin Connect ──────────────────────────────────────
@@ -750,86 +766,135 @@
             connectedState.classList.toggle('d-none', !connected);
             setCardExpanded('garmin-card-toggle', 'garmin-card-body', connected);
 
-            document.getElementById('garmin-connect-btn').addEventListener('click', async () => {
-                const btn = document.getElementById('garmin-connect-btn');
-                const feedback = document.getElementById('garmin-connect-feedback');
-                const email = document.getElementById('garmin-email').value.trim();
-                const password = document.getElementById('garmin-password').value;
+            document.getElementById('garmin-connect-btn').addEventListener('click', connectGarmin);
+            document.getElementById('garmin-sync-btn').addEventListener('click', startGarminSync);
+            document.getElementById('garmin-disconnect-btn').addEventListener('click', disconnectGarmin);
+        }
 
-                if (!email || !password) {
+        // See connectIcu()'s comment above: named references so repeated
+        // loadGarminStatus() reloads (fired after every connect/sync/
+        // disconnect, and on initial load) don't stack up duplicate
+        // listeners — a plain inline arrow function is a fresh, distinct
+        // listener on every reload, so e.g. a failed-then-retried connect
+        // would fire once per accumulated listener, and disconnect would
+        // pop its confirm() dialog once per accumulated listener too.
+        async function connectGarmin() {
+            const btn = document.getElementById('garmin-connect-btn');
+            const feedback = document.getElementById('garmin-connect-feedback');
+            const email = document.getElementById('garmin-email').value.trim();
+            const password = document.getElementById('garmin-password').value;
+
+            if (!email || !password) {
+                feedback.style.display = '';
+                feedback.innerHTML = '<span class="text-danger small"><i class="bi bi-exclamation-triangle"></i> Email and password are required.</span>';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Connecting…';
+            feedback.style.display = 'none';
+
+            try {
+                const res = await window.apiClient.fetch('/garmin/connect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                if (res.success) {
                     feedback.style.display = '';
-                    feedback.innerHTML = '<span class="text-danger small"><i class="bi bi-exclamation-triangle"></i> Email and password are required.</span>';
-                    return;
-                }
-
-                btn.disabled = true;
-                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Connecting…';
-                feedback.style.display = 'none';
-
-                try {
-                    const res = await window.apiClient.fetch('/garmin/connect', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ email, password })
-                    });
-                    if (res.success) {
-                        feedback.style.display = '';
-                        feedback.innerHTML = `<span class="text-success small"><i class="bi bi-check-circle"></i> Connected as <strong>${window.escapeHtml(res.display_name || email)}</strong>.</span>`;
-                        document.getElementById('garmin-password').value = '';
-                        await loadGarminStatus();
-                        if (typeof showToast === 'function') showToast('Garmin Connect connected!', 'success');
-                    } else {
-                        feedback.style.display = '';
-                        feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(res.error || 'Connection failed')}</span>`;
-                    }
-                } catch (e) {
-                    feedback.style.display = '';
-                    feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(e.message || 'Connection failed')}</span>`;
-                } finally {
-                    btn.disabled = false;
-                    btn.innerHTML = '<i class="bi bi-link-45deg"></i> Connect';
-                }
-            });
-
-            document.getElementById('garmin-sync-btn').addEventListener('click', async () => {
-                const btn = document.getElementById('garmin-sync-btn');
-                const feedback = document.getElementById('garmin-sync-feedback');
-                btn.disabled = true;
-                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Syncing…';
-                feedback.style.display = 'none';
-
-                try {
-                    const res = await window.apiClient.fetch('/garmin/sync', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ days: 90 })
-                    });
-                    if (res.success) {
-                        feedback.style.display = '';
-                        feedback.innerHTML = `<span class="text-success small"><i class="bi bi-check-circle"></i> Synced ${res.fetched} activities (${res.new} new)</span>`;
-                        if (typeof showToast === 'function') showToast(`Garmin sync complete: ${res.new} new activities`, 'success');
-                    } else {
-                        feedback.style.display = '';
-                        feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(res.error || 'Sync failed')}</span>`;
-                    }
-                } catch (e) {
-                    feedback.style.display = '';
-                    feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(e.message || 'Sync failed')}</span>`;
-                } finally {
-                    btn.disabled = false;
-                    btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Sync Activities';
-                }
-            });
-
-            document.getElementById('garmin-disconnect-btn').addEventListener('click', async () => {
-                if (!confirm('Disconnect Garmin? This will remove your saved credentials.')) return;
-                try {
-                    await window.apiClient.fetch('/garmin/disconnect', { method: 'POST' });
-                    if (typeof showToast === 'function') showToast('Garmin disconnected', 'info');
+                    feedback.innerHTML = `<span class="text-success small"><i class="bi bi-check-circle"></i> Connected as <strong>${window.escapeHtml(res.display_name || email)}</strong>.</span>`;
+                    document.getElementById('garmin-password').value = '';
                     await loadGarminStatus();
-                } catch (e) {
-                    if (typeof showToast === 'function') showToast('Failed to disconnect', 'error');
+                    if (typeof showToast === 'function') showToast('Garmin Connect connected!', 'success');
+                } else {
+                    feedback.style.display = '';
+                    feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(res.error || 'Connection failed')}</span>`;
                 }
+            } catch (e) {
+                feedback.style.display = '';
+                feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(e.message || 'Connection failed')}</span>`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-link-45deg"></i> Connect';
+            }
+        }
+
+        async function disconnectGarmin() {
+            if (!confirm('Disconnect Garmin? This will remove your saved credentials.')) return;
+            try {
+                await window.apiClient.fetch('/garmin/disconnect', { method: 'POST' });
+                if (typeof showToast === 'function') showToast('Garmin disconnected', 'info');
+                await loadGarminStatus();
+            } catch (e) {
+                if (typeof showToast === 'function') showToast('Failed to disconnect', 'error');
+            }
+        }
+
+        let _garminSyncStop = null;
+        const idleGarminSyncBtnHtml = '<i class="bi bi-arrow-repeat"></i> Sync Activities';
+
+        function resetGarminSyncBtn() {
+            const btn = document.getElementById('garmin-sync-btn');
+            btn.disabled = false;
+            btn.innerHTML = idleGarminSyncBtnHtml;
+        }
+
+        async function startGarminSync() {
+            const btn = document.getElementById('garmin-sync-btn');
+            const feedback = document.getElementById('garmin-sync-feedback');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Syncing…';
+            feedback.style.display = 'none';
+
+            try {
+                const res = await window.apiClient.fetch('/garmin/sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ days: 90 })
+                });
+                if (res.status === 'started' || res.status === 'already_running') {
+                    pollGarminSync();
+                } else {
+                    feedback.style.display = '';
+                    feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(res.message || 'Sync failed')}</span>`;
+                    resetGarminSyncBtn();
+                }
+            } catch (e) {
+                feedback.style.display = '';
+                feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(e.message || 'Sync failed')}</span>`;
+                resetGarminSyncBtn();
+            }
+        }
+
+        function pollGarminSync() {
+            const feedback = document.getElementById('garmin-sync-feedback');
+
+            _garminSyncStop = window.pollJob({
+                intervalMs: 1500,
+                fetchStatus: () => window.apiClient.fetch('/garmin/sync/status'),
+                onGiveUp: (reason) => {
+                    resetGarminSyncBtn();
+                    if (typeof showToast === 'function') {
+                        showToast(reason === 'timeout' ? 'Garmin sync is taking unusually long' : 'Lost connection while checking sync status', 'warning');
+                    }
+                },
+                onStatus: (resp) => {
+                    if (resp.status === 'running') {
+                        return 'running';
+                    } else if (resp.status === 'done') {
+                        feedback.style.display = '';
+                        feedback.innerHTML = `<span class="text-success small"><i class="bi bi-check-circle"></i> ${window.escapeHtml(resp.label || 'Sync complete')}</span>`;
+                        if (typeof showToast === 'function') showToast(resp.label || 'Garmin sync complete', 'success');
+                        resetGarminSyncBtn();
+                        return 'done';
+                    } else if (resp.status === 'error') {
+                        feedback.style.display = '';
+                        feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(resp.label || 'Sync failed')}</span>`;
+                        resetGarminSyncBtn();
+                        return 'error';
+                    }
+                    return 'running';
+                },
             });
         }
 
@@ -881,79 +946,82 @@
             setCardExpanded('tr-card-toggle', 'tr-card-body', connected);
             if (requiresNote) requiresNote.style.display = connected ? 'none' : '';
 
-            // Connect button
-            document.getElementById('tr-connect-btn').addEventListener('click', async () => {
-                const btn = document.getElementById('tr-connect-btn');
-                const feedback = document.getElementById('tr-connect-feedback');
-                const urlInput = document.getElementById('tr-feed-url');
-                const feedUrl = urlInput.value.trim();
+            document.getElementById('tr-connect-btn').addEventListener('click', connectTrainerRoad);
+            document.getElementById('tr-sync-btn').addEventListener('click', syncTrainerRoadNow);
+            document.getElementById('tr-disconnect-btn').addEventListener('click', disconnectTrainerRoad);
+        }
 
-                if (!feedUrl) {
-                    feedback.style.display = '';
-                    feedback.innerHTML = '<span class="text-danger small"><i class="bi bi-exclamation-triangle"></i> Feed URL is required.</span>';
-                    return;
-                }
+        // See connectIcu()'s comment above: named references so repeated
+        // loadTrainerRoadStatus() reloads don't stack up duplicate listeners.
+        async function connectTrainerRoad() {
+            const btn = document.getElementById('tr-connect-btn');
+            const feedback = document.getElementById('tr-connect-feedback');
+            const urlInput = document.getElementById('tr-feed-url');
+            const feedUrl = urlInput.value.trim();
 
-                btn.disabled = true;
-                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Connecting…';
-                feedback.style.display = 'none';
+            if (!feedUrl) {
+                feedback.style.display = '';
+                feedback.innerHTML = '<span class="text-danger small"><i class="bi bi-exclamation-triangle"></i> Feed URL is required.</span>';
+                return;
+            }
 
-                try {
-                    const res = await window.apiClient.connectTrainerRoad(feedUrl);
-                    if (res.success) {
-                        if (typeof showToast === 'function') showToast(`TrainerRoad connected! ${res.workouts_synced} workouts synced.`, 'success');
-                        await loadTrainerRoadStatus();
-                    } else {
-                        feedback.style.display = '';
-                        feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${res.error || 'Connection failed'}</span>`;
-                    }
-                } catch (e) {
-                    feedback.style.display = '';
-                    feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${e.message || 'Connection failed'}</span>`;
-                } finally {
-                    btn.disabled = false;
-                    btn.innerHTML = '<i class="bi bi-link-45deg"></i> Connect';
-                }
-            });
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Connecting…';
+            feedback.style.display = 'none';
 
-            // Sync button
-            document.getElementById('tr-sync-btn').addEventListener('click', async () => {
-                const btn = document.getElementById('tr-sync-btn');
-                const feedback = document.getElementById('tr-sync-feedback');
-                btn.disabled = true;
-                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Syncing…';
-                feedback.style.display = 'none';
-
-                try {
-                    const res = await window.apiClient.syncTrainerRoad();
-                    if (res.success) {
-                        feedback.style.display = '';
-                        feedback.innerHTML = `<span class="text-success small"><i class="bi bi-check-circle"></i> Synced ${res.workouts_synced} workouts (${res.created} new, ${res.updated} updated)</span>`;
-                        await loadTrainerRoadStatus();
-                    } else {
-                        feedback.style.display = '';
-                        feedback.innerHTML = '<span class="text-danger small"><i class="bi bi-x-circle"></i> Sync failed</span>';
-                    }
-                } catch (e) {
-                    feedback.style.display = '';
-                    feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${e.message || 'Sync failed'}</span>`;
-                } finally {
-                    btn.disabled = false;
-                    btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Sync Now';
-                }
-            });
-
-            // Disconnect button
-            document.getElementById('tr-disconnect-btn').addEventListener('click', async () => {
-                if (!confirm('Disconnect TrainerRoad? This will remove your feed URL and cached workouts.')) return;
-                try {
-                    await window.apiClient.disconnectTrainerRoad();
-                    if (typeof showToast === 'function') showToast('TrainerRoad disconnected', 'info');
+            try {
+                const res = await window.apiClient.connectTrainerRoad(feedUrl);
+                if (res.success) {
+                    if (typeof showToast === 'function') showToast(`TrainerRoad connected! ${res.workouts_synced} workouts synced.`, 'success');
                     await loadTrainerRoadStatus();
-                } catch (e) {
-                    if (typeof showToast === 'function') showToast('Failed to disconnect', 'error');
+                } else {
+                    feedback.style.display = '';
+                    feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${res.error || 'Connection failed'}</span>`;
                 }
-            });
+            } catch (e) {
+                feedback.style.display = '';
+                feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${e.message || 'Connection failed'}</span>`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-link-45deg"></i> Connect';
+            }
+        }
+
+        async function syncTrainerRoadNow() {
+            const btn = document.getElementById('tr-sync-btn');
+            const feedback = document.getElementById('tr-sync-feedback');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Syncing…';
+            feedback.style.display = 'none';
+
+            try {
+                const res = await window.apiClient.syncTrainerRoad();
+                if (res.success) {
+                    feedback.style.display = '';
+                    feedback.innerHTML = `<span class="text-success small"><i class="bi bi-check-circle"></i> Synced ${res.workouts_synced} workouts (${res.created} new, ${res.updated} updated)</span>`;
+                    await loadTrainerRoadStatus();
+                } else {
+                    feedback.style.display = '';
+                    feedback.innerHTML = '<span class="text-danger small"><i class="bi bi-x-circle"></i> Sync failed</span>';
+                }
+            } catch (e) {
+                feedback.style.display = '';
+                feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${e.message || 'Sync failed'}</span>`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Sync Now';
+            }
+        }
+
+        async function disconnectTrainerRoad() {
+            if (!confirm('Disconnect TrainerRoad? This will remove your feed URL and cached workouts.')) return;
+            try {
+                await window.apiClient.disconnectTrainerRoad();
+                if (typeof showToast === 'function') showToast('TrainerRoad disconnected', 'info');
+                await loadTrainerRoadStatus();
+            } catch (e) {
+                if (typeof showToast === 'function') showToast('Failed to disconnect', 'error');
+            }
         }
 
         async function loadTrainerRoadWorkouts() {
@@ -1311,34 +1379,76 @@
             const repairBtn = document.getElementById('repair-gear-btn');
             if (!syncBtn || !repairBtn) return;
 
-            syncBtn.addEventListener('click', async () => {
-                const feedback = document.getElementById('gear-admin-feedback');
-                syncBtn.disabled = true;
-                syncBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Syncing…';
-                feedback.style.display = 'none';
-                try {
-                    const resp = await window.apiClient.fetch('/stats/refresh-gear', {
-                        method: 'POST',
-                        body: JSON.stringify({}),
-                    });
-                    if (resp.status === 'success') {
-                        feedback.style.display = '';
-                        feedback.innerHTML = `<span class="text-success small"><i class="bi bi-check-circle"></i> ${window.escapeHtml(resp.message || 'Gear synced')}</span>`;
-                        if (typeof showToast === 'function') showToast(resp.message || 'Gear synced', 'success');
-                    } else {
-                        feedback.style.display = '';
-                        feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(resp.message || 'Sync failed')}</span>`;
-                    }
-                } catch (e) {
-                    feedback.style.display = '';
-                    feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(e.message || 'Sync failed')}</span>`;
-                } finally {
-                    syncBtn.disabled = false;
-                    syncBtn.innerHTML = '<i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Sync Gear';
-                }
-            });
+            syncBtn.addEventListener('click', startGearSync);
 
             repairBtn.addEventListener('click', startGearRepair);
+        }
+
+        let _gearSyncStop = null;
+        const idleSyncBtnHtml = '<i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Sync Gear';
+
+        function resetGearSyncBtn() {
+            const btn = document.getElementById('sync-gear-btn');
+            btn.disabled = false;
+            btn.innerHTML = idleSyncBtnHtml;
+        }
+
+        async function startGearSync() {
+            const syncBtn = document.getElementById('sync-gear-btn');
+            const feedback = document.getElementById('gear-admin-feedback');
+            syncBtn.disabled = true;
+            syncBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Syncing…';
+            feedback.style.display = 'none';
+
+            try {
+                const resp = await window.apiClient.fetch('/stats/refresh-gear', {
+                    method: 'POST',
+                    body: JSON.stringify({}),
+                });
+                if (resp.status === 'started' || resp.status === 'already_running') {
+                    pollGearSync();
+                } else {
+                    feedback.style.display = '';
+                    feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(resp.message || 'Sync failed')}</span>`;
+                    resetGearSyncBtn();
+                }
+            } catch (e) {
+                feedback.style.display = '';
+                feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(e.message || 'Sync failed')}</span>`;
+                resetGearSyncBtn();
+            }
+        }
+
+        function pollGearSync() {
+            const feedback = document.getElementById('gear-admin-feedback');
+
+            _gearSyncStop = window.pollJob({
+                intervalMs: 1500,
+                fetchStatus: () => window.apiClient.fetch('/stats/refresh-gear/status'),
+                onGiveUp: (reason) => {
+                    resetGearSyncBtn();
+                    if (typeof showToast === 'function') {
+                        showToast(reason === 'timeout' ? 'Gear sync is taking unusually long' : 'Lost connection while checking sync status', 'warning');
+                    }
+                },
+                onStatus: (resp) => {
+                    if (resp.status === 'running') {
+                        return 'running';
+                    } else if (resp.status === 'done') {
+                        feedback.style.display = '';
+                        feedback.innerHTML = `<span class="text-success small"><i class="bi bi-check-circle"></i> ${window.escapeHtml(resp.label || 'Gear synced')}</span>`;
+                        if (typeof showToast === 'function') showToast(resp.label || 'Gear synced', 'success');
+                        resetGearSyncBtn();
+                        return 'done';
+                    } else if (resp.status === 'error') {
+                        feedback.style.display = '';
+                        feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(resp.label || 'Sync failed')}</span>`;
+                        resetGearSyncBtn();
+                        return 'error';
+                    }
+                    return 'running';
+                },
+            });
         }
 
         let _gearRepairStop = null;

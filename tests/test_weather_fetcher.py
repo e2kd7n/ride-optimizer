@@ -14,13 +14,19 @@ trigger needs an AQI signal) — a separate Open-Meteo host/API with its own
 radius+TTL cache mirroring get_current_conditions/get_daily_forecast.
 """
 
+import threading
+import time
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
 
 import pytest
 import requests
 
-from src.weather_fetcher import WeatherFetcher
+from src.weather_fetcher import (
+    WeatherFetcher,
+    _MAX_CONCURRENT_WEATHER_CALLS,
+    _WEATHER_SEMAPHORE_WAIT_S,
+)
 
 
 def _mock_daily_response(dates, temp_max=22.0):
@@ -287,3 +293,62 @@ class TestGetAirQuality:
             fetcher.get_air_quality(40.0 + i, -74.0)
 
         assert len(fetcher.aqi_cache) == 3
+
+
+@pytest.mark.unit
+class TestWeatherConcurrencyCap:
+    """#598 follow-up: Open-Meteo calls (get_current_conditions, get_daily_forecast,
+    get_hourly_forecast, get_air_quality) previously had no cap on how many could
+    block a thread at once. The app's whole 4-thread gunicorn pool is shared across
+    every endpoint, so a handful of concurrent cache misses for *different*
+    locations during an Open-Meteo slowdown could occupy every thread — the same
+    exposure fixed for Overpass in src/coverage_tracker.py. _limited_call() caps
+    concurrent Open-Meteo calls to _MAX_CONCURRENT_WEATHER_CALLS; one more must
+    fail fast (return None) rather than queue behind them."""
+
+    def test_concurrency_cap_fails_fast_when_exceeded(self, fetcher, mock_session):
+        release_event = threading.Event()
+        both_in_flight = threading.Barrier(_MAX_CONCURRENT_WEATHER_CALLS + 1, timeout=5)
+
+        def blocking_get(*args, **kwargs):
+            both_in_flight.wait(timeout=5)
+            assert release_event.wait(timeout=30)
+            response = Mock()
+            response.json.return_value = _mock_daily_response(['2026-01-01'])
+            response.raise_for_status = Mock()
+            return response
+
+        mock_session.return_value.get.side_effect = blocking_get
+
+        # Well-separated locations (>> cache_radius_km) so none collide with
+        # each other or share a cache entry.
+        in_flight_locations = [(40.0 + i * 5.0, -74.0) for i in range(_MAX_CONCURRENT_WEATHER_CALLS)]
+        overflow_location = (40.0 + _MAX_CONCURRENT_WEATHER_CALLS * 5.0, -74.0)
+
+        results = {}
+
+        def worker(name, lat, lon):
+            results[name] = fetcher.get_daily_forecast(lat, lon, days=1)
+
+        threads = [
+            threading.Thread(target=worker, args=(f"inflight{i}", lat, lon))
+            for i, (lat, lon) in enumerate(in_flight_locations)
+        ]
+        for t in threads:
+            t.start()
+        both_in_flight.wait(timeout=5)  # all in-flight workers confirmed mid-call
+
+        start = time.monotonic()
+        overflow_result = fetcher.get_daily_forecast(*overflow_location, days=1)
+        elapsed = time.monotonic() - start
+
+        release_event.set()
+        for t in threads:
+            t.join(timeout=5)
+
+        assert overflow_result is None
+        # Fails fast — bounded by the wait budget, not left to queue
+        # indefinitely behind the in-flight calls.
+        assert elapsed < _WEATHER_SEMAPHORE_WAIT_S + 3
+        for i in range(_MAX_CONCURRENT_WEATHER_CALLS):
+            assert results[f"inflight{i}"] is not None
