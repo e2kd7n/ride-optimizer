@@ -181,6 +181,7 @@ def _register_blueprints(app: Flask) -> None:
 def _register_error_handlers(app: Flask) -> None:
     """Register global error handlers."""
     from flask import jsonify
+    from flask_wtf.csrf import CSRFError
 
     @app.errorhandler(404)
     def not_found(error):
@@ -190,6 +191,19 @@ def _register_error_handlers(app: Flask) -> None:
     def internal_error(error):
         logger.error('Internal server error: %s', error)
         return jsonify({'status': 'error', 'message': 'Internal server error'}), 500
+
+    @app.errorhandler(CSRFError)
+    def csrf_error(error):
+        # Without this, Flask-WTF's default handler returns a plain HTML
+        # error page (not JSON) with the real reason (e.g. "The CSRF
+        # session token is missing.") — api-client.js's fetch() wrapper
+        # tries response.json() on every non-ok response and silently
+        # swallows the resulting parse failure, so the actual reason never
+        # reaches the user or the console; they just see the generic
+        # "Invalid request. Please check your input." fallback for what's
+        # often a stale-token hiccup a fresh /api/csrf-token fetch would fix.
+        logger.warning('CSRF validation failed: %s', error.description)
+        return jsonify({'status': 'error', 'message': error.description}), 400
 
 
 def _register_after_request(app: Flask) -> None:

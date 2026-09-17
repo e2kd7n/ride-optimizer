@@ -29,8 +29,21 @@ bp = Blueprint('core', __name__, url_prefix='/api')
 
 @bp.route('/csrf-token')
 def get_csrf_token():
-    """Return a CSRF token for clients making state-changing requests."""
-    return jsonify({'csrf_token': generate_csrf()})
+    """Return a CSRF token for clients making state-changing requests.
+
+    Explicitly no-store: this response has no validator (ETag/Last-Modified)
+    and Flask sets no Cache-Control by default, so a browser is free to serve
+    a stale copy from disk/back-forward cache on a later request — the
+    client would then hold a token whose matching session cookie was never
+    actually (re)written by this response, since a cache hit never reaches
+    the server at all. That produces "The CSRF session token is missing."
+    on the next state-changing request with no server-side trace of it ever
+    happening (confirmed on the deployed Pi: zero logged /api/csrf-token
+    hits from the browser despite the client clearly holding *some* token).
+    """
+    response = jsonify({'csrf_token': generate_csrf()})
+    response.headers['Cache-Control'] = 'no-store'
+    return response
 
 
 @bp.route('/status')

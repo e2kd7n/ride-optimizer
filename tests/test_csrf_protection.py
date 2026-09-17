@@ -52,6 +52,33 @@ def test_get_request_does_not_require_csrf_token(prod_like_client):
 
 
 @pytest.mark.integration
+def test_csrf_rejection_returns_json_not_html(prod_like_client):
+    """Flask-WTF's default CSRFError handler returns a plain HTML error
+    page, not JSON — api-client.js's fetch() wrapper calls response.json()
+    on every non-ok response and silently swallows the resulting parse
+    failure, so the real reason (e.g. "The CSRF session token is missing.")
+    never reached the user or the console; they just saw the generic
+    "Invalid request. Please check your input." fallback. The registered
+    CSRFError handler must return the app's standard JSON error shape."""
+    resp = prod_like_client.put('/api/settings', json={'foo': 'bar'})
+    assert resp.status_code == 400
+    assert resp.content_type.startswith('application/json')
+    data = resp.get_json()
+    assert data['status'] == 'error'
+    assert 'CSRF' in data['message']
+
+
+@pytest.mark.integration
+def test_csrf_token_endpoint_is_not_cacheable(prod_like_client):
+    """A cached /api/csrf-token response means the browser never actually
+    revisits the server on a later fetch, so it can hand the client a
+    token whose matching session cookie was never (re)written — producing
+    "The CSRF session token is missing." with zero server-side trace."""
+    resp = prod_like_client.get('/api/csrf-token')
+    assert resp.headers.get('Cache-Control') == 'no-store'
+
+
+@pytest.mark.integration
 def test_csrf_enforcement_is_skipped_when_testing_flag_is_set(prod_like_client):
     """The TESTING flag (set by other test suites' shared-app fixtures) must
     still disable CSRF for convenience in tests, without weakening production."""
