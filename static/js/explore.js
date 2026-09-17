@@ -324,6 +324,16 @@ function initMap() {
             setStart(e.latlng.lat, e.latlng.lng);
         }
     });
+
+    // loadCoverage() fetches tiles for map.getBounds() as of the moment it's
+    // called (setStart/setEnd/etc.) and never again — so panning or zooming
+    // out afterward left the newly-visible viewport with no coverage tiles,
+    // stuck showing whatever was fetched for the original view. Re-fetch on
+    // every view change once a start point exists, same debounce as the
+    // other triggers so a scroll-wheel zoom doesn't fire one request per tick.
+    map.on('zoomend moveend', () => {
+        if (startMarker) debouncedLoadCoverage();
+    });
 }
 
 /** Enter or exit rectangle-draw mode (#491), disabling map panning while active
