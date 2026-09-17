@@ -44,6 +44,21 @@ _OVERPASS_REQUEST_TIMEOUT_S = 12
 # bbox changes on nearly every pin placement, so a bbox-keyed marker would
 # almost always miss and every request would still pay the full timeout.
 _OVERPASS_NEGATIVE_CACHE_TTL_S = 60
+# Caps how many threads can be blocked inside an Overpass call at once
+# (#598). The app runs a single gunicorn worker with only 4 threads total
+# (gunicorn.conf.py), shared across every endpoint — page loads included.
+# Without a cap, a handful of concurrent water-polygon cache misses (a
+# user panning across several new areas, or Overpass itself running slow)
+# can occupy every thread for up to _OVERPASS_REQUEST_TIMEOUT_S each,
+# leaving nothing to serve unrelated requests — confirmed live: two test
+# requests against a cold bbox queued 13.5 minutes before being serviced
+# at all. Kept well under the thread count so fast, local-only endpoints
+# (tile coverage from the warm index, page loads) always have headroom.
+_MAX_CONCURRENT_OVERPASS_CALLS = 2
+# How long a request waits for a free Overpass slot before giving up.
+# Bounds the worst case to roughly this plus one request's own timeout,
+# instead of queueing behind however many callers are already waiting.
+_OVERPASS_SEMAPHORE_WAIT_S = 5
 
 
 #: Placeholder value for a visited tile in a TileCoverage response (#579).
@@ -320,6 +335,13 @@ class CoverageTracker:
         # pattern as _get_zoom_lock/_tile_index_locks_lock above.
         self._water_polygon_locks: Dict[str, threading.Lock] = {}
         self._water_polygon_locks_lock = threading.Lock()
+        # Caps concurrent Overpass calls across *all* bboxes (#598) — the
+        # per-key lock above only de-dups requests for the *same* bbox;
+        # this bounds how many different-bbox calls can block a thread at
+        # once, so the app's small shared thread pool always keeps headroom
+        # for fast, local-only endpoints even when several new areas are
+        # queried in quick succession or Overpass itself is slow.
+        self._overpass_semaphore = threading.BoundedSemaphore(_MAX_CONCURRENT_OVERPASS_CALLS)
 
     # ------------------------------------------------------------------
     # Activity loading
@@ -752,37 +774,56 @@ class CoverageTracker:
                     f"Overpass water-polygon lookup temporarily unavailable ({remaining:.0f}s)"
                 )
 
-            south, west, north, east = bounds
-            query = (
-                f"[out:json][timeout:{_OVERPASS_QUERY_TIMEOUT_S}];"
-                "("
-                f'way["natural"="water"]({south},{west},{north},{east});'
-                f'relation["natural"="water"]({south},{west},{north},{east});'
-                ");"
-                "out geom;"
-            )
-            # Overpass rejects requests with no/default User-Agent (406).
-            headers = {"User-Agent": "ride-optimizer (exploration water-tile lookup)"}
-            try:
-                response = requests.post(
-                    _OVERPASS_URL, data={"data": query}, headers=headers,
-                    timeout=_OVERPASS_REQUEST_TIMEOUT_S,
-                )
-                response.raise_for_status()
-                elements = response.json().get("elements", [])
-            except (requests.RequestException, ValueError, OSError) as exc:
-                with self._overpass_failure_lock:
-                    self._overpass_failure_until[_OVERPASS_URL] = time.time() + _OVERPASS_NEGATIVE_CACHE_TTL_S
+            # Concurrency cap (#598): bound how many threads can be blocked
+            # inside the actual Overpass call at once, across all bboxes —
+            # see _MAX_CONCURRENT_OVERPASS_CALLS. Fail fast rather than
+            # queue if no slot frees up within the wait budget, instead of
+            # silently tying up a thread for however long callers ahead of
+            # us take.
+            if not self._overpass_semaphore.acquire(timeout=_OVERPASS_SEMAPHORE_WAIT_S):
                 logger.warning(
-                    "Overpass water-polygon query failed: %s — negative-caching endpoint for %ds",
-                    exc, _OVERPASS_NEGATIVE_CACHE_TTL_S,
+                    "Overpass concurrency cap (%d) reached — failing fast instead of queueing",
+                    _MAX_CONCURRENT_OVERPASS_CALLS,
                 )
-                raise
+                raise RuntimeError(
+                    f"Overpass water-polygon lookup busy "
+                    f"({_MAX_CONCURRENT_OVERPASS_CALLS} requests already in flight); try again shortly"
+                )
+            try:
+                south, west, north, east = bounds
+                query = (
+                    f"[out:json][timeout:{_OVERPASS_QUERY_TIMEOUT_S}];"
+                    "("
+                    f'way["natural"="water"]({south},{west},{north},{east});'
+                    f'relation["natural"="water"]({south},{west},{north},{east});'
+                    ");"
+                    "out geom;"
+                )
+                # Overpass rejects requests with no/default User-Agent (406).
+                headers = {"User-Agent": "ride-optimizer (exploration water-tile lookup)"}
+                try:
+                    response = requests.post(
+                        _OVERPASS_URL, data={"data": query}, headers=headers,
+                        timeout=_OVERPASS_REQUEST_TIMEOUT_S,
+                    )
+                    response.raise_for_status()
+                    elements = response.json().get("elements", [])
+                except (requests.RequestException, ValueError, OSError) as exc:
+                    with self._overpass_failure_lock:
+                        self._overpass_failure_until[_OVERPASS_URL] = time.time() + _OVERPASS_NEGATIVE_CACHE_TTL_S
+                    logger.warning(
+                        "Overpass water-polygon query failed: %s — negative-caching endpoint for %ds",
+                        exc, _OVERPASS_NEGATIVE_CACHE_TTL_S,
+                    )
+                    raise
 
-            # A successful call clears any earlier failure marker so the next
-            # request isn't held back by a now-stale negative cache entry.
-            with self._overpass_failure_lock:
-                self._overpass_failure_until.pop(_OVERPASS_URL, None)
+                # A successful call clears any earlier failure marker so the
+                # next request isn't held back by a now-stale negative cache
+                # entry.
+                with self._overpass_failure_lock:
+                    self._overpass_failure_until.pop(_OVERPASS_URL, None)
+            finally:
+                self._overpass_semaphore.release()
 
             polygons: List[List[Tuple[float, float]]] = []
             for element in elements:
