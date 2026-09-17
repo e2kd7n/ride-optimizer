@@ -4,6 +4,7 @@ Unit tests for data_fetcher module.
 import json
 import pytest
 import tempfile
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import Mock, MagicMock, patch, call
@@ -167,15 +168,16 @@ class TestStravaDataFetcher:
         assert len(commute_activities) >= 1
         assert all('commute' in act.name.lower() or 'work' in act.name.lower() for act in commute_activities)
     
-    @patch('os.path.exists')
-    @patch('builtins.open', create=True)
-    def test_cache_activities(self, mock_open, mock_exists, mock_client, mock_config):
-        """Test caching activities."""
-        mock_exists.return_value = False
-        mock_file = MagicMock()
-        mock_open.return_value.__enter__.return_value = mock_file
-        
+    def test_cache_activities(self, mock_client, mock_config, tmp_path):
+        """Test caching activities.
+
+        Uses a real tmp_path file rather than mocking builtins.open/
+        os.path.exists — cache_activities() now writes through JSONStorage
+        (#598 follow-up: locked, atomic read-modify-write), which needs a
+        real file for its fsync/lock-byte operations; a globally mocked
+        open() breaks those in ways unrelated to what this test checks."""
         fetcher = StravaDataFetcher(mock_client, mock_config, use_test_cache=True)
+        fetcher.cache_path = tmp_path / "activities_test.json"
         
         activities = [
             Activity(
@@ -494,6 +496,39 @@ class TestCacheManagement:
 
     def test_get_cache_age_days_missing(self, fetcher):
         assert fetcher._get_cache_age_days() == 0.0
+
+    def test_concurrent_cache_activities_do_not_clobber_each_other(self, fetcher):
+        """#598 follow-up: cache_activities() used to do an unlocked
+        read-modify-write with a plain open()+json.dump() — two writers
+        landing in the same window (e.g. a Garmin sync and a Strava fetch)
+        could each read the same pre-write state, and whichever wrote last
+        silently discarded the other's new activity. Runs two real threads
+        concurrently against the same fetcher/cache file and asserts both
+        activities survive."""
+        self._write_cache(fetcher.cache_path, age_days=0, activities=[])
+
+        errors = []
+
+        def add_activity(activity_id):
+            try:
+                fetcher.cache_activities([Activity(
+                    id=activity_id, name=f"Ride {activity_id}", type="Ride",
+                    start_date=datetime.now(timezone.utc).isoformat(),
+                    distance=1000.0, moving_time=100, elapsed_time=100,
+                    total_elevation_gain=0.0, average_speed=1.0, max_speed=1.0,
+                )], merge=True)
+            except Exception as e:  # pragma: no cover - surfaced via `errors`
+                errors.append(e)
+
+        threads = [threading.Thread(target=add_activity, args=(i,)) for i in (1, 2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=5)
+
+        assert not errors
+        final = fetcher.load_cached_activities()
+        assert {a.id for a in final} == {1, 2}
 
 
 class TestFindCrossSourceDuplicate:
