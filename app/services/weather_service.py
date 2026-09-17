@@ -19,6 +19,32 @@ from src.secure_logger import SecureLogger
 logger = SecureLogger(__name__)
 
 
+def _normalize_daily_forecast_keys(day_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Alias WeatherFetcher.get_daily_forecast()'s temp_max_c/wind_speed_max_kph/
+    precipitation_sum_mm onto the temperature_c/wind_speed_kph/precipitation_mm
+    names _calculate_comfort_score actually reads (it was written against
+    get_current_conditions()'s temp_c/wind_speed_kph/precipitation_mm shape).
+
+    Without this, every daily-forecast comfort score silently defaults to a
+    fixed 1.0/'favorable' regardless of actual conditions, since none of
+    _calculate_comfort_score's key names match the daily-forecast shape at
+    all — confirmed empirically: a 38C/45kph-wind/12mm-rain day scored 1.0
+    ("favorable") before this fix. Also fulfills this method's own docstring,
+    which already promised both 'temperature'/'temperature_c' etc. would be
+    present — downstream readers (PlannerService._analyze_ride_weather's
+    day_forecast.get('temperature_c', 20) fallback, dashboard.js's
+    weather.temperature_c) were relying on aliases that were never actually
+    set.
+    """
+    if 'temperature_c' not in day_data and 'temp_max_c' in day_data:
+        day_data['temperature_c'] = day_data['temp_max_c']
+    if 'wind_speed_kph' not in day_data and 'wind_speed_max_kph' in day_data:
+        day_data['wind_speed_kph'] = day_data['wind_speed_max_kph']
+    if 'precipitation_mm' not in day_data and 'precipitation_sum_mm' in day_data:
+        day_data['precipitation_mm'] = day_data['precipitation_sum_mm']
+    return day_data
+
+
 class WeatherService:
     """
     Service layer for weather data with caching and graceful degradation.
@@ -294,9 +320,12 @@ class WeatherService:
             for day_data in forecast_data:
                 if not day_data:
                     continue
-                
-                # Add comfort score and favorability
-                enriched_day = self._enrich_weather_data(day_data.copy())
+
+                # Alias temp_max_c/wind_speed_max_kph/precipitation_sum_mm
+                # onto the names _calculate_comfort_score reads (see
+                # _normalize_daily_forecast_keys) before scoring.
+                normalized_day = _normalize_daily_forecast_keys(day_data.copy())
+                enriched_day = self._enrich_weather_data(normalized_day)
                 enriched_forecast.append(enriched_day)
             
             logger.info(

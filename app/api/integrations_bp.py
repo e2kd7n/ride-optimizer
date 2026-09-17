@@ -13,6 +13,7 @@ Routes:
   POST /api/garmin/connect
   POST /api/garmin/disconnect
   POST /api/garmin/sync
+  GET  /api/garmin/sync/status
   GET  /api/trainerroad/status
   POST /api/trainerroad/connect
   POST /api/trainerroad/sync
@@ -22,6 +23,7 @@ Routes:
 """
 
 import os
+import threading
 from datetime import datetime
 
 from flask import Blueprint, current_app, jsonify, request
@@ -283,36 +285,66 @@ def garmin_disconnect():
 @bp.route('/garmin/sync', methods=['POST'])
 @limiter.limit("10 per minute")
 def garmin_sync():
-    """Fetch activities from Garmin Connect and merge into local cache."""
+    """Fetch activities from Garmin Connect and merge into local cache.
+
+    Runs as a background job (#598 follow-up) rather than blocking the
+    request thread: GarminService.fetch_activities() makes one HTTP call
+    per activity to fetch its GPS polyline (up to `limit`, default 200, one
+    per activity — see GarminService.fetch_activities), all sequential on
+    the calling thread. With only 4 gunicorn threads shared across the
+    whole app, a single sync could tie one up for a long time. Poll
+    /api/garmin/sync/status for progress.
+    """
+    jobs = current_app.container.jobs
+    if not jobs.garmin_sync.try_start({'status': 'running', 'label': 'Connecting to Garmin…'}):
+        return jsonify({'status': 'already_running'}), 409
+
     container = current_app.container
     container.initialise()
 
     svc = container.get_garmin_service()
     if not svc.is_connected():
-        return jsonify({'success': False, 'error': 'Garmin not connected'}), 400
+        jobs.garmin_sync.reset({'status': 'idle'})
+        return jsonify({'status': 'error', 'message': 'Garmin not connected'}), 400
 
     data = request.get_json(silent=True) or {}
     days = min(int(data.get('days', 90)), 365)
 
-    try:
-        activities = svc.fetch_activities(days=days)
-        if container.analysis_service and container.analysis_service.data_fetcher:
-            existing = container.analysis_service.data_fetcher.load_cached_activities() or []
-            existing_ids = {a.id for a in existing}
-            new_acts = [a for a in activities if a.id not in existing_ids]
-            if new_acts:
-                merged = existing + new_acts
-                container.analysis_service.data_fetcher.cache_activities(merged)
-            return jsonify({
-                'success': True,
-                'fetched': len(activities),
-                'new': len(new_acts),
-                'total': len(existing) + len(new_acts),
-            })
-        return jsonify({'success': True, 'fetched': len(activities), 'new': len(activities)})
-    except Exception as e:
-        logger.error(f"Garmin sync failed: {e}", exc_info=True)
-        return jsonify({'success': False, 'error': str(e)}), 500
+    def _run():
+        try:
+            activities = svc.fetch_activities(days=days)
+            if container.analysis_service and container.analysis_service.data_fetcher:
+                existing = container.analysis_service.data_fetcher.load_cached_activities() or []
+                existing_ids = {a.id for a in existing}
+                new_acts = [a for a in activities if a.id not in existing_ids]
+                if new_acts:
+                    merged = existing + new_acts
+                    container.analysis_service.data_fetcher.cache_activities(merged)
+                jobs.garmin_sync.update(
+                    status='done',
+                    label=f'Synced {len(activities)} activities ({len(new_acts)} new)',
+                    fetched=len(activities),
+                    new=len(new_acts),
+                    total=len(existing) + len(new_acts),
+                )
+            else:
+                jobs.garmin_sync.update(
+                    status='done',
+                    label=f'Synced {len(activities)} activities ({len(activities)} new)',
+                    fetched=len(activities),
+                    new=len(activities),
+                )
+        except Exception as e:
+            logger.error(f"Garmin sync failed: {e}", exc_info=True)
+            jobs.garmin_sync.update(status='error', label=str(e))
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({'status': 'started'})
+
+
+@bp.route('/garmin/sync/status')
+def garmin_sync_status():
+    return jsonify(current_app.container.jobs.garmin_sync.snapshot())
 
 
 # ---------------------------------------------------------------------------
