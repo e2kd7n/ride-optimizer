@@ -791,35 +791,7 @@
                 }
             });
 
-            document.getElementById('garmin-sync-btn').addEventListener('click', async () => {
-                const btn = document.getElementById('garmin-sync-btn');
-                const feedback = document.getElementById('garmin-sync-feedback');
-                btn.disabled = true;
-                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Syncing…';
-                feedback.style.display = 'none';
-
-                try {
-                    const res = await window.apiClient.fetch('/garmin/sync', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ days: 90 })
-                    });
-                    if (res.success) {
-                        feedback.style.display = '';
-                        feedback.innerHTML = `<span class="text-success small"><i class="bi bi-check-circle"></i> Synced ${res.fetched} activities (${res.new} new)</span>`;
-                        if (typeof showToast === 'function') showToast(`Garmin sync complete: ${res.new} new activities`, 'success');
-                    } else {
-                        feedback.style.display = '';
-                        feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(res.error || 'Sync failed')}</span>`;
-                    }
-                } catch (e) {
-                    feedback.style.display = '';
-                    feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(e.message || 'Sync failed')}</span>`;
-                } finally {
-                    btn.disabled = false;
-                    btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Sync Activities';
-                }
-            });
+            document.getElementById('garmin-sync-btn').addEventListener('click', startGarminSync);
 
             document.getElementById('garmin-disconnect-btn').addEventListener('click', async () => {
                 if (!confirm('Disconnect Garmin? This will remove your saved credentials.')) return;
@@ -830,6 +802,74 @@
                 } catch (e) {
                     if (typeof showToast === 'function') showToast('Failed to disconnect', 'error');
                 }
+            });
+        }
+
+        let _garminSyncStop = null;
+        const idleGarminSyncBtnHtml = '<i class="bi bi-arrow-repeat"></i> Sync Activities';
+
+        function resetGarminSyncBtn() {
+            const btn = document.getElementById('garmin-sync-btn');
+            btn.disabled = false;
+            btn.innerHTML = idleGarminSyncBtnHtml;
+        }
+
+        async function startGarminSync() {
+            const btn = document.getElementById('garmin-sync-btn');
+            const feedback = document.getElementById('garmin-sync-feedback');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Syncing…';
+            feedback.style.display = 'none';
+
+            try {
+                const res = await window.apiClient.fetch('/garmin/sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ days: 90 })
+                });
+                if (res.status === 'started' || res.status === 'already_running') {
+                    pollGarminSync();
+                } else {
+                    feedback.style.display = '';
+                    feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(res.message || 'Sync failed')}</span>`;
+                    resetGarminSyncBtn();
+                }
+            } catch (e) {
+                feedback.style.display = '';
+                feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(e.message || 'Sync failed')}</span>`;
+                resetGarminSyncBtn();
+            }
+        }
+
+        function pollGarminSync() {
+            const feedback = document.getElementById('garmin-sync-feedback');
+
+            _garminSyncStop = window.pollJob({
+                intervalMs: 1500,
+                fetchStatus: () => window.apiClient.fetch('/garmin/sync/status'),
+                onGiveUp: (reason) => {
+                    resetGarminSyncBtn();
+                    if (typeof showToast === 'function') {
+                        showToast(reason === 'timeout' ? 'Garmin sync is taking unusually long' : 'Lost connection while checking sync status', 'warning');
+                    }
+                },
+                onStatus: (resp) => {
+                    if (resp.status === 'running') {
+                        return 'running';
+                    } else if (resp.status === 'done') {
+                        feedback.style.display = '';
+                        feedback.innerHTML = `<span class="text-success small"><i class="bi bi-check-circle"></i> ${window.escapeHtml(resp.label || 'Sync complete')}</span>`;
+                        if (typeof showToast === 'function') showToast(resp.label || 'Garmin sync complete', 'success');
+                        resetGarminSyncBtn();
+                        return 'done';
+                    } else if (resp.status === 'error') {
+                        feedback.style.display = '';
+                        feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(resp.label || 'Sync failed')}</span>`;
+                        resetGarminSyncBtn();
+                        return 'error';
+                    }
+                    return 'running';
+                },
             });
         }
 
