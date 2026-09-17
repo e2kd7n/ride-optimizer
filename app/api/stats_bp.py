@@ -4,6 +4,7 @@ Routes:
   GET  /api/stats
   GET  /api/stats/gear
   POST /api/stats/refresh-gear
+  GET  /api/stats/refresh-gear/status
   POST /api/stats/backfill-gear-ids
   GET  /api/stats/backfill-gear-ids/status
 """
@@ -435,27 +436,54 @@ def get_gear_stats():
 @bp.route('/stats/refresh-gear', methods=['POST'])
 @limiter.limit("10 per minute")
 def refresh_gear():
-    """Fetch athlete's bikes and shoes from Strava and update the gear cache."""
+    """Fetch athlete's bikes and shoes from Strava and update the gear cache.
+
+    Runs as a background job (#598 follow-up) rather than blocking the
+    request thread: data_fetcher.fetch_athlete_gear() goes through
+    stravalib, whose DefaultRateLimiter can synchronously time.sleep() the
+    calling thread for the rest of Strava's current rate-limit window (up to
+    ~15 minutes short-term, or until midnight UTC for the daily cap) if that
+    limit is hit — previously running inline here, unlike every sibling
+    Strava-fetch endpoint (/api/fetch, /api/analyze,
+    /api/stats/backfill-gear-ids), which already backgrounds the call. With
+    only 4 gunicorn threads shared across the whole app, one such call could
+    tie up a thread for that entire window. Poll
+    /api/stats/refresh-gear/status for progress.
+    """
+    jobs = current_app.container.jobs
+    if not jobs.refresh_gear.try_start({'status': 'running', 'label': 'Connecting to Strava…'}):
+        return jsonify({'status': 'already_running'}), 409
+
     container = current_app.container
     container.initialise()
 
     analysis_service = container.analysis_service
     if analysis_service is None:
+        jobs.refresh_gear.reset({'status': 'idle'})
         return jsonify({'status': 'error', 'message': 'Analysis is currently unavailable'}), 503
 
-    try:
-        data = analysis_service.data_fetcher.fetch_athlete_gear()
-        bikes = len(data.get('bikes', []))
-        shoes = len(data.get('shoes', []))
-        return jsonify({
-            'status': 'success',
-            'message': f'Refreshed {bikes} bikes and {shoes} shoes',
-            'bikes': bikes,
-            'shoes': shoes,
-        })
-    except Exception as e:
-        logger.error(f"Failed to refresh gear: {e}", exc_info=True)
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+    def _run():
+        try:
+            data = analysis_service.data_fetcher.fetch_athlete_gear()
+            bikes = len(data.get('bikes', []))
+            shoes = len(data.get('shoes', []))
+            jobs.refresh_gear.update(
+                status='done',
+                label=f'Refreshed {bikes} bikes and {shoes} shoes',
+                bikes=bikes,
+                shoes=shoes,
+            )
+        except Exception as e:
+            logger.error(f"Failed to refresh gear: {e}", exc_info=True)
+            jobs.refresh_gear.update(status='error', label=str(e))
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({'status': 'started'})
+
+
+@bp.route('/stats/refresh-gear/status')
+def refresh_gear_status():
+    return jsonify(current_app.container.jobs.refresh_gear.snapshot())
 
 
 @bp.route('/stats/backfill-gear-ids', methods=['POST'])

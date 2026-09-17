@@ -1311,34 +1311,76 @@
             const repairBtn = document.getElementById('repair-gear-btn');
             if (!syncBtn || !repairBtn) return;
 
-            syncBtn.addEventListener('click', async () => {
-                const feedback = document.getElementById('gear-admin-feedback');
-                syncBtn.disabled = true;
-                syncBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Syncing…';
-                feedback.style.display = 'none';
-                try {
-                    const resp = await window.apiClient.fetch('/stats/refresh-gear', {
-                        method: 'POST',
-                        body: JSON.stringify({}),
-                    });
-                    if (resp.status === 'success') {
-                        feedback.style.display = '';
-                        feedback.innerHTML = `<span class="text-success small"><i class="bi bi-check-circle"></i> ${window.escapeHtml(resp.message || 'Gear synced')}</span>`;
-                        if (typeof showToast === 'function') showToast(resp.message || 'Gear synced', 'success');
-                    } else {
-                        feedback.style.display = '';
-                        feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(resp.message || 'Sync failed')}</span>`;
-                    }
-                } catch (e) {
-                    feedback.style.display = '';
-                    feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(e.message || 'Sync failed')}</span>`;
-                } finally {
-                    syncBtn.disabled = false;
-                    syncBtn.innerHTML = '<i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Sync Gear';
-                }
-            });
+            syncBtn.addEventListener('click', startGearSync);
 
             repairBtn.addEventListener('click', startGearRepair);
+        }
+
+        let _gearSyncStop = null;
+        const idleSyncBtnHtml = '<i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Sync Gear';
+
+        function resetGearSyncBtn() {
+            const btn = document.getElementById('sync-gear-btn');
+            btn.disabled = false;
+            btn.innerHTML = idleSyncBtnHtml;
+        }
+
+        async function startGearSync() {
+            const syncBtn = document.getElementById('sync-gear-btn');
+            const feedback = document.getElementById('gear-admin-feedback');
+            syncBtn.disabled = true;
+            syncBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Syncing…';
+            feedback.style.display = 'none';
+
+            try {
+                const resp = await window.apiClient.fetch('/stats/refresh-gear', {
+                    method: 'POST',
+                    body: JSON.stringify({}),
+                });
+                if (resp.status === 'started' || resp.status === 'already_running') {
+                    pollGearSync();
+                } else {
+                    feedback.style.display = '';
+                    feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(resp.message || 'Sync failed')}</span>`;
+                    resetGearSyncBtn();
+                }
+            } catch (e) {
+                feedback.style.display = '';
+                feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(e.message || 'Sync failed')}</span>`;
+                resetGearSyncBtn();
+            }
+        }
+
+        function pollGearSync() {
+            const feedback = document.getElementById('gear-admin-feedback');
+
+            _gearSyncStop = window.pollJob({
+                intervalMs: 1500,
+                fetchStatus: () => window.apiClient.fetch('/stats/refresh-gear/status'),
+                onGiveUp: (reason) => {
+                    resetGearSyncBtn();
+                    if (typeof showToast === 'function') {
+                        showToast(reason === 'timeout' ? 'Gear sync is taking unusually long' : 'Lost connection while checking sync status', 'warning');
+                    }
+                },
+                onStatus: (resp) => {
+                    if (resp.status === 'running') {
+                        return 'running';
+                    } else if (resp.status === 'done') {
+                        feedback.style.display = '';
+                        feedback.innerHTML = `<span class="text-success small"><i class="bi bi-check-circle"></i> ${window.escapeHtml(resp.label || 'Gear synced')}</span>`;
+                        if (typeof showToast === 'function') showToast(resp.label || 'Gear synced', 'success');
+                        resetGearSyncBtn();
+                        return 'done';
+                    } else if (resp.status === 'error') {
+                        feedback.style.display = '';
+                        feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(resp.label || 'Sync failed')}</span>`;
+                        resetGearSyncBtn();
+                        return 'error';
+                    }
+                    return 'running';
+                },
+            });
         }
 
         let _gearRepairStop = null;
