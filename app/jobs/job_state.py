@@ -69,6 +69,8 @@ class JobRegistry:
         self.history_backfill.reset({'status': 'idle'})
         self.refresh_gear: JobState = JobState()
         self.refresh_gear.reset({'status': 'idle'})
+        self.garmin_sync: JobState = JobState()
+        self.garmin_sync.reset({'status': 'idle'})
         # threading.Event replaces the bare bool _analysis_stop_requested
         self.analysis_stop: threading.Event = threading.Event()
         self.history_backfill_stop: threading.Event = threading.Event()
