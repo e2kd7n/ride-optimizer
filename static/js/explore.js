@@ -1028,10 +1028,7 @@ async function loadCoverage() {
     }
 
     try {
-        const [results, roadlessResults] = await Promise.all([
-            Promise.all(zooms.map(fetchOne)),
-            Promise.all(zooms.map(fetchRoadless)),
-        ]);
+        const results = await Promise.all(zooms.map(fetchOne));
         if (requestId !== _coverageRequestId) return; // a newer loadCoverage() call has since taken over
 
         const failed = results.find(d => d.status !== 'success');
@@ -1043,29 +1040,17 @@ async function loadCoverage() {
         coverageData = results[0];
         coverageDataSecondary = results[1] || null;
         _coverageIsCorridor = !!corridorBoxes;
-        coverageData.roadless = (roadlessResults[0] && roadlessResults[0].status === 'success')
-            ? roadlessResults[0].roadless
-            : [];
-        if (coverageDataSecondary) {
-            coverageDataSecondary.roadless = (roadlessResults[1] && roadlessResults[1].status === 'success')
-                ? roadlessResults[1].roadless
-                : [];
-        }
-        // #567 — surface a genuine roadless (water-exclusion) lookup failure
-        // instead of the previous silent degrade: a route generated without
-        // it can target open water with nothing telling the rider why. Not
-        // triggered by "no water found" (a real success with an empty list)
-        // or by the intentional no-bounds skip on a full-history load.
-        if (roadlessResults.some(roadlessLookupFailed)) {
-            showRoadlessWarning();
-        } else {
-            clearRoadlessWarning();
-        }
 
-        // Clear any stale "new tile" highlight from a previous start point/grid,
-        // then draw the visited-tile grid so coverage is visible on the map
-        // (not just fed silently to the route generator) — #488 had dropped
-        // this rendering step entirely.
+        // Render as soon as coverage itself is ready — tile rendering never
+        // reads .roadless (only later route-generation scoring does, via
+        // exploration-worker.js, which already tolerates it being absent).
+        // Coverage is normally served from a warm in-memory index in tens
+        // of milliseconds; roadless is a live Overpass lookup on any cache
+        // miss, and often the slower/less reliable of the two (#600) — a
+        // rider shouldn't wait on that just to see coverage that was
+        // already sitting there ready. Clear any stale "new tile" highlight
+        // from a previous start point/grid first (#488 had dropped this
+        // rendering step entirely).
         newTilesLayer.clearLayers();
         renderTiles(coverageData, coverageDataSecondary);
         const updatedAt = corridorBoxes ? new Date(coverageData.computed_at) : new Date(coverageData.computed_at + 'Z');
@@ -1079,6 +1064,33 @@ async function loadCoverage() {
         statusEl.textContent = (corridorBoxes
             ? `Updated ${updatedAt.toLocaleTimeString()} (corridor: ${corridorBoxes.length} segment${corridorBoxes.length > 1 ? 's' : ''})`
             : `Updated ${updatedAt.toLocaleTimeString()}`) + staleSuffix;
+        clearTimeout(slowHintTimer);
+        updateWorkflowState();
+
+        // Roadless (water-exclusion) data trails independently, attached
+        // whenever it resolves — not awaited before the render above.
+        Promise.all(zooms.map(fetchRoadless)).then((roadlessResults) => {
+            if (requestId !== _coverageRequestId) return; // a newer loadCoverage() call has since taken over
+            coverageData.roadless = (roadlessResults[0] && roadlessResults[0].status === 'success')
+                ? roadlessResults[0].roadless
+                : [];
+            if (coverageDataSecondary) {
+                coverageDataSecondary.roadless = (roadlessResults[1] && roadlessResults[1].status === 'success')
+                    ? roadlessResults[1].roadless
+                    : [];
+            }
+            // #567 — surface a genuine roadless (water-exclusion) lookup
+            // failure instead of the previous silent degrade: a route
+            // generated without it can target open water with nothing
+            // telling the rider why. Not triggered by "no water found" (a
+            // real success with an empty list) or by the intentional
+            // no-bounds skip on a full-history load.
+            if (roadlessResults.some(roadlessLookupFailed)) {
+                showRoadlessWarning();
+            } else {
+                clearRoadlessWarning();
+            }
+        }).catch(() => {}); // fetchOne/fetchRoadless already catch their own errors into a status object; this is just a backstop.
     } catch (e) {
         if (requestId === _coverageRequestId) showCoverageError(e.message);
     } finally {
