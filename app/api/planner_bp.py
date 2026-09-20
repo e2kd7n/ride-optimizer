@@ -227,7 +227,15 @@ def exploration_roadless_tiles():
 @bp.route('/exploration/invalidate', methods=['POST'])
 @limiter.limit(_rate_limit("exploration.rate_limit_invalidate", "10 per minute"))
 def exploration_invalidate():
-    """Clear coverage caches (call after fetching new activities).
+    """Fully clear coverage caches, including the on-disk tile index — the
+    explicit user-initiated "Clear Cache" action.
+
+    This is the manual path #571 designed hard_invalidate_caches() for: an
+    explicit user action expecting a full recompute, as opposed to the
+    automatic post-activity-sync path (data_bp.py), which calls the soft
+    invalidate_caches() so it doesn't force a cold rebuild on every sync.
+    Calling the soft version here (as this endpoint did until now) made
+    "Clear Cache" silently a no-op against the on-disk index.
 
     Unlike every sibling /exploration/* endpoint, this had no rate limit
     (#576) — repeatedly hitting it reproduces the full cold-rebuild
@@ -237,7 +245,7 @@ def exploration_invalidate():
     coverage request to pay for a synchronous rebuild inline.
     """
     svc = current_app.container.get_exploration_service()
-    svc.invalidate_caches()
+    svc.hard_invalidate_caches()
     svc.restart_prewarm()
     return jsonify({'status': 'success', 'message': 'Coverage caches invalidated'})
 

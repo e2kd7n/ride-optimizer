@@ -227,13 +227,17 @@ class TestExplorationTilesAPI:
 
 @pytest.mark.unit
 class TestExplorationInvalidateAPI:
-    """Tests for POST /api/exploration/invalidate (#576).
+    """Tests for POST /api/exploration/invalidate (#571, #576).
 
     Unlike every sibling /exploration/* endpoint this had no rate limit —
     repeatedly hitting it reproduced the full cold-rebuild incident on
     demand — and it never re-triggered the #560 pre-warm after wiping the
     cache, leaving the next live coverage request to pay for a synchronous
-    rebuild inline.
+    rebuild inline. It must call hard_invalidate_caches() (the full,
+    destructive wipe #571 designed for this explicit user action), not the
+    soft invalidate_caches() the automatic post-sync path uses — calling
+    the soft version here made "Clear Cache" silently a no-op against the
+    on-disk tile index.
     """
 
     def test_invalidate_clears_cache_and_rewarms(self, client):
@@ -246,7 +250,8 @@ class TestExplorationInvalidateAPI:
             assert response.status_code == 200
             data = response.get_json()
             assert data['status'] == 'success'
-            mock_svc.invalidate_caches.assert_called_once()
+            mock_svc.hard_invalidate_caches.assert_called_once()
+            mock_svc.invalidate_caches.assert_not_called()
             mock_svc.restart_prewarm.assert_called_once()
         finally:
             app.container.exploration_service = None

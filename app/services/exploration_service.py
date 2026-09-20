@@ -206,8 +206,8 @@ class ExplorationService:
 
     def hard_invalidate_caches(self):
         """Fully wipe the coverage cache, including the on-disk tile index.
-        Not yet wired to any endpoint — intended for an explicit,
-        user-initiated "clear my coverage cache" action (#576)."""
+        Wired to POST /api/exploration/invalidate (planner_bp.py) — the
+        explicit, user-initiated "Clear Cache" action (#571, #576)."""
         self._tracker.hard_invalidate_caches()
 
     def _cache_get(self, cache_key: tuple) -> Optional[dict]:
