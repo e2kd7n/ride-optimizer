@@ -571,11 +571,33 @@ async function useMyLocation() {
         },
         (err) => {
             statusEl.textContent = previousText;
-            if (typeof showToast === 'function') showToast(err.message || 'Unable to determine your location', 'error');
+            if (typeof showToast === 'function') showToast(geolocationErrorMessage(err), 'error');
             btn.disabled = false;
         },
         { enableHighAccuracy: false, timeout: 10000 },
     );
+}
+
+// Insecure origins never fire the browser's permission prompt at all —
+// PERMISSION_DENIED fires immediately with an implementation-defined message
+// that doesn't explain why (design review 2026-07-28, finding ERR-1; #526
+// fixes the underlying insecure-origin problem via HTTPS, this covers
+// devices/browsers that still hit it during rollout or on old bookmarks).
+function geolocationErrorMessage(err) {
+    const insecureOrigin = location.protocol !== 'https:' && location.hostname !== 'localhost';
+    if (err.code === err.PERMISSION_DENIED) {
+        if (insecureOrigin) {
+            return 'Location requires a secure (https://) connection — this page was loaded over plain HTTP.';
+        }
+        return 'Location permission was denied. Check your browser\'s site settings to allow it.';
+    }
+    if (err.code === err.POSITION_UNAVAILABLE) {
+        return 'Your location is currently unavailable. Try again in a moment.';
+    }
+    if (err.code === err.TIMEOUT) {
+        return 'Timed out while determining your location. Try again.';
+    }
+    return err.message || 'Unable to determine your location';
 }
 
 // ── Web Worker ──────────────────────────────────────────────────

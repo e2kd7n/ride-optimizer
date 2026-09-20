@@ -1,0 +1,17 @@
+# Reverse proxy for ride-optimizer: terminates TLS and proxies to the app
+# container over the compose-internal network, so gunicorn/Flask never see
+# HTTPS directly (see docs/DEPLOYMENT.md "HTTPS / TLS").
+#
+# `tls internal` makes Caddy mint and auto-renew its own local CA + leaf certs
+# — no domain, DNS provider, or manual openssl/certbot step needed. This is
+# the LAN-only option (#526 "Option A"): each browser/device will show a
+# certificate-authority warning once, until you optionally trust Caddy's root
+# CA (deploy/README section below covers that).
+#
+# CADDY_SITE_ADDRESS overrides the hostname(s) Caddy answers on — set it in
+# .env if `pi4.local` doesn't resolve on your LAN (e.g. to the Pi's static
+# IP). Multiple addresses can be space-separated.
+{$CADDY_SITE_ADDRESS:https://pi4.local} {
+	tls internal
+	reverse_proxy ride-optimizer:{$APP_PORT:8083}
+}
