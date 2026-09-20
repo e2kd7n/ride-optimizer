@@ -1208,7 +1208,14 @@ async function loadCoverage() {
         // rendering step entirely).
         newTilesLayer.clearLayers();
         renderTiles(coverageData, coverageDataSecondary);
-        const updatedAt = corridorBoxes ? new Date(coverageData.computed_at) : new Date(coverageData.computed_at + 'Z');
+        // #582: the backend now always emits an explicit UTC offset
+        // (datetime.now(timezone.utc).isoformat() -> "...+00:00", since the
+        // deprecated datetime.utcnow() calls were replaced), and the
+        // corridor-merge path's own synthetic timestamp (new Date().toISOString())
+        // already ends in "Z" — both are directly parseable, so the manual
+        // "+ 'Z'" this used to need for a bare naive-datetime string would now
+        // produce an invalid double-offset string ("...+00:00Z") instead.
+        const updatedAt = new Date(coverageData.computed_at);
         // #563 — flag when the backend's stale-serving fast path answered
         // with cached-but-possibly-outdated data rather than a fresh
         // rebuild, so a rider isn't silently planning against numbers that
