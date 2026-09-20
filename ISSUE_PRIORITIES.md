@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-09-20 17:11:55 UTC / 2026-09-20 17:11:55 GMT
+**Last Updated:** 2026-09-20 17:15:45 UTC / 2026-09-20 17:15:45 GMT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -43,9 +43,6 @@ This file reflects the current state of GitHub issues organized by release miles
 
 ## 📅 v0.20.0 (Future Release)
 
-### 🔴 P0 - CRITICAL
-- #570 - Explore tab: fix route-generation failures and multi-minute stalls on real rides
-
 ### 🔴 P1 - HIGH
 - #595 - Non-corridor coverage fetch sends unclamped map viewport as bbox, can exceed backend's 0.5° limit
 
@@ -68,7 +65,6 @@ None
 - #588 - Settings analysis 'Done' summary drops long_rides_count from the same result object it reads counts from
 - #586 - Commute-window weather card averages away the hourly breakdown it already fetched
 - #585 - Explore route detail: "N new tiles" doesn't distinguish squadrats from squadratinhos
-- #581 - Dead road-coverage feature (~200 lines): osmnx/shapely not installed, no frontend caller
 
 ### 📋 P4 - FUTURE
 None
