@@ -59,7 +59,7 @@ stop_spinner ok
 # (docker-compose.yml) — pulling a new image alone leaves config.yaml frozen at
 # whatever it was when this checkout was last updated, so any config-touching
 # fix silently never takes effect on the Pi until someone happens to git pull
-# by hand (#596). Fast-forward only: never clobber a diverged checkout.
+# by hand (#597). Fast-forward only: never clobber a diverged checkout.
 section "Syncing Config" "🔄"
 
 if git fetch origin main --quiet 2>/dev/null; then
