@@ -35,6 +35,22 @@ let selectedAreaBounds = null;
 const COVERAGE_MAX_BBOX_DEGREES = 0.45;
 const CORRIDOR_BUFFER_MILES = 3;
 
+// Loop/out-and-back coverage is fetched from a square region around the start
+// point sized by the route generator's own reach radius (see
+// computeRadiusBoxes()) rather than the corridor's line-split. A square grid
+// grows O(n^2) with radius where the corridor's line-split only grows O(n), so
+// this caps the grid at MAX_RADIUS_GRID_DIM x MAX_RADIUS_GRID_DIM boxes to keep
+// worst-case concurrent Overpass-backed requests (long distance slider + "both"
+// zoom mode) bounded on the Pi — beyond this, the fetched coverage area is
+// clamped smaller than the true reach radius (route generation still targets
+// the full requested distance; only "new tile" targeting precision near the far
+// edge is affected).
+const MAX_RADIUS_GRID_DIM = 3;
+// Rounding step (miles) applied to the reach radius before computing boxes, so
+// small slider/duration nudges that round to the same value reuse
+// _corridorCoverageCache instead of missing on every debounced settle.
+const RADIUS_ROUNDING_MILES = 2;
+
 // #540 — point-to-point origin/destination already impose a natural minimum
 // route length; only requests whose target distance is this multiple beyond
 // the *efficient* (routed) origin->destination distance count as "wild" and
@@ -170,7 +186,14 @@ function initDistanceSlider() {
     updateDistanceDisplay(slider.value);
     // Bound here instead of an inline oninput="" attribute so CSP
     // script-src can drop 'unsafe-inline' — #475.
-    slider.addEventListener('input', () => updateDistanceDisplay(slider.value));
+    slider.addEventListener('input', () => {
+        updateDistanceDisplay(slider.value);
+        // Loop/out-and-back coverage area depends on target distance (see
+        // loadCoverage()) — reload so it tracks the new value. Guarded on
+        // startMarker like every other debouncedLoadCoverage() call site
+        // (setStart/setEnd) so this is a no-op before a start point exists.
+        if (startMarker) debouncedLoadCoverage();
+    });
 }
 
 function updateDistanceDisplay(kmValue) {
@@ -212,6 +235,10 @@ function onTargetTypeChange() {
     document.getElementById('distance-target-group').classList.toggle('d-none', isDuration);
     document.getElementById('duration-target-group').classList.toggle('d-none', !isDuration);
     if (isDuration) updateDurationHint();
+    // Switching between distance/duration targets changes which control
+    // resolveTargetDistanceKm() reads — reload loop/out-and-back coverage so
+    // it's sized against the now-active target.
+    if (startMarker) debouncedLoadCoverage();
 }
 
 function initDurationSlider() {
@@ -220,6 +247,7 @@ function initDurationSlider() {
     slider.addEventListener('input', () => {
         document.getElementById('duration-value').textContent = slider.value;
         updateDurationHint();
+        if (startMarker) debouncedLoadCoverage();
     });
 }
 
@@ -412,6 +440,10 @@ function onRouteTypeChange() {
     document.getElementById('end-location-group').classList.toggle('d-none', !isPtp);
     if (!isPtp) clearEnd();
     updateWorkflowState();
+    // Switching shape changes which branch of loadCoverage() applies (corridor
+    // vs start+distance radius vs viewport) — reload so stale coverage from
+    // the previous shape doesn't linger. Debounced — see setStart().
+    if (startMarker) debouncedLoadCoverage();
 }
 
 // ── Workflow step tracking (#361) ──────────────────────────────
@@ -627,9 +659,100 @@ function computeCorridorBoxes(startLatLng, endLatLng, bufferMiles, maxSpanDeg) {
     return boxes;
 }
 
+/**
+ * Tile a square region around `centerLatLng` (out to `radiusMiles`, padded by
+ * `bufferMiles`) into a chain of overlapping boxes each within `maxSpanDeg` per
+ * side — the loop/out-and-back equivalent of computeCorridorBoxes() above, but
+ * for a point+radius area instead of a line between two points.
+ *
+ * `radiusMiles` is rounded up to the nearest RADIUS_ROUNDING_MILES first so
+ * small target-distance changes that round to the same value produce the same
+ * boxes and hit _corridorCoverageCache instead of missing on every debounced
+ * reload. Returns `{ boxes, bounds, clamped }` — `bounds` is the outer
+ * [south, west, north, east] rectangle the boxes tile (padded, post-clamp);
+ * `clamped` is true if the true reach radius had to be shrunk to keep the grid
+ * within MAX_RADIUS_GRID_DIM x MAX_RADIUS_GRID_DIM boxes.
+ */
+function computeRadiusBoxes(centerLatLng, radiusMiles, bufferMiles, maxSpanDeg) {
+    const roundedRadiusMiles = Math.ceil(radiusMiles / RADIUS_ROUNDING_MILES) * RADIUS_ROUNDING_MILES;
+
+    const padLatDeg = milesToDegLat(bufferMiles);
+    const padLonDeg = milesToDegLon(bufferMiles, centerLatLng.lat);
+    const maxPadDeg = Math.max(padLatDeg, padLonDeg);
+    const rawSplitDeg = Math.max(0.05, maxSpanDeg - 2 * maxPadDeg);
+
+    // How large an outer half-width (in degrees) MAX_RADIUS_GRID_DIM cells of
+    // rawSplitDeg can cover, converted back to miles at this latitude — the
+    // ceiling on the *effective* radius fed into the box grid.
+    const maxOuterHalfDeg = (MAX_RADIUS_GRID_DIM * rawSplitDeg) / 2;
+    const maxRadiusMilesLat = maxOuterHalfDeg * 69.0;
+    const maxRadiusMilesLon = maxOuterHalfDeg * 69.172 * Math.cos(centerLatLng.lat * Math.PI / 180);
+    const maxRadiusMiles = Math.min(maxRadiusMilesLat, maxRadiusMilesLon);
+
+    const clamped = roundedRadiusMiles > maxRadiusMiles;
+    const effectiveRadiusMiles = clamped ? maxRadiusMiles : roundedRadiusMiles;
+
+    const outerPadLatDeg = milesToDegLat(effectiveRadiusMiles) + padLatDeg;
+    const outerPadLonDeg = milesToDegLon(effectiveRadiusMiles, centerLatLng.lat) + padLonDeg;
+    const outer = {
+        south: centerLatLng.lat - outerPadLatDeg,
+        north: centerLatLng.lat + outerPadLatDeg,
+        west: centerLatLng.lng - outerPadLonDeg,
+        east: centerLatLng.lng + outerPadLonDeg,
+    };
+    const bounds = [outer.south, outer.west, outer.north, outer.east];
+
+    if ((outer.north - outer.south) <= maxSpanDeg && (outer.east - outer.west) <= maxSpanDeg) {
+        return { boxes: [outer], bounds, clamped };
+    }
+
+    const cols = Math.max(1, Math.min(MAX_RADIUS_GRID_DIM, Math.ceil((outer.east - outer.west) / rawSplitDeg)));
+    const rows = Math.max(1, Math.min(MAX_RADIUS_GRID_DIM, Math.ceil((outer.north - outer.south) / rawSplitDeg)));
+
+    const boxes = [];
+    for (let r = 0; r < rows; r++) {
+        const south0 = outer.south + (outer.north - outer.south) * (r / rows);
+        const north0 = outer.south + (outer.north - outer.south) * ((r + 1) / rows);
+        const rowPadLon = milesToDegLon(bufferMiles, (south0 + north0) / 2);
+        for (let c = 0; c < cols; c++) {
+            const west0 = outer.west + (outer.east - outer.west) * (c / cols);
+            const east0 = outer.west + (outer.east - outer.west) * ((c + 1) / cols);
+            boxes.push({
+                south: south0 - padLatDeg,
+                north: north0 + padLatDeg,
+                west: west0 - rowPadLon,
+                east: east0 + rowPadLon,
+            });
+        }
+    }
+    return { boxes, bounds, clamped };
+}
+
+/** Slippy-map (Web Mercator) tile index for (lat, lon) at `zoom` — ported from
+ *  src/coverage_tracker.py's lat_lon_to_tile() so total-tile counts computed
+ *  here match the server's exactly. */
+function latLonToTile(lat, lon, zoom) {
+    const n = Math.pow(2, zoom);
+    const x = Math.floor((lon + 180.0) / 360.0 * n);
+    const latRad = lat * Math.PI / 180;
+    const y = Math.floor((1.0 - Math.asinh(Math.tan(latRad)) / Math.PI) / 2.0 * n);
+    return [x, y];
+}
+
+/** Total tile count within [south, west, north, east] at `zoom`, matching
+ *  coverage_tracker.py:638's (max_tx-min_tx+1)*(max_ty-min_ty+1) — computed
+ *  directly from the rectangle rather than summed per sub-box, so it's exact
+ *  regardless of how many overlapping boxes the bounds were tiled into. */
+function tileCountInBounds(bounds, zoom) {
+    const [south, west, north, east] = bounds;
+    const [minTx, minTy] = latLonToTile(north, west, zoom); // north = smaller y
+    const [maxTx, maxTy] = latLonToTile(south, east, zoom); // south = larger y
+    return (maxTx - minTx + 1) * (maxTy - minTy + 1);
+}
+
 /** Merge per-box tile-coverage responses into one result covering the full
- *  corridor. `bounds` is the enclosing rectangle (start/end padded by the
- *  corridor buffer) — the route-generation worker needs a real bounds to
+ *  corridor/area. `bounds` is the enclosing rectangle (padded by the corridor/
+ *  radius buffer) — the route-generation worker needs a real bounds to
  *  enumerate candidate tiles against, same as the single-bbox path. */
 function mergeCoverageResults(results, bounds) {
     const successes = results.filter(r => r && r.status === 'success');
@@ -639,7 +762,11 @@ function mergeCoverageResults(results, bounds) {
 
     const visited = {};
     for (const r of successes) Object.assign(visited, r.visited);
-    const totalInBounds = successes.reduce((sum, r) => sum + (r.total_in_bounds || 0), 0);
+    // Computed analytically from the merged outer bounds rather than summed
+    // per-box — summing double-counts tiles in the deliberate overlap between
+    // adjacent padded boxes, which under-reports coverage_pct (worse as box
+    // count grows, e.g. the loop/out-and-back radius grid).
+    const totalInBounds = tileCountInBounds(bounds, successes[0].zoom);
 
     return {
         status: 'success',
@@ -973,6 +1100,7 @@ async function loadCoverage() {
     const isPtp = document.getElementById('route-type-select').value === 'point_to_point';
     let corridorBoxes = null;
     let corridorBounds = null;
+    let radiusClamped = false;
     if (isPtp && startMarker && endMarker) {
         const start = startMarker.getLatLng();
         const end = endMarker.getLatLng();
@@ -989,6 +1117,23 @@ async function loadCoverage() {
                 Math.max(start.lng, end.lng) + padLon,
             ];
         }
+    } else if (!isPtp && startMarker) {
+        // Loop/out-and-back coverage is derived from the start point and target
+        // distance, not the map viewport — a rider planning a long ride
+        // shouldn't have to zoom out far enough to see the whole route just to
+        // get coverage data, and the viewport is an arbitrary basis for what
+        // the route generator will actually search anyway.
+        const distanceKm = await resolveTargetDistanceKm();
+        // Matches exploration-worker.js's own round-trip reachRadius formula
+        // (reachBasisKm / 4) exactly, so the fetched area always matches what
+        // the route generator will search.
+        const reachRadiusMiles = (distanceKm / 4) / 1.60934;
+        const { boxes, bounds, clamped } = computeRadiusBoxes(
+            startMarker.getLatLng(), reachRadiusMiles, CORRIDOR_BUFFER_MILES, COVERAGE_MAX_BBOX_DEGREES
+        );
+        corridorBoxes = boxes;
+        corridorBounds = bounds;
+        radiusClamped = clamped;
     }
 
     let fetchOne, fetchRoadless;
@@ -1071,9 +1216,12 @@ async function loadCoverage() {
         const staleSuffix = isStale(coverageData) || (coverageDataSecondary && isStale(coverageDataSecondary))
             ? ' (showing cached data — may not include your latest activity yet)'
             : '';
+        const clampedSuffix = radiusClamped
+            ? ' — coverage area capped for very long routes; tile targeting may be less precise near the far end'
+            : '';
         statusEl.textContent = (corridorBoxes
-            ? `Updated ${updatedAt.toLocaleTimeString()} (corridor: ${corridorBoxes.length} segment${corridorBoxes.length > 1 ? 's' : ''})`
-            : `Updated ${updatedAt.toLocaleTimeString()}`) + staleSuffix;
+            ? `Updated ${updatedAt.toLocaleTimeString()} (${isPtp ? 'corridor' : 'area'}: ${corridorBoxes.length} segment${corridorBoxes.length > 1 ? 's' : ''})`
+            : `Updated ${updatedAt.toLocaleTimeString()}`) + staleSuffix + clampedSuffix;
         clearTimeout(slowHintTimer);
         updateWorkflowState();
 
