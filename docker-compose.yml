@@ -27,9 +27,11 @@ services:
       - NTFY_PRIORITY_WARNING=${NTFY_PRIORITY_WARNING:-default}
       - NTFY_PRIORITY_INFO=${NTFY_PRIORITY_INFO:-low}
 
-    ports:
-      - "${APP_PORT:-8083}:${APP_PORT:-8083}"
-
+    # No host "ports:" publish here (#526) — caddy is the only thing exposed
+    # to the LAN, and reaches this container over the compose network by
+    # service name (see deploy/Caddyfile). Cron jobs run inside this same
+    # container via `podman exec` and hit 127.0.0.1 directly, so they're
+    # unaffected.
     volumes:
       - ./data:/app/data
       - ./cache:/app/cache
@@ -45,3 +47,26 @@ services:
 
     mem_limit: 512m
     cpus: "1.5"
+
+  caddy:
+    image: docker.io/library/caddy:2-alpine
+    container_name: ride-optimizer-caddy
+    restart: unless-stopped
+    depends_on:
+      - ride-optimizer
+
+    environment:
+      - APP_PORT=${APP_PORT:-8083}
+      - CADDY_SITE_ADDRESS=${CADDY_SITE_ADDRESS:-https://pi4.local}
+
+    ports:
+      - "443:443"
+      - "443:443/udp"
+
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy_data:/data
+      - ./caddy_config:/config
+
+    mem_limit: 128m
+    cpus: "0.5"

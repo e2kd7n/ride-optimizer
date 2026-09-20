@@ -34,7 +34,7 @@ podman-compose up -d
 podman-compose ps
 ```
 
-The app will be available at `http://<pi-ip>:8083`.
+The app is served over HTTPS by the bundled Caddy reverse proxy at `https://pi4.local` (or whatever `CADDY_SITE_ADDRESS` is set to) — see "HTTPS / TLS" below for the one-time browser trust step. `ride-optimizer` itself no longer publishes a host port; it's reachable from the LAN only through Caddy.
 
 ## Changing the Port
 
@@ -126,7 +126,25 @@ Volumes mounted from the repo directory:
 
 The compose file uses bridge networking (not `host` mode), so ride-optimizer has its own network namespace. Port conflicts with other services (e.g., mealplanner) are explicit and caught at startup rather than at bind time.
 
-Default port **8083** does not conflict with common defaults (80, 443, 3000, 5000, 8000, 8080). Change via `APP_PORT` in `.env` if needed.
+Default port **8083** does not conflict with common defaults (80, 443, 3000, 5000, 8000, 8080), but `ride-optimizer` no longer publishes it to the host at all — see "HTTPS / TLS" below. The `caddy` service does publish **443**; if another service on the Pi already holds that port, stop it or change `CADDY_SITE_ADDRESS`/the `caddy` service's `ports:` in a `docker-compose.override.yml`.
+
+## HTTPS / TLS
+
+The `caddy` service (`deploy/Caddyfile`) reverse-proxies HTTPS on port 443 to `ride-optimizer` over the compose-internal network; gunicorn/Flask never handle TLS directly (#526). This matters for browser APIs that require a [secure context](https://developer.mozilla.org/en-US/docs/Web/Security/Secure_Contexts) — notably the Explore page's "Use My Location" button, which browsers refuse to run at all over plain HTTP on a non-localhost origin.
+
+By default Caddy mints its own local CA and a leaf certificate for `pi4.local` (Caddy's `tls internal` directive) — no domain name or DNS provider required, and renewal is fully automatic. This is the right fit for a LAN-only personal deployment like this one; there's no public domain or Tailscale in play here, so the CA-signed path from issue #526 (real domain + certbot/DNS-01, or `tailscale cert`) doesn't apply unless that changes later.
+
+**First-time setup on the Pi:**
+
+1. `podman-compose up -d` as usual — Caddy generates its root CA and leaf cert on first start (persisted in `./caddy_data`, so this only happens once).
+2. Visit `https://pi4.local` (or your LAN IP, or whatever you set `CADDY_SITE_ADDRESS` to in `.env`). Your browser will warn that the certificate authority isn't trusted — that's expected, since it's a private CA Caddy generated for this Pi.
+3. Either click through the warning each time (fine for occasional use), or trust the CA once per device for a warning-free experience:
+   ```bash
+   podman exec ride-optimizer-caddy cat /data/caddy/pki/authorities/local/root.crt
+   ```
+   Copy that output to your device and add it as a trusted root certificate (Settings → trust store on iOS/Android; `certmgr.msc` → Trusted Root CAs on Windows; Keychain Access on macOS).
+
+If `pi4.local` doesn't resolve on your network (mDNS/Avahi not reachable from that device), set `CADDY_SITE_ADDRESS=https://<pi-lan-ip>` in `.env` and restart — Caddy will mint a cert for the IP instead.
 
 ## Monitoring
 
@@ -136,17 +154,19 @@ podman-compose logs -f
 
 # Container health and resource usage
 podman-compose ps
-podman stats ride-optimizer
+podman stats ride-optimizer ride-optimizer-caddy
 
-# Manual health check
-curl http://localhost:8083/api/status
+# Manual health check (self-signed cert, so -k)
+curl -k https://pi4.local/api/status
 ```
 
 ## Backup and Restore
 
 ```bash
-# Backup
-tar -czf ~/backups/ride-optimizer-$(date +%Y%m%d).tar.gz data/ cache/ config/ .env
+# Backup (caddy_data preserves the local CA so trusted devices stay trusted
+# after a restore — omit it and Caddy just mints a new one, requiring
+# re-trust per device)
+tar -czf ~/backups/ride-optimizer-$(date +%Y%m%d).tar.gz data/ cache/ config/ caddy_data/ .env
 
 # Restore
 podman-compose down
@@ -160,4 +180,4 @@ After the first CI push, the package appears at `https://github.com/e2kd7n?tab=p
 
 ---
 
-*Last Updated: 2026-05-18*
+*Last Updated: 2026-09-20*

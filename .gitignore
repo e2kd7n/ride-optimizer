@@ -14,6 +14,11 @@ config/.garmin_tokens/
 /data/*.db
 /cache/
 /output/
+
+# Caddy's generated local CA + leaf certs (#526) — per-host, regenerated on
+# first `podman-compose up -d` if missing
+/caddy_data/
+/caddy_config/
 venv/
 __pycache__/
 *.pyc
