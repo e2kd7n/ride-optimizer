@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-09-20 16:20:09 UTC / 2026-09-20 16:20:09 GMT
+**Last Updated:** 2026-09-20 16:24:15 UTC / 2026-09-20 16:24:15 GMT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -43,20 +43,14 @@ This file reflects the current state of GitHub issues organized by release miles
 ## 📅 v0.20.0 (Future Release)
 
 ### 🔴 P0 - CRITICAL
-- #571 - Nightly cron wipes the tile index after every activity sync — the actual root cause of cold rebuilds, not the #555 cache sweep
 - #570 - Explore tab: fix route-generation failures and multi-minute stalls on real rides
-- #563 - Explore: client stacks 3x45s timeouts on coverage requests — a slow backend can hang silently for ~2 minutes
-- #558 - Explore: single global lock across all zoom levels serializes coverage requests behind cold-start rebuilds
 
 ### 🔴 P1 - HIGH
 - #598 - Single 4-thread gunicorn worker can starve the whole app for minutes when an external API (Overpass) is slow
-- #597 - pi-auto-update.sh pulls the image but never syncs the host checkout, so bind-mounted config.yaml drifts silently
 - #595 - Non-corridor coverage fetch sends unclamped map viewport as bbox, can exceed backend's 0.5° limit
 - #584 - computeCorridorBoxes' own padding can push a segment past the backend's bbox limit, causing an unretried 400
-- #583 - CoverageTracker._activities_cache never refreshes on its own — blocks #571's soft-invalidate fix from being safe
 - #576 - POST /api/exploration/invalidate has no rate limit and reproduces the full cold-rebuild incident on demand via Clear Cache
 - #573 - ExplorationService.initialize() never runs in production — persisted route cache never loads despite being written on every route
-- #572 - get_exploration_service() is not thread-safe — concurrent requests can construct duplicate CoverageTrackers
 - #567 - Explore: silent water/roadless-exclusion failure can suggest un-rideable (open-water) tiles
 - #565 - Explore: generate-then-plot flow requires too many manual taps for a mid-ride rider
 - #564 - Explore: coverage load failures show no toast or retry affordance
