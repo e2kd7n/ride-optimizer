@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-09-20 00:03:37 UTC / 2026-09-20 00:03:37 GMT
+**Last Updated:** 2026-09-20 16:20:09 UTC / 2026-09-20 16:20:09 GMT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -8,13 +8,13 @@ This file reflects the current state of GitHub issues organized by release miles
 
 ## 📍 Release Context
 
-- **Current Release:** v0.19.0 (deployed, milestone fully closed)
-- **Next Release:** v0.18.0 (in development)
-- **Future Releases:** 
+- **Current Release:** none (deployed, milestone fully closed)
+- **Next Release:** 0.21.0 (in development)
+- **Future Releases:** v0.20.0
 
 ---
 
-## 🎯 v0.18.0 (Next Release - IN DEVELOPMENT)
+## 🎯 0.21.0 (Next Release - IN DEVELOPMENT)
 
 **Priority within this release determines work order. Complete P0/P1 issues before moving to future releases.**
 
@@ -28,16 +28,19 @@ This file reflects the current state of GitHub issues organized by release miles
 **No P2 issues** ✅
 
 ### 🟢 P3 - LOW
-- #514 - Offload background analysis batch jobs to Pi Zero W cluster (ClusterHAT)
+- #594 - Epic: RideWithGPS integration — import routes and suggest Explore tile-coverage optimizations
+- #593 - RideWithGPS: publish an optimized route back as a new route
+- #592 - RideWithGPS: Explore tab visualization of suggested vs. original route
+- #591 - RideWithGPS: algorithm to suggest a tile-coverage-optimizing modification to an existing route
+- #590 - RideWithGPS: import existing routes into the app's route model
+- #589 - RideWithGPS: connect an account (auth + service scaffolding)
 
 ### 📋 P4 - FUTURE
 **No P4 issues** ✅
 
 ---
 
-## ⚠️ Issues Without Release Assignment
-
-These issues need to be assigned to a release milestone and prioritized.
+## 📅 v0.20.0 (Future Release)
 
 ### 🔴 P0 - CRITICAL
 - #571 - Nightly cron wipes the tile index after every activity sync — the actual root cause of cold rebuilds, not the #555 cache sweep
@@ -59,6 +62,18 @@ These issues need to be assigned to a release milestone and prioritized.
 - #564 - Explore: coverage load failures show no toast or retry affordance
 - #560 - Explore: cold-start tile index rebuild runs synchronously on the first request after every restart
 
+---
+
+## ⚠️ Issues Without Release Assignment
+
+These issues need to be assigned to a release milestone and prioritized.
+
+### 🔴 P0 - CRITICAL
+None
+
+### 🔴 P1 - HIGH
+None
+
 ### 🟡 P2 - MEDIUM
 - #600 - Explore tile rendering waits on the roadless/water-polygon fetch for no reason
 - #580 - Explore rate limits don't match real call volume — legitimate use self-inflicts 429s that get silently swallowed
@@ -70,13 +85,6 @@ These issues need to be assigned to a release milestone and prioritized.
 - #562 - Overpass water-polygon fetch has no retry/backoff or negative-cache, ties up a thread for up to 30s per failure
 
 ### 🟢 P3 - LOW
-- #601 - CI build workflow doesn't trigger on templates/** changes
-- #594 - Epic: RideWithGPS integration — import routes and suggest Explore tile-coverage optimizations
-- #593 - RideWithGPS: publish an optimized route back as a new route
-- #592 - RideWithGPS: Explore tab visualization of suggested vs. original route
-- #591 - RideWithGPS: algorithm to suggest a tile-coverage-optimizing modification to an existing route
-- #590 - RideWithGPS: import existing routes into the app's route model
-- #589 - RideWithGPS: connect an account (auth + service scaffolding)
 - #588 - Settings analysis 'Done' summary drops long_rides_count from the same result object it reads counts from
 - #586 - Commute-window weather card averages away the hourly breakdown it already fetched
 - #585 - Explore route detail: "N new tiles" doesn't distinguish squadrats from squadratinhos
@@ -84,6 +92,7 @@ These issues need to be assigned to a release milestone and prioritized.
 - #581 - Dead road-coverage feature (~200 lines): osmnx/shapely not installed, no frontend caller
 - #569 - Explore route/tile color palette drifts from the documented Fair Weather brand palette
 - #568 - Explore: no offline/last-known-good cached fallback when a load fails
+- #514 - Offload background analysis batch jobs to Pi Zero W cluster (ClusterHAT)
 
 ### 📋 P4 - FUTURE
 None
