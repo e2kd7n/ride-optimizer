@@ -7,6 +7,7 @@ on:
       - 'app/**'
       - 'src/**'
       - 'static/**'
+      - 'templates/**'
       - 'config/**'
       - 'cron/**'
       - 'launch.py'
@@ -16,6 +17,7 @@ on:
       - 'requirements-dev.txt'
       - 'tests/**'
       - 'Dockerfile'
+      - '.env.example'
       - '.github/workflows/docker-publish.yml'
   pull_request:
     branches: [main]
