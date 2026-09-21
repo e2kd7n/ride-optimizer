@@ -862,7 +862,7 @@ function roadlessLookupFailed(result) {
  *  zoomed-out view on a wide screen can exceed COVERAGE_MAX_BBOX_DEGREES
  *  even when the start/end pins are close together and never trigger
  *  corridor mode), so this guards the non-corridor coverage fetch below
- *  from the same backend "bounding box too large" rejection (#592). */
+ *  from the same backend "bounding box too large" rejection (#595). */
 function clampBoxSpan(south, west, north, east, maxSpanDeg) {
     const latSpan = north - south;
     const lonSpan = east - west;
@@ -1178,7 +1178,7 @@ async function loadCoverage() {
         // The viewport itself has no size limit — a zoomed-out view on a wide
         // screen can exceed COVERAGE_MAX_BBOX_DEGREES even when the start/end
         // pins are close together and never trigger corridor mode above, so
-        // clamp it the same way a corridor box is bounded (#592).
+        // clamp it the same way a corridor box is bounded (#595).
         const clampedBounds = clampBoxSpan(
             bounds.getSouth(), bounds.getWest(), bounds.getNorth(), bounds.getEast(),
             COVERAGE_MAX_BBOX_DEGREES,
