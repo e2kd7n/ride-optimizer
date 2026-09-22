@@ -85,6 +85,10 @@
         }
         .window-metric i { width: 16px; color: var(--ink-soft); }
 
+        .window-hour-breakdown {
+            line-height: 1.5;
+        }
+
         .transit-alert {
             border-left: 4px solid var(--danger);
             background: color-mix(in srgb, var(--danger) 12%, var(--surface));

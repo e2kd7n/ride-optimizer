@@ -146,7 +146,7 @@ function formatWindowHourBreakdown(hours, optimalDeparture) {
 
 function renderWindowMetrics(windowData, contentId) {
     const el = document.getElementById(contentId);
-    if (!windowData || !windowData.avg_temp_f) {
+    if (!windowData || windowData.avg_temp_f == null) {
         el.innerHTML = '<div class="text-muted small">No data for this window</div>';
         return;
     }
