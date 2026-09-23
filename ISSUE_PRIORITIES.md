@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-09-21 01:04:47 UTC / 2026-09-21 01:04:47 GMT
+**Last Updated:** 2026-09-23 02:50:51 UTC / 2026-09-23 02:50:51 GMT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -8,7 +8,7 @@ This file reflects the current state of GitHub issues organized by release miles
 
 ## 📍 Release Context
 
-- **Current Release:** v0.20.0 (deployed, milestone fully closed)
+- **Current Release:** none (deployed, milestone fully closed)
 - **Next Release:** 0.21.0 (in development)
 - **Future Releases:** 
 
@@ -45,25 +45,7 @@ This file reflects the current state of GitHub issues organized by release miles
 
 These issues need to be assigned to a release milestone and prioritized.
 
-### 🔴 P0 - CRITICAL
-None
-
-### 🔴 P1 - HIGH
-None
-
-### 🟡 P2 - MEDIUM
-None
-
-### 🟢 P3 - LOW
-- #588 - Settings analysis 'Done' summary drops long_rides_count from the same result object it reads counts from
-- #586 - Commute-window weather card averages away the hourly breakdown it already fetched
-- #585 - Explore route detail: "N new tiles" doesn't distinguish squadrats from squadratinhos
-
-### 📋 P4 - FUTURE
-None
-
-### ⚠️ Unprioritized (No P-label)
-None
+**All issues are assigned to releases** ✅
 
 ---
 
