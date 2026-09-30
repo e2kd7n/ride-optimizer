@@ -11,7 +11,6 @@
  */
 
 // Mobile detection
-const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 
 /**
@@ -371,28 +370,6 @@ function optimizeTooltipsForTouch() {
 }
 
 /**
- * Handle responsive behavior on window resize
- */
-function handleResponsiveResize() {
-    let resizeTimeout;
-    
-    window.addEventListener('resize', function() {
-        clearTimeout(resizeTimeout);
-        
-        resizeTimeout = setTimeout(function() {
-            const width = window.innerWidth;
-
-            // Adjust touch target sizes
-            if (width < 768) {
-                document.body.classList.add('mobile-view');
-            } else {
-                document.body.classList.remove('mobile-view');
-            }
-        }, 250);
-    });
-}
-
-/**
  * Prevent iOS zoom on input focus
  */
 function preventIOSZoom() {
@@ -448,22 +425,11 @@ function enhanceAsyncActions() {
  * Initialize all mobile features
  */
 function initializeMobileFeatures() {
-    // Check if we're on a mobile device
-    if (window.innerWidth < 768 || isMobileDevice) {
-        document.body.classList.add('mobile-device');
-    }
-    
-    if (isTouchDevice) {
-        document.body.classList.add('touch-device');
-    }
-    
-    // Initialize features
     renderBottomNavDrawer();
     initializeBottomNav();
     initializeSwipeGestures();
     initializeTouchFeedback();
     optimizeTooltipsForTouch();
-    handleResponsiveResize();
     preventIOSZoom();
     enhanceAsyncActions();
 
@@ -476,15 +442,5 @@ if (document.readyState === 'loading') {
 } else {
     initializeMobileFeatures();
 }
-
-// Export for use in other modules
-window.mobileUtils = {
-    isMobileDevice,
-    isTouchDevice,
-    navigateToTab,
-    navigateToNextTab,
-    navigateToPreviousTab,
-    showSwipeFeedback
-};
 
 console.log('✓ mobile.js loaded - Bottom nav, swipe gestures, and touch enhancements ready');
