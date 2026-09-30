@@ -15,6 +15,7 @@ from src.secure_logger import SecureLogger
 import math
 import threading
 import time
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,6 +32,12 @@ logger = SecureLogger(__name__)
 TILE_ZOOM = 14              # "squadrat" granularity (squadrat.at / squadrat.com default)
 SQUADRATINHO_ZOOM = 17      # "squadratinho" granularity — each squadrat = 8x8 squadratinhos
 MAX_WATER_POLYGON_CACHES = 20  # cap on retained water_<hash>.json files
+# Parsed water polygons kept in memory (LRU). Each water_*.json can be
+# several MB on disk and several times that once parsed, so only the most
+# recently explored areas stay resident -- enough that panning/zooming
+# within one area (and explore.js "both" mode's paired calls) stops
+# re-reading and re-parsing the same file on every request.
+_WATER_POLYGON_MEMO_SIZE = 2
 _OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 # Overpass's own internal query budget ([out:json][timeout:N]) and the
 # client-side requests.post timeout (#562) — lowered together from the
@@ -335,6 +342,9 @@ class CoverageTracker:
         # pattern as _get_zoom_lock/_tile_index_locks_lock above.
         self._water_polygon_locks: Dict[str, threading.Lock] = {}
         self._water_polygon_locks_lock = threading.Lock()
+        # key -> ((mtime_ns, size), polygons); see _WATER_POLYGON_MEMO_SIZE.
+        self._water_polygon_memo: "OrderedDict[str, Tuple[Tuple[int, int], list]]" = OrderedDict()
+        self._water_polygon_memo_lock = threading.Lock()
         # Caps concurrent Overpass calls across *all* bboxes (#598) — the
         # per-key lock above only de-dups requests for the *same* bbox;
         # this bounds how many different-bbox calls can block a thread at
@@ -747,13 +757,23 @@ class CoverageTracker:
 
         with self._get_water_polygon_lock(key):
             if cache_file.exists():
-                age_s = time.time() - cache_file.stat().st_mtime
+                st = cache_file.stat()
+                age_s = time.time() - st.st_mtime
                 if ttl <= 0 or age_s <= ttl:
+                    stamp = (st.st_mtime_ns, st.st_size)
+                    with self._water_polygon_memo_lock:
+                        memo = self._water_polygon_memo.get(key)
+                        if memo is not None and memo[0] == stamp:
+                            self._water_polygon_memo.move_to_end(key)
+                            return memo[1]
                     try:
                         with open(cache_file, "r", encoding="utf-8") as f:
-                            return json.load(f)
+                            polygons = json.load(f)
                     except (json.JSONDecodeError, OSError):
                         pass
+                    else:
+                        self._remember_water_polygons(key, stamp, polygons)
+                        return polygons
                 else:
                     logger.info(
                         "Water polygon cache %s is %.0fs old (TTL %ds) — refetching",
@@ -848,6 +868,8 @@ class CoverageTracker:
                 secure_chmod(tmp_path)
                 os.replace(tmp_path, cache_file)
                 secure_chmod(cache_file)
+                st = cache_file.stat()
+                self._remember_water_polygons(key, (st.st_mtime_ns, st.st_size), polygons)
                 self._evict_old_water_polygon_caches()
             except OSError as exc:
                 logger.warning("Failed to write water polygon cache: %s", exc)
@@ -949,6 +971,14 @@ class CoverageTracker:
     # ------------------------------------------------------------------
     # Cache helpers
     # ------------------------------------------------------------------
+
+    def _remember_water_polygons(self, key: str, stamp: Tuple[int, int], polygons: list) -> None:
+        """Store parsed polygons in the small LRU memo."""
+        with self._water_polygon_memo_lock:
+            self._water_polygon_memo[key] = (stamp, polygons)
+            self._water_polygon_memo.move_to_end(key)
+            while len(self._water_polygon_memo) > _WATER_POLYGON_MEMO_SIZE:
+                self._water_polygon_memo.popitem(last=False)
 
     def _evict_old_water_polygon_caches(self) -> None:
         """Keep at most MAX_WATER_POLYGON_CACHES water_*.json files,

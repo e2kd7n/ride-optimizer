@@ -29,16 +29,14 @@ get_route_groups() -> List[RouteGroup]
 get_long_rides() -> List[LongRide]
 get_activities() -> List[Activity]
 get_locations() -> Tuple[Location, Location]
-clear_cache()
 ```
 
 **Usage Example**:
 ```python
 from app.services import AnalysisService
-from src.config import Config
 
-config = Config('config/config.yaml')
-service = AnalysisService(config)
+# Config is read via ConfigManager.get_instance(); services take collaborators, not a config object
+service = AnalysisService(weather_service=weather_service)
 
 # Run full analysis
 result = service.run_full_analysis(force_refresh=True)
@@ -61,15 +59,15 @@ route_groups = service.get_route_groups()
 ```python
 initialize(route_groups, home_location, work_location, enable_weather=True)
 get_next_commute(direction=None) -> Dict[str, Any]
-get_all_commute_options(direction) -> Dict[str, Any]
-get_departure_windows() -> Dict[str, Any]
+get_workout_aware_commute(direction=None) -> Dict[str, Any]
+generate_comparison_map(routes, home_location, work_location) -> Optional[str]
 ```
 
 **Usage Example**:
 ```python
 from app.services import CommuteService
 
-service = CommuteService(config)
+service = CommuteService(weather_service=weather_service)
 service.initialize(route_groups, home, work)
 
 # Get next commute recommendation
@@ -99,7 +97,7 @@ get_ride_details(ride_id) -> Dict[str, Any]
 ```python
 from app.services import PlannerService
 
-service = PlannerService(config)
+service = PlannerService(weather_service=weather_service)
 service.initialize(long_rides)
 
 # Get 7-day recommendations
@@ -119,7 +117,7 @@ for day in recommendations['recommendations']:
 **Responsibilities**:
 - Browse all routes (commute + long rides)
 - Search and filter capabilities
-- Route statistics and details
+- Route details
 - Route comparison
 - Favorite management
 
@@ -128,8 +126,7 @@ for day in recommendations['recommendations']:
 initialize(route_groups, long_rides)
 get_all_routes(route_type='all', sort_by='uses', limit=None) -> Dict[str, Any]
 search_routes(query, limit=10) -> Dict[str, Any]
-get_route_details(route_id, route_type) -> Dict[str, Any]
-get_route_statistics() -> Dict[str, Any]
+get_route_by_id(route_id, route_type=None) -> Optional[Dict[str, Any]]
 toggle_favorite(route_id, is_favorite) -> Dict[str, Any]
 get_favorites() -> Dict[str, Any]
 ```
@@ -138,7 +135,7 @@ get_favorites() -> Dict[str, Any]
 ```python
 from app.services import RouteLibraryService
 
-service = RouteLibraryService(config)
+service = RouteLibraryService()
 service.initialize(route_groups, long_rides)
 
 # Get all routes sorted by usage
@@ -160,10 +157,10 @@ This pattern allows services to be created early (e.g., at app startup) and init
 
 ```python
 # Step 1: Create services at app startup
-analysis_service = AnalysisService(config)
-commute_service = CommuteService(config)
-planner_service = PlannerService(config)
-library_service = RouteLibraryService(config)
+analysis_service = AnalysisService(weather_service=weather_service)
+commute_service = CommuteService(weather_service=weather_service)
+planner_service = PlannerService(weather_service=weather_service)
+library_service = RouteLibraryService()
 
 # Step 2: Initialize with data after analysis
 result = analysis_service.run_full_analysis()
@@ -189,11 +186,11 @@ bp = Blueprint('commute', __name__)
 @bp.route('/api/commute/next')
 def get_next_commute():
     # Service is injected or accessed from app context
-    service = current_app.commute_service
-    
+    service = current_app.container.commute_service
+
     # Call service method
     recommendation = service.get_next_commute()
-    
+
     # Return JSON response
     return jsonify(recommendation)
 ```
@@ -220,19 +217,17 @@ Services are designed for easy testing:
 ```python
 import pytest
 from app.services import CommuteService
-from src.config import Config
 
 def test_commute_service():
-    config = Config('config/config_test.yaml')
-    service = CommuteService(config)
-    
+    service = CommuteService()  # weather/TrainerRoad/settings services are optional
+
     # Mock data
     route_groups = [...]
     home = Location(...)
     work = Location(...)
-    
+
     service.initialize(route_groups, home, work)
-    
+
     result = service.get_next_commute()
     assert result['status'] == 'success'
     assert 'route' in result

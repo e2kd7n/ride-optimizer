@@ -392,8 +392,6 @@ class RouteNamer:
         Returns:
             List of coordinates at turn points
         """
-        import math
-        
         if len(coordinates) < 3:
             return []
         

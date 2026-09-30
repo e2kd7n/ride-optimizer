@@ -21,7 +21,6 @@ import webbrowser
 import sys
 import os
 import secrets
-import hashlib
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, Optional

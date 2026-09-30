@@ -4,7 +4,7 @@ Unit tests for long_ride_analyzer module.
 import pytest
 from datetime import datetime, timezone
 from unittest.mock import Mock, patch, MagicMock
-from src.long_ride_analyzer import LongRide, LongRideAnalyzer, RideRecommendation
+from src.long_ride_analyzer import LongRide, LongRideAnalyzer
 from src.data_fetcher import Activity
 
 
@@ -306,75 +306,6 @@ class TestGenerateFallbackNames:
         analyzer = _make_analyzer()
         groups = analyzer.generate_fallback_names([])
         assert groups == {}
-
-
-# ---------------------------------------------------------------------------
-# find_rides_near_location tests
-# ---------------------------------------------------------------------------
-
-class TestFindRidesNearLocation:
-    def _make_ride(self, ride_id, coords):
-        return LongRide(
-            activity_id=ride_id, name=f"Ride {ride_id}", coordinates=coords,
-            distance=50000.0, duration=7200, elevation_gain=300.0,
-            timestamp="2026-05-10T08:00:00+00:00", average_speed=6.94,
-            start_location=coords[0], end_location=coords[-1],
-            is_loop=False, type="Ride",
-        )
-
-    def test_finds_nearby_ride(self):
-        ride = self._make_ride(1, [(41.88, -87.63), (41.89, -87.62)])
-        analyzer = _make_analyzer()
-        result = analyzer.find_rides_near_location([ride], 41.88, -87.63, search_radius_km=1.0)
-        assert len(result) == 1
-
-    def test_excludes_distant_ride(self):
-        ride = self._make_ride(1, [(42.5, -88.0), (42.6, -88.1)])
-        analyzer = _make_analyzer()
-        result = analyzer.find_rides_near_location([ride], 41.88, -87.63, search_radius_km=1.0)
-        assert len(result) == 0
-
-    def test_empty_rides_returns_empty(self):
-        analyzer = _make_analyzer()
-        result = analyzer.find_rides_near_location([], 41.88, -87.63)
-        assert result == []
-
-
-# ---------------------------------------------------------------------------
-# calculate_wind_score tests
-# ---------------------------------------------------------------------------
-
-class TestCalculateWindScore:
-    def _make_ride(self):
-        coords = [(41.88 + i * 0.01, -87.63 + i * 0.01) for i in range(20)]
-        return LongRide(
-            activity_id=1, name="Wind Test", coordinates=coords,
-            distance=50000.0, duration=7200, elevation_gain=100.0,
-            timestamp="2026-05-10T08:00:00+00:00", average_speed=6.94,
-            start_location=coords[0], end_location=coords[-1],
-            is_loop=False, type="Ride",
-        )
-
-    def test_returns_tuple(self):
-        analyzer = _make_analyzer()
-        ride = self._make_ride()
-        score, analysis = analyzer.calculate_wind_score(ride, {'wind_direction_deg': 180, 'wind_speed_kph': 20})
-        assert isinstance(score, float)
-        assert isinstance(analysis, dict)
-        assert 0.0 <= score <= 1.0
-
-    def test_insufficient_coords_returns_neutral(self):
-        short_ride = LongRide(
-            activity_id=1, name="Short", coordinates=[(0.0, 0.0)],
-            distance=1000.0, duration=300, elevation_gain=0.0,
-            timestamp="2026-05-10T08:00:00+00:00", average_speed=3.0,
-            start_location=(0.0, 0.0), end_location=(0.0, 0.0),
-            is_loop=False, type="Ride",
-        )
-        analyzer = _make_analyzer()
-        score, analysis = analyzer.calculate_wind_score(short_ride, {})
-        assert score == 0.5
-        assert analysis.get('status') == 'insufficient_data'
 
 
 # ---------------------------------------------------------------------------

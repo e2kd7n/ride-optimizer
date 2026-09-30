@@ -258,46 +258,6 @@ class TestSearchRoutes:
         assert 'Search failed' in result['message']
 
 
-class TestGetRouteStatistics:
-    """Test get_route_statistics functionality."""
-    
-    def test_get_statistics_empty(self, route_library_service):
-        """Test statistics with no routes."""
-        stats = route_library_service.get_route_statistics()
-        assert stats['total_routes'] == 0
-        assert stats['commute_routes'] == 0
-        assert stats['long_rides'] == 0
-        assert stats['total_distance'] == 0.0
-        assert stats['total_activities'] == 0
-        assert stats['most_used_route'] is None
-        assert stats['longest_ride'] is None
-    
-    def test_get_statistics_with_routes(self, initialized_service):
-        """Test statistics with routes."""
-        stats = initialized_service.get_route_statistics()
-        assert stats['total_routes'] == 2
-        assert stats['commute_routes'] == 1
-        assert stats['long_rides'] == 1
-        assert stats['total_activities'] == 28  # 25 commutes + 3 long rides
-        assert stats['total_distance'] > 0
-    
-    def test_most_used_route(self, initialized_service):
-        """Test most used route calculation."""
-        stats = initialized_service.get_route_statistics()
-        assert stats['most_used_route'] is not None
-        assert stats['most_used_route']['id'] == "route_group_1"
-        assert stats['most_used_route']['uses'] == 25
-        assert stats['most_used_route']['type'] == 'commute'
-    
-    def test_longest_ride(self, initialized_service):
-        """Test longest ride calculation."""
-        stats = initialized_service.get_route_statistics()
-        assert stats['longest_ride'] is not None
-        assert stats['longest_ride']['id'] == 67890
-        assert stats['longest_ride']['distance'] == 160.0
-        assert stats['longest_ride']['type'] == 'long_ride'
-
-
 class TestFavoriteManagement:
     """Test favorite route management."""
 

@@ -12,7 +12,7 @@ from datetime import datetime
 import tempfile
 import shutil
 
-from src.json_storage import JSONStorage, get_storage
+from src.json_storage import JSONStorage
 
 
 def _mp_increment_worker(data_dir: str, n_iterations: int) -> None:
@@ -237,14 +237,6 @@ class TestJSONStorage:
         """Test update validates filenames like read/write."""
         with pytest.raises(ValueError):
             storage.update('../evil.json', lambda d: d, default={})
-
-    def test_get_storage_singleton(self, temp_dir):
-        """Test get_storage returns singleton instance."""
-        storage1 = get_storage(temp_dir)
-        storage2 = get_storage(temp_dir)
-        
-        # Should be same instance
-        assert storage1 is storage2
 
 
 @pytest.mark.integration

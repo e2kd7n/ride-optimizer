@@ -141,23 +141,6 @@ def combined_distance_km(coords1_km: np.ndarray,
     return h_dist
 
 
-def similarity_score(coords1: np.ndarray,
-                     coords2: np.ndarray,
-                     scale_m: float = 300.0,
-                     already_km: bool = False) -> float:
-    """
-    Return a 0-1 similarity score using combined distance.
-    Compatible with the commute analyzer's scoring convention.
-    """
-    if not already_km:
-        coords1 = coords_to_km(coords1)
-        coords2 = coords_to_km(coords2)
-
-    dist_km = combined_distance_km(coords1, coords2)
-    dist_m = dist_km * 1000
-    return 1.0 / (1.0 + dist_m / scale_m)
-
-
 # ---------------------------------------------------------------------------
 # Degree-space variants used by the commute route grouper (RouteAnalyzer).
 #

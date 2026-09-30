@@ -295,6 +295,71 @@ class TestGetAirQuality:
         assert len(fetcher.aqi_cache) == 3
 
 
+def _set_hourly_response(mock_session, n_hours=48):
+    response = Mock()
+    response.json.return_value = {
+        'hourly': {
+            'time': [f'2026-01-01T{h % 24:02d}:00' for h in range(n_hours)],
+            'temperature_2m': [10.0] * n_hours,
+            'wind_speed_10m': [12.0] * n_hours,
+            'wind_gusts_10m': [20.0] * n_hours,
+            'wind_direction_10m': [180] * n_hours,
+            'precipitation_probability': [5] * n_hours,
+        }
+    }
+    response.raise_for_status = Mock()
+    mock_session.return_value.get.return_value = response
+    return response
+
+
+@pytest.mark.unit
+class TestGetHourlyForecastMemo:
+    """One /api/commute request asks for the same corridor's hourly forecast
+    several times; the short in-memory memo must collapse those to one call."""
+
+    def test_repeat_call_is_served_from_memo(self, fetcher, mock_session):
+        _set_hourly_response(mock_session)
+        first = fetcher.get_hourly_forecast(40.7128, -74.0060, hours=24)
+        second = fetcher.get_hourly_forecast(40.7128, -74.0060, hours=24)
+
+        assert mock_session.return_value.get.call_count == 1
+        assert first == second
+        assert len(second) == 24
+
+    def test_returned_list_is_a_copy(self, fetcher, mock_session):
+        _set_hourly_response(mock_session)
+        fetcher.get_hourly_forecast(40.7128, -74.0060, hours=24)[0]['temp_c'] = 99
+        assert fetcher.get_hourly_forecast(40.7128, -74.0060, hours=24)[0]['temp_c'] == 10.0
+
+    def test_more_hours_within_same_forecast_window_uses_memo(self, fetcher, mock_session):
+        _set_hourly_response(mock_session)
+        fetcher.get_hourly_forecast(40.7128, -74.0060, hours=24)
+        longer = fetcher.get_hourly_forecast(40.7128, -74.0060, hours=30)
+
+        assert mock_session.return_value.get.call_count == 1
+        assert len(longer) == 30
+
+    def test_expired_entry_refetches(self, fetcher, mock_session):
+        _set_hourly_response(mock_session)
+        fetcher.get_hourly_forecast(40.7128, -74.0060, hours=24)
+        for key, (_, data) in list(fetcher._hourly_memo.items()):
+            fetcher._hourly_memo[key] = (datetime.now() - timedelta(hours=1), data)
+
+        fetcher.get_hourly_forecast(40.7128, -74.0060, hours=24)
+        assert mock_session.return_value.get.call_count == 2
+
+    def test_different_location_is_not_memoised(self, fetcher, mock_session):
+        _set_hourly_response(mock_session)
+        fetcher.get_hourly_forecast(40.7128, -74.0060, hours=24)
+        fetcher.get_hourly_forecast(41.8781, -87.6298, hours=24)
+        assert mock_session.return_value.get.call_count == 2
+
+    def test_failed_fetch_is_not_memoised(self, fetcher, mock_session):
+        mock_session.return_value.get.side_effect = requests.exceptions.ConnectionError('down')
+        assert fetcher.get_hourly_forecast(40.7128, -74.0060, hours=24) is None
+        assert fetcher._hourly_memo == {}
+
+
 @pytest.mark.unit
 class TestWeatherConcurrencyCap:
     """#598 follow-up: Open-Meteo calls (get_current_conditions, get_daily_forecast,

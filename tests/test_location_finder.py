@@ -171,21 +171,3 @@ class TestParseTime:
         t = finder._parse_time("08:30")
         assert t == time(8, 30)
 
-
-class TestGetLocationStatistics:
-    def test_returns_expected_keys(self):
-        loc = Location(lat=40.7, lon=-74.0, name="Home", activity_count=50,
-                       avg_departure_time=time(7, 30), radius=150.0)
-        finder = LocationFinder([], _make_config())
-        stats = finder.get_location_statistics(loc)
-        assert stats['name'] == "Home"
-        assert stats['coordinates'] == (40.7, -74.0)
-        assert stats['radius_meters'] == 150.0
-        assert stats['avg_departure_time'] == "07:30:00"
-
-    def test_none_times_returned_as_none(self):
-        loc = Location(lat=0, lon=0, name="Work", activity_count=0)
-        finder = LocationFinder([], _make_config())
-        stats = finder.get_location_statistics(loc)
-        assert stats['avg_departure_time'] is None
-        assert stats['avg_arrival_time'] is None

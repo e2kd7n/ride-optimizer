@@ -15,7 +15,6 @@ Routes:
 """
 
 import math
-from datetime import datetime
 
 from flask import Blueprint, current_app, jsonify, request
 

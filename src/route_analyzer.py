@@ -31,7 +31,7 @@ from .route_namer import RouteNamer, check_rate_limit_file
 from .json_storage import secure_chmod
 from .route_comparison import (
     passes_prefilter_deg, frechet_similarity_deg,
-    hausdorff_percentile_similarity_deg, commute_similarity_score,
+    hausdorff_percentile_similarity_deg,
 )
 
 logger = SecureLogger(__name__)
@@ -1077,71 +1077,6 @@ class RouteAnalyzer:
         # Return median route
         median_idx = len(sorted_routes) // 2
         return sorted_routes[median_idx]
-    
-    def calculate_route_metrics(self, route_group: RouteGroup) -> RouteMetrics:
-        """
-        Calculate metrics for a route group.
-        
-        Args:
-            route_group: RouteGroup object
-            
-        Returns:
-            RouteMetrics object
-        """
-        routes = route_group.routes
-        
-        # Calculate averages
-        durations = [r.duration for r in routes]
-        distances = [r.distance for r in routes]
-        speeds = [r.average_speed for r in routes]
-        elevations = [r.elevation_gain for r in routes]
-        
-        avg_duration = np.mean(durations)
-        std_duration = np.std(durations)
-        avg_distance = np.mean(distances)
-        avg_speed = np.mean(speeds)
-        avg_elevation = np.mean(elevations)
-        
-        # Calculate consistency score (1 - coefficient of variation)
-        if avg_duration > 0:
-            cv = std_duration / avg_duration
-            consistency_score = max(0, 1 - cv)
-        else:
-            consistency_score = 0
-        
-        return RouteMetrics(
-            avg_duration=avg_duration,
-            std_duration=std_duration,
-            avg_distance=avg_distance,
-            avg_speed=avg_speed,
-            avg_elevation=avg_elevation,
-            consistency_score=consistency_score,
-            usage_frequency=len(routes)
-        )
-    
-    def get_route_statistics(self, route_group: RouteGroup) -> Dict[str, Any]:
-        """
-        Get detailed statistics for a route group.
-        
-        Args:
-            route_group: RouteGroup object
-            
-        Returns:
-            Dictionary of statistics
-        """
-        metrics = self.calculate_route_metrics(route_group)
-        
-        return {
-            'id': route_group.id,
-            'direction': route_group.direction,
-            'frequency': route_group.frequency,
-            'avg_duration_min': metrics.avg_duration / 60,
-            'std_duration_min': metrics.std_duration / 60,
-            'avg_distance_km': metrics.avg_distance / 1000,
-            'avg_speed_kmh': metrics.avg_speed * 3.6,
-            'avg_elevation_m': metrics.avg_elevation,
-            'consistency_score': metrics.consistency_score
-        }
     
     def _geocoding_enabled(self) -> bool:
         """Whether background geocoding should run for this instance.

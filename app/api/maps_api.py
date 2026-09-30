@@ -8,7 +8,7 @@ Returns map data with center, zoom, routes, markers, and layers for /api/maps/<p
 import html
 
 from flask import Blueprint, request, jsonify
-from typing import List, Dict, Optional
+from typing import List, Dict
 from src.secure_logger import SecureLogger
 from app.schemas import MapQuerySchema, validate_request_args
 from src.json_storage import JSONStorage

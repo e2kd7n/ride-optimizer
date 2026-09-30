@@ -12,7 +12,6 @@ from typing import List, Dict, Optional, Tuple
 import math
 
 import folium
-from folium import plugins
 
 from .route_analyzer import RouteGroup
 from .location_finder import Location
@@ -355,34 +354,6 @@ class RouteVisualizer:
             
         except Exception as e:
             logger.error(f"Failed to add weather display: {e}")
-    
-    def add_heatmap_layer(self) -> None:
-        """Add heatmap overlay showing most frequently used paths."""
-        if self.map is None:
-            raise ValueError("Map not initialized. Call create_base_map() first.")
-        
-        # Collect all coordinates from all routes (simplified — a heatmap doesn't need
-        # full-resolution GPS density, and this is summed across every route in every
-        # group, which can be a lot of points).
-        heat_data = []
-        simplify_tolerance = self.config.get('visualization.route_simplify_tolerance_deg', 0.00005)
-
-        for group in self.route_groups:
-            for route in group.routes:
-                for coord in simplify_coordinates(route.coordinates, simplify_tolerance):
-                    heat_data.append([coord[0], coord[1]])
-        
-        if heat_data:
-            # Create heatmap
-            plugins.HeatMap(
-                heat_data,
-                radius=15,
-                blur=20,
-                max_zoom=13,
-                gradient={0.4: 'blue', 0.6: 'lime', 0.8: 'yellow', 1.0: 'red'}
-            ).add_to(self.map)
-            
-            logger.info(f"Added heatmap with {len(heat_data)} points (trimmed for privacy)")
     
     def _create_popup_html(self, route_group: RouteGroup, route_name: str) -> str:
         """
