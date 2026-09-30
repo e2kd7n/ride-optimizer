@@ -193,9 +193,10 @@ class ExplorationService:
 
     def get_roadless_tiles(
         self,
-        bounds: Tuple[float, float, float, float],
+        bounds,
         zoom: Optional[int] = None,
     ) -> Dict[str, Any]:
+        """`bounds` is one (south, west, north, east) box or a list of them."""
         return self._tracker.get_roadless_tiles(bounds, zoom=zoom)
 
     def invalidate_caches(self):
