@@ -1,6 +1,6 @@
 /**
  * Dashboard page logic
- * Loads and displays system status, weather, recommendations, and routes
+ * Loads and displays weather, recommendations, and route status
  * (initialization happens in the DOMContentLoaded listener at the bottom
  * of this file)
  */
@@ -366,63 +366,6 @@ function renderWorkoutRideOption(workoutRide) {
                 ${rideCards}
             </div>
         </div>`;
-}
-
-/**
- * Load and display system status
- */
-async function loadSystemStatus() {
-    const container = document.getElementById('system-status');
-    
-    try {
-        const status = await window.apiClient.getStatus();
-        
-        const html = `
-            <div class="row">
-                <div class="col-md-3">
-                    <div class="text-center">
-                        <i class="bi bi-hdd fs-3 ${status.storage_ok ? 'text-success' : 'text-danger'}"></i>
-                        <div class="mt-2">
-                            <strong>Storage</strong><br>
-                            <small class="text-muted">${status.storage_used_mb}MB / ${status.storage_total_mb}MB</small>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="text-center">
-                        <i class="bi bi-clock-history fs-3 text-info"></i>
-                        <div class="mt-2">
-                            <strong>Uptime</strong><br>
-                            <small class="text-muted">${formatUptime(status.uptime_seconds)}</small>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="text-center">
-                        <i class="bi bi-calendar-check fs-3 text-primary"></i>
-                        <div class="mt-2">
-                            <strong>Last Update</strong><br>
-                            <small class="text-muted">${formatTimestamp(status.last_update)}</small>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="text-center">
-                        <i class="bi bi-check-circle fs-3 text-success"></i>
-                        <div class="mt-2">
-                            <strong>Status</strong><br>
-                            <small class="text-muted">Operational</small>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        container.innerHTML = html;
-    } catch (error) {
-        console.error('Failed to load system status:', error);
-        window.renderErrorStateInto(container, 'System status unavailable.', { variant: 'danger', retry: loadSystemStatus });
-    }
 }
 
 /**
@@ -837,9 +780,6 @@ async function loadRouteStatus() {
                     : 'Hide route conditions';
             });
         }
-
-        const mobile = document.getElementById('route-status-panel-mobile');
-        if (mobile) mobile.innerHTML = html;
     } catch (error) {
         console.error('Failed to load route status:', error);
         window.renderErrorStateInto(container, 'Route status unavailable.', { small: true, retry: loadRouteStatus });
@@ -1007,40 +947,6 @@ async function loadHourlyForecast() {
 }
 
 /**
- * Utility: Format uptime seconds to human readable
- */
-function formatUptime(seconds) {
-    const days = Math.floor(seconds / 86400);
-    const hours = Math.floor((seconds % 86400) / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    
-    if (days > 0) return `${days}d ${hours}h`;
-    if (hours > 0) return `${hours}h ${minutes}m`;
-    return `${minutes}m`;
-}
-
-/**
- * Utility: Format ISO timestamp to relative time
- */
-function formatTimestamp(isoString) {
-    if (!isoString) return 'Never';
-    
-    const date = new Date(isoString);
-    const now = new Date();
-    const diffMs = now - date;
-    const diffMins = Math.floor(diffMs / 60000);
-    
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours}h ago`;
-    
-    const diffDays = Math.floor(diffHours / 24);
-    return `${diffDays}d ago`;
-}
-
-/**
  * Utility: Get Bootstrap class for recommendation score
  */
 function getScoreClass(score) {
@@ -1060,10 +966,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Load dashboard data
     await loadDashboard();
 
-    // Refresh data every 5 minutes
-    setInterval(async () => {
-        await loadDashboard();
-    }, 5 * 60 * 1000);
+    // Refresh every 5 minutes while the tab is visible. A background tab
+    // skips the poll (it fans out to ~7 endpoints) and instead catches up
+    // as soon as it's shown again if a refresh came due while hidden.
+    const REFRESH_MS = 5 * 60 * 1000;
+    let lastRefresh = Date.now();
+    const refresh = () => {
+        lastRefresh = Date.now();
+        return loadDashboard();
+    };
+    setInterval(() => {
+        if (!document.hidden) refresh();
+    }, REFRESH_MS);
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && Date.now() - lastRefresh >= REFRESH_MS) refresh();
+    });
 
     // “What's New” toast on first visit
     (function showWhatsNew() {

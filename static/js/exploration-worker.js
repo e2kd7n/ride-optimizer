@@ -714,61 +714,6 @@ function constructInsertionTour(start, end, candidates, distanceKm, optimizeFor,
     return tour;
 }
 
-// ── TSP (brute-force for ≤8 points) ─────────────────────────────
-
-function solveTSP(start, points, end) {
-    if (points.length <= 1) return points;
-
-    const n = points.length;
-    if (n > 8) {
-        return nearestNeighborTSP(start, points, end);
-    }
-
-    const indices = points.map((_, i) => i);
-    let bestDist = Infinity;
-    let bestPerm = indices;
-
-    const permute = (arr, l = 0) => {
-        if (l === arr.length - 1) {
-            const d = routeDistance(start, arr.map(i => points[i]), end);
-            if (d < bestDist) {
-                bestDist = d;
-                bestPerm = [...arr];
-            }
-            return;
-        }
-        for (let i = l; i < arr.length; i++) {
-            [arr[l], arr[i]] = [arr[i], arr[l]];
-            permute(arr, l + 1);
-            [arr[l], arr[i]] = [arr[i], arr[l]];
-        }
-    };
-    permute(indices);
-
-    return bestPerm.map(i => points[i]);
-}
-
-function nearestNeighborTSP(start, points, end) {
-    const remaining = [...points];
-    const ordered = [];
-    let current = start;
-
-    while (remaining.length > 0) {
-        let bestIdx = 0;
-        let bestDist = Infinity;
-        for (let i = 0; i < remaining.length; i++) {
-            const d = haversineKm(current.lat, current.lon, remaining[i].lat, remaining[i].lon);
-            if (d < bestDist) {
-                bestDist = d;
-                bestIdx = i;
-            }
-        }
-        current = remaining.splice(bestIdx, 1)[0];
-        ordered.push(current);
-    }
-    return ordered;
-}
-
 function routeDistance(start, waypoints, end) {
     let total = 0;
     let prev = start;
