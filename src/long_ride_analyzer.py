@@ -7,9 +7,8 @@ Analyzes non-commute cycling activities for recreational ride recommendations.
 import json
 from .secure_logger import SecureLogger
 from pathlib import Path
-from typing import List, Tuple, Dict, Any, Optional
+from typing import List, Tuple, Dict, Optional
 from dataclasses import dataclass
-from datetime import datetime
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from functools import partial
 
@@ -23,7 +22,6 @@ from .route_comparison import (
     coords_to_km, passes_prefilter, combined_distance_km,
     LONG_RIDE_THRESHOLDS,
 )
-from .weather_fetcher import WeatherFetcher
 from .json_storage import secure_chmod
 
 logger = SecureLogger(__name__)
@@ -68,19 +66,6 @@ class LongRide:
         return self.coordinates[mid_idx]
 
 
-@dataclass
-class RideRecommendation:
-    """Represents a ride recommendation for a clicked location."""
-    ride: LongRide
-    distance_to_location: float  # meters from clicked location
-    weather_score: float  # 0-1, based on wind direction preference
-    precipitation_risk: str  # "none", "low", "medium", "high"
-    recommended_start_time: Optional[str] = None
-    estimated_duration: Optional[float] = None  # hours
-    route_description: str = ""
-    wind_analysis: Optional[Dict[str, Any]] = None
-
-
 class LongRideAnalyzer:
     """Analyzes non-commute rides for recreational recommendations."""
 
@@ -97,7 +82,6 @@ class LongRideAnalyzer:
         self.activities = activities
         self.config = config
         self.route_namer = RouteNamer(config)
-        self.weather_fetcher = WeatherFetcher()  # WeatherFetcher doesn't take config parameter
         self._similarity_cache: Dict[str, float] = self._load_similarity_cache()
         
     def _load_similarity_cache(self) -> Dict[str, float]:
@@ -502,9 +486,6 @@ class LongRideAnalyzer:
                     logger.debug(f"Failed to decode polyline for group '{name}': {e}")
                     continue
 
-        # Create activity lookup
-        activity_lookup = {act.id: act for act in unnamed_rides}
-        
         # Prepare data for parallel processing
         activities_data = [
             (act.id, act.polyline, group_representatives)
@@ -643,195 +624,7 @@ class LongRideAnalyzer:
         logger.info(f"Generated {len(fallback_groups)} fallback names for unnamed rides")
         
         return fallback_groups
-    
-    
-    
-    def find_rides_near_location(self, long_rides: List[LongRide],
-                                 clicked_lat: float, clicked_lon: float,
-                                 search_radius_km: float = 5.0) -> List[LongRide]:
-        """
-        Find rides that pass near a clicked location.
-        
-        Args:
-            long_rides: List of LongRide objects
-            clicked_lat: Latitude of clicked location
-            clicked_lon: Longitude of clicked location
-            search_radius_km: Search radius in kilometers
-            
-        Returns:
-            List of LongRide objects that pass near the location
-        """
-        clicked_location = (clicked_lat, clicked_lon)
-        nearby_rides = []
-        
-        for ride in long_rides:
-            # Check if any point on the route is within search radius
-            min_distance = float('inf')
-            
-            for coord in ride.coordinates:
-                distance = geodesic(clicked_location, coord).kilometers
-                min_distance = min(min_distance, distance)
-                
-                # Early exit if we found a close point
-                if min_distance <= search_radius_km:
-                    nearby_rides.append(ride)
-                    break
-        
-        logger.info(f"Found {len(nearby_rides)} rides within {search_radius_km}km of location")
-        
-        return nearby_rides
-    
-    def calculate_wind_score(self, ride: LongRide, current_weather: Dict[str, Any]) -> Tuple[float, Dict[str, Any]]:
-        """
-        Calculate wind favorability score for a ride.
-        Strong preference for tailwinds in the second half of the route.
-        
-        Args:
-            ride: LongRide object
-            current_weather: Current weather data
-            
-        Returns:
-            Tuple of (score from 0-1 where 1 is best, detailed wind analysis dict)
-        """
-        if not ride.coordinates or len(ride.coordinates) < 4:
-            return 0.5, {'status': 'insufficient_data'}
-        
-        wind_direction = current_weather.get('wind_direction_deg',
-                                            current_weather.get('wind_direction', 0))
-        wind_speed = current_weather.get('wind_speed_kph',
-                                        current_weather.get('wind_speed', 0))
-        
-        # Analyze wind for multiple segments to get detailed picture
-        num_segments = max(1, min(8, len(ride.coordinates) // 10))  # 8 segments or fewer
-        segment_size = len(ride.coordinates) // num_segments
-        
-        segment_analyses = []
-        first_half_scores = []
-        second_half_scores = []
-        
-        for i in range(num_segments):
-            start_idx = i * segment_size
-            end_idx = min((i + 1) * segment_size, len(ride.coordinates) - 1)
-            
-            if start_idx >= end_idx:
-                continue
-            
-            # Calculate segment bearing
-            segment_bearing = self._calculate_bearing(
-                ride.coordinates[start_idx],
-                ride.coordinates[end_idx]
-            )
-            
-            # Calculate relative wind angle (wind direction is where wind comes FROM)
-            relative_angle = (wind_direction - segment_bearing + 180) % 360 - 180
-            
-            # Determine wind type and score
-            if abs(relative_angle) < 45:
-                wind_type = "headwind"
-                segment_score = 0.3  # Headwind is not ideal
-            elif abs(relative_angle) > 135:
-                wind_type = "tailwind"
-                segment_score = 1.0  # Tailwind is excellent
-            elif abs(relative_angle) < 90:
-                wind_type = "quartering_headwind"
-                segment_score = 0.5
-            else:
-                wind_type = "quartering_tailwind"
-                segment_score = 0.8
-            
-            segment_analyses.append({
-                'segment': i + 1,
-                'wind_type': wind_type,
-                'relative_angle': relative_angle,
-                'score': segment_score
-            })
-            
-            # Categorize by half
-            if i < num_segments // 2:
-                first_half_scores.append(segment_score)
-            else:
-                second_half_scores.append(segment_score)
-        
-        # Calculate average scores for each half
-        first_half_avg = np.mean(first_half_scores) if first_half_scores else 0.5
-        second_half_avg = np.mean(second_half_scores) if second_half_scores else 0.5
-        
-        # STRONG preference for tailwinds in second half (70% weight on second half)
-        # This ensures routes with good tailwinds coming back are highly ranked
-        combined_score = 0.3 * first_half_avg + 0.7 * second_half_avg
-        
-        # Bonus for consistent tailwinds in second half
-        if second_half_avg > 0.8:
-            combined_score = min(1.0, float(combined_score * 1.1))  # 10% bonus
-        
-        # Detailed analysis for reporting
-        wind_analysis = {
-            'wind_speed_kph': wind_speed,
-            'wind_direction_deg': wind_direction,
-            'first_half_score': first_half_avg,
-            'second_half_score': second_half_avg,
-            'combined_score': combined_score,
-            'segments': segment_analyses,
-            'recommendation': self._get_wind_recommendation(
-                float(first_half_avg), float(second_half_avg), float(wind_speed)
-            )
-        }
-        
-        return float(combined_score), wind_analysis
-    
-    def _get_wind_recommendation(self, first_half_score: float,
-                                 second_half_score: float, wind_speed: float) -> str:
-        """
-        Generate human-readable wind recommendation.
-        
-        Args:
-            first_half_score: Score for first half (0-1)
-            second_half_score: Score for second half (0-1)
-            wind_speed: Wind speed in km/h
-            
-        Returns:
-            Recommendation string
-        """
-        if wind_speed < 10:
-            return "Light winds - minimal impact on ride"
-        
-        if second_half_score > 0.8:
-            if first_half_score < 0.5:
-                return "Excellent! Headwind out, strong tailwind back - perfect for a long ride"
-            else:
-                return "Great tailwinds for the return journey"
-        elif second_half_score > 0.6:
-            return "Favorable winds on the way back"
-        elif second_half_score < 0.4:
-            return "Challenging headwinds on return - consider shorter route or different day"
-        else:
-            return "Mixed wind conditions - manageable but not ideal"
-    
-    def _calculate_bearing(self, point1: Tuple[float, float],
-                          point2: Tuple[float, float]) -> float:
-        """
-        Calculate bearing between two points.
-        
-        Args:
-            point1: (lat, lon) tuple
-            point2: (lat, lon) tuple
-            
-        Returns:
-            Bearing in degrees (0-360)
-        """
-        lat1, lon1 = np.radians(point1[0]), np.radians(point1[1])
-        lat2, lon2 = np.radians(point2[0]), np.radians(point2[1])
-        
-        dlon = lon2 - lon1
-        
-        x = np.sin(dlon) * np.cos(lat2)
-        y = np.cos(lat1) * np.sin(lat2) - np.sin(lat1) * np.cos(lat2) * np.cos(dlon)
-        
-        bearing = np.degrees(np.arctan2(x, y))
-        bearing = (bearing + 360) % 360
-        
-        return bearing
-    
+
     def group_similar_rides(self, long_ride_activities: List[Activity],
                             on_progress=None) -> List[LongRide]:
         """

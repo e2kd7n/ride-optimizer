@@ -10,7 +10,7 @@ This service provides intelligent commute route recommendations based on:
 
 from html import escape
 from typing import List, Dict, Any, Optional, Tuple
-from datetime import datetime, time, date
+from datetime import datetime, date
 
 # folium and src.visualizer (which imports folium) are imported lazily in the
 # map-generation methods to avoid startup cost on the Pi — see the same
@@ -183,61 +183,6 @@ class CommuteService:
                 'route': None
             }
     
-    def get_all_commute_options(self, direction: str = None) -> Dict[str, Any]:
-        """
-        Get all available commute options for a direction.
-
-        Args:
-            direction: "to_work" or "to_home". Defaults to "to_work" before noon,
-                       "to_home" in the afternoon.
-
-        Returns:
-            Dictionary with all options:
-            {
-                'status': 'success' | 'error',
-                'direction': str,
-                'options': List[Dict],  # All routes ranked by score
-                'count': int
-            }
-        """
-        if direction is None:
-            from datetime import datetime as _dt
-            direction = 'to_work' if _dt.now().hour < 12 else 'to_home'
-
-        if not self._recommender:
-            return {
-                'status': 'error',
-                'message': 'Commute service not initialized',
-                'direction': direction,
-                'options': [],
-                'count': 0
-            }
-
-        try:
-            recommendations = self._recommender.get_all_recommendations(direction)
-            
-            options = [
-                self._format_recommendation(rec)
-                for rec in recommendations
-            ]
-            
-            return {
-                'status': 'success',
-                'direction': direction,
-                'options': options,
-                'count': len(options)
-            }
-            
-        except Exception as e:
-            logger.error(f"Failed to get commute options: {e}", exc_info=True)
-            return {
-                'status': 'error',
-                'message': f'Failed to get options: {str(e)}',
-                'direction': direction,
-                'options': [],
-                'count': 0
-            }
-    
     def _format_recommendation(self, rec: CommuteRecommendation) -> Dict[str, Any]:
         """
         Format a CommuteRecommendation for web consumption.
@@ -297,7 +242,7 @@ class CommuteService:
         Generate an interactive comparison map for all available commute routes.
         
         Args:
-            routes: Ranked commute route options from get_all_commute_options()
+            routes: Ranked commute route options (formatted recommendations)
             home_location: Home location
             work_location: Work location
             

@@ -8,7 +8,6 @@ Licensed under the MIT License - see LICENSE file for details.
 """
 
 import json
-import os
 import time
 from datetime import datetime, timedelta
 from pathlib import Path

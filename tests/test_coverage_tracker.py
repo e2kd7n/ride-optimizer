@@ -1420,6 +1420,56 @@ class TestCacheTtl:
         mock_post.assert_called_once()
 
 
+class TestWaterPolygonMemo:
+    """A cache hit used to json.load() the whole water_*.json file (several MB
+    on the Pi) on every roadless-tile request; parsed polygons now stay in a
+    small in-memory LRU keyed on the file's (mtime, size)."""
+
+    BOUNDS = (40.0, -75.0, 41.0, -74.0)
+
+    @pytest.fixture
+    def tracker(self, tmp_path):
+        config = MagicMock()
+        config.get = MagicMock(side_effect=lambda key, default=None: default)
+        t = CoverageTracker(config)
+        t.cache_dir = tmp_path
+        return t
+
+    def _write_cache(self, tracker, bounds, polygons):
+        path = tracker.cache_dir / f"water_{_bbox_cache_key(bounds)}.json"
+        path.write_text(json.dumps(polygons))
+        return path
+
+    def test_repeat_hit_does_not_reread_file(self, tracker):
+        self._write_cache(tracker, self.BOUNDS, [[[40.1, -74.5], [40.2, -74.5], [40.2, -74.4]]])
+        first = tracker._get_or_fetch_water_polygons(self.BOUNDS)
+
+        with patch("src.coverage_tracker.json.load") as mock_load, patch("requests.post") as mock_post:
+            second = tracker._get_or_fetch_water_polygons(self.BOUNDS)
+
+        assert second is first
+        mock_load.assert_not_called()
+        mock_post.assert_not_called()
+
+    def test_rewritten_file_is_reread(self, tracker):
+        path = self._write_cache(tracker, self.BOUNDS, [[[40.1, -74.5], [40.2, -74.5], [40.2, -74.4]]])
+        tracker._get_or_fetch_water_polygons(self.BOUNDS)
+
+        path.write_text(json.dumps([]))
+        later = time.time() + 5
+        os.utime(path, (later, later))
+
+        assert tracker._get_or_fetch_water_polygons(self.BOUNDS) == []
+
+    def test_memo_is_bounded(self, tracker):
+        for i in range(4):
+            bounds = (40.0 + i, -75.0, 41.0 + i, -74.0)
+            self._write_cache(tracker, bounds, [])
+            tracker._get_or_fetch_water_polygons(bounds)
+
+        assert len(tracker._water_polygon_memo) == 2
+
+
 # ── Overpass timeout / retry / negative cache (#562) ──────────────
 
 class TestOverpassTimeoutAndNegativeCache:

@@ -22,7 +22,6 @@ else:
     import msvcrt
 from pathlib import Path
 from typing import Any, Callable
-from datetime import datetime
 
 logger = SecureLogger(__name__)
 # Per-file in-process locks, keyed by resolved file path. Module-level (not
@@ -454,24 +453,3 @@ class JSONStorage:
         except Exception as e:
             logger.error(f"Error listing files: {e}")
             return []
-
-
-# Convenience function for quick access
-_default_storage = None
-
-def get_storage(data_dir: str = 'data') -> JSONStorage:
-    """
-    Get default JSONStorage instance (singleton pattern).
-    
-    Args:
-        data_dir: Directory for JSON files
-        
-    Returns:
-        JSONStorage instance
-    """
-    global _default_storage
-    if _default_storage is None:
-        _default_storage = JSONStorage(data_dir)
-    return _default_storage
-
-

@@ -13,7 +13,7 @@ from src.secure_logger import SecureLogger
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-from src.route_analyzer import RouteGroup, Route
+from src.route_analyzer import RouteGroup
 from src.long_ride_analyzer import LongRide
 from src.config_manager import ConfigManager
 from src.json_storage import JSONStorage
@@ -28,7 +28,7 @@ class RouteLibraryService:
     Provides:
     - Browse all routes (commute + long rides)
     - Search and filter capabilities
-    - Route statistics and details
+    - Route details
     - Favorite management (JSON-based storage)
     """
 
@@ -248,90 +248,6 @@ class RouteLibraryService:
                     return self._format_long_ride_detailed(ride)
 
         return None
-
-    def get_route_statistics(self) -> Dict[str, Any]:
-        """
-        Get overall route library statistics.
-
-        Returns:
-            Dictionary with statistics:
-            {
-                'total_routes': int,
-                'commute_routes': int,
-                'long_rides': int,
-                'total_distance': float,
-                'total_activities': int,
-                'most_used_route': Dict,
-                'longest_ride': Dict
-            }
-        """
-        stats = {
-            'total_routes': 0,
-            'commute_routes': 0,
-            'long_rides': 0,
-            'total_distance': 0.0,
-            'total_activities': 0,
-            'most_used_route': None,
-            'longest_ride': None
-        }
-
-        if self._route_groups:
-            stats['commute_routes'] = len(self._route_groups)
-            stats['total_routes'] += len(self._route_groups)
-
-            def _grp_freq(g):
-                return g.frequency if hasattr(g, 'frequency') else g.get('frequency', 0)
-
-            def _grp_dist(g):
-                if hasattr(g, 'representative_route'):
-                    return g.representative_route.distance if g.representative_route else 0
-                return g.get('representative_route', {}).get('distance', 0)
-
-            for group in self._route_groups:
-                freq = _grp_freq(group)
-                stats['total_activities'] += freq
-                stats['total_distance'] += _grp_dist(group) * freq
-
-            # Find most used commute route
-            if self._route_groups:
-                most_used = max(self._route_groups, key=_grp_freq)
-                if hasattr(most_used, 'id'):
-                    most_used_id = most_used.id
-                    most_used_name = most_used.name
-                    most_used_freq = most_used.frequency
-                else:
-                    most_used_id = most_used.get('id')
-                    most_used_name = most_used.get('name')
-                    most_used_freq = most_used.get('frequency', 0)
-                stats['most_used_route'] = {
-                    'id': most_used_id,
-                    'name': most_used_name,
-                    'uses': most_used_freq,
-                    'type': 'commute'
-                }
-
-        if self._long_rides:
-            stats['long_rides'] = len(self._long_rides)
-            stats['total_routes'] += len(self._long_rides)
-
-            for ride in self._long_rides:
-                stats['total_activities'] += ride.uses
-                stats['total_distance'] += ride.distance * ride.uses
-
-            # Find longest ride
-            if self._long_rides:
-                longest = max(self._long_rides, key=lambda r: r.distance)
-                stats['longest_ride'] = {
-                    'id': longest.activity_id,
-                    'name': longest.name,
-                    'distance': longest.distance_km,
-                    'type': 'long_ride'
-                }
-
-        # Convert total distance to km
-        stats['total_distance'] = stats['total_distance'] / 1000
-
-        return stats
 
     def _format_commute_route(self, group) -> Dict[str, Any]:
         """

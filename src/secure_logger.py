@@ -18,7 +18,7 @@ Usage:
 
 import logging
 from collections.abc import Mapping
-from typing import Any, Optional
+from typing import Any
 from src.pii_sanitizer import sanitize_log_message
 
 

@@ -18,7 +18,6 @@ from src.route_comparison import (
     bbox_overlap_ratio,
     passes_prefilter,
     combined_distance_km,
-    similarity_score,
     passes_prefilter_deg,
     frechet_similarity_deg,
     hausdorff_percentile_similarity_deg,
@@ -45,13 +44,6 @@ class TestKmScaledHelpers:
         c1 = coords_to_km(_line())
         c2 = coords_to_km(_line(offset_lat=0.5))  # ~55km away
         assert combined_distance_km(c1, c2) > 10
-
-    def test_similarity_score_high_for_identical(self):
-        coords = _line()
-        assert similarity_score(coords, coords) > 0.99
-
-    def test_similarity_score_low_for_distant(self):
-        assert similarity_score(_line(), _line(offset_lat=1.0)) < 0.1
 
     def test_passes_prefilter_rejects_distant_centroids(self):
         c1 = coords_to_km(_line())
