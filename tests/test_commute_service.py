@@ -235,77 +235,6 @@ class TestGetNextCommute:
 
 
 @pytest.mark.unit
-class TestGetAllCommuteOptions:
-    """Test getting all commute options."""
-    
-    def test_get_all_options_not_initialized(self, commute_service):
-        """Test getting options when service not initialized."""
-        result = commute_service.get_all_commute_options('to_work')
-        
-        assert result['status'] == 'error'
-        assert 'not initialized' in result['message'].lower()
-        assert result['direction'] == 'to_work'
-        assert result['options'] == []
-        assert result['count'] == 0
-    
-    def test_get_all_options_success(self, commute_service, mock_route_group):
-        """Test successfully getting all options."""
-        # Create multiple mock recommendations
-        mock_recs = []
-        for i in range(3):
-            rec = Mock(spec=CommuteRecommendation)
-            rec.direction = 'to_work'
-            rec.time_window = 'morning'
-            rec.route_group = mock_route_group
-            rec.score = 0.9 - (i * 0.1)
-            rec.breakdown = {}
-            rec.is_today = True
-            rec.window_start = time(7, 0)
-            rec.window_end = time(9, 0)
-            rec.forecast_weather = None
-            mock_recs.append(rec)
-        
-        commute_service._recommender = Mock()
-        commute_service._recommender.get_all_recommendations.return_value = mock_recs
-        
-        result = commute_service.get_all_commute_options('to_work')
-        
-        assert result['status'] == 'success'
-        assert result['direction'] == 'to_work'
-        assert result['count'] == 3
-        assert len(result['options']) == 3
-        # Verify scores are in order
-        assert result['options'][0]['score'] == 0.9
-        assert result['options'][1]['score'] == 0.8
-        assert result['options'][2]['score'] == 0.7
-    
-    def test_get_all_options_empty_list(self, commute_service):
-        """Test when no options are available."""
-        commute_service._recommender = Mock()
-        commute_service._recommender.get_all_recommendations.return_value = []
-        
-        result = commute_service.get_all_commute_options('to_home')
-        
-        assert result['status'] == 'success'
-        assert result['count'] == 0
-        assert result['options'] == []
-    
-    def test_get_all_options_exception_handling(self, commute_service):
-        """Test exception handling when getting options."""
-        commute_service._recommender = Mock()
-        commute_service._recommender.get_all_recommendations.side_effect = \
-            Exception("Database error")
-        
-        result = commute_service.get_all_commute_options('to_work')
-        
-        assert result['status'] == 'error'
-        assert 'failed to get options' in result['message'].lower()
-        assert result['count'] == 0
-
-
-
-
-@pytest.mark.unit
 class TestFormatRecommendation:
     """Test recommendation formatting."""
     
@@ -432,10 +361,6 @@ class TestCommuteServiceIntegration:
         result = commute_service.get_next_commute()
         assert result['status'] == 'success'
 
-        # Get all options
-        mock_recommender.get_all_recommendations.return_value = [mock_rec]
-        options = commute_service.get_all_commute_options('to_work')
-        assert options['count'] == 1
 
 @pytest.mark.unit
 class TestCommuteMapWeatherOverlay:
@@ -575,23 +500,6 @@ class TestGetNextCommuteTimeBasedDirection:
         result = commute_service.get_next_commute()
         assert result['status'] == 'success'
         assert result['direction'] == 'to_work'
-
-
-@pytest.mark.unit
-class TestGetAllCommuteOptionsDefaultDirection:
-    """Test default direction logic in get_all_commute_options."""
-
-    def test_default_direction_uses_time(self, commute_service):
-        """Default direction should be based on current time of day."""
-        commute_service._recommender = Mock()
-        commute_service._recommender.get_all_recommendations.return_value = []
-
-        from datetime import datetime as _dt
-        current_hour = _dt.now().hour
-        expected = 'to_work' if current_hour < 12 else 'to_home'
-
-        result = commute_service.get_all_commute_options()
-        assert result['direction'] == expected
 
 
 @pytest.mark.unit

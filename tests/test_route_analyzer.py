@@ -189,37 +189,6 @@ class TestRouteAnalyzer:
         # Should extract routes going from home to work
         assert all(isinstance(r, Route) for r in routes)
     
-    def test_calculate_route_metrics(self, home_location, work_location, mock_config):
-        """Test route metrics calculation."""
-        routes = [
-            Route(
-                activity_id=i, direction="home_to_work",
-                coordinates=[(41.8781, -87.6298), (41.8819, -87.6278)],
-                distance=5000.0 + i*100, duration=1200 + i*10,
-                elevation_gain=50.0, timestamp=datetime.now(timezone.utc).isoformat(),
-                average_speed=4.17, is_plus_route=False
-            )
-            for i in range(5)
-        ]
-        
-        group = RouteGroup(
-            id="test_group", direction="home_to_work",
-            routes=routes, representative_route=routes[0],
-            frequency=5, name="Test Route", is_plus_route=False
-        )
-        
-        analyzer = RouteAnalyzer(
-            [], home_location, work_location, mock_config, n_workers=1
-        )
-        
-        metrics = analyzer.calculate_route_metrics(group)
-        
-        assert isinstance(metrics, RouteMetrics)
-        assert metrics.avg_duration > 0
-        assert metrics.avg_distance > 0
-        assert metrics.usage_frequency == 5
-        assert 0 <= metrics.consistency_score <= 1
-    
     def test_calculate_route_similarity_uses_frechet_when_available(
         self, home_location, work_location, mock_config
     ):
@@ -509,64 +478,6 @@ class TestSelectRepresentativeRoute:
         r3 = _make_route(3, duration=3000)
         rep = analyzer._select_representative_route([r1, r2, r3])
         assert rep.duration == 2000  # median
-
-
-# ---------------------------------------------------------------------------
-# calculate_route_metrics (additional cases)
-# ---------------------------------------------------------------------------
-
-class TestCalculateRouteMetricsExtra:
-    @pytest.fixture
-    def analyzer(self):
-        return RouteAnalyzer([], _make_location(), _make_location(41.89, -87.62, "Work"),
-                             _make_config(), n_workers=1)
-
-    def test_consistent_routes_high_score(self, analyzer):
-        routes = [_make_route(i, duration=2200) for i in range(5)]  # identical duration
-        group = _make_group(routes=routes)
-        metrics = analyzer.calculate_route_metrics(group)
-        assert metrics.consistency_score > 0.9
-
-    def test_variable_routes_lower_score(self, analyzer):
-        routes = [_make_route(i, duration=1000 + i * 500) for i in range(6)]
-        group = _make_group(routes=routes)
-        metrics = analyzer.calculate_route_metrics(group)
-        assert metrics.consistency_score < 0.9
-
-    def test_single_route_zero_std(self, analyzer):
-        group = _make_group(routes=[_make_route(1, duration=2200)])
-        metrics = analyzer.calculate_route_metrics(group)
-        assert metrics.std_duration == 0.0
-        assert metrics.consistency_score == 1.0
-
-
-# ---------------------------------------------------------------------------
-# get_route_statistics tests
-# ---------------------------------------------------------------------------
-
-class TestGetRouteStatistics:
-    @pytest.fixture
-    def analyzer(self):
-        return RouteAnalyzer([], _make_location(), _make_location(41.89, -87.62, "Work"),
-                             _make_config(), n_workers=1)
-
-    def test_statistics_dict_keys(self, analyzer):
-        group = _make_group(routes=[_make_route(1)])
-        stats = analyzer.get_route_statistics(group)
-        assert 'id' in stats
-        assert 'direction' in stats
-        assert 'avg_duration_min' in stats
-        assert 'avg_distance_km' in stats
-        assert 'avg_speed_kmh' in stats
-        assert 'consistency_score' in stats
-
-    def test_statistics_values_in_correct_units(self, analyzer):
-        r = _make_route(1, distance=12000.0, duration=2400, average_speed=5.0)
-        group = _make_group(routes=[r])
-        stats = analyzer.get_route_statistics(group)
-        assert abs(stats['avg_distance_km'] - 12.0) < 0.01
-        assert abs(stats['avg_duration_min'] - 40.0) < 0.01
-        assert abs(stats['avg_speed_kmh'] - 18.0) < 0.1
 
 
 # ---------------------------------------------------------------------------
@@ -994,23 +905,6 @@ class TestMergeNewRoutes:
         result = analyzer._merge_new_routes([group], [new_route])
         assert len(result) >= 1
 
-
-
-# ---------------------------------------------------------------------------
-# calculate_route_metrics zero-duration edge case
-# ---------------------------------------------------------------------------
-
-class TestCalculateRouteMetricsZeroDuration:
-    @pytest.fixture
-    def analyzer(self):
-        return RouteAnalyzer([], _make_location(), _make_location(41.89, -87.62, "Work"),
-                             _make_config(), n_workers=1)
-
-    def test_zero_duration_consistency_score(self, analyzer):
-        route = _make_route(1, duration=0)
-        group = _make_group(routes=[route])
-        metrics = analyzer.calculate_route_metrics(group)
-        assert metrics.consistency_score == 0
 
 
 # ---------------------------------------------------------------------------

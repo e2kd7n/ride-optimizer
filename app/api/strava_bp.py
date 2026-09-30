@@ -31,7 +31,6 @@ bp = Blueprint('strava', __name__, url_prefix='/api')
 
 @bp.route('/strava/status')
 def strava_status():
-    import secrets as _secrets
     storage = SecureTokenStorage('config/credentials.json')
     tokens = storage.load_tokens()
     if tokens is None:

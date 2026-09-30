@@ -16,9 +16,8 @@ from datetime import datetime, timedelta
 # folium is imported lazily in the map-generation methods to avoid startup
 # cost on the Pi — see the same pattern in analysis_service.py.
 
-from src.long_ride_analyzer import LongRideAnalyzer, LongRide, RideRecommendation
+from src.long_ride_analyzer import LongRide
 from src.config_manager import ConfigManager
-from src.location_finder import Location
 from app.services.weather_service import WeatherService
 
 logger = SecureLogger(__name__)

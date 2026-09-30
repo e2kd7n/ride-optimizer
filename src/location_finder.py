@@ -291,23 +291,3 @@ class LocationFinder:
         parts = time_str.split(':')
         return time(int(parts[0]), int(parts[1]))
     
-    def get_location_statistics(self, location: Location) -> Dict:
-        """
-        Get detailed statistics for a location.
-        
-        Args:
-            location: Location object
-            
-        Returns:
-            Dictionary of statistics
-        """
-        return {
-            'name': location.name,
-            'coordinates': (location.lat, location.lon),
-            'activity_count': location.activity_count,
-            'avg_departure_time': str(location.avg_departure_time) if location.avg_departure_time else None,
-            'avg_arrival_time': str(location.avg_arrival_time) if location.avg_arrival_time else None,
-            'radius_meters': location.radius
-        }
-
-

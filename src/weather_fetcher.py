@@ -8,7 +8,7 @@ to analyze wind conditions and their impact on cycling routes.
 import contextlib
 import requests
 import threading
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
 import numpy as np
 from geopy.distance import geodesic
@@ -34,6 +34,14 @@ _MAX_CONCURRENT_WEATHER_CALLS = 2
 # How long a request waits for a free slot before giving up, mirroring
 # _OVERPASS_SEMAPHORE_WAIT_S in src/coverage_tracker.py.
 _WEATHER_SEMAPHORE_WAIT_S = 5
+
+# In-memory memo for get_hourly_forecast. Hourly data comes back indexed from
+# local midnight and Open-Meteo refreshes it roughly hourly, so a short TTL is
+# safe; the key includes today's date so an entry never spans midnight. This
+# collapses the identical calls one /api/commute request makes (both
+# directions x to_work/to_home for the same corridor midpoint) into one fetch.
+_HOURLY_MEMO_TTL = timedelta(minutes=15)
+_HOURLY_MEMO_MAX_ENTRIES = 64
 
 
 class WeatherFetcher:
@@ -108,6 +116,7 @@ class WeatherFetcher:
         logger.info(f"Loaded {len(self.aqi_cache)} air-quality cache entries from {self.aqi_cache_file}")
 
         self._semaphore = threading.Semaphore(_MAX_CONCURRENT_WEATHER_CALLS)
+        self._hourly_memo: Dict[tuple, Tuple[datetime, List[Dict]]] = {}
 
     @contextlib.contextmanager
     def _limited_call(self):
@@ -554,19 +563,26 @@ class WeatherFetcher:
             logger.error(f"Error fetching weather conditions: {e}")
             return None
     
-    def get_hourly_forecast(self, lat: float, lon: float, 
+    def get_hourly_forecast(self, lat: float, lon: float,
                            hours: int = 24) -> Optional[List[Dict]]:
         """
         Get hourly weather forecast.
-        
+
         Args:
             lat: Latitude
             lon: Longitude
             hours: Number of hours to forecast (default 24)
-            
+
         Returns:
             List of hourly forecasts or None if unavailable
         """
+        forecast_days = min((hours // 24) + 1, 7)
+        now = datetime.now()
+        memo_key = (round(lat, 3), round(lon, 3), forecast_days, now.date())
+        memo = self._hourly_memo.get(memo_key)
+        if memo and now - memo[0] < _HOURLY_MEMO_TTL:
+            return [dict(f) for f in memo[1][:hours]]
+
         try:
             params = {
                 'latitude': lat,
@@ -575,9 +591,9 @@ class WeatherFetcher:
                          'wind_gusts_10m,precipitation_probability',
                 'wind_speed_unit': 'kmh',
                 'timezone': 'auto',
-                'forecast_days': min((hours // 24) + 1, 7)
+                'forecast_days': forecast_days
             }
-            
+
             with self._limited_call():
                 response = self.session.get(self.base_url, params=params, timeout=10)
                 response.raise_for_status()
@@ -585,11 +601,13 @@ class WeatherFetcher:
 
             if 'hourly' not in data:
                 return None
-            
+
             hourly = data['hourly']
             forecasts = []
-            
-            for i in range(min(hours, len(hourly['time']))):
+
+            # Parse every returned hour (not just `hours`) so the memo can serve a
+            # later call asking for more hours within the same forecast_days window.
+            for i in range(len(hourly['time'])):
                 forecast = {
                     'timestamp': hourly['time'][i],
                     'temp_c': hourly['temperature_2m'][i],
@@ -599,13 +617,21 @@ class WeatherFetcher:
                     'precipitation_prob': hourly['precipitation_probability'][i]
                 }
                 forecasts.append(forecast)
-            
-            return forecasts
+
+            self._hourly_memo = {
+                k: v for k, v in self._hourly_memo.items()
+                if now - v[0] < _HOURLY_MEMO_TTL
+            }
+            if len(self._hourly_memo) >= _HOURLY_MEMO_MAX_ENTRIES:
+                self._hourly_memo.clear()
+            self._hourly_memo[memo_key] = (now, forecasts)
+
+            return [dict(f) for f in forecasts[:hours]]
 
         except (requests.exceptions.RequestException, TimeoutError) as e:
             logger.error(f"Error fetching hourly forecast: {e}")
             return None
-    
+
     def get_daily_forecast(self, lat: float, lon: float, days: int = 7,
                             save_cache: bool = True) -> Optional[List[Dict]]:
         """
@@ -613,7 +639,7 @@ class WeatherFetcher:
 
         Unlike get_current_conditions, this previously had no caching at all: every
         call — regardless of caller (PlannerService scoring dozens of rides per
-        forecast day, /api/weather/forecast, forecast_generator.py) — hit the
+        forecast day, /api/weather/forecast) — hit the
         Open-Meteo API fresh. That's what let a single planner recommendations
         request fire hundreds of redundant identical calls (#554).
 

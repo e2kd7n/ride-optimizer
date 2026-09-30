@@ -651,7 +651,6 @@ class AnalysisService:
         Returns:
             List of dicts with ride pattern info, sorted by frequency
         """
-        from collections import Counter
         import re
 
         self._load_from_cache()

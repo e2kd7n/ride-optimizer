@@ -16,7 +16,6 @@ from typing import Dict
 from flask import Blueprint, current_app, jsonify, request
 
 from app.extensions import limiter
-from src.logging_config import setup_logging
 from src.secure_logger import SecureLogger
 
 logger = SecureLogger(__name__)

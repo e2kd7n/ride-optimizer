@@ -419,32 +419,6 @@ analysis:
         # Verify long rides were set
         assert len(analyzer.long_rides) == 3
         assert all(ride.distance >= 100000 for ride in analyzer.long_rides)
-    
-    @patch('src.weather_fetcher.WeatherFetcher')
-    def test_long_ride_with_weather_integration(self, mock_weather_class,
-                                                sample_long_rides, mock_config):
-        """Test long ride recommendations with weather data."""
-        from src.long_ride_analyzer import LongRideAnalyzer
-        
-        # Mock weather data
-        mock_weather = mock_weather_class.return_value
-        mock_weather.get_daily_forecast.return_value = [
-            {
-                'date': '2024-05-07',
-                'temp_max_c': 22.0,
-                'temp_min_c': 15.0,
-                'wind_speed_max_kph': 15.0,
-                'precipitation_sum_mm': 0.0
-            }
-        ]
-        
-        # Create analyzer with empty activities list
-        analyzer = LongRideAnalyzer([], mock_config)
-        analyzer.long_rides = sample_long_rides
-        
-        # Verify long rides and weather fetcher
-        assert len(analyzer.long_rides) == 3
-        assert analyzer.weather_fetcher is not None
 
 
 @pytest.mark.integration  

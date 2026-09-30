@@ -8,8 +8,8 @@ Provides:
 - Weather summary formatting for UI
 """
 
-from typing import Dict, Any, Optional, List, Tuple
-from datetime import datetime, timedelta
+from typing import Dict, Any, Optional, List
+from datetime import datetime
 
 from src.weather_fetcher import WeatherFetcher, WindImpactCalculator
 from src.config_manager import ConfigManager
