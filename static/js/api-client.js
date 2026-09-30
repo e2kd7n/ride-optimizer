@@ -210,13 +210,6 @@ class APIClient {
     }
 
     /**
-     * Get system status
-     */
-    async getStatus() {
-        return this.fetch('/status');
-    }
-
-    /**
      * Get current weather data
      */
     async getWeather() {

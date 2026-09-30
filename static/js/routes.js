@@ -1250,11 +1250,6 @@
         }
     });
     
-    // Expose functions for use by dashboard
-    window.RouteRenderer = {
-        createRouteCard: createRouteCard,
-        formatDuration: formatDuration
-    };
 })();
 
 /**
