@@ -62,7 +62,8 @@ class APIClient {
      * Generic fetch wrapper with error handling and retry logic
      */
     async fetch(endpoint, options = {}) {
-        const { timeoutMs, onRetry, ...fetchOptions } = options;
+        const { timeoutMs, onRetry, maxAttempts, ...fetchOptions } = options;
+        const attempts = maxAttempts || this.retryAttempts;
         const url = `${this.baseURL}${endpoint}`;
         const method = (fetchOptions.method || 'GET').toUpperCase();
         const isMutation = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method);
@@ -75,7 +76,7 @@ class APIClient {
         let lastError;
         let lastStatus;
 
-        for (let attempt = 0; attempt < this.retryAttempts; attempt++) {
+        for (let attempt = 0; attempt < attempts; attempt++) {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), timeoutMs || this.timeout);
 
@@ -139,7 +140,7 @@ class APIClient {
                 lastError = error;
                 
                 // Log error details for debugging
-                console.error(`API request failed (attempt ${attempt + 1}/${this.retryAttempts}):`, {
+                console.error(`API request failed (attempt ${attempt + 1}/${attempts}):`, {
                     endpoint,
                     error: error.message,
                     status: error.status
@@ -174,7 +175,7 @@ class APIClient {
                 }
                 
                 // If this was the last attempt, throw the error
-                if (attempt === this.retryAttempts - 1) {
+                if (attempt === attempts - 1) {
                     throw error;
                 }
                 
@@ -192,7 +193,7 @@ class APIClient {
                 // or endpoint-specific response shapes. 1-indexed attempt
                 // numbers: this is the attempt about to start.
                 if (typeof onRetry === 'function') {
-                    onRetry(attempt + 2, this.retryAttempts);
+                    onRetry(attempt + 2, attempts);
                 }
 
                 await this.sleep(delay);
@@ -370,13 +371,23 @@ class APIClient {
         return this.fetch(`/exploration/tiles${qs ? '?' + qs : ''}`, { timeoutMs, onRetry });
     }
 
-    async getRoadlessTiles(bounds, zoom) {
+    /**
+     * Open-water tiles for one bbox or an array of bboxes, all in one
+     * request (#604) — the backend fetches/caches water per snapped grid
+     * cell itself, so the caller shouldn't multiply requests by box count.
+     * The lookup is CPU- and Overpass-bound and can legitimately take tens
+     * of seconds on a cold cache, so it gets a timeout above the backend's
+     * own fetch budget and a single attempt: retrying a request that has
+     * already timed out only queues more work behind the Pi's few threads
+     * while the abandoned one keeps running server-side.
+     */
+    async getRoadlessTiles(boxes, zoom) {
+        const list = Array.isArray(boxes) ? boxes : [boxes];
         const params = new URLSearchParams({
-            south: bounds.south, west: bounds.west,
-            north: bounds.north, east: bounds.east,
+            boxes: list.map(b => [b.south, b.west, b.north, b.east].map(v => v.toFixed(5)).join(',')).join(';'),
         });
         if (zoom) params.set('zoom', zoom);
-        return this.fetch(`/exploration/roadless-tiles?${params}`);
+        return this.fetch(`/exploration/roadless-tiles?${params}`, { timeoutMs: 60000, maxAttempts: 1 });
     }
 
     async invalidateCoverageCache() {

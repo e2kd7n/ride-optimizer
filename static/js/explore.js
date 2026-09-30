@@ -96,14 +96,28 @@ let _sessionWind = undefined; // undefined = not yet fetched, null = unavailable
 // applies to the corridor case, not point-to-point generally.
 let _coverageIsCorridor = false;
 
-// Per-corridor-box coverage/roadless responses, cached client-side for the
+// Per-corridor-box coverage responses, cached client-side for the
 // duration of the page session — re-placing one pin (e.g. dragging the end
 // point) commonly leaves several corridor boxes unchanged, so this avoids
 // re-fetching boxes whose bounds haven't moved. Cleared on an explicit
 // "clear cache" action (server-side invalidation already implies these are
 // stale); a full page reload also clears it since it's in-memory only.
 let _corridorCoverageCache = new Map();
+// Roadless (water) responses for a whole box set, keyed by zoom + every
+// box's bounds. Since #604 the box set goes out as one request, so this
+// caches the whole set rather than per box (the server caches water per
+// snapped grid cell, which is where the per-box reuse happens now).
 let _corridorRoadlessCache = new Map();
+
+// #604 — the in-flight roadless (water) lookup for the current
+// loadCoverage(), or null once it has resolved. Generate waits on it for up
+// to ROADLESS_WAIT_MS so routes aren't scored without water exclusion just
+// because the lookup trailed coverage by a few seconds.
+let _roadlessPending = null;
+const ROADLESS_WAIT_MS = 8000;
+// Mirrors MAX_ROADLESS_BOXES in app/api/planner_bp.py — a longer
+// point-to-point corridor is split into several requests of this size.
+const ROADLESS_MAX_BOXES_PER_REQUEST = 16;
 
 // Guards against a slow, now-superseded loadCoverage() response overwriting
 // state set by a newer call (e.g. the user repositioned a pin again before
@@ -826,34 +840,57 @@ function isStale(result) {
  * even when *every* per-segment roadless (water-exclusion) lookup failed —
  * there was no way for the caller to tell "no water in this corridor" apart
  * from "the Overpass lookup failed for some/all segments." Now carries a
- * failedCount/totalCount alongside the merged tile list so the caller can
- * warn on a genuine failure instead of staying silent.
+ * failedCount/totalCount alongside the merged runs so the caller can warn
+ * on a genuine failure instead of staying silent.
+ *
+ * `results` are roadless-tiles responses for chunks of `boxCounts[i]` boxes
+ * each (#604 — one request per chunk, not per box). A response's own
+ * `failed_boxes` counts boxes the backend couldn't look up; a request that
+ * failed outright counts all of its boxes. Runs ([y, x0, x1]) from
+ * different chunks may overlap — the worker's lookup tolerates that.
  */
-function mergeRoadlessResults(results) {
-    const seen = new Set();
-    const roadless = [];
+function mergeRoadlessResults(results, boxCounts) {
+    const runs = [];
     let failedCount = 0;
-    for (const r of results) {
-        if (!r || r.status !== 'success') { failedCount++; continue; }
-        for (const tile of r.roadless || []) {
-            const key = `${tile.x},${tile.y}`;
-            if (!seen.has(key)) { seen.add(key); roadless.push(tile); }
-        }
+    results.forEach((r, i) => {
+        if (!r || r.status !== 'success') { failedCount += boxCounts[i]; return; }
+        failedCount += r.failed_boxes || 0;
+        for (const run of r.roadless_runs || []) runs.push(run);
+    });
+    const totalCount = boxCounts.reduce((a, b) => a + b, 0);
+    return { status: 'success', roadless_runs: runs, failedCount, totalCount };
+}
+
+/** Fetch roadless (water) tiles for a whole box set at `zoom` — chunked to
+ *  ROADLESS_MAX_BOXES_PER_REQUEST boxes per request and cached as a set. */
+function fetchRoadlessBoxes(boxes, zoom) {
+    const key = `${zoom}:` + boxes.map(b => `${b.south.toFixed(4)},${b.west.toFixed(4)},${b.north.toFixed(4)},${b.east.toFixed(4)}`).join(';');
+    const cached = _corridorRoadlessCache.get(key);
+    if (cached) return Promise.resolve(cached);
+    const chunks = [];
+    for (let i = 0; i < boxes.length; i += ROADLESS_MAX_BOXES_PER_REQUEST) {
+        chunks.push(boxes.slice(i, i + ROADLESS_MAX_BOXES_PER_REQUEST));
     }
-    return { status: 'success', roadless, failedCount, totalCount: results.length };
+    return Promise.all(chunks.map(chunk => api.getRoadlessTiles(chunk, zoom).catch(() => null)))
+        .then(results => {
+            const merged = mergeRoadlessResults(results, chunks.map(c => c.length));
+            if (merged.failedCount === 0) _corridorRoadlessCache.set(key, merged);
+            return merged;
+        });
 }
 
 /**
  * #567: did a fetchRoadless() result represent a genuine lookup failure, as
  * opposed to "no water found" (success) or an intentional skip (no bounds
  * to query, e.g. a full-history load at map zoom < 10)? Handles both the
- * corridor-merged shape (mergeRoadlessResults, above — a failedCount) and
- * the single-bbox shape (a plain {status: 'success' | 'error' | 'skipped'}
+ * merged shape (mergeRoadlessResults, above — a failedCount) and the
+ * single-bbox shape (a plain {status: 'success' | 'error' | 'skipped'}
  * response from fetchOne's fetchRoadless below).
  */
 function roadlessLookupFailed(result) {
     if (!result) return false; // shouldn't happen post-#567, but never false-alarm on it
     if (typeof result.failedCount === 'number') return result.failedCount > 0;
+    if (result.status === 'success') return (result.failed_boxes || 0) > 0;
     return result.status === 'error';
 }
 
@@ -1054,9 +1091,8 @@ function showCoverageError(message) {
  * degrade (coverage itself still loaded fine), not a replacement for any
  * of those.
  */
-function showRoadlessWarning() {
+function showRoadlessWarning(message = 'Water exclusion unavailable — some suggested tiles may be unreachable') {
     const el = document.getElementById('roadless-warning');
-    const message = 'Water exclusion unavailable — some suggested tiles may be unreachable';
     if (!el) {
         if (typeof showToast === 'function') showToast(message, 'warning');
         return;
@@ -1077,8 +1113,31 @@ function clearRoadlessWarning() {
     el.classList.add('d-none');
 }
 
+/**
+ * #604 — Generate used to run straight away even while the water lookup was
+ * still in flight, so routes got scored without water exclusion and the
+ * "unavailable" warning only surfaced ~45 s later, over routes already on
+ * screen. Wait up to ROADLESS_WAIT_MS for it; if it still hasn't landed,
+ * say so *before* generating rather than after.
+ */
+async function awaitRoadlessData(statusEl) {
+    const pending = _roadlessPending;
+    if (!pending) return;
+    statusEl.textContent = 'Waiting for water data…';
+    let timer;
+    const timedOut = await Promise.race([
+        pending.then(() => false),
+        new Promise(resolve => { timer = setTimeout(() => resolve(true), ROADLESS_WAIT_MS); }),
+    ]);
+    clearTimeout(timer);
+    if (timedOut && _roadlessPending === pending) {
+        showRoadlessWarning('Water data still loading — generating without water exclusion, so some suggested tiles may be unreachable');
+    }
+}
+
 async function loadCoverage() {
     const requestId = ++_coverageRequestId;
+    _roadlessPending = null;
     const statusEl = document.getElementById('coverage-status');
     statusEl.textContent = 'Loading coverage…';
     clearRoadlessWarning();
@@ -1168,10 +1227,9 @@ async function loadCoverage() {
             ))
         ).then(results => mergeCoverageResults(results, corridorBounds));
         // #525: roadless tiles (open water) excluded from "new tile" targeting;
-        // best-effort per box, same as the single-bbox path below.
-        fetchRoadless = (tileZoom) => Promise.all(
-            corridorBoxes.map(box => fetchCorridorBox(_corridorRoadlessCache, api.getRoadlessTiles.bind(api), box, tileZoom).catch(() => null))
-        ).then(mergeRoadlessResults);
+        // best-effort, same as the single-bbox path below. #604: every box
+        // goes out in one request instead of one request per box.
+        fetchRoadless = (tileZoom) => fetchRoadlessBoxes(corridorBoxes, tileZoom);
     } else {
         const bounds = map.getBounds();
         const mapZoom = map.getZoom();
@@ -1219,7 +1277,7 @@ async function loadCoverage() {
         _coverageIsCorridor = !!corridorBoxes;
 
         // Render as soon as coverage itself is ready — tile rendering never
-        // reads .roadless (only later route-generation scoring does, via
+        // reads .roadless_runs (only later route-generation scoring does, via
         // exploration-worker.js, which already tolerates it being absent).
         // Coverage is normally served from a warm in-memory index in tens
         // of milliseconds; roadless is a live Overpass lookup on any cache
@@ -1255,15 +1313,17 @@ async function loadCoverage() {
         updateWorkflowState();
 
         // Roadless (water-exclusion) data trails independently, attached
-        // whenever it resolves — not awaited before the render above.
-        Promise.all(zooms.map(fetchRoadless)).then((roadlessResults) => {
+        // whenever it resolves — not awaited before the render above, but
+        // Generate waits briefly on _roadlessPending (#604).
+        const pending = Promise.all(zooms.map(fetchRoadless)).then((roadlessResults) => {
             if (requestId !== _coverageRequestId) return; // a newer loadCoverage() call has since taken over
-            coverageData.roadless = (roadlessResults[0] && roadlessResults[0].status === 'success')
-                ? roadlessResults[0].roadless
+            if (_roadlessPending === pending) _roadlessPending = null;
+            coverageData.roadless_runs = (roadlessResults[0] && roadlessResults[0].status === 'success')
+                ? roadlessResults[0].roadless_runs
                 : [];
             if (coverageDataSecondary) {
-                coverageDataSecondary.roadless = (roadlessResults[1] && roadlessResults[1].status === 'success')
-                    ? roadlessResults[1].roadless
+                coverageDataSecondary.roadless_runs = (roadlessResults[1] && roadlessResults[1].status === 'success')
+                    ? roadlessResults[1].roadless_runs
                     : [];
             }
             // #567 — surface a genuine roadless (water-exclusion) lookup
@@ -1278,6 +1338,7 @@ async function loadCoverage() {
                 clearRoadlessWarning();
             }
         }).catch(() => {}); // fetchOne/fetchRoadless already catch their own errors into a status object; this is just a backstop.
+        _roadlessPending = pending;
     } catch (e) {
         if (requestId === _coverageRequestId) showCoverageError(e.message);
     } finally {
@@ -1621,6 +1682,7 @@ async function generateRoute() {
     const spinnerEl = document.getElementById('worker-spinner');
     btn.disabled = true;
     spinnerEl.classList.remove('d-none');
+    await awaitRoadlessData(statusEl);
     statusEl.textContent = 'Computing exploration routes…';
 
     clearHighlight();
@@ -1888,6 +1950,7 @@ async function generateWorkoutCombo() {
         updateWorkflowState();
     };
 
+    await awaitRoadlessData(statusEl);
     statusEl.textContent = 'Generating workout-combo routes…';
     const wind = await getSessionWind();
     explorationWorker.postMessage({

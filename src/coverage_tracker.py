@@ -31,13 +31,21 @@ logger = SecureLogger(__name__)
 
 TILE_ZOOM = 14              # "squadrat" granularity (squadrat.at / squadrat.com default)
 SQUADRATINHO_ZOOM = 17      # "squadratinho" granularity — each squadrat = 8x8 squadratinhos
-MAX_WATER_POLYGON_CACHES = 20  # cap on retained water_<hash>.json files
-# Parsed water polygons kept in memory (LRU). Each water_*.json can be
-# several MB on disk and several times that once parsed, so only the most
-# recently explored areas stay resident -- enough that panning/zooming
-# within one area (and explore.js "both" mode's paired calls) stops
-# re-reading and re-parsing the same file on every request.
-_WATER_POLYGON_MEMO_SIZE = 2
+MAX_WATER_POLYGON_CACHES = 32  # cap on retained water_<hash>.json files
+# Parsed water polygons kept in memory (LRU), as compact numpy ring arrays.
+# Each water_*.json can be several MB on disk, so only the most recently
+# explored areas stay resident -- sized for one loop/out-and-back area grid
+# (up to 3x3 boxes, each with its own snapped fetch, #604) so a reload of
+# the same area stops re-reading and re-parsing every file.
+_WATER_POLYGON_MEMO_SIZE = 9
+# On-disk water cache format. 2 (#603) added coastline chains and stitched
+# multipolygon rings; an older bare-list file is treated as a cache miss.
+_WATER_CACHE_VERSION = 2
+# Wall-clock budget for the Overpass fetches behind one multi-box roadless
+# request (#604). Boxes whose fetch would start after it runs out are
+# reported as failed instead of holding a worker thread for up to
+# N x _OVERPASS_REQUEST_TIMEOUT_S; explore.js's own timeout sits above it.
+_ROADLESS_FETCH_BUDGET_S = 40
 _OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 # Overpass's own internal query budget ([out:json][timeout:N]) and the
 # client-side requests.post timeout (#562) — lowered together from the
@@ -306,6 +314,390 @@ def _activity_tiles(coords: List[Tuple[float, float]], zoom: int) -> Set[Tuple[i
     return tiles
 
 
+# ── Water geometry (#525, #603, #604) ─────────────────────────────
+#
+# Pure-Python/numpy helpers that turn an Overpass water/coastline response
+# into "water groups" — lists of rings combined under the even-odd rule —
+# and rasterize those groups onto a slippy-map tile grid.
+
+
+def _normalize_boxes(bounds) -> List[Tuple[float, float, float, float]]:
+    """Accept one (south, west, north, east) box or a list of them."""
+    if not bounds:
+        return []
+    if isinstance(bounds[0], (int, float)):
+        return [tuple(bounds)]
+    return [tuple(b) for b in bounds]
+
+
+def _pt_key(pt) -> Tuple[float, float]:
+    """Endpoint identity for stitching ways — OSM coordinates are stored at
+    1e-7 degree precision, so two ways sharing a node round to the same key."""
+    return (round(pt[0], 7), round(pt[1], 7))
+
+
+def _join_ways(lines: List[list], directed: bool) -> List[list]:
+    """Stitch ways that share endpoints into longer chains/rings.
+
+    `directed` keeps every way's own direction (coastline ways, whose
+    direction encodes which side is water); otherwise a way may be reversed
+    to fit (multipolygon member ways, which OSM doesn't orient consistently).
+    """
+    chains = {i: list(line) for i, line in enumerate(lines) if len(line) >= 2}
+    starts: Dict[Tuple[float, float], Set[int]] = {}
+    ends: Dict[Tuple[float, float], Set[int]] = {}
+    for i, c in chains.items():
+        starts.setdefault(_pt_key(c[0]), set()).add(i)
+        ends.setdefault(_pt_key(c[-1]), set()).add(i)
+
+    def detach(i: int) -> list:
+        c = chains.pop(i)
+        starts[_pt_key(c[0])].discard(i)
+        ends[_pt_key(c[-1])].discard(i)
+        return c
+
+    out = []
+    while chains:
+        chain = detach(next(iter(chains)))
+        # Extend the tail, then the head, until closed or nothing fits.
+        while _pt_key(chain[0]) != _pt_key(chain[-1]):
+            k = _pt_key(chain[-1])
+            if starts.get(k):
+                chain.extend(detach(next(iter(starts[k])))[1:])
+            elif not directed and ends.get(k):
+                chain.extend(detach(next(iter(ends[k])))[::-1][1:])
+            else:
+                break
+        while _pt_key(chain[0]) != _pt_key(chain[-1]):
+            k = _pt_key(chain[0])
+            if ends.get(k):
+                chain[:0] = detach(next(iter(ends[k])))[:-1]
+            elif not directed and starts.get(k):
+                chain[:0] = detach(next(iter(starts[k])))[::-1][:-1]
+            else:
+                break
+        out.append(chain)
+    return out
+
+
+def _parse_water_elements(elements: list) -> dict:
+    """Overpass `out geom` elements -> the on-disk water cache format.
+
+    {"version": N, "water": [group, ...], "coastline": [chain, ...]} where a
+    group is a list of [lat, lon] rings and a chain is a directed coastline
+    polyline (land on the left, water on the right).
+    """
+    water: List[list] = []
+    coastline: List[list] = []
+    for element in elements:
+        etype = element.get("type")
+        tags = element.get("tags") or {}
+        if etype == "way" and element.get("geometry"):
+            pts = [[pt["lat"], pt["lon"]] for pt in element["geometry"]]
+            if tags.get("natural") == "coastline":
+                if len(pts) >= 2:
+                    coastline.append(pts)
+            elif len(pts) >= 3:
+                water.append([pts])
+        elif etype == "relation":
+            members = [
+                [[pt["lat"], pt["lon"]] for pt in m["geometry"]]
+                for m in element.get("members", [])
+                if m.get("role") in ("outer", "inner") and m.get("geometry")
+            ]
+            rings = [r for r in _join_ways(members, directed=False) if len(r) >= 3]
+            if rings:
+                water.append(rings)
+    return {
+        "version": _WATER_CACHE_VERSION,
+        "water": water,
+        "coastline": _join_ways(coastline, directed=True),
+    }
+
+
+def _ring_bbox(rings: List[np.ndarray]) -> Tuple[float, float, float, float]:
+    """(south, west, north, east) of a group of rings."""
+    lats = np.concatenate([r[:, 0] for r in rings])
+    lons = np.concatenate([r[:, 1] for r in rings])
+    return float(lats.min()), float(lons.min()), float(lats.max()), float(lons.max())
+
+
+def _build_water_groups(raw: dict, rect: Tuple[float, float, float, float]) -> list:
+    """Cache-format dict -> [(bbox, [ring arrays]), ...] ready to rasterize.
+    Coastline chains become one extra group, clipped to `rect` (the snapped
+    fetch rectangle)."""
+    groups = []
+    for group in raw.get("water", []):
+        rings = [np.asarray(r, dtype=float) for r in group if len(r) >= 3]
+        if rings:
+            groups.append((_ring_bbox(rings), rings))
+    coast_rings = _coastline_water_rings(raw.get("coastline", []), rect)
+    if coast_rings:
+        rings = [np.asarray(r, dtype=float) for r in coast_rings]
+        groups.append((_ring_bbox(rings), rings))
+    return groups
+
+
+def _signed_area(ring: list) -> float:
+    """Shoelace area in (lon, lat) space: > 0 counter-clockwise."""
+    area = 0.0
+    n = len(ring)
+    for i in range(n):
+        y1, x1 = ring[i]
+        y2, x2 = ring[(i + 1) % n]
+        area += x1 * y2 - x2 * y1
+    return area / 2.0
+
+
+def _clip_segment(p, q, rect) -> Optional[Tuple[float, float]]:
+    """Liang-Barsky: the [t0, t1] parameter range of segment p->q inside
+    `rect`, or None if it misses entirely."""
+    south, west, north, east = rect
+    y0, x0 = p
+    y1, x1 = q
+    dx, dy = x1 - x0, y1 - y0
+    t0, t1 = 0.0, 1.0
+    for pk, qk in ((-dx, x0 - west), (dx, east - x0), (-dy, y0 - south), (dy, north - y0)):
+        if pk == 0:
+            if qk < 0:
+                return None
+            continue
+        r = qk / pk
+        if pk < 0:
+            t0 = max(t0, r)
+        else:
+            t1 = min(t1, r)
+        if t0 > t1:
+            return None
+    return t0, t1
+
+
+def _clip_polyline(points: list, rect) -> List[list]:
+    """Split a polyline into its pieces inside `rect`."""
+    pieces: List[list] = []
+    cur: Optional[list] = None
+    for p, q in zip(points, points[1:]):
+        res = _clip_segment(p, q, rect)
+        if res is None:
+            if cur is not None:
+                pieces.append(cur)
+                cur = None
+            continue
+        t0, t1 = res
+        a = (p[0] + (q[0] - p[0]) * t0, p[1] + (q[1] - p[1]) * t0)
+        b = (p[0] + (q[0] - p[0]) * t1, p[1] + (q[1] - p[1]) * t1)
+        if cur is None:
+            cur = [a]
+        cur.append(b)
+        if t1 < 1.0:
+            pieces.append(cur)
+            cur = None
+    if cur is not None:
+        pieces.append(cur)
+    return pieces
+
+
+def _coastline_water_rings(chains: List[list], rect) -> List[list]:
+    """Close directed coastline chains (water on the right) into water-side
+    rings within `rect` (#603).
+
+    Chains are clipped to the rectangle; each clipped piece enters and exits
+    through the rectangle boundary. Starting from a piece's exit, walking
+    the boundary clockwise keeps the water on the right, so the ring runs
+    along the boundary (picking up any corners on the way) to the next
+    piece's entry, follows that piece, and so on until it closes. Chains
+    that close inside the rectangle are kept as-is: clockwise is enclosed
+    water, counter-clockwise an island. With no chain crossing the boundary
+    the rectangle is all water if its outermost closed ring is an island,
+    and otherwise has no coastline water beyond those closed rings.
+
+    Pieces that start or end inside the rectangle are broken data (a
+    coastline gap) and are dropped; all returned rings form one even-odd
+    group. A rectangle with no coastline at all — say, a snapped cell
+    entirely in the middle of Lake Michigan — can't be told apart from
+    inland and yields nothing.
+    """
+    south, west, north, east = rect
+    width, height = east - west, north - south
+    perimeter = 2 * (width + height)
+    eps = 1e-9 * max(1.0, width, height)
+
+    def on_boundary(pt) -> bool:
+        lat, lon = pt
+        return min(abs(lat - north), abs(lat - south), abs(lon - east), abs(lon - west)) <= eps
+
+    def inside(pt) -> bool:
+        return south <= pt[0] <= north and west <= pt[1] <= east
+
+    def perimeter_pos(pt) -> float:
+        # Clockwise from the NW corner: top edge east, right edge south,
+        # bottom edge west, left edge north.
+        lat, lon = pt
+        d = [abs(lat - north), abs(lon - east), abs(lat - south), abs(lon - west)]
+        edge = d.index(min(d))
+        if edge == 0:
+            return lon - west
+        if edge == 1:
+            return width + (north - lat)
+        if edge == 2:
+            return width + height + (east - lon)
+        return 2 * width + height + (lat - south)
+
+    corners = [
+        (0.0, (north, west)),
+        (width, (north, east)),
+        (width + height, (south, east)),
+        (2 * width + height, (south, west)),
+    ]
+
+    closed_rings: List[list] = []
+    pieces: List[list] = []
+    for chain in chains:
+        if len(chain) < 2:
+            continue
+        pts = [tuple(p) for p in chain]
+        if _pt_key(pts[0]) == _pt_key(pts[-1]) and len(pts) >= 4:
+            ring = pts[:-1]
+            outside_idx = next((i for i, p in enumerate(ring) if not inside(p)), None)
+            if outside_idx is None:
+                closed_rings.append(ring)
+                continue
+            # Rotate so the ring starts (and ends) outside the rectangle —
+            # then every clipped piece enters and exits via the boundary.
+            pts = ring[outside_idx:] + ring[:outside_idx] + [ring[outside_idx]]
+        for piece in _clip_polyline(pts, rect):
+            if len(piece) < 2 or all(_pt_key(p) == _pt_key(piece[0]) for p in piece):
+                continue
+            if not (on_boundary(piece[0]) and on_boundary(piece[-1])):
+                logger.debug("Dropping coastline piece with an end inside the clip rectangle")
+                continue
+            pieces.append(piece)
+
+    rings: List[list] = []
+    if pieces:
+        t_in = [perimeter_pos(p[0]) for p in pieces]
+        t_out = [perimeter_pos(p[-1]) for p in pieces]
+        used = [False] * len(pieces)
+        for start in range(len(pieces)):
+            if used[start]:
+                continue
+            ring: List[tuple] = []
+            cur = start
+            for _ in range(len(pieces) + 1):
+                used[cur] = True
+                ring.extend(pieces[cur])
+                best, best_d = start, (t_in[start] - t_out[cur]) % perimeter
+                for j in range(len(pieces)):
+                    if used[j]:
+                        continue
+                    d = (t_in[j] - t_out[cur]) % perimeter
+                    if d < best_d:
+                        best, best_d = j, d
+                for d_corner, corner in sorted(
+                    ((ct - t_out[cur]) % perimeter, cpt) for ct, cpt in corners
+                ):
+                    if 0 < d_corner < best_d:
+                        ring.append(corner)
+                if best == start:
+                    break
+                cur = best
+            if len(ring) >= 3:
+                rings.append(ring)
+        rings.extend(closed_rings)
+    elif closed_rings:
+        rings.extend(closed_rings)
+        outermost = max(closed_rings, key=lambda r: abs(_signed_area(r)))
+        if _signed_area(outermost) > 0:  # an island: the sea surrounds it
+            rings.append([(north, west), (north, east), (south, east), (south, west)])
+    return rings
+
+
+def _rasterize_water_groups(
+    groups: List[List[np.ndarray]], zoom: int,
+    min_tx: int, max_tx: int, min_ty: int, max_ty: int,
+) -> np.ndarray:
+    """Boolean [ty, tx] mask of tiles whose center falls inside water.
+
+    Each group is a list of rings combined under the even-odd rule (so an
+    island ring punches a hole); groups are unioned. Same half-open
+    crossing rule as a classic ray-cast point-in-polygon test, but done as
+    a numpy scanline — every ring edge is intersected with each tile row it
+    spans once, instead of every tile being tested against every edge
+    (#604). Each row's crossings, sorted by longitude and paired up, give
+    the water intervals; a per-row difference array unions them.
+    """
+    n_rows, n_cols = max_ty - min_ty + 1, max_tx - min_tx + 1
+    mask = np.zeros((max(n_rows, 0), max(n_cols, 0)), dtype=bool)
+    if n_rows <= 0 or n_cols <= 0 or not groups:
+        return mask
+
+    row_lats = np.array([
+        (b[0] + b[2]) / 2 for b in (tile_to_bounds(min_tx, ty, zoom) for ty in range(min_ty, max_ty + 1))
+    ])
+    col_lons = np.array([
+        (b[1] + b[3]) / 2 for b in (tile_to_bounds(tx, min_ty, zoom) for tx in range(min_tx, max_tx + 1))
+    ])
+    asc_lats = row_lats[::-1]  # rows run north -> south; searchsorted needs ascending
+
+    a_parts, b_parts, g_parts = [], [], []
+    for gid, rings in enumerate(groups):
+        for ring in rings:
+            if len(ring) < 3:
+                continue
+            a_parts.append(ring)
+            b_parts.append(np.roll(ring, -1, axis=0))
+            g_parts.append(np.full(len(ring), gid))
+    if not a_parts:
+        return mask
+    a = np.concatenate(a_parts)
+    b = np.concatenate(b_parts)
+    gid = np.concatenate(g_parts)
+    ya, xa, yb, xb = a[:, 0], a[:, 1], b[:, 0], b[:, 1]
+
+    # An edge crosses a row's center latitude when min(ya, yb) <= lat < max(ya, yb).
+    i0 = np.searchsorted(asc_lats, np.minimum(ya, yb), side="left")
+    i1 = np.searchsorted(asc_lats, np.maximum(ya, yb), side="left")
+    counts = i1 - i0
+    total = int(counts.sum())
+    if total == 0:
+        return mask
+    edge = np.repeat(np.arange(len(counts)), counts)
+    asc_idx = np.repeat(i0, counts) + (np.arange(total) - np.repeat(np.cumsum(counts) - counts, counts))
+    lat = asc_lats[asc_idx]
+    x = xa[edge] + (xb[edge] - xa[edge]) * (lat - ya[edge]) / (yb[edge] - ya[edge])
+    row = n_rows - 1 - asc_idx
+
+    # Every (group, row) has an even number of crossings, so after sorting
+    # consecutive pairs never straddle two groups or rows.
+    order = np.lexsort((x, row, gid[edge]))
+    x, row = x[order], row[order]
+    x0, x1, r = x[0::2], x[1::2], row[0::2]
+    # Tile centers c with x0 <= c < x1 are inside.
+    c0 = np.searchsorted(col_lons, x0, side="left")
+    c1 = np.searchsorted(col_lons, x1, side="left")
+    keep = c1 > c0
+    diff = np.zeros((n_rows, n_cols + 1), dtype=np.int32)
+    np.add.at(diff, (r[keep], c0[keep]), 1)
+    np.add.at(diff, (r[keep], c1[keep]), -1)
+    return np.cumsum(diff, axis=1)[:, :n_cols] > 0
+
+
+def _mask_to_runs(mask: np.ndarray, min_tx: int, min_ty: int) -> List[List[int]]:
+    """[[y, x_start, x_end], ...] (x inclusive) for each horizontal run of
+    True cells in a [ty, tx] mask."""
+    if mask.size == 0 or not mask.any():
+        return []
+    padded = np.zeros((mask.shape[0], mask.shape[1] + 2), dtype=np.int8)
+    padded[:, 1:-1] = mask
+    d = np.diff(padded, axis=1)
+    run_starts = np.argwhere(d == 1)
+    run_ends = np.argwhere(d == -1)
+    return [
+        [int(min_ty + r), int(min_tx + c0), int(min_tx + c1 - 1)]
+        for (r, c0), (_, c1) in zip(run_starts, run_ends)
+    ]
+
+
 class CoverageTracker:
     """Compute tile coverage from Strava activity GPS data."""
 
@@ -342,7 +734,7 @@ class CoverageTracker:
         # pattern as _get_zoom_lock/_tile_index_locks_lock above.
         self._water_polygon_locks: Dict[str, threading.Lock] = {}
         self._water_polygon_locks_lock = threading.Lock()
-        # key -> ((mtime_ns, size), polygons); see _WATER_POLYGON_MEMO_SIZE.
+        # key -> ((mtime_ns, size), water groups); see _WATER_POLYGON_MEMO_SIZE.
         self._water_polygon_memo: "OrderedDict[str, Tuple[Tuple[int, int], list]]" = OrderedDict()
         self._water_polygon_memo_lock = threading.Lock()
         # Caps concurrent Overpass calls across *all* bboxes (#598) — the
@@ -722,25 +1114,37 @@ class CoverageTracker:
     # Water polygons (open-water tile exclusion, #525)
     # ------------------------------------------------------------------
 
-    def _get_or_fetch_water_polygons(
+    def _get_or_fetch_water_features(
         self, bounds: Tuple[float, float, float, float]
-    ) -> List[List[List[float]]]:
-        """Load cached open-water polygons for `bounds`, querying Overpass
-        (OSM `natural=water` ways/relations) if no cache exists yet.
+    ) -> List[Tuple[Tuple[float, float, float, float], List[np.ndarray]]]:
+        """Load cached open-water geometry for `bounds`, querying Overpass
+        if no cache exists yet.
 
-        Returns a list of polygons, each a list of [lat, lon] ring points.
-        A freshly-fetched result builds these as (lat, lon) tuples, but the
-        far more common cache-hit path returns whatever json.load() gave
-        back — plain lists, since JSON has no tuple type — so the
-        annotation reflects that actual (list-of-lists) shape rather than
-        the tuple type only the cold-fetch path produces. Pure-Python/
-        `requests` only — no osmnx/shapely — so this works without a full
-        bike-network graph fetch.
+        Returns a list of "water groups", each a (bbox, rings) pair where
+        `rings` is a list of (N, 2) [lat, lon] arrays combined under the
+        even-odd rule (see _rasterize_water_groups). Three sources feed it:
+
+        * a `natural=water` way — one group, one ring;
+        * a `natural=water` relation — one group holding its outer AND
+          inner rings, with member ways stitched into real rings first
+          (_join_ways), so an island inside a lake stays land and a lake
+          whose outline is split across several member ways is one ring
+          instead of each piece being closed with its own straight chord;
+        * `natural=coastline` ways (#603) — the Great Lakes and every
+          sea/ocean coast are mapped as open coastline lines (water on the
+          right), never as a water polygon. They're turned into one group of
+          water-side rings clipped to the snapped fetch rectangle, see
+          _coastline_water_rings.
+
+        Pure-Python/numpy + `requests` only — no osmnx/shapely.
 
         `bounds` is snapped outward to a fixed grid (_snap_bbox_to_grid)
         before it's used as a cache key or an Overpass query bbox, so a
         pan/zoom within the same area reuses one cached fetch instead of
-        each exact viewport paying out its own Overpass round-trip.
+        each exact viewport paying out its own Overpass round-trip. The
+        snapped rectangle is also the coastline clip rectangle: every
+        coastline way with a node inside it was fetched, so a chain can only
+        leave it by crossing its boundary.
 
         The whole cache-check/fetch/write sequence runs under a per-key
         lock (_get_water_polygon_lock) so two concurrent requests for the
@@ -768,12 +1172,16 @@ class CoverageTracker:
                             return memo[1]
                     try:
                         with open(cache_file, "r", encoding="utf-8") as f:
-                            polygons = json.load(f)
+                            raw = json.load(f)
                     except (json.JSONDecodeError, OSError):
-                        pass
-                    else:
-                        self._remember_water_polygons(key, stamp, polygons)
-                        return polygons
+                        raw = None
+                    # A pre-#603 cache file is a bare list of water rings
+                    # with no coastline data at all — refetch it rather than
+                    # keep serving a lakefront area with the lake missing.
+                    if isinstance(raw, dict) and raw.get("version") == _WATER_CACHE_VERSION:
+                        groups = _build_water_groups(raw, bounds)
+                        self._remember_water_polygons(key, stamp, groups)
+                        return groups
                 else:
                     logger.info(
                         "Water polygon cache %s is %.0fs old (TTL %ds) — refetching",
@@ -816,6 +1224,7 @@ class CoverageTracker:
                     "("
                     f'way["natural"="water"]({south},{west},{north},{east});'
                     f'relation["natural"="water"]({south},{west},{north},{east});'
+                    f'way["natural"="coastline"]({south},{west},{north},{east});'
                     ");"
                     "out geom;"
                 )
@@ -845,18 +1254,8 @@ class CoverageTracker:
             finally:
                 self._overpass_semaphore.release()
 
-            polygons: List[List[Tuple[float, float]]] = []
-            for element in elements:
-                if element.get("type") == "way" and element.get("geometry"):
-                    ring = [(pt["lat"], pt["lon"]) for pt in element["geometry"]]
-                    if len(ring) >= 3:
-                        polygons.append(ring)
-                elif element.get("type") == "relation":
-                    for member in element.get("members", []):
-                        if member.get("role") == "outer" and member.get("geometry"):
-                            ring = [(pt["lat"], pt["lon"]) for pt in member["geometry"]]
-                            if len(ring) >= 3:
-                                polygons.append(ring)
+            raw = _parse_water_elements(elements)
+            groups = _build_water_groups(raw, bounds)
 
             # Atomic write (temp file + os.replace, #562) — like the tile
             # index and route cache already do — so a concurrent reader can
@@ -864,12 +1263,12 @@ class CoverageTracker:
             tmp_path = cache_file.with_name(f"{cache_file.name}.tmp{os.getpid()}")
             try:
                 with open(tmp_path, "w", encoding="utf-8") as f:
-                    json.dump(polygons, f)
+                    json.dump(raw, f)
                 secure_chmod(tmp_path)
                 os.replace(tmp_path, cache_file)
                 secure_chmod(cache_file)
                 st = cache_file.stat()
-                self._remember_water_polygons(key, (st.st_mtime_ns, st.st_size), polygons)
+                self._remember_water_polygons(key, (st.st_mtime_ns, st.st_size), groups)
                 self._evict_old_water_polygon_caches()
             except OSError as exc:
                 logger.warning("Failed to write water polygon cache: %s", exc)
@@ -878,93 +1277,106 @@ class CoverageTracker:
                 except OSError:
                     pass
 
-            return polygons
-
-    @staticmethod
-    def _point_in_polygon(lat: float, lon: float, polygon: List[Tuple[float, float]]) -> bool:
-        """Ray-casting point-in-polygon test (no shapely required)."""
-        inside = False
-        n = len(polygon)
-        j = n - 1
-        for i in range(n):
-            yi, xi = polygon[i]
-            yj, xj = polygon[j]
-            if (yi > lat) != (yj > lat):
-                x_at_lat = (xj - xi) * (lat - yi) / (yj - yi) + xi
-                if lon < x_at_lat:
-                    inside = not inside
-            j = i
-        return inside
-
-    @staticmethod
-    def _polygon_bbox(polygon: List[Tuple[float, float]]) -> Tuple[float, float, float, float]:
-        """(min_lat, min_lon, max_lat, max_lon) bounding box of a polygon
-        ring — a cheap prefilter (#574) computed once per polygon per
-        get_roadless_tiles() call, ahead of the full tile sweep."""
-        lats = [pt[0] for pt in polygon]
-        lons = [pt[1] for pt in polygon]
-        return min(lats), min(lons), max(lats), max(lons)
+            return groups
 
     def get_roadless_tiles(
         self,
-        bounds: Tuple[float, float, float, float],
+        bounds,
         zoom: Optional[int] = None,
     ) -> dict:
-        """Find tiles within `bounds` that fall inside open water (lakes,
-        reservoirs, and similar bodies tagged `natural=water` in OSM).
+        """Find tiles that fall inside open water — lakes, reservoirs and
+        rivers (OSM `natural=water`) plus coastline-bounded water such as
+        the Great Lakes and sea coasts (OSM `natural=coastline`, #603).
 
         The exploration route generator uses this to exclude tiles that
         aren't bikeable or walkable from "new tile" scoring, so routes stop
-        being pulled toward tiles they have no way to enter (#525). Queries
-        Overpass directly with a pure-Python point-in-polygon test — no
-        osmnx/shapely dependency — so it doesn't need a full bike-network
-        graph fetch. This only catches open water, not genuinely roadless
-        (but dry) terrain that the old osmnx-graph-absence check also caught.
+        being pulled toward tiles they have no way to enter (#525). This
+        only catches open water, not genuinely roadless (but dry) terrain.
 
-        Each polygon's bounding box is precomputed once, before the tile
-        sweep (#574), and used as a cheap prefilter: a tile whose center
-        falls outside every polygon's bbox is rejected immediately, without
-        running the full O(polygon points) ray-cast test at all. This is
-        deliberately NOT a per-(bbox,zoom) *result* cache — get_tile_coverage()'s
-        own docstring explains why that pattern was dropped elsewhere (an
-        almost-always-miss cache, since the viewport bbox changes on nearly
-        every request); the bbox prefilter here is a same-call speedup, not
-        a cache of this method's output.
+        `bounds` is either one (south, west, north, east) box or a list of
+        them (#604): explore.js's loop/out-and-back area grid and its
+        point-to-point corridor chain send every box in ONE request instead
+        of one request per box. Each box is evaluated against the water
+        fetched for its own snapped grid rectangle; boxes that share a
+        snapped rectangle share one fetch. If the Overpass lookup fails (or
+        the per-request fetch budget runs out) for some boxes, the others
+        still come back, with `failed_boxes` saying how many were skipped;
+        the status is "error" only when every box failed.
+
+        Tiles are classified with a numpy scanline rasterizer
+        (_rasterize_water_groups) rather than a per-tile ray-cast (#604 —
+        the pure-Python tile x polygon sweep took ~5 s per box on the Pi
+        even with warm caches). The result is returned as row runs,
+        `roadless_runs: [[y, x_start, x_end], ...]` (both x inclusive),
+        because an open-lake area at zoom 17 is hundreds of thousands of
+        tiles — far too many to ship, or to build on the Pi, as one JSON
+        object per tile.
         """
         zoom = zoom or self.zoom
+        boxes = _normalize_boxes(bounds)
+        if not boxes:
+            return {"status": "error", "message": "no bounds given"}
 
-        try:
-            polygons = self._get_or_fetch_water_polygons(bounds)
-        except Exception as exc:
-            logger.error("Failed to fetch water polygons: %s", exc)
-            return {"status": "error", "message": str(exc)}
+        # One fetch per distinct snapped rectangle, bounded overall so a
+        # cold multi-box load can't hold a worker thread for N x the
+        # Overpass timeout.
+        deadline = time.monotonic() + _ROADLESS_FETCH_BUDGET_S
+        groups_by_key: Dict[str, Optional[list]] = {}
+        last_error: Optional[str] = None
+        for box in boxes:
+            key = _bbox_cache_key(_snap_bbox_to_grid(box, _WATER_POLYGON_GRID_DEGREES))
+            if key in groups_by_key:
+                continue
+            if time.monotonic() > deadline:
+                groups_by_key[key] = None
+                last_error = "water lookup time budget exhausted"
+                continue
+            try:
+                groups_by_key[key] = self._get_or_fetch_water_features(box)
+            except Exception as exc:
+                logger.error("Failed to fetch water polygons: %s", exc)
+                groups_by_key[key] = None
+                last_error = str(exc)
 
-        south, west, north, east = bounds
-        min_tx, min_ty = lat_lon_to_tile(north, west, zoom)
-        max_tx, max_ty = lat_lon_to_tile(south, east, zoom)
+        outer = (
+            min(b[0] for b in boxes), min(b[1] for b in boxes),
+            max(b[2] for b in boxes), max(b[3] for b in boxes),
+        )
+        min_tx, min_ty = lat_lon_to_tile(outer[2], outer[1], zoom)
+        max_tx, max_ty = lat_lon_to_tile(outer[0], outer[3], zoom)
+        mask = np.zeros((max_ty - min_ty + 1, max_tx - min_tx + 1), dtype=bool)
 
-        polygons_with_bbox = [(poly, self._polygon_bbox(poly)) for poly in polygons]
+        failed = 0
+        for box in boxes:
+            key = _bbox_cache_key(_snap_bbox_to_grid(box, _WATER_POLYGON_GRID_DEGREES))
+            groups = groups_by_key.get(key)
+            if groups is None:
+                failed += 1
+                continue
+            b_south, b_west, b_north, b_east = box
+            bx0, by0 = lat_lon_to_tile(b_north, b_west, zoom)
+            bx1, by1 = lat_lon_to_tile(b_south, b_east, zoom)
+            relevant = [
+                rings for (g_south, g_west, g_north, g_east), rings in groups
+                if g_south <= b_north and g_north >= b_south and g_west <= b_east and g_east >= b_west
+            ]
+            if not relevant:
+                continue
+            sub = _rasterize_water_groups(relevant, zoom, bx0, bx1, by0, by1)
+            mask[by0 - min_ty:by1 - min_ty + 1, bx0 - min_tx:bx1 - min_tx + 1] |= sub
 
-        roadless: List[Dict[str, int]] = []
-        for tx in range(min_tx, max_tx + 1):
-            for ty in range(min_ty, max_ty + 1):
-                t_south, t_west, t_north, t_east = tile_to_bounds(tx, ty, zoom)
-                center_lat = (t_south + t_north) / 2
-                center_lon = (t_west + t_east) / 2
-                for poly, (p_min_lat, p_min_lon, p_max_lat, p_max_lon) in polygons_with_bbox:
-                    # Bbox prefilter: skip the full ray-cast entirely for a
-                    # polygon whose bbox can't possibly contain this tile.
-                    if not (p_min_lat <= center_lat <= p_max_lat and p_min_lon <= center_lon <= p_max_lon):
-                        continue
-                    if self._point_in_polygon(center_lat, center_lon, poly):
-                        roadless.append({"x": tx, "y": ty})
-                        break
+        if failed == len(boxes):
+            return {"status": "error", "message": last_error or "water lookup failed"}
 
+        runs = _mask_to_runs(mask, min_tx, min_ty)
         return {
             "status": "success",
             "zoom": zoom,
-            "roadless": roadless,
-            "bounds": bounds,
+            "roadless_runs": runs,
+            "roadless_count": int(mask.sum()),
+            "box_count": len(boxes),
+            "failed_boxes": failed,
+            "bounds": outer,
             "computed_at": datetime.now(timezone.utc).isoformat(),
         }
 

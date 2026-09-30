@@ -16,9 +16,10 @@
  *       different corridors (loop) or deliberately retrace the same one
  *       (out_and_back). Ignored when routeType is 'point_to_point'.
  *   - coverageData: {visited: {"x,y": {...}}, total_in_bounds, bounds, zoom,
- *       roadless?: [{x, y}]} — roadless (#525) lists tiles that fall inside
- *       open water (OSM natural=water polygons), i.e. not bikeable or
- *       walkable; excluded from new-tile targeting.
+ *       roadless_runs?: [[y, x0, x1]]} — roadless_runs (#525, #604) lists
+ *       row runs of tiles (x0..x1 inclusive) that fall inside open water
+ *       (OSM natural=water polygons and coastline-bounded water), i.e. not
+ *       bikeable or walkable; excluded from new-tile targeting.
  *       Absent/empty when the roadless lookup wasn't available.
  *   - coverageDataSecondary: same shape as coverageData, at a different zoom | null
  *       When present ("Both" grid mode), routes are optimized against both
@@ -89,12 +90,12 @@ function scanGrid(coverageData, start, reachRadius, areaBounds) {
     // #525: exclude tiles that are open water (not bikeable or walkable)
     // from "new tile" targeting. Best-effort: empty/absent when the
     // roadless lookup failed.
-    const roadlessSet = new Set((coverageData.roadless || []).map(t => `${t.x},${t.y}`));
+    const isRoadless = buildRoadlessLookup(coverageData.roadless_runs);
     // Fused build+filter: a corridor bbox for a far-apart point-to-point
     // route can span many tiles, most of them already ridden — skip
     // allocating a tile object at all for anything visited/roadless instead
     // of building the full grid and filtering it a moment later.
-    const unvisited = buildUnvisitedTileSet(bounds, zoom, visitedSet, roadlessSet);
+    const unvisited = buildUnvisitedTileSet(bounds, zoom, visitedSet, isRoadless);
 
     let reachableTiles = unvisited.filter(
         t => haversineKm(start.lat, start.lon, t.lat, t.lon) <= reachRadius
@@ -439,9 +440,31 @@ function nextQuadrant(dir) {
 
 // ── Tile utilities ──────────────────────────────────────────────
 
+/** (x, y) -> whether the tile is open water, from [y, x0, x1] row runs.
+ *  Looked up per row rather than expanded into a per-tile Set — an open
+ *  lake at zoom 17 is hundreds of thousands of tiles but only a few
+ *  hundred runs (#604). Runs may overlap (merged from several requests). */
+function buildRoadlessLookup(runs) {
+    if (!runs || runs.length === 0) return () => false;
+    const byRow = new Map();
+    for (const [y, x0, x1] of runs) {
+        let row = byRow.get(y);
+        if (!row) { row = []; byRow.set(y, row); }
+        row.push(x0, x1);
+    }
+    return (x, y) => {
+        const row = byRow.get(y);
+        if (!row) return false;
+        for (let i = 0; i < row.length; i += 2) {
+            if (x >= row[i] && x <= row[i + 1]) return true;
+        }
+        return false;
+    };
+}
+
 /** All tiles in `bounds` that aren't already visited or roadless — see the
  *  fused build+filter note at its call site in scanGrid(). */
-function buildUnvisitedTileSet(bounds, zoom, visitedSet, roadlessSet) {
+function buildUnvisitedTileSet(bounds, zoom, visitedSet, isRoadless) {
     const [south, west, north, east] = bounds;
     const n = Math.pow(2, zoom);
     const minX = Math.floor((west + 180) / 360 * n);
@@ -453,7 +476,7 @@ function buildUnvisitedTileSet(bounds, zoom, visitedSet, roadlessSet) {
     for (let x = minX; x <= maxX; x++) {
         for (let y = minY; y <= maxY; y++) {
             const key = `${x},${y}`;
-            if (visitedSet.has(key) || roadlessSet.has(key)) continue;
+            if (visitedSet.has(key) || isRoadless(x, y)) continue;
             const lat = tileCenterLat(y, zoom);
             const lon = tileCenterLon(x, zoom);
             tiles.push({ key, x, y, lat, lon });

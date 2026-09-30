@@ -428,6 +428,43 @@ class TestExplorationBboxValidation:
         )
         assert response.status_code == 400
 
+    def test_roadless_tiles_malformed_boxes_rejected(self, client):
+        response = client.get('/api/exploration/roadless-tiles?boxes=41.0,-88.0,41.4')
+        assert response.status_code == 400
+        assert 'boxes' in response.get_json()['message']
+
+    def test_roadless_tiles_oversized_box_in_list_rejected(self, client):
+        response = client.get(
+            '/api/exploration/roadless-tiles?boxes=41.0,-88.0,41.4,-87.6;30.0,-100.0,45.0,-70.0'
+        )
+        assert response.status_code == 400
+        assert 'too large' in response.get_json()['message'].lower()
+
+    def test_roadless_tiles_too_many_boxes_rejected(self, client):
+        from app.api.planner_bp import MAX_ROADLESS_BOXES
+        boxes = ';'.join(['41.0,-88.0,41.4,-87.6'] * (MAX_ROADLESS_BOXES + 1))
+        response = client.get(f'/api/exploration/roadless-tiles?boxes={boxes}')
+        assert response.status_code == 400
+        assert 'too many' in response.get_json()['message'].lower()
+
+    def test_roadless_tiles_boxes_passed_to_service_as_one_call(self, client):
+        """#604: the whole area grid is one request / one service call."""
+        from launch import app
+
+        mock_svc = Mock()
+        mock_svc.get_roadless_tiles.return_value = {'status': 'success', 'roadless_runs': []}
+        app.container.exploration_service = mock_svc
+        try:
+            response = client.get(
+                '/api/exploration/roadless-tiles?boxes=41.0,-88.0,41.4,-87.6;41.4,-88.0,41.8,-87.6&zoom=14'
+            )
+            assert response.status_code == 200
+            mock_svc.get_roadless_tiles.assert_called_once_with(
+                [(41.0, -88.0, 41.4, -87.6), (41.4, -88.0, 41.8, -87.6)], zoom=14
+            )
+        finally:
+            app.container.exploration_service = None
+
 
 @pytest.mark.unit
 class TestExplorationRouteWaypointValidation:

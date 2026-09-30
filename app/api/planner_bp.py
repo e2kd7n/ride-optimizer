@@ -30,6 +30,9 @@ bp = Blueprint('planner', __name__, url_prefix='/api')
 # Matches what the Explore UI can realistically request on-screen; anything
 # larger risks a huge Overpass download / graph build (#481).
 MAX_BBOX_DEGREES = 0.5
+# Most bboxes one /exploration/roadless-tiles request may carry (#604) —
+# a 3x3 loop area grid fits easily; explore.js chunks a longer corridor.
+MAX_ROADLESS_BOXES = 16
 
 
 def _rate_limit(config_key: str, default: str):
@@ -192,24 +195,46 @@ def exploration_tiles():
 @bp.route('/exploration/roadless-tiles')
 @limiter.limit(_rate_limit("exploration.rate_limit_roadless", "20 per minute"))
 def exploration_roadless_tiles():
-    """Tiles within a bounding box that fall inside open water (OSM
-    `natural=water`) — used to keep the route generator from targeting
-    non-bikeable tiles as "new tile" candidates (#525)."""
+    """Tiles that fall inside open water (OSM `natural=water`, plus
+    coastline-bounded water such as the Great Lakes, #603) — used to keep
+    the route generator from targeting non-bikeable tiles as "new tile"
+    candidates (#525).
+
+    Takes either one bbox (south/west/north/east) or `boxes`, a
+    semicolon-separated list of `south,west,north,east` bboxes (#604), so
+    explore.js's area grid / corridor chain is one request rather than one
+    per box. Each box is held to the same size limit as a single bbox.
+    Tiles come back as `roadless_runs: [[y, x_start, x_end], ...]`."""
     from src.coverage_tracker import TILE_ZOOM, SQUADRATINHO_ZOOM
 
     svc = current_app.container.get_exploration_service()
 
-    south = request.args.get('south', type=float)
-    west = request.args.get('west', type=float)
-    north = request.args.get('north', type=float)
-    east = request.args.get('east', type=float)
+    boxes_param = request.args.get('boxes')
+    if boxes_param:
+        boxes = []
+        try:
+            for part in boxes_param.split(';'):
+                values = [float(v) for v in part.split(',')]
+                if len(values) != 4:
+                    raise ValueError
+                boxes.append(tuple(values))
+        except ValueError:
+            return jsonify({'status': 'error', 'message': 'boxes must be "south,west,north,east;..."'}), 400
+        if len(boxes) > MAX_ROADLESS_BOXES:
+            return jsonify({'status': 'error', 'message': f'too many boxes (max {MAX_ROADLESS_BOXES})'}), 400
+    else:
+        south = request.args.get('south', type=float)
+        west = request.args.get('west', type=float)
+        north = request.args.get('north', type=float)
+        east = request.args.get('east', type=float)
+        if any(v is None for v in (south, west, north, east)):
+            return jsonify({'status': 'error', 'message': 'south, west, north, east are required'}), 400
+        boxes = [(south, west, north, east)]
 
-    if any(v is None for v in (south, west, north, east)):
-        return jsonify({'status': 'error', 'message': 'south, west, north, east are required'}), 400
-
-    bbox_error = _validate_bbox(south, west, north, east)
-    if bbox_error:
-        return jsonify({'status': 'error', 'message': bbox_error}), 400
+    for box in boxes:
+        bbox_error = _validate_bbox(*box)
+        if bbox_error:
+            return jsonify({'status': 'error', 'message': bbox_error}), 400
 
     zoom = request.args.get('zoom', type=int)
     if zoom is not None and zoom not in (TILE_ZOOM, SQUADRATINHO_ZOOM):
@@ -218,7 +243,7 @@ def exploration_roadless_tiles():
             'message': f'zoom must be {TILE_ZOOM} (squadrat) or {SQUADRATINHO_ZOOM} (squadratinho)',
         }), 400
 
-    result = svc.get_roadless_tiles((south, west, north, east), zoom=zoom)
+    result = svc.get_roadless_tiles(boxes, zoom=zoom)
     status_code = 200 if result.get('status') == 'success' else 500
     return jsonify(result), status_code
 

@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
+import numpy as np
 import pytest
 import requests
 
@@ -21,12 +22,32 @@ from src.coverage_tracker import (
     _WATER_POLYGON_GRID_DEGREES,
     _MAX_CONCURRENT_OVERPASS_CALLS,
     _OVERPASS_SEMAPHORE_WAIT_S,
+    _WATER_POLYGON_MEMO_SIZE,
+    _WATER_CACHE_VERSION,
+    _join_ways,
+    _coastline_water_rings,
+    _rasterize_water_groups,
+    _mask_to_runs,
     _segment_tiles,
     _activity_tiles,
     _robust_tile_range,
     TILE_ZOOM,
     SQUADRATINHO_ZOOM,
 )
+
+
+def _roadless_set(result):
+    """Expand a roadless-tiles result's [y, x0, x1] runs into {(x, y)}."""
+    return {
+        (x, y)
+        for y, x0, x1 in result["roadless_runs"]
+        for x in range(x0, x1 + 1)
+    }
+
+
+def _v2_cache(rings):
+    """A current-format water cache file body: one water group per ring."""
+    return json.dumps({"version": _WATER_CACHE_VERSION, "water": [[r] for r in rings], "coastline": []})
 
 
 # ── lat_lon_to_tile ──────────────────────────────────────────────
@@ -947,7 +968,7 @@ class TestGetRoadlessTiles:
             result = tracker.get_roadless_tiles(self.BOUNDS, zoom=TILE_ZOOM)
 
         assert result["status"] == "success"
-        assert result["roadless"] == []
+        assert _roadless_set(result) == set()
 
     def test_water_polygon_covering_bounds_marks_every_tile_roadless(self, tracker):
         # A single "natural=water" way whose ring encloses the whole bbox —
@@ -970,7 +991,7 @@ class TestGetRoadlessTiles:
         min_tx, min_ty = lat_lon_to_tile(north, west, TILE_ZOOM)
         max_tx, max_ty = lat_lon_to_tile(south, east, TILE_ZOOM)
         expected_count = (max_tx - min_tx + 1) * (max_ty - min_ty + 1)
-        assert len(result["roadless"]) == expected_count
+        assert len(_roadless_set(result)) == expected_count
 
     def test_water_relation_outer_ring_is_used(self, tracker):
         south, west, north, east = self.BOUNDS
@@ -991,7 +1012,7 @@ class TestGetRoadlessTiles:
             result = tracker.get_roadless_tiles(self.BOUNDS, zoom=TILE_ZOOM)
 
         assert result["status"] == "success"
-        assert len(result["roadless"]) > 0
+        assert len(_roadless_set(result)) > 0
 
     def test_water_far_from_bounds_leaves_tiles_reachable(self, tracker):
         # A water polygon nowhere near the query bbox shouldn't mark any
@@ -1009,7 +1030,7 @@ class TestGetRoadlessTiles:
             result = tracker.get_roadless_tiles(self.BOUNDS, zoom=TILE_ZOOM)
 
         assert result["status"] == "success"
-        assert result["roadless"] == []
+        assert _roadless_set(result) == set()
 
     def test_result_uses_cached_polygons_on_second_call(self, tracker):
         with patch("requests.post", return_value=self._overpass_response([])) as mock_post:
@@ -1145,125 +1166,99 @@ class TestGetRoadlessTiles:
             assert results[f"inflight{i}"]["status"] == "success"
 
 
-# ── get_roadless_tiles() bbox prefilter (#574) ─────────────────────
+# ── water rasterizer (#604, replaces the #574 per-tile ray-cast) ──────
 
-class TestRoadlessTilesBboxPrefilter:
-    """get_roadless_tiles()/_point_in_polygon() previously ran a full
-    ray-cast for every tile against every water polygon with no cheap
-    reject first. #574 precomputes each polygon's bbox once per call and
-    skips the ray-cast entirely for a tile whose center falls outside it —
-    not a per-(bbox,zoom) result cache (deliberately not added; see
-    get_tile_coverage()'s own docstring on why that pattern was dropped)."""
+def _brute_force_point_in_polygon(lat, lon, polygon):
+    """Reference ray-cast (the pre-#604 implementation) the scanline
+    rasterizer must agree with."""
+    inside = False
+    n = len(polygon)
+    j = n - 1
+    for i in range(n):
+        yi, xi = polygon[i]
+        yj, xj = polygon[j]
+        if (yi > lat) != (yj > lat):
+            x_at_lat = (xj - xi) * (lat - yi) / (yj - yi) + xi
+            if lon < x_at_lat:
+                inside = not inside
+        j = i
+    return inside
 
-    @pytest.fixture
-    def mock_config(self):
-        config = MagicMock()
-        config.get = MagicMock(side_effect=lambda key, default=None: default)
-        return config
 
-    @pytest.fixture
-    def tracker(self, mock_config, tmp_path):
-        t = CoverageTracker(mock_config)
-        t.cache_dir = tmp_path
-        return t
+class TestRasterizeWaterGroups:
+    """The per-tile ray-cast sweep took ~5 s per box on the Pi (#604); the
+    numpy scanline rasterizer must give the same tiles, far faster."""
 
-    # A wider bbox spanning a 6x6 tile block at TILE_ZOOM, so a small
-    # water polygon tucked in one corner leaves plenty of tiles whose
-    # centers fall outside its bbox.
     _x0, _y0 = lat_lon_to_tile(40.7, -74.0, TILE_ZOOM)
-    _south, _west, _, _ = tile_to_bounds(_x0, _y0 + 5, TILE_ZOOM)
-    _, _, _north, _east = tile_to_bounds(_x0 + 5, _y0, TILE_ZOOM)
-    BOUNDS = (_south, _west, _north, _east)
+    _south, _west, _, _ = tile_to_bounds(_x0, _y0 + 9, TILE_ZOOM)
+    _, _, _north, _east = tile_to_bounds(_x0 + 9, _y0, TILE_ZOOM)
 
-    @staticmethod
-    def _overpass_response(elements):
-        resp = MagicMock()
-        resp.raise_for_status = MagicMock()
-        resp.json.return_value = {"elements": elements}
-        return resp
+    def _tile_range(self, zoom):
+        min_tx, min_ty = lat_lon_to_tile(self._north, self._west, zoom)
+        max_tx, max_ty = lat_lon_to_tile(self._south, self._east, zoom)
+        return min_tx, max_tx, min_ty, max_ty
 
-    def test_polygon_bbox_computes_correct_extent(self, tracker):
-        polygon = [(10.0, 20.0), (10.0, 25.0), (15.0, 25.0), (15.0, 20.0), (10.0, 20.0)]
-        assert tracker._polygon_bbox(polygon) == (10.0, 20.0, 15.0, 25.0)
-
-    def test_prefilter_skips_ray_cast_for_tiles_outside_polygon_bbox(self, tracker):
-        """A small water polygon confined to one corner of the bbox must
-        not trigger a _point_in_polygon call for tiles whose centers fall
-        outside that polygon's own bbox."""
-        # A tiny polygon around the single tile at (x0, y0) only.
-        t_south, t_west, t_north, t_east = tile_to_bounds(self._x0, self._y0, TILE_ZOOM)
-        ring = [
-            {"lat": t_south, "lon": t_west},
-            {"lat": t_south, "lon": t_east},
-            {"lat": t_north, "lon": t_east},
-            {"lat": t_north, "lon": t_west},
-            {"lat": t_south, "lon": t_west},
-        ]
-        elements = [{"type": "way", "geometry": ring}]
-
-        with patch("requests.post", return_value=self._overpass_response(elements)):
-            with patch.object(
-                tracker, "_point_in_polygon", wraps=tracker._point_in_polygon
-            ) as spy:
-                result = tracker.get_roadless_tiles(self.BOUNDS, zoom=TILE_ZOOM)
-
-        assert result["status"] == "success"
-        min_tx, min_ty = lat_lon_to_tile(self._north, self._west, TILE_ZOOM)
-        max_tx, max_ty = lat_lon_to_tile(self._south, self._east, TILE_ZOOM)
-        total_tiles = (max_tx - min_tx + 1) * (max_ty - min_ty + 1)
-        assert total_tiles > 4  # sanity: bbox is meaningfully larger than the polygon
-
-        # The prefilter must reject the vast majority of tiles before ever
-        # calling the full ray-cast test.
-        assert spy.call_count < total_tiles
-
-    def test_prefilter_result_matches_brute_force_ray_cast(self, tracker):
-        """Correctness guard: the bbox-prefiltered result must be identical
-        to what a full ray-cast-every-tile sweep would produce — the
-        prefilter is a same-call speedup, not a behavior change."""
-        # An irregular polygon covering roughly the left half of the bbox.
-        mid_lon = (self._west + self._east) / 2
-        pad = 0.001
-        ring = [
-            {"lat": self._south - pad, "lon": self._west - pad},
-            {"lat": self._south - pad, "lon": mid_lon},
-            {"lat": self._north + pad, "lon": mid_lon},
-            {"lat": self._north + pad, "lon": self._west - pad},
-            {"lat": self._south - pad, "lon": self._west - pad},
-        ]
-        elements = [{"type": "way", "geometry": ring}]
-
-        with patch("requests.post", return_value=self._overpass_response(elements)):
-            result = tracker.get_roadless_tiles(self.BOUNDS, zoom=TILE_ZOOM)
-        assert result["status"] == "success"
-        prefiltered = {(t["x"], t["y"]) for t in result["roadless"]}
-
-        # Brute-force: ray-cast every tile center against the raw polygon,
-        # no bbox shortcut at all.
-        polygon = [(pt["lat"], pt["lon"]) for pt in ring]
-        min_tx, min_ty = lat_lon_to_tile(self._north, self._west, TILE_ZOOM)
-        max_tx, max_ty = lat_lon_to_tile(self._south, self._east, TILE_ZOOM)
-        brute_force = set()
+    def _brute_force(self, rings, zoom):
+        min_tx, max_tx, min_ty, max_ty = self._tile_range(zoom)
+        out = set()
         for tx in range(min_tx, max_tx + 1):
             for ty in range(min_ty, max_ty + 1):
-                t_south, t_west, t_north, t_east = tile_to_bounds(tx, ty, TILE_ZOOM)
-                center_lat = (t_south + t_north) / 2
-                center_lon = (t_west + t_east) / 2
-                if tracker._point_in_polygon(center_lat, center_lon, polygon):
-                    brute_force.add((tx, ty))
+                s, w, n, e = tile_to_bounds(tx, ty, zoom)
+                parity = sum(_brute_force_point_in_polygon((s + n) / 2, (w + e) / 2, r) for r in rings)
+                if parity % 2:
+                    out.add((tx, ty))
+        return out
 
-        assert prefiltered == brute_force
-        assert len(brute_force) > 0  # sanity: the polygon actually covers some tiles
+    def _raster(self, groups, zoom):
+        min_tx, max_tx, min_ty, max_ty = self._tile_range(zoom)
+        mask = _rasterize_water_groups(
+            [[np.asarray(r, dtype=float) for r in g] for g in groups],
+            zoom, min_tx, max_tx, min_ty, max_ty,
+        )
+        return {(x, y) for y, x0, x1 in _mask_to_runs(mask, min_tx, min_ty) for x in range(x0, x1 + 1)}
 
-    def test_no_polygons_means_no_ray_cast_calls_at_all(self, tracker):
-        with patch("requests.post", return_value=self._overpass_response([])):
-            with patch.object(
-                tracker, "_point_in_polygon", wraps=tracker._point_in_polygon
-            ) as spy:
-                result = tracker.get_roadless_tiles(self.BOUNDS, zoom=TILE_ZOOM)
+    @pytest.mark.parametrize("zoom", [TILE_ZOOM, SQUADRATINHO_ZOOM])
+    def test_matches_brute_force_ray_cast_on_irregular_polygon(self, zoom):
+        s, w, n, e = self._south, self._west, self._north, self._east
+        # A concave, partly-outside polygon (unclosed — the closing edge is
+        # implicit, as in the old ray-cast).
+        ring = [
+            (s - 0.01, w + 0.3 * (e - w)),
+            (s + 0.4 * (n - s), e + 0.01),
+            (n + 0.01, w + 0.7 * (e - w)),
+            (s + 0.5 * (n - s), w + 0.45 * (e - w)),
+            (s + 0.8 * (n - s), w - 0.01),
+        ]
+        expected = self._brute_force([ring], zoom)
+        assert expected  # sanity: covers some tiles
+        assert self._raster([[ring]], zoom) == expected
 
-        assert result["roadless"] == []
-        spy.assert_not_called()
+    def test_island_ring_in_same_group_is_a_hole(self):
+        s, w, n, e = self._south, self._west, self._north, self._east
+        outer = [(s - 1, w - 1), (s - 1, e + 1), (n + 1, e + 1), (n + 1, w - 1)]
+        mid_lat, mid_lon = (s + n) / 2, (w + e) / 2
+        d_lat, d_lon = (n - s) / 4, (e - w) / 4
+        island = [
+            (mid_lat - d_lat, mid_lon - d_lon), (mid_lat - d_lat, mid_lon + d_lon),
+            (mid_lat + d_lat, mid_lon + d_lon), (mid_lat + d_lat, mid_lon - d_lon),
+        ]
+        tiles = self._raster([[outer, island]], TILE_ZOOM)
+        assert tiles == self._brute_force([outer, island], TILE_ZOOM)
+        min_tx, max_tx, min_ty, max_ty = self._tile_range(TILE_ZOOM)
+        assert 0 < len(tiles) < (max_tx - min_tx + 1) * (max_ty - min_ty + 1)
+
+    def test_overlapping_groups_are_unioned_not_xored(self):
+        s, w, n, e = self._south, self._west, self._north, self._east
+        big = [(s - 1, w - 1), (s - 1, e + 1), (n + 1, e + 1), (n + 1, w - 1)]
+        tiles = self._raster([[big], [big]], TILE_ZOOM)
+        min_tx, max_tx, min_ty, max_ty = self._tile_range(TILE_ZOOM)
+        assert len(tiles) == (max_tx - min_tx + 1) * (max_ty - min_ty + 1)
+
+    def test_no_groups_gives_empty_mask(self):
+        min_tx, max_tx, min_ty, max_ty = self._tile_range(TILE_ZOOM)
+        mask = _rasterize_water_groups([], TILE_ZOOM, min_tx, max_tx, min_ty, max_ty)
+        assert not mask.any()
+        assert _mask_to_runs(mask, min_tx, min_ty) == []
 
 
 # ── bbox cache key (#481, used for water-polygon caching) ────────
@@ -1395,11 +1390,11 @@ class TestCacheTtl:
 
     def test_water_polygons_reused_when_default_ttl_disabled(self, tracker):
         cache_file = tracker.cache_dir / f"water_{_bbox_cache_key(self.BOUNDS)}.json"
-        cache_file.write_text(json.dumps([[[40.1, -74.5], [40.2, -74.5], [40.2, -74.4]]]))
+        cache_file.write_text(_v2_cache([[[40.1, -74.5], [40.2, -74.5], [40.2, -74.4]]]))
         self._age_file(cache_file, age_seconds=10_000_000)
 
         with patch("requests.post") as mock_post:
-            polygons = tracker._get_or_fetch_water_polygons(self.BOUNDS)
+            polygons = tracker._get_or_fetch_water_features(self.BOUNDS)
 
         assert len(polygons) == 1
         mock_post.assert_not_called()
@@ -1407,14 +1402,14 @@ class TestCacheTtl:
     def test_water_polygons_refetched_once_stale(self, tracker):
         self._config_values["exploration.water_polygon_cache_ttl_seconds"] = 3600
         cache_file = tracker.cache_dir / f"water_{_bbox_cache_key(self.BOUNDS)}.json"
-        cache_file.write_text(json.dumps([[[40.1, -74.5], [40.2, -74.5], [40.2, -74.4]]]))
+        cache_file.write_text(_v2_cache([[[40.1, -74.5], [40.2, -74.5], [40.2, -74.4]]]))
         self._age_file(cache_file, age_seconds=7200)
 
         mock_response = MagicMock()
         mock_response.json.return_value = {"elements": []}
         mock_response.raise_for_status = MagicMock()
         with patch("requests.post", return_value=mock_response) as mock_post:
-            polygons = tracker._get_or_fetch_water_polygons(self.BOUNDS)
+            polygons = tracker._get_or_fetch_water_features(self.BOUNDS)
 
         assert polygons == []
         mock_post.assert_called_once()
@@ -1437,15 +1432,15 @@ class TestWaterPolygonMemo:
 
     def _write_cache(self, tracker, bounds, polygons):
         path = tracker.cache_dir / f"water_{_bbox_cache_key(bounds)}.json"
-        path.write_text(json.dumps(polygons))
+        path.write_text(_v2_cache(polygons))
         return path
 
     def test_repeat_hit_does_not_reread_file(self, tracker):
         self._write_cache(tracker, self.BOUNDS, [[[40.1, -74.5], [40.2, -74.5], [40.2, -74.4]]])
-        first = tracker._get_or_fetch_water_polygons(self.BOUNDS)
+        first = tracker._get_or_fetch_water_features(self.BOUNDS)
 
         with patch("src.coverage_tracker.json.load") as mock_load, patch("requests.post") as mock_post:
-            second = tracker._get_or_fetch_water_polygons(self.BOUNDS)
+            second = tracker._get_or_fetch_water_features(self.BOUNDS)
 
         assert second is first
         mock_load.assert_not_called()
@@ -1453,27 +1448,27 @@ class TestWaterPolygonMemo:
 
     def test_rewritten_file_is_reread(self, tracker):
         path = self._write_cache(tracker, self.BOUNDS, [[[40.1, -74.5], [40.2, -74.5], [40.2, -74.4]]])
-        tracker._get_or_fetch_water_polygons(self.BOUNDS)
+        tracker._get_or_fetch_water_features(self.BOUNDS)
 
-        path.write_text(json.dumps([]))
+        path.write_text(_v2_cache([]))
         later = time.time() + 5
         os.utime(path, (later, later))
 
-        assert tracker._get_or_fetch_water_polygons(self.BOUNDS) == []
+        assert tracker._get_or_fetch_water_features(self.BOUNDS) == []
 
     def test_memo_is_bounded(self, tracker):
-        for i in range(4):
-            bounds = (40.0 + i, -75.0, 41.0 + i, -74.0)
+        for i in range(_WATER_POLYGON_MEMO_SIZE + 2):
+            bounds = (20.0 + i, -75.0, 21.0 + i, -74.0)
             self._write_cache(tracker, bounds, [])
-            tracker._get_or_fetch_water_polygons(bounds)
+            tracker._get_or_fetch_water_features(bounds)
 
-        assert len(tracker._water_polygon_memo) == 2
+        assert len(tracker._water_polygon_memo) == _WATER_POLYGON_MEMO_SIZE
 
 
 # ── Overpass timeout / retry / negative cache (#562) ──────────────
 
 class TestOverpassTimeoutAndNegativeCache:
-    """_get_or_fetch_water_polygons() previously made a single
+    """_get_or_fetch_water_features() previously made a single
     requests.post(timeout=30) call with a [timeout:25] Overpass query and
     no negative cache, so a slow/degraded Overpass endpoint made every
     roadless-tile request pay out a ~30s wait, one at a time, forever."""
@@ -1513,7 +1508,7 @@ class TestOverpassTimeoutAndNegativeCache:
         assert _OVERPASS_REQUEST_TIMEOUT_S >= _OVERPASS_QUERY_TIMEOUT_S
 
         with patch("requests.post", return_value=self._overpass_response()) as mock_post:
-            tracker._get_or_fetch_water_polygons(self.BOUNDS)
+            tracker._get_or_fetch_water_features(self.BOUNDS)
 
         _, kwargs = mock_post.call_args
         assert kwargs["timeout"] == _OVERPASS_REQUEST_TIMEOUT_S
@@ -1526,12 +1521,12 @@ class TestOverpassTimeoutAndNegativeCache:
         immediately instead of paying out another full timeout."""
         with patch("requests.post", side_effect=requests.ConnectionError("boom")) as mock_post:
             with pytest.raises(Exception):
-                tracker._get_or_fetch_water_polygons(self.BOUNDS)
+                tracker._get_or_fetch_water_features(self.BOUNDS)
 
         other_bounds = (10.0, 10.0, 11.0, 11.0)
         with patch("requests.post", return_value=self._overpass_response()) as mock_post2:
             with pytest.raises(Exception):
-                tracker._get_or_fetch_water_polygons(other_bounds)
+                tracker._get_or_fetch_water_features(other_bounds)
             # Negative cache means the second bbox's request never even
             # tried the network.
             mock_post2.assert_not_called()
@@ -1544,7 +1539,7 @@ class TestOverpassTimeoutAndNegativeCache:
 
         with patch("requests.post", side_effect=requests.ConnectionError("boom")):
             with pytest.raises(Exception):
-                tracker._get_or_fetch_water_polygons(self.BOUNDS)
+                tracker._get_or_fetch_water_features(self.BOUNDS)
 
         assert _OVERPASS_URL in tracker._overpass_failure_until
         assert self.BOUNDS not in tracker._overpass_failure_until
@@ -1558,7 +1553,7 @@ class TestOverpassTimeoutAndNegativeCache:
         tracker._overpass_failure_until[_OVERPASS_URL] = time.time() - 1
 
         with patch("requests.post", return_value=self._overpass_response()) as mock_post:
-            polygons = tracker._get_or_fetch_water_polygons(self.BOUNDS)
+            polygons = tracker._get_or_fetch_water_features(self.BOUNDS)
 
         assert polygons == []
         mock_post.assert_called_once()
@@ -1568,7 +1563,7 @@ class TestOverpassTimeoutAndNegativeCache:
 
         with patch("requests.post", side_effect=requests.ConnectionError("boom")):
             with pytest.raises(Exception):
-                tracker._get_or_fetch_water_polygons(self.BOUNDS)
+                tracker._get_or_fetch_water_features(self.BOUNDS)
         assert _OVERPASS_URL in tracker._overpass_failure_until
 
         # Manually expire the marker (simulating TTL elapsed) and retry —
@@ -1576,13 +1571,13 @@ class TestOverpassTimeoutAndNegativeCache:
         tracker._overpass_failure_until[_OVERPASS_URL] = time.time() - 1
         other_bounds = (10.0, 10.0, 11.0, 11.0)
         with patch("requests.post", return_value=self._overpass_response()):
-            tracker._get_or_fetch_water_polygons(other_bounds)
+            tracker._get_or_fetch_water_features(other_bounds)
 
         assert _OVERPASS_URL not in tracker._overpass_failure_until
 
     def test_water_polygon_cache_write_leaves_no_tmp_file_behind(self, tracker):
         with patch("requests.post", return_value=self._overpass_response()):
-            tracker._get_or_fetch_water_polygons(self.BOUNDS)
+            tracker._get_or_fetch_water_features(self.BOUNDS)
 
         cache_file = tracker.cache_dir / f"water_{_bbox_cache_key(self.BOUNDS)}.json"
         assert cache_file.exists()
@@ -1590,3 +1585,220 @@ class TestOverpassTimeoutAndNegativeCache:
             json.load(f)  # must be valid, complete JSON
         tmp_files = list(tracker.cache_dir.glob("water_*.tmp*"))
         assert tmp_files == []
+
+
+# ── coastline-bounded water: Great Lakes / sea coasts (#603) ──────────
+
+# A crude Lake Michigan south shore, directed the way OSM draws coastline
+# (land on the left, water on the right): west along the Indiana shore,
+# then north up the Chicago lakefront.
+_LAKE_MICHIGAN_SOUTH_SHORE = [
+    (41.73, -86.80), (41.62, -87.25), (41.65, -87.52), (41.87, -87.61),
+    (41.97, -87.64), (42.07, -87.68), (42.25, -87.80), (42.60, -87.82),
+]
+# The #603 repro's Northeast area box for a 100 km loop from 60660 —
+# almost entirely open lake.
+_NE_LAKE_BOX = (41.949, -87.600, 42.311, -87.237)
+# The adjacent box spanning downtown plus the shoreline.
+_DOWNTOWN_BOX = (41.674, -87.847, 42.036, -87.484)
+
+
+def _coastline_way(points):
+    return {
+        "type": "way",
+        "tags": {"natural": "coastline"},
+        "geometry": [{"lat": lat, "lon": lon} for lat, lon in points],
+    }
+
+
+def _overpass(elements):
+    resp = MagicMock()
+    resp.raise_for_status = MagicMock()
+    resp.json.return_value = {"elements": elements}
+    return resp
+
+
+def _tile_total(box, zoom):
+    min_tx, min_ty = lat_lon_to_tile(box[2], box[1], zoom)
+    max_tx, max_ty = lat_lon_to_tile(box[0], box[3], zoom)
+    return (max_tx - min_tx + 1) * (max_ty - min_ty + 1)
+
+
+class TestCoastlineWater:
+    """Water exclusion never excluded Lake Michigan: the Great Lakes and
+    every sea coast are OSM `natural=coastline` lines, not `natural=water`
+    polygons, so the Overpass query returned nothing to test against and
+    "Most new tiles" loops were planned miles out into the lake."""
+
+    @pytest.fixture
+    def tracker(self, tmp_path):
+        config = MagicMock()
+        config.get = MagicMock(side_effect=lambda key, default=None: default)
+        t = CoverageTracker(config)
+        t.cache_dir = tmp_path
+        return t
+
+    def test_overpass_query_asks_for_coastline(self, tracker):
+        with patch("requests.post", return_value=_overpass([])) as mock_post:
+            tracker.get_roadless_tiles(_NE_LAKE_BOX, zoom=TILE_ZOOM)
+        query = mock_post.call_args[1]["data"]["data"]
+        assert 'way["natural"="coastline"]' in query
+
+    @pytest.mark.parametrize("zoom", [TILE_ZOOM, SQUADRATINHO_ZOOM])
+    def test_lakefront_box_is_mostly_roadless(self, tracker, zoom):
+        """Regression for the #603 repro: the NE area box must come back
+        as (mostly) open water, not 0 tiles."""
+        with patch("requests.post", return_value=_overpass([_coastline_way(_LAKE_MICHIGAN_SOUTH_SHORE)])):
+            result = tracker.get_roadless_tiles(_NE_LAKE_BOX, zoom=zoom)
+        assert result["status"] == "success"
+        assert result["roadless_count"] / _tile_total(_NE_LAKE_BOX, zoom) > 0.8
+
+    def test_shoreline_box_splits_land_from_lake(self, tracker):
+        with patch("requests.post", return_value=_overpass([_coastline_way(_LAKE_MICHIGAN_SOUTH_SHORE)])):
+            result = tracker.get_roadless_tiles(_DOWNTOWN_BOX, zoom=TILE_ZOOM)
+        tiles = _roadless_set(result)
+        share = len(tiles) / _tile_total(_DOWNTOWN_BOX, TILE_ZOOM)
+        assert 0.15 < share < 0.6
+        # A lake tile off Navy Pier is water; a tile in the West Loop isn't.
+        assert lat_lon_to_tile(41.89, -87.50, TILE_ZOOM) in tiles
+        assert lat_lon_to_tile(41.88, -87.66, TILE_ZOOM) not in tiles
+
+    def test_reversed_coastline_marks_the_other_side(self, tracker):
+        """Way direction decides the water side: the same line drawn the
+        other way round must flag the inland side instead."""
+        reversed_shore = list(reversed(_LAKE_MICHIGAN_SOUTH_SHORE))
+        with patch("requests.post", return_value=_overpass([_coastline_way(reversed_shore)])):
+            result = tracker.get_roadless_tiles(_DOWNTOWN_BOX, zoom=TILE_ZOOM)
+        tiles = _roadless_set(result)
+        assert lat_lon_to_tile(41.89, -87.50, TILE_ZOOM) not in tiles
+        assert lat_lon_to_tile(41.88, -87.66, TILE_ZOOM) in tiles
+
+    def test_coastline_split_across_ways_is_stitched(self, tracker):
+        """OSM splits coastline into many ways; they're joined end-to-start
+        before clipping."""
+        shore = _LAKE_MICHIGAN_SOUTH_SHORE
+        ways = [_coastline_way(shore[:4]), _coastline_way(shore[3:6]), _coastline_way(shore[5:])]
+        with patch("requests.post", return_value=_overpass(ways)):
+            result = tracker.get_roadless_tiles(_NE_LAKE_BOX, zoom=TILE_ZOOM)
+        assert result["roadless_count"] / _tile_total(_NE_LAKE_BOX, TILE_ZOOM) > 0.8
+
+    def test_no_coastline_means_no_coastline_water(self, tracker):
+        with patch("requests.post", return_value=_overpass([])):
+            result = tracker.get_roadless_tiles(_NE_LAKE_BOX, zoom=TILE_ZOOM)
+        assert result["roadless_runs"] == []
+
+    def test_legacy_list_cache_file_is_refetched(self, tracker):
+        """A pre-#603 cache file has no coastline data — serving it would
+        keep the lake missing, so it counts as a miss."""
+        snapped = _snap_bbox_to_grid(_NE_LAKE_BOX, _WATER_POLYGON_GRID_DEGREES)
+        (tracker.cache_dir / f"water_{_bbox_cache_key(snapped)}.json").write_text(json.dumps([]))
+        with patch("requests.post", return_value=_overpass([_coastline_way(_LAKE_MICHIGAN_SOUTH_SHORE)])) as mock_post:
+            result = tracker.get_roadless_tiles(_NE_LAKE_BOX, zoom=TILE_ZOOM)
+        mock_post.assert_called_once()
+        assert result["roadless_count"] > 0
+
+
+class TestCoastlineWaterRings:
+    RECT = (0.0, 0.0, 1.0, 1.0)  # south, west, north, east
+
+    @staticmethod
+    def _inside(rings, lat, lon):
+        return sum(_brute_force_point_in_polygon(lat, lon, r) for r in rings) % 2 == 1
+
+    def test_line_crossing_rect_keeps_right_hand_side(self):
+        # Heading south down the middle: land on the left (east), water
+        # on the right (west).
+        rings = _coastline_water_rings([[(1.5, 0.5), (-0.5, 0.5)]], self.RECT)
+        assert self._inside(rings, 0.5, 0.25)
+        assert not self._inside(rings, 0.5, 0.75)
+
+    def test_island_alone_makes_the_rest_of_the_rect_water(self):
+        # Counter-clockwise closed ring = island (land inside, sea outside).
+        island = [(0.4, 0.4), (0.4, 0.6), (0.6, 0.6), (0.6, 0.4), (0.4, 0.4)]
+        rings = _coastline_water_rings([island], self.RECT)
+        assert self._inside(rings, 0.1, 0.1)
+        assert not self._inside(rings, 0.5, 0.5)
+
+    def test_enclosed_clockwise_ring_is_water_inside_only(self):
+        lake = [(0.4, 0.4), (0.6, 0.4), (0.6, 0.6), (0.4, 0.6), (0.4, 0.4)]
+        rings = _coastline_water_rings([lake], self.RECT)
+        assert self._inside(rings, 0.5, 0.5)
+        assert not self._inside(rings, 0.1, 0.1)
+
+    def test_closed_ring_crossing_the_rect_boundary(self):
+        # A clockwise lake ring straddling the rect's east edge.
+        lake = [(0.3, 0.7), (0.7, 0.7), (0.7, 1.3), (0.3, 1.3), (0.3, 0.7)]
+        rings = _coastline_water_rings([lake], self.RECT)
+        assert self._inside(rings, 0.5, 0.9)
+        assert not self._inside(rings, 0.5, 0.5)
+
+    def test_dangling_piece_is_dropped(self):
+        # Starts inside the rect: broken data, can't be closed.
+        assert _coastline_water_rings([[(0.5, 0.5), (1.5, 0.5)]], self.RECT) == []
+
+
+class TestJoinWays:
+    def test_directed_join_follows_direction(self):
+        chains = _join_ways([[(0, 0), (0, 1)], [(0, 1), (0, 2)]], directed=True)
+        assert chains == [[(0, 0), (0, 1), (0, 2)]]
+
+    def test_directed_join_does_not_reverse(self):
+        chains = _join_ways([[(0, 0), (0, 1)], [(0, 2), (0, 1)]], directed=True)
+        assert len(chains) == 2
+
+    def test_undirected_join_closes_multipolygon_ring(self):
+        # Two halves of a ring, the second drawn "backwards".
+        chains = _join_ways([[(0, 0), (0, 1), (1, 1)], [(0, 0), (1, 0), (1, 1)]], directed=False)
+        assert len(chains) == 1
+        assert chains[0][0] == chains[0][-1]
+        assert len(chains[0]) == 5
+
+
+class TestMultiBoxRoadless:
+    """#604: explore.js now sends every area-grid/corridor box in one
+    request instead of one request per box."""
+
+    @pytest.fixture
+    def tracker(self, tmp_path):
+        config = MagicMock()
+        config.get = MagicMock(side_effect=lambda key, default=None: default)
+        t = CoverageTracker(config)
+        t.cache_dir = tmp_path
+        return t
+
+    def test_boxes_sharing_a_snapped_rect_share_one_fetch(self, tracker):
+        a = (41.60, -87.90, 41.80, -87.70)
+        b = (41.80, -87.90, 42.00, -87.70)
+        with patch("requests.post", return_value=_overpass([])) as mock_post:
+            result = tracker.get_roadless_tiles([a, b], zoom=TILE_ZOOM)
+        assert result["status"] == "success"
+        assert result["box_count"] == 2
+        mock_post.assert_called_once()
+
+    def test_union_of_boxes_matches_single_box_results(self, tracker):
+        with patch("requests.post", return_value=_overpass([_coastline_way(_LAKE_MICHIGAN_SOUTH_SHORE)])):
+            both = tracker.get_roadless_tiles([_NE_LAKE_BOX, _DOWNTOWN_BOX], zoom=TILE_ZOOM)
+            ne = tracker.get_roadless_tiles(_NE_LAKE_BOX, zoom=TILE_ZOOM)
+            downtown = tracker.get_roadless_tiles(_DOWNTOWN_BOX, zoom=TILE_ZOOM)
+        assert _roadless_set(both) == _roadless_set(ne) | _roadless_set(downtown)
+
+    def test_partial_failure_reports_failed_boxes(self, tracker):
+        ok_box = (41.60, -87.90, 41.80, -87.70)
+        far_box = (10.1, 10.1, 10.3, 10.3)  # different snapped rect
+        calls = {"n": 0}
+
+        def post(*args, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise requests.ConnectionError("boom")
+            return _overpass([])
+
+        with patch("requests.post", side_effect=post):
+            result = tracker.get_roadless_tiles([ok_box, far_box], zoom=TILE_ZOOM)
+        assert result["status"] == "success"
+        assert result["failed_boxes"] == 1
+
+    def test_every_box_failing_is_an_error(self, tracker):
+        with patch("requests.post", side_effect=requests.ConnectionError("boom")):
+            result = tracker.get_roadless_tiles([(41.6, -87.9, 41.8, -87.7)], zoom=TILE_ZOOM)
+        assert result["status"] == "error"
