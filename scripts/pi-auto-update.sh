@@ -89,33 +89,55 @@ fi
 section "Pulling Image" "📥"
 echo -e "  ${BLUE}Image: ${REMOTE_IMAGE}${NC}"
 
-# Record current image ID so we can detect whether a new layer was actually pulled.
-BEFORE_ID=$(podman inspect "$REMOTE_IMAGE" --format '{{.Id}}' 2>/dev/null || echo "")
-
+# Retry with backoff: a single transient GHCR/network failure (e.g. the
+# "TLS handshake timeout" while authenticating that killed the 2026-09-30
+# run) used to abort the whole night's update. Keep podman's output instead
+# of discarding it so a failure says *why* in the journal.
+PULL_ATTEMPTS=4
+PULL_LOG=$(mktemp)
+pulled=false
 timer_start
-start_spinner "Pulling ${REMOTE_IMAGE}"
-if ! podman pull "$REMOTE_IMAGE" &>/dev/null; then
+for attempt in $(seq 1 "$PULL_ATTEMPTS"); do
+    start_spinner "Pulling ${REMOTE_IMAGE} (attempt ${attempt}/${PULL_ATTEMPTS})"
+    if podman pull "$REMOTE_IMAGE" >"$PULL_LOG" 2>&1; then
+        stop_spinner ok
+        pulled=true
+        break
+    fi
     stop_spinner fail
-    echo -e "  ${RED}❌ Pull failed — network issue or image not yet published. Aborting.${NC}"
+    echo -e "  ${YELLOW}⚠️  $(tail -n 1 "$PULL_LOG")${NC}"
+    if [ "$attempt" -lt "$PULL_ATTEMPTS" ]; then
+        delay=$((attempt * 120))
+        echo -e "  Retrying in ${delay}s..."
+        sleep "$delay"
+    fi
+done
+timer_end
+if [ "$pulled" != true ]; then
+    echo -e "  ${RED}❌ Pull failed after ${PULL_ATTEMPTS} attempts. Last podman output:${NC}"
+    tail -n 15 "$PULL_LOG" | sed 's/^/     /'
+    rm -f "$PULL_LOG"
     exit 1
 fi
-stop_spinner ok
-timer_end
+rm -f "$PULL_LOG"
 
-AFTER_ID=$(podman inspect "$REMOTE_IMAGE" --format '{{.Id}}' 2>/dev/null || echo "")
+# Compare what's *running* against what's now pulled — not the image ID
+# before vs after this run's pull. The old before/after check never
+# redeployed once the new image was already on disk (a manual pull, or an
+# earlier run whose pull succeeded but whose deploy failed), so the Pi could
+# sit on a stale container indefinitely while every run reported "unchanged".
+PULLED_ID=$(podman image inspect "$REMOTE_IMAGE" --format '{{.Id}}' 2>/dev/null || echo "")
+RUNNING_ID=$(podman inspect ride-optimizer --format '{{.Image}}' 2>/dev/null || echo "")
 
-if [ "$BEFORE_ID" = "$AFTER_ID" ] && [ -n "$BEFORE_ID" ] && [ "$FORCE" = false ]; then
+if [ -n "$RUNNING_ID" ] && [ "$RUNNING_ID" = "$PULLED_ID" ] && [ "$FORCE" = false ]; then
     section "Summary" "🚲"
-    echo -e "  ${GREEN}✓${NC}  Image unchanged (${AFTER_ID:0:12}) — containers not restarted."
+    echo -e "  ${GREEN}✓${NC}  Already running the latest image (${PULLED_ID:0:12}) — containers not restarted."
     exit 0
 fi
 
-echo -e "  ${BLUE}New image: ${BEFORE_ID:0:12} → ${AFTER_ID:0:12}${NC}"
-
-# Remove the superseded image layer so it does not accumulate on the Pi.
-if [ -n "$BEFORE_ID" ] && [ "$BEFORE_ID" != "$AFTER_ID" ]; then
-    podman rmi "$BEFORE_ID" 2>/dev/null || true
-fi
+echo -e "  ${BLUE}Deploying image: ${RUNNING_ID:0:12} → ${PULLED_ID:0:12}${NC}"
+# The superseded image is still in use by the running container here; it
+# becomes dangling once the new container is up and is pruned below.
 
 # ── Deploy ───────────────────────────────────────────────────────────────────
 
