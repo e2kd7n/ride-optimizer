@@ -539,10 +539,18 @@ class StravaDataFetcher:
                     final_activities = merged_activities
 
                 except Exception as e:
-                    logger.warning(f"Failed to merge with existing cache: {e}. Replacing cache.")
-                    stats['new'] = len(activities)
-                    stats['total'] = len(activities)
-                    final_activities = activities
+                    # Never fall back to replacing the cache with just this
+                    # batch: with Strava API access gone, the existing cache
+                    # can't be re-fetched. Raising aborts the write.
+                    logger.error(f"Failed to merge with existing cache: {e}. Cache left untouched.")
+                    raise
+            elif merge and self.cache_path.exists():
+                # JSONStorage.update() passes default=None when the file exists
+                # but couldn't be parsed — don't treat that as "no cache" and
+                # overwrite a possibly recoverable file with this batch alone.
+                raise RuntimeError(
+                    f"{self.cache_path} exists but could not be read; refusing to overwrite it"
+                )
             else:
                 # Not merging or no existing cache
                 stats['new'] = len(activities)

@@ -214,6 +214,7 @@ class TestRunFullAnalysis:
         # Mock data fetcher directly to avoid authentication
         mock_data_fetcher = Mock()
         mock_data_fetcher.fetch_activities = Mock(side_effect=Exception("API Error"))
+        mock_data_fetcher.load_cached_activities = Mock(return_value=[])
         analysis_service._data_fetcher = mock_data_fetcher
 
         result = analysis_service.run_full_analysis()
@@ -222,6 +223,33 @@ class TestRunFullAnalysis:
         assert 'API Error' in result['message']
         assert 'API Error' in result['errors'][0]
         assert result['activities_count'] == 0
+
+    @patch('app.services.analysis_service.LocationFinder')
+    @patch('app.services.analysis_service.LongRideAnalyzer')
+    @patch('app.services.analysis_service.RouteAnalyzer')
+    def test_run_full_analysis_falls_back_to_cache_when_fetch_fails(
+            self, mock_route_analyzer_class, mock_long_ride_analyzer_class,
+            mock_location_finder_class, analysis_service, mock_activity,
+            mock_location):
+        """Strava unreachable (e.g. API access ended) must not fail the run
+        when cached activities exist — analyze the cache instead."""
+        mock_data_fetcher = Mock()
+        mock_data_fetcher.fetch_activities = Mock(side_effect=Exception("401 Unauthorized"))
+        mock_data_fetcher.load_cached_activities = Mock(return_value=[mock_activity])
+        analysis_service._data_fetcher = mock_data_fetcher
+
+        mock_location_finder_class.return_value.identify_home_work = Mock(
+            return_value=mock_location)
+        mock_route_analyzer_class.return_value.group_similar_routes = Mock(return_value=[])
+        mock_long_ride_analyzer_class.return_value.classify_activities = Mock(
+            return_value=([], [mock_activity]))
+        mock_long_ride_analyzer_class.return_value.group_similar_rides = Mock(return_value=[])
+
+        result = analysis_service.run_full_analysis()
+
+        assert result['status'] == 'success'
+        assert result['activities_count'] == 1
+        assert any('401 Unauthorized' in e for e in result['errors'])
 
     @patch('app.services.analysis_service.LocationFinder')
     @patch('app.services.analysis_service.LongRideAnalyzer')
