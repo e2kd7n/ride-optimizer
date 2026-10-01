@@ -402,6 +402,34 @@ class TestCacheManagement:
         assert stats['new'] == 1
         assert stats['total'] == 2
 
+    def test_cache_activities_merge_failure_leaves_cache_untouched(self, fetcher):
+        """A merge error must not fall back to replacing the whole cache with
+        just the incoming batch — the existing cache is irreplaceable once
+        Strava API access is gone."""
+        self._write_cache(fetcher.cache_path, age_days=0)
+        # An entry Activity.from_dict can't build (missing required fields)
+        data = json.loads(fetcher.cache_path.read_text())
+        data['activities'].append({'id': 2})
+        fetcher.cache_path.write_text(json.dumps(data))
+        before = fetcher.cache_path.read_text()
+
+        new_acts = [Activity(id=3, name="New", type="Ride", distance=2000.0,
+                             moving_time=600, elapsed_time=620, total_elevation_gain=20.0,
+                             average_speed=3.0, max_speed=5.0)]
+        with pytest.raises(Exception):
+            fetcher.cache_activities(new_acts, merge=True)
+        assert fetcher.cache_path.read_text() == before
+
+    def test_cache_activities_unreadable_cache_not_overwritten(self, fetcher):
+        fetcher.cache_path.write_text('{"timestamp": "2026-01-01", "activities": [')
+        before = fetcher.cache_path.read_text()
+        new_acts = [Activity(id=3, name="New", type="Ride", distance=2000.0,
+                             moving_time=600, elapsed_time=620, total_elevation_gain=20.0,
+                             average_speed=3.0, max_speed=5.0)]
+        with pytest.raises(RuntimeError, match="refusing to overwrite"):
+            fetcher.cache_activities(new_acts, merge=True)
+        assert fetcher.cache_path.read_text() == before
+
     def test_cache_activities_update_existing(self, fetcher):
         self._write_cache(fetcher.cache_path, age_days=0, activities=[
             {'id': 5, 'name': 'Orig', 'type': 'Ride', 'distance': 1000.0,

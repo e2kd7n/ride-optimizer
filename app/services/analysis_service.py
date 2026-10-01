@@ -399,13 +399,28 @@ class AnalysisService:
                     _notify(phase='fetching', fetched=count,
                             label=f'Fetching from Strava… {count:,} activities so far')
 
-                self._activities = self.data_fetcher.fetch_activities(
-                    use_cache=not force_refresh,
-                    after=after,
-                    before=before,
-                    progress_callback=_fetch_cb,
-                    merge_cache=True,
-                )
+                try:
+                    self._activities = self.data_fetcher.fetch_activities(
+                        use_cache=not force_refresh,
+                        after=after,
+                        before=before,
+                        progress_callback=_fetch_cb,
+                        merge_cache=True,
+                    )
+                except Exception as fetch_err:
+                    # Strava unreachable / auth revoked / API access ended:
+                    # analyze what's already cached rather than failing the
+                    # whole run (the daily cron job would otherwise error out
+                    # every night once the 365-day cache window lapses).
+                    cached = self.data_fetcher.load_cached_activities()
+                    if not cached:
+                        raise
+                    logger.warning(
+                        f"Strava fetch failed ({fetch_err}); analyzing "
+                        f"{len(cached)} cached activities instead"
+                    )
+                    errors.append(f"Strava fetch failed, used cached activities: {fetch_err}")
+                    self._activities = cached
             logger.info(f"Loaded {len(self._activities)} activities")
             
             if not self._activities:
