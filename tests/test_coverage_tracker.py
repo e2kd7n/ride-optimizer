@@ -47,7 +47,15 @@ def _roadless_set(result):
 
 def _v2_cache(rings):
     """A current-format water cache file body: one water group per ring."""
-    return json.dumps({"version": _WATER_CACHE_VERSION, "water": [[r] for r in rings], "coastline": []})
+    return json.dumps({"version": _WATER_CACHE_VERSION, "water": [[r] for r in rings]})
+
+
+def _write_empty_coast_cache(cache_dir, bounds):
+    """An (empty) coastline cache alongside a test's water cache, so the
+    water-cache tests don't also trigger a coastline fetch."""
+    (cache_dir / f"coast_{_bbox_cache_key(bounds)}.json").write_text(
+        json.dumps({"version": _WATER_CACHE_VERSION, "coastline": []})
+    )
 
 
 # ── lat_lon_to_tile ──────────────────────────────────────────────
@@ -1391,6 +1399,7 @@ class TestCacheTtl:
     def test_water_polygons_reused_when_default_ttl_disabled(self, tracker):
         cache_file = tracker.cache_dir / f"water_{_bbox_cache_key(self.BOUNDS)}.json"
         cache_file.write_text(_v2_cache([[[40.1, -74.5], [40.2, -74.5], [40.2, -74.4]]]))
+        _write_empty_coast_cache(tracker.cache_dir, self.BOUNDS)
         self._age_file(cache_file, age_seconds=10_000_000)
 
         with patch("requests.post") as mock_post:
@@ -1403,6 +1412,7 @@ class TestCacheTtl:
         self._config_values["exploration.water_polygon_cache_ttl_seconds"] = 3600
         cache_file = tracker.cache_dir / f"water_{_bbox_cache_key(self.BOUNDS)}.json"
         cache_file.write_text(_v2_cache([[[40.1, -74.5], [40.2, -74.5], [40.2, -74.4]]]))
+        _write_empty_coast_cache(tracker.cache_dir, self.BOUNDS)
         self._age_file(cache_file, age_seconds=7200)
 
         mock_response = MagicMock()
@@ -1433,6 +1443,7 @@ class TestWaterPolygonMemo:
     def _write_cache(self, tracker, bounds, polygons):
         path = tracker.cache_dir / f"water_{_bbox_cache_key(bounds)}.json"
         path.write_text(_v2_cache(polygons))
+        _write_empty_coast_cache(tracker.cache_dir, bounds)
         return path
 
     def test_repeat_hit_does_not_reread_file(self, tracker):
@@ -1494,15 +1505,15 @@ class TestOverpassTimeoutAndNegativeCache:
         resp.json.return_value = {"elements": elements or []}
         return resp
 
-    def test_client_and_query_timeouts_are_lowered_together(self, tracker):
-        """Both the client-side requests.post timeout and Overpass's own
-        internal [out:json][timeout:N] budget must be lowered together
-        (~10-12s) — lowering only the client side would abort queries
-        Overpass would've legitimately finished."""
+    def test_client_and_query_timeouts_move_together(self, tracker):
+        """The client-side requests.post timeout and Overpass's own internal
+        [out:json][timeout:N] budget must stay paired — lowering only the
+        client side would abort queries Overpass would've legitimately
+        finished. (Raised back from #562's 10/12 s: a cold dense-metro water
+        fetch measured 14.7 s from the Pi, #604.)"""
         from src.coverage_tracker import _OVERPASS_QUERY_TIMEOUT_S, _OVERPASS_REQUEST_TIMEOUT_S
 
-        assert _OVERPASS_REQUEST_TIMEOUT_S <= 12
-        assert _OVERPASS_QUERY_TIMEOUT_S <= 12
+        assert _OVERPASS_REQUEST_TIMEOUT_S <= 30
         # Client timeout must not be tighter than Overpass's own query
         # budget, or we'd abort queries Overpass was about to finish.
         assert _OVERPASS_REQUEST_TIMEOUT_S >= _OVERPASS_QUERY_TIMEOUT_S
@@ -1574,6 +1585,17 @@ class TestOverpassTimeoutAndNegativeCache:
             tracker._get_or_fetch_water_features(other_bounds)
 
         assert _OVERPASS_URL not in tracker._overpass_failure_until
+
+    def test_deadline_caps_the_request_timeout(self, tracker):
+        with patch("requests.post", return_value=self._overpass_response()) as mock_post:
+            tracker._get_or_fetch_water_features(self.BOUNDS, deadline=time.monotonic() + 5)
+        assert mock_post.call_args[1]["timeout"] <= 5
+
+    def test_exhausted_deadline_fails_without_calling_overpass(self, tracker):
+        with patch("requests.post") as mock_post:
+            with pytest.raises(RuntimeError):
+                tracker._get_or_fetch_water_features(self.BOUNDS, deadline=time.monotonic())
+        mock_post.assert_not_called()
 
     def test_water_polygon_cache_write_leaves_no_tmp_file_behind(self, tracker):
         with patch("requests.post", return_value=self._overpass_response()):
@@ -1687,15 +1709,28 @@ class TestCoastlineWater:
             result = tracker.get_roadless_tiles(_NE_LAKE_BOX, zoom=TILE_ZOOM)
         assert result["roadless_runs"] == []
 
-    def test_legacy_list_cache_file_is_refetched(self, tracker):
-        """A pre-#603 cache file has no coastline data — serving it would
-        keep the lake missing, so it counts as a miss."""
+    def test_legacy_water_cache_is_kept_and_only_coastline_fetched(self, tracker):
+        """A pre-#603 water cache (bare list of rings) stays valid — a cold
+        dense-metro water fetch is slow and huge (28 MB / ~15 s for the
+        Chicago cell), so a deploy must not throw those away. Only the
+        small coastline query runs."""
         snapped = _snap_bbox_to_grid(_NE_LAKE_BOX, _WATER_POLYGON_GRID_DEGREES)
         (tracker.cache_dir / f"water_{_bbox_cache_key(snapped)}.json").write_text(json.dumps([]))
         with patch("requests.post", return_value=_overpass([_coastline_way(_LAKE_MICHIGAN_SOUTH_SHORE)])) as mock_post:
             result = tracker.get_roadless_tiles(_NE_LAKE_BOX, zoom=TILE_ZOOM)
         mock_post.assert_called_once()
+        query = mock_post.call_args[1]["data"]["data"]
+        assert '"coastline"' in query
+        assert '"water"' not in query
         assert result["roadless_count"] > 0
+        assert (tracker.cache_dir / f"coast_{_bbox_cache_key(snapped)}.json").exists()
+
+    def test_cold_cache_fetches_water_and_coastline_in_one_query(self, tracker):
+        with patch("requests.post", return_value=_overpass([])) as mock_post:
+            tracker.get_roadless_tiles(_NE_LAKE_BOX, zoom=TILE_ZOOM)
+        mock_post.assert_called_once()
+        query = mock_post.call_args[1]["data"]["data"]
+        assert '"coastline"' in query and '"water"' in query
 
 
 class TestCoastlineWaterRings:
