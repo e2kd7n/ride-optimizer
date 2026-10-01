@@ -1611,9 +1611,11 @@ class TestOverpassTimeoutAndNegativeCache:
 
 # ── coastline-bounded water: Great Lakes / sea coasts (#603) ──────────
 
-# A crude Lake Michigan south shore, directed the way OSM draws coastline
-# (land on the left, water on the right): west along the Indiana shore,
-# then north up the Chicago lakefront.
+# A lakefront-shaped shore drawn as natural=coastline (land on the left,
+# water on the right): west along the Indiana shore, then north up the
+# Chicago lakefront. The Great Lakes themselves are natural=water
+# multipolygons in OSM (see _lake_michigan_relation); this exercises the
+# coastline path that sea coasts use, on familiar geography.
 _LAKE_MICHIGAN_SOUTH_SHORE = [
     (41.73, -86.80), (41.62, -87.25), (41.65, -87.52), (41.87, -87.61),
     (41.97, -87.64), (42.07, -87.68), (42.25, -87.80), (42.60, -87.82),
@@ -1646,11 +1648,66 @@ def _tile_total(box, zoom):
     return (max_tx - min_tx + 1) * (max_ty - min_ty + 1)
 
 
+def _lake_michigan_relation():
+    """Lake Michigan as OSM actually maps it (#603): a natural=water
+    multipolygon relation whose outer ring is split across several member
+    ways — not all drawn in the same direction — plus inner island rings.
+    (The issue blamed missing natural=coastline handling, but the Great
+    Lakes aren't coastline; the old parser closed each outer member way
+    with its own straight chord, leaving the open lake as land.)"""
+    outer = [
+        (41.62, -87.55), (42.00, -87.66), (42.60, -87.82),  # west shore, south -> north
+        (42.60, -86.20), (41.75, -86.80), (41.62, -87.55),  # east/south shore back to start
+    ]
+    pieces = [outer[0:3], outer[2:5], outer[4:6]]
+    pieces[1] = list(reversed(pieces[1]))  # member ways aren't consistently oriented
+    island = [(42.20, -87.40), (42.20, -87.35), (42.25, -87.35), (42.25, -87.40), (42.20, -87.40)]
+
+    def geom(pts):
+        return [{"lat": lat, "lon": lon} for lat, lon in pts]
+
+    members = [{"type": "way", "role": "outer", "geometry": geom(pc)} for pc in pieces]
+    members.append({"type": "way", "role": "inner", "geometry": geom(island)})
+    return {"type": "relation", "tags": {"natural": "water", "name": "Lake Michigan"}, "members": members}
+
+
+class TestGreatLakesMultipolygon:
+    """#603 regression: the 100 km loop from 60660 planned waypoints miles
+    out in Lake Michigan because the lake relation's split outer ring was
+    never stitched into one ring."""
+
+    @pytest.fixture
+    def tracker(self, tmp_path):
+        config = MagicMock()
+        config.get = MagicMock(side_effect=lambda key, default=None: default)
+        t = CoverageTracker(config)
+        t.cache_dir = tmp_path
+        return t
+
+    @pytest.mark.parametrize("zoom", [TILE_ZOOM, SQUADRATINHO_ZOOM])
+    def test_open_lake_box_is_mostly_roadless(self, tracker, zoom):
+        with patch("requests.post", return_value=_overpass([_lake_michigan_relation()])):
+            result = tracker.get_roadless_tiles(_NE_LAKE_BOX, zoom=zoom)
+        assert result["status"] == "success"
+        assert result["roadless_count"] / _tile_total(_NE_LAKE_BOX, zoom) > 0.8
+
+    def test_inner_island_stays_land(self, tracker):
+        with patch("requests.post", return_value=_overpass([_lake_michigan_relation()])):
+            tiles = _roadless_set(tracker.get_roadless_tiles(_NE_LAKE_BOX, zoom=TILE_ZOOM))
+        assert lat_lon_to_tile(42.225, -87.375, TILE_ZOOM) not in tiles
+        assert lat_lon_to_tile(42.10, -87.40, TILE_ZOOM) in tiles
+
+    def test_shoreline_box_splits_land_from_lake(self, tracker):
+        with patch("requests.post", return_value=_overpass([_lake_michigan_relation()])):
+            tiles = _roadless_set(tracker.get_roadless_tiles(_DOWNTOWN_BOX, zoom=TILE_ZOOM))
+        assert lat_lon_to_tile(41.89, -87.55, TILE_ZOOM) in tiles
+        assert lat_lon_to_tile(41.88, -87.70, TILE_ZOOM) not in tiles
+
+
 class TestCoastlineWater:
-    """Water exclusion never excluded Lake Michigan: the Great Lakes and
-    every sea coast are OSM `natural=coastline` lines, not `natural=water`
-    polygons, so the Overpass query returned nothing to test against and
-    "Most new tiles" loops were planned miles out into the lake."""
+    """Sea and ocean coasts are OSM `natural=coastline` lines, not
+    `natural=water` polygons, so the original water query never returned
+    anything for them (#603)."""
 
     @pytest.fixture
     def tracker(self, tmp_path):
@@ -1709,21 +1766,35 @@ class TestCoastlineWater:
             result = tracker.get_roadless_tiles(_NE_LAKE_BOX, zoom=TILE_ZOOM)
         assert result["roadless_runs"] == []
 
-    def test_legacy_water_cache_is_kept_and_only_coastline_fetched(self, tracker):
-        """A pre-#603 water cache (bare list of rings) stays valid — a cold
-        dense-metro water fetch is slow and huge (28 MB / ~15 s for the
-        Chicago cell), so a deploy must not throw those away. Only the
-        small coastline query runs."""
+    def test_legacy_water_cache_is_refetched(self, tracker):
+        """A pre-#603 water cache is unstitched member pieces with inner
+        rings dropped — on the Pi, Lake Michigan's cached pieces didn't
+        close into a ring at all — so it counts as a miss."""
         snapped = _snap_bbox_to_grid(_NE_LAKE_BOX, _WATER_POLYGON_GRID_DEGREES)
         (tracker.cache_dir / f"water_{_bbox_cache_key(snapped)}.json").write_text(json.dumps([]))
+        _write_empty_coast_cache(tracker.cache_dir, snapped)
+        with patch("requests.post", return_value=_overpass([_lake_michigan_relation()])) as mock_post:
+            result = tracker.get_roadless_tiles(_NE_LAKE_BOX, zoom=TILE_ZOOM)
+        mock_post.assert_called_once()
+        query = mock_post.call_args[1]["data"]["data"]
+        assert '"water"' in query and '"coastline"' not in query
+        assert result["roadless_count"] / _tile_total(_NE_LAKE_BOX, TILE_ZOOM) > 0.8
+
+    def test_warm_water_cache_only_fetches_missing_coastline(self, tracker):
+        snapped = _snap_bbox_to_grid(_NE_LAKE_BOX, _WATER_POLYGON_GRID_DEGREES)
+        (tracker.cache_dir / f"water_{_bbox_cache_key(snapped)}.json").write_text(_v2_cache([]))
         with patch("requests.post", return_value=_overpass([_coastline_way(_LAKE_MICHIGAN_SOUTH_SHORE)])) as mock_post:
             result = tracker.get_roadless_tiles(_NE_LAKE_BOX, zoom=TILE_ZOOM)
         mock_post.assert_called_once()
         query = mock_post.call_args[1]["data"]["data"]
-        assert '"coastline"' in query
-        assert '"water"' not in query
+        assert '"coastline"' in query and '"water"' not in query
         assert result["roadless_count"] > 0
-        assert (tracker.cache_dir / f"coast_{_bbox_cache_key(snapped)}.json").exists()
+
+    def test_small_water_ways_are_filtered_by_perimeter(self, tracker):
+        with patch("requests.post", return_value=_overpass([])) as mock_post:
+            tracker.get_roadless_tiles(_NE_LAKE_BOX, zoom=TILE_ZOOM)
+        query = mock_post.call_args[1]["data"]["data"]
+        assert "(if: length() >" in query
 
     def test_cold_cache_fetches_water_and_coastline_in_one_query(self, tracker):
         with patch("requests.post", return_value=_overpass([])) as mock_post:
