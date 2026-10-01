@@ -38,22 +38,32 @@ MAX_WATER_POLYGON_CACHES = 32  # cap on retained water_<hash>.json files
 # (up to 3x3 boxes, each with its own snapped fetch, #604) so a reload of
 # the same area stops re-reading and re-parsing every file.
 _WATER_POLYGON_MEMO_SIZE = 9
-# On-disk water cache format. 2 (#603) added coastline chains and stitched
-# multipolygon rings; an older bare-list file is treated as a cache miss.
+# On-disk format of water_<key>.json / coast_<key>.json (#603). Version 2
+# water files hold stitched multipolygon groups (inner rings included); a
+# pre-#603 water file is a bare list of rings and is still read as-is, so a
+# deploy doesn't throw away every warm water cache and force the slow cold
+# fetches. Coastline lives in its own, much smaller coast_<key>.json, so
+# adding it to an area with a warm water cache costs only a coastline query.
 _WATER_CACHE_VERSION = 2
 # Wall-clock budget for the Overpass fetches behind one multi-box roadless
-# request (#604). Boxes whose fetch would start after it runs out are
-# reported as failed instead of holding a worker thread for up to
-# N x _OVERPASS_REQUEST_TIMEOUT_S; explore.js's own timeout sits above it.
-_ROADLESS_FETCH_BUDGET_S = 40
+# request (#604). Each Overpass call's own timeout is capped at whatever is
+# left of it, and boxes whose fetch would start after it runs out are
+# reported as failed, so one request can't hold a worker thread for
+# N x _OVERPASS_REQUEST_TIMEOUT_S. explore.js's 60 s timeout sits above it.
+_ROADLESS_FETCH_BUDGET_S = 50
 _OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 # Overpass's own internal query budget ([out:json][timeout:N]) and the
-# client-side requests.post timeout (#562) — lowered together from the
-# previous 25/30s. The client timeout stays a couple seconds above the
-# query timeout so we don't abort a query Overpass would've legitimately
-# finished (lowering only the client side would do exactly that).
-_OVERPASS_QUERY_TIMEOUT_S = 10
-_OVERPASS_REQUEST_TIMEOUT_S = 12
+# client-side requests.post timeout. #562 lowered these from 25/30 s to
+# 10/12 s, but a cold water fetch for a dense metro cell legitimately takes
+# longer — measured from the Pi on 2026-09-30: 14.7 s and 28 MB for the
+# 1x1 degree Chicago cell — so 12 s made it fail on every attempt. Raised
+# back now that the cost of a slow endpoint is bounded elsewhere: the
+# negative cache (#562), the concurrency cap (#598), the per-request budget
+# above, and explore.js no longer retrying (#604). The client timeout stays
+# a few seconds above the query timeout so we don't abort a query Overpass
+# would've legitimately finished.
+_OVERPASS_QUERY_TIMEOUT_S = 25
+_OVERPASS_REQUEST_TIMEOUT_S = 30
 # Short-lived "this endpoint just failed" marker (#562), keyed by endpoint
 # rather than by bbox: an outage is global to the endpoint, but the query
 # bbox changes on nearly every pin placement, so a bbox-keyed marker would
@@ -380,20 +390,25 @@ def _join_ways(lines: List[list], directed: bool) -> List[list]:
     return out
 
 
-def _parse_water_elements(elements: list) -> dict:
-    """Overpass `out geom` elements -> the on-disk water cache format.
+def _parse_overpass_water(elements: list) -> Tuple[List[list], List[list]]:
+    """Overpass `out geom` elements -> (water groups, coastline chains).
 
-    {"version": N, "water": [group, ...], "coastline": [chain, ...]} where a
-    group is a list of [lat, lon] rings and a chain is a directed coastline
-    polyline (land on the left, water on the right).
+    A water group is a list of [lat, lon] rings (one for a `natural=water`
+    way; a multipolygon relation's stitched outer and inner rings); a
+    coastline chain is a directed polyline with land on the left and water
+    on the right. Coordinates are rounded to 1e-6 degrees (~10 cm) to keep
+    the cache files small.
     """
+    def pts_of(geometry):
+        return [[round(pt["lat"], 6), round(pt["lon"], 6)] for pt in geometry]
+
     water: List[list] = []
     coastline: List[list] = []
     for element in elements:
         etype = element.get("type")
         tags = element.get("tags") or {}
         if etype == "way" and element.get("geometry"):
-            pts = [[pt["lat"], pt["lon"]] for pt in element["geometry"]]
+            pts = pts_of(element["geometry"])
             if tags.get("natural") == "coastline":
                 if len(pts) >= 2:
                     coastline.append(pts)
@@ -401,18 +416,31 @@ def _parse_water_elements(elements: list) -> dict:
                 water.append([pts])
         elif etype == "relation":
             members = [
-                [[pt["lat"], pt["lon"]] for pt in m["geometry"]]
+                pts_of(m["geometry"])
                 for m in element.get("members", [])
                 if m.get("role") in ("outer", "inner") and m.get("geometry")
             ]
             rings = [r for r in _join_ways(members, directed=False) if len(r) >= 3]
             if rings:
                 water.append(rings)
-    return {
-        "version": _WATER_CACHE_VERSION,
-        "water": water,
-        "coastline": _join_ways(coastline, directed=True),
-    }
+    return water, _join_ways(coastline, directed=True)
+
+
+def _water_groups_from_cache(raw) -> Optional[List[list]]:
+    """Water groups from a water_<key>.json body: the current versioned
+    format, or a pre-#603 bare list of rings (each its own group, exactly as
+    it was rasterized before). None for anything unreadable."""
+    if isinstance(raw, list):
+        return [[ring] for ring in raw]
+    if isinstance(raw, dict) and raw.get("version") == _WATER_CACHE_VERSION:
+        return raw.get("water", [])
+    return None
+
+
+def _coastline_from_cache(raw) -> Optional[List[list]]:
+    if isinstance(raw, dict) and raw.get("version") == _WATER_CACHE_VERSION:
+        return raw.get("coastline", [])
+    return None
 
 
 def _ring_bbox(rings: List[np.ndarray]) -> Tuple[float, float, float, float]:
@@ -422,16 +450,18 @@ def _ring_bbox(rings: List[np.ndarray]) -> Tuple[float, float, float, float]:
     return float(lats.min()), float(lons.min()), float(lats.max()), float(lons.max())
 
 
-def _build_water_groups(raw: dict, rect: Tuple[float, float, float, float]) -> list:
-    """Cache-format dict -> [(bbox, [ring arrays]), ...] ready to rasterize.
-    Coastline chains become one extra group, clipped to `rect` (the snapped
-    fetch rectangle)."""
+def _build_water_groups(
+    water: List[list], coastline: List[list], rect: Tuple[float, float, float, float],
+) -> list:
+    """Water groups + coastline chains -> [(bbox, [ring arrays]), ...] ready
+    to rasterize. Coastline chains become one extra group, clipped to `rect`
+    (the snapped fetch rectangle)."""
     groups = []
-    for group in raw.get("water", []):
+    for group in water:
         rings = [np.asarray(r, dtype=float) for r in group if len(r) >= 3]
         if rings:
             groups.append((_ring_bbox(rings), rings))
-    coast_rings = _coastline_water_rings(raw.get("coastline", []), rect)
+    coast_rings = _coastline_water_rings(coastline, rect)
     if coast_rings:
         rings = [np.asarray(r, dtype=float) for r in coast_rings]
         groups.append((_ring_bbox(rings), rings))
@@ -1115,10 +1145,12 @@ class CoverageTracker:
     # ------------------------------------------------------------------
 
     def _get_or_fetch_water_features(
-        self, bounds: Tuple[float, float, float, float]
+        self,
+        bounds: Tuple[float, float, float, float],
+        deadline: Optional[float] = None,
     ) -> List[Tuple[Tuple[float, float, float, float], List[np.ndarray]]]:
         """Load cached open-water geometry for `bounds`, querying Overpass
-        if no cache exists yet.
+        for whatever isn't cached yet.
 
         Returns a list of "water groups", each a (bbox, rings) pair where
         `rings` is a list of (N, 2) [lat, lon] arrays combined under the
@@ -1136,6 +1168,12 @@ class CoverageTracker:
           water-side rings clipped to the snapped fetch rectangle, see
           _coastline_water_rings.
 
+        Water and coastline are cached in separate files (water_<key>.json,
+        coast_<key>.json): a dense metro cell's water is tens of MB from
+        Overpass while its coastline is small, so an area whose water is
+        already cached only pays for the cheap coastline query. When both
+        are missing they're fetched in one query.
+
         Pure-Python/numpy + `requests` only — no osmnx/shapely.
 
         `bounds` is snapped outward to a fixed grid (_snap_bbox_to_grid)
@@ -1145,6 +1183,9 @@ class CoverageTracker:
         snapped rectangle is also the coastline clip rectangle: every
         coastline way with a node inside it was fetched, so a chain can only
         leave it by crossing its boundary.
+
+        `deadline` (time.monotonic()) caps the Overpass call's timeout to
+        the caller's remaining budget.
 
         The whole cache-check/fetch/write sequence runs under a per-key
         lock (_get_water_polygon_lock) so two concurrent requests for the
@@ -1156,128 +1197,153 @@ class CoverageTracker:
         """
         bounds = _snap_bbox_to_grid(bounds, _WATER_POLYGON_GRID_DEGREES)
         key = _bbox_cache_key(bounds)
-        cache_file = self.cache_dir / f"water_{key}.json"
-        ttl = int(self.config.get("exploration.water_polygon_cache_ttl_seconds", 0))
+        water_file = self.cache_dir / f"water_{key}.json"
+        coast_file = self.cache_dir / f"coast_{key}.json"
 
         with self._get_water_polygon_lock(key):
-            if cache_file.exists():
-                st = cache_file.stat()
-                age_s = time.time() - st.st_mtime
-                if ttl <= 0 or age_s <= ttl:
-                    stamp = (st.st_mtime_ns, st.st_size)
-                    with self._water_polygon_memo_lock:
-                        memo = self._water_polygon_memo.get(key)
-                        if memo is not None and memo[0] == stamp:
-                            self._water_polygon_memo.move_to_end(key)
-                            return memo[1]
-                    try:
-                        with open(cache_file, "r", encoding="utf-8") as f:
-                            raw = json.load(f)
-                    except (json.JSONDecodeError, OSError):
-                        raw = None
-                    # A pre-#603 cache file is a bare list of water rings
-                    # with no coastline data at all — refetch it rather than
-                    # keep serving a lakefront area with the lake missing.
-                    if isinstance(raw, dict) and raw.get("version") == _WATER_CACHE_VERSION:
-                        groups = _build_water_groups(raw, bounds)
-                        self._remember_water_polygons(key, stamp, groups)
-                        return groups
-                else:
-                    logger.info(
-                        "Water polygon cache %s is %.0fs old (TTL %ds) — refetching",
-                        cache_file, age_s, ttl,
-                    )
+            water_stamp = self._fresh_cache_stamp(water_file)
+            coast_stamp = self._fresh_cache_stamp(coast_file)
+            if water_stamp and coast_stamp:
+                with self._water_polygon_memo_lock:
+                    memo = self._water_polygon_memo.get(key)
+                    if memo is not None and memo[0] == (water_stamp, coast_stamp):
+                        self._water_polygon_memo.move_to_end(key)
+                        return memo[1]
 
-            # Negative cache (#562): skip straight to failure if Overpass
-            # failed recently rather than paying out another ~12s timeout
-            # for a query that's very likely to fail again during an outage.
-            with self._overpass_failure_lock:
-                failure_until = self._overpass_failure_until.get(_OVERPASS_URL)
-            if failure_until is not None and time.time() < failure_until:
-                remaining = failure_until - time.time()
-                logger.warning(
-                    "Overpass endpoint recently failed — skipping retry for %.0fs more", remaining,
-                )
-                raise RuntimeError(
-                    f"Overpass water-polygon lookup temporarily unavailable ({remaining:.0f}s)"
-                )
+            water = _water_groups_from_cache(self._read_cache_json(water_file)) if water_stamp else None
+            coastline = _coastline_from_cache(self._read_cache_json(coast_file)) if coast_stamp else None
 
-            # Concurrency cap (#598): bound how many threads can be blocked
-            # inside the actual Overpass call at once, across all bboxes —
-            # see _MAX_CONCURRENT_OVERPASS_CALLS. Fail fast rather than
-            # queue if no slot frees up within the wait budget, instead of
-            # silently tying up a thread for however long callers ahead of
-            # us take.
-            if not self._overpass_semaphore.acquire(timeout=_OVERPASS_SEMAPHORE_WAIT_S):
-                logger.warning(
-                    "Overpass concurrency cap (%d) reached — failing fast instead of queueing",
-                    _MAX_CONCURRENT_OVERPASS_CALLS,
-                )
-                raise RuntimeError(
-                    f"Overpass water-polygon lookup busy "
-                    f"({_MAX_CONCURRENT_OVERPASS_CALLS} requests already in flight); try again shortly"
-                )
-            try:
+            if water is None or coastline is None:
                 south, west, north, east = bounds
-                query = (
-                    f"[out:json][timeout:{_OVERPASS_QUERY_TIMEOUT_S}];"
-                    "("
-                    f'way["natural"="water"]({south},{west},{north},{east});'
-                    f'relation["natural"="water"]({south},{west},{north},{east});'
-                    f'way["natural"="coastline"]({south},{west},{north},{east});'
-                    ");"
-                    "out geom;"
-                )
-                # Overpass rejects requests with no/default User-Agent (406).
-                headers = {"User-Agent": "ride-optimizer (exploration water-tile lookup)"}
-                try:
-                    response = requests.post(
-                        _OVERPASS_URL, data={"data": query}, headers=headers,
-                        timeout=_OVERPASS_REQUEST_TIMEOUT_S,
-                    )
-                    response.raise_for_status()
-                    elements = response.json().get("elements", [])
-                except (requests.RequestException, ValueError, OSError) as exc:
-                    with self._overpass_failure_lock:
-                        self._overpass_failure_until[_OVERPASS_URL] = time.time() + _OVERPASS_NEGATIVE_CACHE_TTL_S
-                    logger.warning(
-                        "Overpass water-polygon query failed: %s — negative-caching endpoint for %ds",
-                        exc, _OVERPASS_NEGATIVE_CACHE_TTL_S,
-                    )
-                    raise
-
-                # A successful call clears any earlier failure marker so the
-                # next request isn't held back by a now-stale negative cache
-                # entry.
-                with self._overpass_failure_lock:
-                    self._overpass_failure_until.pop(_OVERPASS_URL, None)
-            finally:
-                self._overpass_semaphore.release()
-
-            raw = _parse_water_elements(elements)
-            groups = _build_water_groups(raw, bounds)
-
-            # Atomic write (temp file + os.replace, #562) — like the tile
-            # index and route cache already do — so a concurrent reader can
-            # never observe a truncated/partial JSON file mid-write.
-            tmp_path = cache_file.with_name(f"{cache_file.name}.tmp{os.getpid()}")
-            try:
-                with open(tmp_path, "w", encoding="utf-8") as f:
-                    json.dump(raw, f)
-                secure_chmod(tmp_path)
-                os.replace(tmp_path, cache_file)
-                secure_chmod(cache_file)
-                st = cache_file.stat()
-                self._remember_water_polygons(key, (st.st_mtime_ns, st.st_size), groups)
+                bbox = f"({south},{west},{north},{east})"
+                parts = []
+                if water is None:
+                    parts += [f'way["natural"="water"]{bbox};', f'relation["natural"="water"]{bbox};']
+                if coastline is None:
+                    parts.append(f'way["natural"="coastline"]{bbox};')
+                elements = self._overpass_query("(" + "".join(parts) + ");out geom;", deadline)
+                fetched_water, fetched_coast = _parse_overpass_water(elements)
+                if water is None:
+                    water = fetched_water
+                    self._write_cache_json(water_file, {"version": _WATER_CACHE_VERSION, "water": water})
+                if coastline is None:
+                    coastline = fetched_coast
+                    self._write_cache_json(coast_file, {"version": _WATER_CACHE_VERSION, "coastline": coastline})
                 self._evict_old_water_polygon_caches()
-            except OSError as exc:
-                logger.warning("Failed to write water polygon cache: %s", exc)
-                try:
-                    tmp_path.unlink()
-                except OSError:
-                    pass
 
+            groups = _build_water_groups(water, coastline, bounds)
+            water_stamp = self._fresh_cache_stamp(water_file)
+            coast_stamp = self._fresh_cache_stamp(coast_file)
+            if water_stamp and coast_stamp:
+                self._remember_water_polygons(key, (water_stamp, coast_stamp), groups)
             return groups
+
+    def _fresh_cache_stamp(self, path: Path) -> Optional[Tuple[int, int]]:
+        """(mtime_ns, size) of a water/coast cache file, or None if it's
+        missing or older than exploration.water_polygon_cache_ttl_seconds
+        (0 = never expires)."""
+        try:
+            st = path.stat()
+        except OSError:
+            return None
+        ttl = int(self.config.get("exploration.water_polygon_cache_ttl_seconds", 0))
+        age_s = time.time() - st.st_mtime
+        if ttl > 0 and age_s > ttl:
+            logger.info("Water polygon cache %s is %.0fs old (TTL %ds) — refetching", path, age_s, ttl)
+            return None
+        return (st.st_mtime_ns, st.st_size)
+
+    @staticmethod
+    def _read_cache_json(path: Path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return None
+
+    @staticmethod
+    def _write_cache_json(path: Path, data) -> None:
+        """Atomic write (temp file + os.replace, #562) — like the tile index
+        and route cache already do — so a concurrent reader can never
+        observe a truncated/partial JSON file mid-write."""
+        tmp_path = path.with_name(f"{path.name}.tmp{os.getpid()}")
+        try:
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, separators=(",", ":"))
+            secure_chmod(tmp_path)
+            os.replace(tmp_path, path)
+            secure_chmod(path)
+        except OSError as exc:
+            logger.warning("Failed to write water polygon cache: %s", exc)
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+
+    def _overpass_query(self, body: str, deadline: Optional[float] = None) -> list:
+        """POST one Overpass query and return its elements, behind the
+        negative cache (#562) and the concurrency cap (#598)."""
+        # Negative cache (#562): skip straight to failure if Overpass
+        # failed recently rather than paying out another full timeout for a
+        # query that's very likely to fail again during an outage.
+        with self._overpass_failure_lock:
+            failure_until = self._overpass_failure_until.get(_OVERPASS_URL)
+        if failure_until is not None and time.time() < failure_until:
+            remaining = failure_until - time.time()
+            logger.warning(
+                "Overpass endpoint recently failed — skipping retry for %.0fs more", remaining,
+            )
+            raise RuntimeError(
+                f"Overpass water-polygon lookup temporarily unavailable ({remaining:.0f}s)"
+            )
+
+        timeout = _OVERPASS_REQUEST_TIMEOUT_S
+        if deadline is not None:
+            timeout = min(timeout, deadline - time.monotonic())
+            if timeout < 1:
+                raise RuntimeError("water lookup time budget exhausted")
+
+        # Concurrency cap (#598): bound how many threads can be blocked
+        # inside the actual Overpass call at once, across all bboxes — see
+        # _MAX_CONCURRENT_OVERPASS_CALLS. Fail fast rather than queue if no
+        # slot frees up within the wait budget, instead of silently tying up
+        # a thread for however long callers ahead of us take.
+        if not self._overpass_semaphore.acquire(timeout=_OVERPASS_SEMAPHORE_WAIT_S):
+            logger.warning(
+                "Overpass concurrency cap (%d) reached — failing fast instead of queueing",
+                _MAX_CONCURRENT_OVERPASS_CALLS,
+            )
+            raise RuntimeError(
+                f"Overpass water-polygon lookup busy "
+                f"({_MAX_CONCURRENT_OVERPASS_CALLS} requests already in flight); try again shortly"
+            )
+        try:
+            query = f"[out:json][timeout:{_OVERPASS_QUERY_TIMEOUT_S}];{body}"
+            # Overpass rejects requests with no/default User-Agent (406).
+            headers = {"User-Agent": "ride-optimizer (exploration water-tile lookup)"}
+            try:
+                response = requests.post(
+                    _OVERPASS_URL, data={"data": query}, headers=headers, timeout=timeout,
+                )
+                response.raise_for_status()
+                elements = response.json().get("elements", [])
+            except (requests.RequestException, ValueError, OSError) as exc:
+                with self._overpass_failure_lock:
+                    self._overpass_failure_until[_OVERPASS_URL] = time.time() + _OVERPASS_NEGATIVE_CACHE_TTL_S
+                logger.warning(
+                    "Overpass water-polygon query failed: %s — negative-caching endpoint for %ds",
+                    exc, _OVERPASS_NEGATIVE_CACHE_TTL_S,
+                )
+                raise
+
+            # A successful call clears any earlier failure marker so the
+            # next request isn't held back by a now-stale negative cache
+            # entry.
+            with self._overpass_failure_lock:
+                self._overpass_failure_until.pop(_OVERPASS_URL, None)
+            return elements
+        finally:
+            self._overpass_semaphore.release()
 
     def get_roadless_tiles(
         self,
@@ -1332,7 +1398,7 @@ class CoverageTracker:
                 last_error = "water lookup time budget exhausted"
                 continue
             try:
-                groups_by_key[key] = self._get_or_fetch_water_features(box)
+                groups_by_key[key] = self._get_or_fetch_water_features(box, deadline)
             except Exception as exc:
                 logger.error("Failed to fetch water polygons: %s", exc)
                 groups_by_key[key] = None
@@ -1395,16 +1461,17 @@ class CoverageTracker:
     def _evict_old_water_polygon_caches(self) -> None:
         """Keep at most MAX_WATER_POLYGON_CACHES water_*.json files,
         evicting the least-recently-modified ones beyond that cap."""
-        caches = sorted(
-            self.cache_dir.glob("water_*.json"),
-            key=lambda p: p.stat().st_mtime,
-            reverse=True,
-        )
-        for p in caches[MAX_WATER_POLYGON_CACHES:]:
-            try:
-                p.unlink()
-            except OSError:
-                pass
+        for pattern in ("water_*.json", "coast_*.json"):
+            caches = sorted(
+                self.cache_dir.glob(pattern),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+            for p in caches[MAX_WATER_POLYGON_CACHES:]:
+                try:
+                    p.unlink()
+                except OSError:
+                    pass
 
     def _sweep_legacy_coverage_tile_files(self) -> int:
         """Delete leftover coverage_tiles_*.json files from the per-bbox
