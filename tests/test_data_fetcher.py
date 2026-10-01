@@ -1057,11 +1057,14 @@ class TestBackfillFullHistory:
         assert len(cached) == 10
 
     @patch('src.data_fetcher.time.sleep')
-    def test_stops_when_page_fully_cached(self, mock_sleep, fetcher):
-        # Pre-seed the cache with an activity that the second page will re-fetch.
+    def test_walks_past_fully_cached_page_to_fill_older_gaps(self, mock_sleep, fetcher):
+        # A page with nothing new does NOT mean everything older is cached:
+        # the cache can have holes deeper in history (a real account was
+        # missing 3,123 of 8,218 activities behind a fully-cached page).
         page1 = [self._make_strava_activity(1, day=20)]
         page2 = [self._make_strava_activity(2, day=10)]  # already cached below
-        fetcher.client.get_activities.side_effect = [page1, page2]
+        page3 = [self._make_strava_activity(3, day=5)]   # hole behind it
+        fetcher.client.get_activities.side_effect = [page1, page2, page3, []]
 
         from src.data_fetcher import Activity
         seeded = Activity(id=2, name="Cached", type="Ride", distance=5000.0,
@@ -1072,12 +1075,11 @@ class TestBackfillFullHistory:
 
         result = fetcher.backfill_full_history()
 
-        # Page 1 (new activity id=1) merges; page 2 re-fetches the already-cached
-        # id=2 with nothing new, so the loop stops after 2 pages without a 3rd call.
-        assert result['pages'] == 2
-        assert fetcher.client.get_activities.call_count == 2
+        assert result['pages'] == 3
+        assert result['new_total'] == 2
+        assert fetcher.client.get_activities.call_count == 4
         cached_ids = {a.id for a in fetcher.load_cached_activities()}
-        assert cached_ids == {1, 2}
+        assert cached_ids == {1, 2, 3}
 
     @patch('src.data_fetcher.time.sleep')
     def test_merges_across_pages_no_duplicates(self, mock_sleep, fetcher):

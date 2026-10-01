@@ -835,9 +835,9 @@ class StravaDataFetcher:
         with more lifetime activities than `max_activities` has activities
         that are never reachable through that path — see issue #486. This
         walks backward in time, re-querying with `before` set to the oldest
-        start_date seen so far, until either Strava returns an empty page
-        (start of history reached) or a full page comes back with nothing
-        new to merge (caught up to activities already in the cache).
+        start_date seen so far, until Strava returns an empty page (start of
+        history reached). It always walks the whole history — a page with
+        nothing new doesn't mean everything older is cached.
 
         This is deliberately a separate, explicit action from the normal
         fetch flow — for a large account it's dozens of paginated calls and
@@ -891,9 +891,10 @@ class StravaDataFetcher:
                 break
             oldest_seen = page_oldest
 
-            if stats['new'] == 0:
-                logger.info(f"Backfill caught up to cached activities after {total_pages} pages")
-                break
+            # Deliberately no "page had nothing new → caught up" early exit:
+            # the cache can have holes deeper in history behind fully-cached
+            # pages. That shortcut once left 3,123 of 8,218 activities
+            # (2005–2008, most of 2011–2016) unfetched while reporting "done".
 
             # Throttle to stay well under Strava's rate limits
             time.sleep(2)
