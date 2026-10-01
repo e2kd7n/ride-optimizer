@@ -38,13 +38,23 @@ MAX_WATER_POLYGON_CACHES = 32  # cap on retained water_<hash>.json files
 # (up to 3x3 boxes, each with its own snapped fetch, #604) so a reload of
 # the same area stops re-reading and re-parsing every file.
 _WATER_POLYGON_MEMO_SIZE = 9
-# On-disk format of water_<key>.json / coast_<key>.json (#603). Version 2
-# water files hold stitched multipolygon groups (inner rings included); a
-# pre-#603 water file is a bare list of rings and is still read as-is, so a
-# deploy doesn't throw away every warm water cache and force the slow cold
-# fetches. Coastline lives in its own, much smaller coast_<key>.json, so
-# adding it to an area with a warm water cache costs only a coastline query.
-_WATER_CACHE_VERSION = 2
+# On-disk format of water_<key>.json / coast_<key>.json (#603). Water files
+# hold stitched multipolygon groups (inner rings included). A pre-#603 water
+# file is a bare list of unstitched member pieces with inner rings dropped —
+# lossy in a way that can't be repaired at load time (verified on the Pi:
+# Lake Michigan's cached pieces don't close into a ring, so open lake came
+# back as land) — and any other version is refetched too. 3 added the
+# _MIN_WATER_WAY_PERIMETER_M filter. Coastline (sea coasts) lives in its
+# own, much smaller coast_<key>.json.
+_WATER_CACHE_VERSION = 3
+# Standalone natural=water ways with a shorter perimeter than this are left
+# out of the Overpass query. Most water ways in a metro area are retention
+# ponds; a tile whose center sits in one is still rideable, so excluding it
+# was wrong anyway — and they made up most of the payload: for the Chicago
+# cell, 8,428 groups / 27.9 MB / ~180 MB parse peak unfiltered vs 516 /
+# 11.9 MB / ~80 MB filtered, with identical lake coverage. Relations
+# (multipolygon lakes such as Lake Michigan) aren't filtered.
+_MIN_WATER_WAY_PERIMETER_M = 1500
 # Wall-clock budget for the Overpass fetches behind one multi-box roadless
 # request (#604). Each Overpass call's own timeout is capped at whatever is
 # left of it, and boxes whose fetch would start after it runs out are
@@ -427,11 +437,9 @@ def _parse_overpass_water(elements: list) -> Tuple[List[list], List[list]]:
 
 
 def _water_groups_from_cache(raw) -> Optional[List[list]]:
-    """Water groups from a water_<key>.json body: the current versioned
-    format, or a pre-#603 bare list of rings (each its own group, exactly as
-    it was rasterized before). None for anything unreadable."""
-    if isinstance(raw, list):
-        return [[ring] for ring in raw]
+    """Water groups from a current-version water_<key>.json body; None (a
+    cache miss) for a legacy or older-version file, or anything unreadable —
+    see _WATER_CACHE_VERSION."""
     if isinstance(raw, dict) and raw.get("version") == _WATER_CACHE_VERSION:
         return raw.get("water", [])
     return None
@@ -1162,8 +1170,8 @@ class CoverageTracker:
           (_join_ways), so an island inside a lake stays land and a lake
           whose outline is split across several member ways is one ring
           instead of each piece being closed with its own straight chord;
-        * `natural=coastline` ways (#603) — the Great Lakes and every
-          sea/ocean coast are mapped as open coastline lines (water on the
+        * `natural=coastline` ways (#603) — sea/ocean coasts are mapped
+          as open coastline lines (water on the
           right), never as a water polygon. They're turned into one group of
           water-side rings clipped to the snapped fetch rectangle, see
           _coastline_water_rings.
@@ -1218,7 +1226,10 @@ class CoverageTracker:
                 bbox = f"({south},{west},{north},{east})"
                 parts = []
                 if water is None:
-                    parts += [f'way["natural"="water"]{bbox};', f'relation["natural"="water"]{bbox};']
+                    parts += [
+                        f'way["natural"="water"]{bbox}(if: length() > {_MIN_WATER_WAY_PERIMETER_M});',
+                        f'relation["natural"="water"]{bbox};',
+                    ]
                 if coastline is None:
                     parts.append(f'way["natural"="coastline"]{bbox};')
                 elements = self._overpass_query("(" + "".join(parts) + ");out geom;", deadline)
@@ -1351,8 +1362,8 @@ class CoverageTracker:
         zoom: Optional[int] = None,
     ) -> dict:
         """Find tiles that fall inside open water — lakes, reservoirs and
-        rivers (OSM `natural=water`) plus coastline-bounded water such as
-        the Great Lakes and sea coasts (OSM `natural=coastline`, #603).
+        rivers (OSM `natural=water`, including the Great Lakes'
+        multipolygons) plus sea coasts (OSM `natural=coastline`, #603).
 
         The exploration route generator uses this to exclude tiles that
         aren't bikeable or walkable from "new tile" scoring, so routes stop

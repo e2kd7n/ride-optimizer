@@ -196,7 +196,7 @@ def exploration_tiles():
 @limiter.limit(_rate_limit("exploration.rate_limit_roadless", "20 per minute"))
 def exploration_roadless_tiles():
     """Tiles that fall inside open water (OSM `natural=water`, plus
-    coastline-bounded water such as the Great Lakes, #603) — used to keep
+    stitched multipolygon lakes such as the Great Lakes and sea coasts, #603) — used to keep
     the route generator from targeting non-bikeable tiles as "new tile"
     candidates (#525).
 
