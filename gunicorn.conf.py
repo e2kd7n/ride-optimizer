@@ -14,5 +14,11 @@ accesslog = '-'
 errorlog = '-'
 loglevel = os.getenv('LOG_LEVEL', 'info').lower()
 preload_app = True
-max_requests = int(os.getenv('GUNICORN_MAX_REQUESTS', '500'))
-max_requests_jitter = int(os.getenv('GUNICORN_MAX_REQUESTS_JITTER', '50'))
+# Worker recycling is OFF by default. With a single worker, a recycle kills
+# every in-process background job (analysis, backfill, fetch — they run as
+# threads in the worker and their state is in memory). Status polling burns
+# ~500 requests in well under an hour, so once a full analysis outgrew that
+# (8k activities) the nightly cron run was killed mid-way every night,
+# ending "with status 'idle'". Set GUNICORN_MAX_REQUESTS to re-enable.
+max_requests = int(os.getenv('GUNICORN_MAX_REQUESTS', '0'))
+max_requests_jitter = int(os.getenv('GUNICORN_MAX_REQUESTS_JITTER', '0'))
