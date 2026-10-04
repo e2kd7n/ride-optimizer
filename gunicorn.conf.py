@@ -13,7 +13,10 @@ keepalive = 5
 accesslog = '-'
 errorlog = '-'
 loglevel = os.getenv('LOG_LEVEL', 'info').lower()
-preload_app = True
+# Off: with a single worker, preloading only made the master hold its own
+# ~220MB copy of the app (refcount writes defeat copy-on-write) on top of the
+# worker's, inside the same container memory limit.
+preload_app = False
 # Worker recycling is OFF by default. With a single worker, a recycle kills
 # every in-process background job (analysis, backfill, fetch — they run as
 # threads in the worker and their state is in memory). Status polling burns

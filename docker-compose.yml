@@ -45,10 +45,11 @@ services:
       retries: 3
       start_period: 180s
 
-    # 1g, not 512m: with the full 8k-activity history the end of a full
-    # analysis (long-ride consolidation + serializing results) peaks above
-    # 512MB and the worker was OOM-killed, losing the whole run (2026-10-04).
-    mem_limit: 1g
+    # 1536m, not 512m: with the full 8k-activity history a full analysis
+    # holds ~940MB (anon) through long-ride matching before the save spike;
+    # at 512m the worker was OOM-killed at the end, losing the whole ~19h run
+    # (2026-10-04). It's a ceiling, not a reservation — the app idles ~300MB.
+    mem_limit: 1536m
     cpus: "1.5"
 
   caddy:
