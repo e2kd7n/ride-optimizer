@@ -45,7 +45,10 @@ services:
       retries: 3
       start_period: 180s
 
-    mem_limit: 512m
+    # 1g, not 512m: with the full 8k-activity history the end of a full
+    # analysis (long-ride consolidation + serializing results) peaks above
+    # 512MB and the worker was OOM-killed, losing the whole run (2026-10-04).
+    mem_limit: 1g
     cpus: "1.5"
 
   caddy:

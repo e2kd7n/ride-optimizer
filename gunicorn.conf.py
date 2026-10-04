@@ -5,7 +5,7 @@ workers = int(os.getenv('GUNICORN_WORKERS', '1'))
 # gthread instead of a second worker process: a slow/blocked request (e.g. a
 # hanging Strava call) no longer serializes every other request behind it,
 # without doubling the base memory footprint the way a second process would
-# on the Pi's 512MB container limit.
+# on the Pi's memory-limited container.
 worker_class = 'gthread'
 threads = int(os.getenv('GUNICORN_THREADS', '4'))
 timeout = int(os.getenv('GUNICORN_TIMEOUT', '60'))
