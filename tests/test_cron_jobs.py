@@ -198,6 +198,131 @@ class TestDailyAnalysisJob:
         assert result == 1
         mock_storage.write.assert_called()
 
+    @patch('cron.daily_analysis.time.sleep')
+    @patch('cron.daily_analysis.requests.Session')
+    @patch('cron.daily_analysis.JSONStorage')
+    @patch('cron.daily_analysis.ConfigManager.get_instance')
+    def test_daily_analysis_survives_status_poll_timeout(self, mock_config,
+                                                         mock_storage_class,
+                                                         mock_session_class,
+                                                         mock_sleep):
+        """A stalled status poll is retried, not treated as a failed run.
+
+        Found live on pi4: the app process stalled ~60s under swap pressure,
+        one poll hit its 30s read timeout and the cron run reported failure
+        while the analysis itself finished normally.
+        """
+        import requests
+        mock_storage = Mock()
+        mock_storage.read.return_value = {'jobs': []}
+        mock_storage_class.return_value = mock_storage
+
+        session = Mock()
+        session.get.side_effect = [
+            _http_response(json_data={'csrf_token': 'tok'}),
+            requests.exceptions.ReadTimeout('read timed out'),
+            requests.exceptions.ConnectionError('connection reset'),
+            _http_response(json_data={'status': 'running'}),
+            _http_response(json_data={
+                'status': 'done',
+                'result': {'activities_count': 100},
+            }),
+        ]
+        session.post.return_value = _http_response(
+            json_data={'status': 'started'})
+        mock_session_class.return_value = session
+
+        from cron import daily_analysis
+        assert daily_analysis.main() == 0
+        session.post.assert_called_once()
+
+    @patch('cron.daily_analysis.MAX_POLL_ERRORS', 2)
+    @patch('cron.daily_analysis.time.sleep')
+    @patch('cron.daily_analysis.requests.Session')
+    @patch('cron.daily_analysis.JSONStorage')
+    @patch('cron.daily_analysis.ConfigManager.get_instance')
+    def test_daily_analysis_gives_up_after_max_poll_errors(self, mock_config,
+                                                           mock_storage_class,
+                                                           mock_session_class,
+                                                           mock_sleep):
+        """Polls that keep failing past the limit still fail the run."""
+        import requests
+        mock_storage = Mock()
+        mock_storage.read.return_value = {'jobs': []}
+        mock_storage_class.return_value = mock_storage
+
+        session = Mock()
+        session.get.side_effect = [
+            _http_response(json_data={'csrf_token': 'tok'}),
+        ] + [requests.exceptions.ReadTimeout('read timed out')] * 3
+        session.post.return_value = _http_response(
+            json_data={'status': 'started'})
+        mock_session_class.return_value = session
+
+        from cron import daily_analysis
+        assert daily_analysis.main() == 1
+        mock_storage.write.assert_called()
+
+    @patch('cron.daily_analysis.time.sleep')
+    @patch('cron.daily_analysis.requests.Session')
+    @patch('cron.daily_analysis.JSONStorage')
+    @patch('cron.daily_analysis.ConfigManager.get_instance')
+    def test_daily_analysis_retriggers_after_lost_job(self, mock_config,
+                                                      mock_storage_class,
+                                                      mock_session_class,
+                                                      mock_sleep):
+        """'idle' mid-run (worker restarted) re-triggers the analysis once."""
+        mock_storage = Mock()
+        mock_storage.read.return_value = {'jobs': []}
+        mock_storage_class.return_value = mock_storage
+
+        session = Mock()
+        session.get.side_effect = [
+            _http_response(json_data={'csrf_token': 'tok'}),
+            _http_response(json_data={'status': 'idle'}),
+            _http_response(json_data={'csrf_token': 'tok2'}),
+            _http_response(json_data={
+                'status': 'done',
+                'result': {'activities_count': 100},
+            }),
+        ]
+        session.post.return_value = _http_response(
+            json_data={'status': 'started'})
+        mock_session_class.return_value = session
+
+        from cron import daily_analysis
+        assert daily_analysis.main() == 0
+        assert session.post.call_count == 2
+        # The re-trigger uses the freshly fetched CSRF token
+        assert session.post.call_args.kwargs['headers']['X-CSRFToken'] == 'tok2'
+
+    @patch('cron.daily_analysis.time.sleep')
+    @patch('cron.daily_analysis.requests.Session')
+    @patch('cron.daily_analysis.JSONStorage')
+    @patch('cron.daily_analysis.ConfigManager.get_instance')
+    def test_daily_analysis_lost_twice_fails(self, mock_config,
+                                             mock_storage_class,
+                                             mock_session_class, mock_sleep):
+        """A second lost job fails the run instead of re-triggering forever."""
+        mock_storage = Mock()
+        mock_storage.read.return_value = {'jobs': []}
+        mock_storage_class.return_value = mock_storage
+
+        session = Mock()
+        session.get.side_effect = [
+            _http_response(json_data={'csrf_token': 'tok'}),
+            _http_response(json_data={'status': 'idle'}),
+            _http_response(json_data={'csrf_token': 'tok2'}),
+            _http_response(json_data={'status': 'idle'}),
+        ]
+        session.post.return_value = _http_response(
+            json_data={'status': 'started'})
+        mock_session_class.return_value = session
+
+        from cron import daily_analysis
+        assert daily_analysis.main() == 1
+        assert session.post.call_count == 2
+
 
 class TestWeatherRefreshJob:
     """Tests for weather_refresh.py cron job (thin HTTP client)."""

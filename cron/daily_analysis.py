@@ -51,6 +51,15 @@ BASE_URL = os.getenv('RIDE_OPTIMIZER_URL',
                      f"http://127.0.0.1:{os.getenv('APP_PORT', '8083')}")
 POLL_INTERVAL_SECONDS = int(os.getenv('ANALYSIS_POLL_INTERVAL', '30'))
 TIMEOUT_SECONDS = int(os.getenv('ANALYSIS_TIMEOUT', str(3 * 60 * 60)))
+# Consecutive status polls allowed to fail (read timeout / connection error)
+# before giving up. Under memory pressure the Pi can stall the app process
+# for a minute or more mid-analysis; one slow poll used to fail the whole
+# run even though the analysis itself went on to finish.
+MAX_POLL_ERRORS = int(os.getenv('ANALYSIS_MAX_POLL_ERRORS', '10'))
+# Times to re-trigger the analysis when its job state is lost mid-run.
+# 'idle' after we started it means the gunicorn worker was replaced (worker
+# timeout or OOM kill) and took the in-process analysis thread with it.
+MAX_RESTARTS = int(os.getenv('ANALYSIS_MAX_RESTARTS', '1'))
 
 
 def _record_job(storage, status, start_time, result=None, error=None):
@@ -82,6 +91,34 @@ def _record_job(storage, status, start_time, result=None, error=None):
     return job_record
 
 
+def _trigger_analysis():
+    """Start an analysis job over HTTP. Returns (session, started).
+
+    started is False when the app answers 409 (already running). Each call
+    uses a fresh session so a re-trigger after a worker restart fetches a new
+    CSRF token instead of reusing one bound to the old worker's session.
+    """
+    session = requests.Session()
+
+    # CSRF: fetch a token (sets the session cookie the token is bound to)
+    resp = session.get(f"{BASE_URL}/api/csrf-token", timeout=30)
+    resp.raise_for_status()
+    csrf_token = resp.json()['csrf_token']
+
+    # Trigger the analysis job. fetch_new=True matches the old in-process
+    # behavior (run_full_analysis with skip_strava_fetch=False).
+    resp = session.post(
+        f"{BASE_URL}/api/analyze",
+        json={'fetch_new': True, 'force_refresh': False},
+        headers={'X-CSRFToken': csrf_token},
+        timeout=60,
+    )
+    if resp.status_code == 409:
+        return session, False
+    resp.raise_for_status()
+    return session, True
+
+
 def main():
     """Trigger analysis over HTTP and wait for it to finish."""
     logger.info("=" * 60)
@@ -99,37 +136,33 @@ def main():
         notifier = None
 
     try:
-        session = requests.Session()
-
-        # CSRF: fetch a token (sets the session cookie the token is bound to)
-        resp = session.get(f"{BASE_URL}/api/csrf-token", timeout=30)
-        resp.raise_for_status()
-        csrf_token = resp.json()['csrf_token']
-
-        # Trigger the analysis job. fetch_new=True matches the old in-process
-        # behavior (run_full_analysis with skip_strava_fetch=False).
-        resp = session.post(
-            f"{BASE_URL}/api/analyze",
-            json={'fetch_new': True, 'force_refresh': False},
-            headers={'X-CSRFToken': csrf_token},
-            timeout=60,
-        )
-        if resp.status_code == 409:
+        session, started = _trigger_analysis()
+        if not started:
             logger.warning("Analysis already running — skipping this cron run")
             return 0
-        resp.raise_for_status()
         logger.info("Analysis started, polling for completion...")
 
         # Poll until the job leaves the 'running' state
         deadline = time.monotonic() + TIMEOUT_SECONDS
+        poll_errors = 0
+        restarts = 0
         while True:
             if time.monotonic() > deadline:
                 raise TimeoutError(
                     f"Analysis still running after {TIMEOUT_SECONDS}s")
             time.sleep(POLL_INTERVAL_SECONDS)
-            status_resp = session.get(f"{BASE_URL}/api/analyze/status",
-                                      timeout=30)
-            status_resp.raise_for_status()
+            try:
+                status_resp = session.get(f"{BASE_URL}/api/analyze/status",
+                                          timeout=30)
+                status_resp.raise_for_status()
+            except requests.RequestException as poll_error:
+                poll_errors += 1
+                if poll_errors > MAX_POLL_ERRORS:
+                    raise
+                logger.warning(f"Status poll failed ({poll_errors}/"
+                               f"{MAX_POLL_ERRORS}), retrying: {poll_error}")
+                continue
+            poll_errors = 0
             snapshot = status_resp.json()
             state = snapshot.get('status')
             if state == 'running':
@@ -137,6 +170,15 @@ def main():
             if state == 'done':
                 result = snapshot.get('result') or {}
                 break
+            if state == 'idle' and restarts < MAX_RESTARTS:
+                restarts += 1
+                logger.warning("Analysis state lost (gunicorn worker "
+                               "restarted?) — re-triggering "
+                               f"({restarts}/{MAX_RESTARTS})")
+                # A 409 here means something else already started a run;
+                # either way there is now a job to poll.
+                session, _ = _trigger_analysis()
+                continue
             raise RuntimeError(
                 f"Analysis ended with status '{state}': "
                 f"{snapshot.get('label') or snapshot.get('result')}")
