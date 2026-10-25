@@ -15,8 +15,9 @@ config/.garmin_tokens/
 /cache/
 /output/
 
-# Caddy's generated local CA + leaf certs (#526) — per-host, regenerated on
-# first `podman-compose up -d` if missing
+# Caddy's local CA + leaf certs from when this repo ran its own Caddy (#526).
+# The pi4 front door in pi-scripts copied them over and owns them now; the
+# old folder can linger in the Pi's checkout, so keep ignoring it.
 /caddy_data/
 /caddy_config/
 venv/

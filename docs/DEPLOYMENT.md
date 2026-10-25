@@ -34,7 +34,7 @@ podman-compose up -d
 podman-compose ps
 ```
 
-The app is served over HTTPS by the bundled Caddy reverse proxy at `https://pi4.local` (or whatever `CADDY_SITE_ADDRESS` is set to) — see "HTTPS / TLS" below for the one-time browser trust step. `ride-optimizer` itself no longer publishes a host port; it's reachable from the LAN only through Caddy.
+On pi4 the app is served at **`https://ride.local`** by the pi4 front door, a shared Caddy that lives in the separate `pi-scripts` repo (`pi4/front-door/`). See "HTTPS / TLS" below. `ride-optimizer` itself publishes only `127.0.0.1:18083` on the Pi's loopback, for the front door to proxy to; nothing on the LAN reaches it directly.
 
 ## Changing the Port
 
@@ -126,25 +126,17 @@ Volumes mounted from the repo directory:
 
 The compose file uses bridge networking (not `host` mode), so ride-optimizer has its own network namespace. Port conflicts with other services (e.g., mealplanner) are explicit and caught at startup rather than at bind time.
 
-Default port **8083** does not conflict with common defaults (80, 443, 3000, 5000, 8000, 8080), but `ride-optimizer` no longer publishes it to the host at all — see "HTTPS / TLS" below. The `caddy` service does publish **443**; if another service on the Pi already holds that port, stop it or change `CADDY_SITE_ADDRESS`/the `caddy` service's `ports:` in a `docker-compose.override.yml`.
+The compose file publishes the app port on the Pi's **loopback only** (`127.0.0.1:18083` → container `${APP_PORT:-8083}`), so it can't collide with anything on the LAN side. 18083 rather than 8083 because the front door itself listens on host `:8083` to redirect old `http://pi4:8083` bookmarks. If you change it, change `pi4/front-door/Caddyfile` and `apps.json` in pi-scripts to match.
 
 ## HTTPS / TLS
 
-The `caddy` service (`deploy/Caddyfile`) reverse-proxies HTTPS on port 443 to `ride-optimizer` over the compose-internal network; gunicorn/Flask never handle TLS directly (#526). This matters for browser APIs that require a [secure context](https://developer.mozilla.org/en-US/docs/Web/Security/Secure_Contexts) — notably the Explore page's "Use My Location" button, which browsers refuse to run at all over plain HTTP on a non-localhost origin.
+TLS is terminated by the **pi4 front door**: a Caddy container in the `pi-scripts` repo (`pi4/front-door/`) that owns the Pi's `:80`/`:443` for every app and also serves the home dashboard at `http://pi4/`. It proxies `https://ride.local` to `127.0.0.1:18083`. gunicorn/Flask never handle TLS directly (#526). HTTPS matters here for browser APIs that require a [secure context](https://developer.mozilla.org/en-US/docs/Web/Security/Secure_Contexts), notably the Explore page's "Use My Location" button, which browsers refuse to run over plain HTTP on a non-localhost origin.
 
-By default Caddy mints its own local CA and a leaf certificate for `pi4.local` (Caddy's `tls internal` directive) — no domain name or DNS provider required, and renewal is fully automatic. This is the right fit for a LAN-only personal deployment like this one; there's no public domain or Tailscale in play here, so the CA-signed path from issue #526 (real domain + certbot/DNS-01, or `tailscale cert`) doesn't apply unless that changes later.
+Until 2026-10-25 this repo ran its own `caddy` service (`deploy/Caddyfile`) at `https://pi4.local`. That moved to pi-scripts when the Pi got a shared front door. Old addresses redirect: `https://pi4.local/<page>` and `http://pi4:8083/<page>` both 308 to `https://ride.local/<page>`.
 
-**First-time setup on the Pi:**
+The certificate comes from Caddy's own local CA (`tls internal`). The front door kept the CA this repo's Caddy generated, so devices that already trust it still do. To trust it on a new device, see "Certificates" in pi-scripts' `pi4/README.md`.
 
-1. `podman-compose up -d` as usual — Caddy generates its root CA and leaf cert on first start (persisted in `./caddy_data`, so this only happens once).
-2. Visit `https://pi4.local` (or your LAN IP, or whatever you set `CADDY_SITE_ADDRESS` to in `.env`). Your browser will warn that the certificate authority isn't trusted — that's expected, since it's a private CA Caddy generated for this Pi.
-3. Either click through the warning each time (fine for occasional use), or trust the CA once per device for a warning-free experience:
-   ```bash
-   podman exec ride-optimizer-caddy cat /data/caddy/pki/authorities/local/root.crt
-   ```
-   Copy that output to your device and add it as a trusted root certificate (Settings → trust store on iOS/Android; `certmgr.msc` → Trusted Root CAs on Windows; Keychain Access on macOS).
-
-If `pi4.local` doesn't resolve on your network (mDNS/Avahi not reachable from that device), set `CADDY_SITE_ADDRESS=https://<pi-lan-ip>` in `.env` and restart — Caddy will mint a cert for the IP instead.
+**Strava re-authorization:** the OAuth callback URL is built from the request host (`url_for(..., _external=True)`), so it is now `https://ride.local/...`. If Strava rejects a re-auth with a redirect-URI error, set the Strava API app's "Authorization Callback Domain" to `ride.local` at strava.com/settings/api. Routine token refreshes don't use the callback and aren't affected.
 
 ## Monitoring
 
@@ -154,19 +146,19 @@ podman-compose logs -f
 
 # Container health and resource usage
 podman-compose ps
-podman stats ride-optimizer ride-optimizer-caddy
+podman stats ride-optimizer
 
-# Manual health check (self-signed cert, so -k)
-curl -k https://pi4.local/api/status
+# Manual health check — on the Pi, straight to the app:
+curl -s http://127.0.0.1:18083/api/status
+# ...or from the LAN through the front door (local CA, so -k):
+curl -k https://ride.local/api/status
 ```
 
 ## Backup and Restore
 
 ```bash
-# Backup (caddy_data preserves the local CA so trusted devices stay trusted
-# after a restore — omit it and Caddy just mints a new one, requiring
-# re-trust per device)
-tar -czf ~/backups/ride-optimizer-$(date +%Y%m%d).tar.gz data/ cache/ config/ caddy_data/ .env
+# Backup (the local CA now lives with the front door in pi-scripts, not here)
+tar -czf ~/backups/ride-optimizer-$(date +%Y%m%d).tar.gz data/ cache/ config/ .env
 
 # Restore
 podman-compose down

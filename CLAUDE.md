@@ -29,7 +29,7 @@ podman-compose up   # pulls image from GHCR
 
 ## Environment Setup
 
-The local server where this is deployed can be accessed via ssh admin@pi4 . 
+The local server where this is deployed can be accessed via ssh admin@pi4 . On the Pi the app is served at **`https://ride.local`** by the shared pi4 front door (a Caddy in the separate `pi-scripts` repo, `pi4/front-door/`), which proxies to the container's loopback-only publish `127.0.0.1:18083`. `http://pi4/` is the Pi's home dashboard; old `https://pi4.local/<page>` and `http://pi4:8083/<page>` links redirect to `ride.local`. Routing, TLS, mDNS names and the host firewall are all in pi-scripts, not this repo. 
 
 Create a `.env` file with Strava API credentials (required — app exits at startup if missing):
 ```
