@@ -373,3 +373,37 @@ class TestRouteSorting:
         assert sorted_routes == routes  # Order unchanged
 
 
+
+
+class TestConcurrentCacheLoad:
+    """Cold-boot race: concurrent first requests must share one cache load."""
+
+    @pytest.mark.parametrize('service_path', [
+        'app.services.route_library_service.RouteLibraryService',
+        'app.services.analysis_service.AnalysisService',
+    ])
+    def test_cache_is_read_once_under_concurrent_first_access(self, service_path):
+        import importlib
+        import threading
+        import time
+
+        module_name, cls_name = service_path.rsplit('.', 1)
+        cls = getattr(importlib.import_module(module_name), cls_name)
+        service = cls()
+
+        reads = []
+
+        def slow_read(name, default=None):
+            reads.append(name)
+            time.sleep(0.05)  # widen the race window like a slow SD card
+            return default
+
+        service.storage.read = slow_read
+        threads = [threading.Thread(target=service._load_from_cache) for _ in range(6)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert reads.count('route_groups.json') == 1
+        assert service._cache_loaded

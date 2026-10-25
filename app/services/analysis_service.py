@@ -10,6 +10,7 @@ This service orchestrates the main analysis workflow:
 
 import json
 import os
+import threading
 from src.secure_logger import SecureLogger
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
@@ -60,6 +61,7 @@ class AnalysisService:
         from src.json_storage import JSONStorage
         self.storage = JSONStorage()
         self._cache_loaded = False
+        self._cache_lock = threading.Lock()
 
         self._strava_client = None
         self._data_fetcher = None
@@ -110,7 +112,15 @@ class AnalysisService:
         """
         if self._cache_loaded:
             return
-        
+        # On a cold boot the healthcheck, status probes and page loads all
+        # arrive before the first load finishes; without the lock each one
+        # parsed the ~50MB route cache in parallel and pushed the Pi into swap.
+        with self._cache_lock:
+            if self._cache_loaded:
+                return
+            self._read_cache()
+
+    def _read_cache(self):
         logger.info("Loading analysis data from cache...")
         
         try:

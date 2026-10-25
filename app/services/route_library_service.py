@@ -9,6 +9,7 @@ This service provides access to the route library:
   no server-side way to set it - the live favoriting UX is localStorage-based)
 """
 
+import threading
 from src.secure_logger import SecureLogger
 from typing import List, Dict, Any, Optional
 from datetime import datetime
@@ -40,6 +41,7 @@ class RouteLibraryService:
         self._long_rides: Optional[List[LongRide]] = None
         self._favorites: set = set()
         self._cache_loaded = False
+        self._cache_lock = threading.Lock()
         self._load_favorites()
 
     def _load_favorites(self):
@@ -61,7 +63,13 @@ class RouteLibraryService:
         """
         if self._cache_loaded:
             return
+        # Same cold-boot race as AnalysisService._load_from_cache.
+        with self._cache_lock:
+            if self._cache_loaded:
+                return
+            self._read_cache()
 
+    def _read_cache(self):
         logger.info("Loading route data from cache...")
 
         try:
