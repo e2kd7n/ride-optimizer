@@ -20,6 +20,11 @@ services:
       # full copy of the numpy stack, which pushed the Pi into swap. 1 = run
       # analysis sequentially in-process (RouteAnalyzer skips the pool).
       - ANALYSIS_N_WORKERS=${ANALYSIS_N_WORKERS:-1}
+      # Worker boot loads every cache before its first heartbeat and takes
+      # minutes on the Pi; gunicorn's old 60s timeout killed it mid-boot in a
+      # loop. Set here as well as in gunicorn.conf.py so it applies without
+      # waiting for an image rebuild.
+      - GUNICORN_TIMEOUT=${GUNICORN_TIMEOUT:-600}
       - NTFY_ENABLED=${NTFY_ENABLED:-false}
       - NTFY_SERVER=${NTFY_SERVER:-https://ntfy.sh}
       - NTFY_TOPIC=${NTFY_TOPIC:-ride-optimizer}

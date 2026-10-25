@@ -8,7 +8,13 @@ workers = int(os.getenv('GUNICORN_WORKERS', '1'))
 # on the Pi's memory-limited container.
 worker_class = 'gthread'
 threads = int(os.getenv('GUNICORN_THREADS', '4'))
-timeout = int(os.getenv('GUNICORN_TIMEOUT', '60'))
+# 600, not 60: with preload_app off, the worker builds the whole app (every
+# service's caches, ~75MB of route JSON at 8k activities) before its first
+# heartbeat. On the Pi that now takes minutes, and at 60s gunicorn killed each
+# worker mid-boot forever (2026-10-25). Under gthread the main thread keeps
+# heartbeating while requests run on the other threads, so this only bounds
+# boot and a truly wedged worker, not slow requests.
+timeout = int(os.getenv('GUNICORN_TIMEOUT', '600'))
 keepalive = 5
 accesslog = '-'
 errorlog = '-'
