@@ -167,7 +167,12 @@ class ServiceContainer:
     def _init_route_library(self) -> None:
         try:
             from app.services.route_library_service import RouteLibraryService
-            self.route_library_service = RouteLibraryService()
+            # Reads through whatever AnalysisService is current (built in wave
+            # 2, or replaced by refresh_services) instead of loading its own
+            # copy of the route caches.
+            self.route_library_service = RouteLibraryService(
+                analysis_source=lambda: self.analysis_service,
+            )
         except Exception as exc:
             logger.error("RouteLibraryService failed to initialize: %s", exc, exc_info=True)
             self.route_library_service = None

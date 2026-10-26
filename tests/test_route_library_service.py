@@ -407,3 +407,70 @@ class TestConcurrentCacheLoad:
 
         assert reads.count('route_groups.json') == 1
         assert service._cache_loaded
+
+
+class TestAnalysisSource:
+    """With analysis_source set, the library reads AnalysisService's objects
+    instead of loading its own copy of the route caches."""
+
+    def _analysis(self, groups, rides):
+        analysis = Mock()
+        analysis.get_route_groups.return_value = groups
+        analysis.get_long_rides.return_value = rides
+        return analysis
+
+    def test_reads_through_without_touching_the_cache_files(self, mock_route_group, mock_long_ride):
+        analysis = self._analysis([mock_route_group], [mock_long_ride])
+        service = RouteLibraryService(analysis_source=lambda: analysis)
+        service.storage.read = Mock(side_effect=AssertionError("must not read cache files"))
+
+        result = service.get_all_routes()
+
+        assert result['status'] == 'success'
+        assert result['total_count'] == 2
+        assert service._route_groups[0] is mock_route_group  # shared, not a copy
+
+    def test_new_analysis_results_show_up_without_a_restart(self, mock_route_group, mock_long_ride):
+        analysis = self._analysis([mock_route_group], [])
+        service = RouteLibraryService(analysis_source=lambda: analysis)
+        assert service.get_all_routes()['total_count'] == 1
+
+        analysis.get_long_rides.return_value = [mock_long_ride]
+        assert service.get_all_routes()['total_count'] == 2
+
+    def test_follows_a_replaced_analysis_service(self, mock_route_group, mock_long_ride):
+        holder = {'analysis': self._analysis([mock_route_group], [])}
+        service = RouteLibraryService(analysis_source=lambda: holder['analysis'])
+        assert service.get_all_routes()['total_count'] == 1
+
+        # What refresh_services('analysis') does: a new AnalysisService object.
+        holder['analysis'] = self._analysis([mock_route_group], [mock_long_ride])
+        assert service.get_all_routes()['total_count'] == 2
+
+    def test_falls_back_to_cache_files_when_analysis_is_unavailable(self):
+        service = RouteLibraryService(analysis_source=lambda: None)
+        service.storage.read = Mock(return_value={})
+        service.get_all_routes()
+        read_names = [c.args[0] for c in service.storage.read.call_args_list]
+        assert 'route_groups.json' in read_names
+
+    def test_search_loads_data_and_handles_both_shapes(self, mock_route_group):
+        mock_route_group.name = 'Lakefront Trail'
+        dict_ride = {'activity_id': 7, 'name': 'Lakefront Century', 'distance': 160000,
+                     'duration': 21600, 'timestamp': '2026-06-01T08:00:00'}
+        analysis = self._analysis([mock_route_group], [dict_ride])
+        service = RouteLibraryService(analysis_source=lambda: analysis)
+
+        result = service.search_routes('lakefront')
+
+        assert result['status'] == 'success'
+        assert result['count'] == 2
+
+    def test_detail_payload_has_the_same_keys_for_objects_and_dicts(self, mock_long_ride):
+        service = RouteLibraryService()
+        from_object = service._format_long_ride_detailed(mock_long_ride)
+        from_dict = service._format_long_ride_from_dict_detailed({
+            'activity_id': 1, 'name': 'x', 'distance': 1000, 'duration': 60,
+            'start_location': [0, 0], 'end_location': [0, 0],
+        })
+        assert set(from_object) == set(from_dict)

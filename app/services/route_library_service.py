@@ -11,7 +11,7 @@ This service provides access to the route library:
 
 import threading
 from src.secure_logger import SecureLogger
-from typing import List, Dict, Any, Optional
+from typing import Any, Callable, Dict, List, Optional
 from datetime import datetime
 
 from src.route_analyzer import RouteGroup
@@ -33,10 +33,22 @@ class RouteLibraryService:
     - Favorite management (JSON-based storage)
     """
 
-    def __init__(self):
-        """Initialize route library service."""
+    def __init__(self, analysis_source: Optional[Callable[[], Any]] = None):
+        """Initialize route library service.
+
+        Args:
+            analysis_source: Returns the current AnalysisService (or None).
+                When set, routes are read through it on every access instead
+                of loading a second copy of route_groups.json / long_rides.json
+                (~75MB parsed at 8k activities, which doubled startup memory on
+                the Pi). Reading through also means a new analysis run shows
+                up here immediately, and a refreshed AnalysisService is picked
+                up because the callable is resolved per call. Without it the
+                service falls back to reading the cache files itself.
+        """
         self.config = ConfigManager.get_instance()
         self.storage = JSONStorage()
+        self._analysis_source = analysis_source
         self._route_groups: Optional[List[RouteGroup]] = None
         self._long_rides: Optional[List[LongRide]] = None
         self._favorites: set = set()
@@ -61,6 +73,13 @@ class RouteLibraryService:
         This allows the service to serve cached data without requiring
         fresh analysis. Called automatically on first data access.
         """
+        analysis = self._analysis_source() if self._analysis_source else None
+        if analysis is not None:
+            # Shared objects, not a copy. AnalysisService does its own
+            # (locked, once-only) cache load behind these getters.
+            self._route_groups = analysis.get_route_groups()
+            self._long_rides = analysis.get_long_rides()
+            return
         if self._cache_loaded:
             return
         # Same cold-boot race as AnalysisService._load_from_cache.
@@ -192,6 +211,8 @@ class RouteLibraryService:
         Returns:
             Dictionary with search results
         """
+        self._load_from_cache()
+
         if not self._route_groups and not self._long_rides:
             return {
                 'status': 'error',
@@ -207,14 +228,14 @@ class RouteLibraryService:
             # Search commute routes
             if self._route_groups:
                 for group in self._route_groups:
-                    name = (group.name or '').lower()
+                    name = ((group.get('name') if isinstance(group, dict) else group.name) or '').lower()
                     if query_lower in name:
                         results.append(self._format_commute_route(group))
 
             # Search long rides
             if self._long_rides:
                 for ride in self._long_rides:
-                    name = ride.name.lower()
+                    name = ((ride.get('name') if isinstance(ride, dict) else ride.name) or '').lower()
                     if query_lower in name:
                         results.append(self._format_long_ride(ride))
 
@@ -467,7 +488,11 @@ class RouteLibraryService:
             'activity_ids': ride.activity_ids,
             'activity_dates': ride.activity_dates,
             'activity_names': ride.activity_names,
-            'ride_type': ride.type
+            'ride_type': ride.type,
+            # Same keys as the from-dict path, so the detail payload doesn't
+            # depend on which form the ride came in.
+            'weather': getattr(ride, 'weather', None),
+            'difficulty': getattr(ride, 'difficulty', None),
         })
         return base
 
