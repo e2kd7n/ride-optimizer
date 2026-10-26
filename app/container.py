@@ -63,6 +63,11 @@ class ServiceContainer:
         self.jobs: JobRegistry = JobRegistry()
 
         self._initialised: bool = False
+        # initialise() takes ~15s on the Pi with full history. Without this,
+        # every request in that window (healthcheck, pi4 status probe, page
+        # loads) built its own full set of services, each parsing the ~75MB
+        # route caches: 3 AnalysisService loads were seen on one cold boot.
+        self._init_lock: threading.Lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # Public interface
@@ -79,7 +84,12 @@ class ServiceContainer:
         """
         if self._initialised:
             return
+        with self._init_lock:
+            if self._initialised:
+                return
+            self._initialise_services()
 
+    def _initialise_services(self) -> None:
         logger.info("Initializing services (wave-parallel)...")
 
         # Wave 1 — I/O-bound, no mutual dependencies

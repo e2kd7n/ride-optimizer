@@ -118,3 +118,26 @@ class TestGetExplorationServiceLocking:
             container.get_exploration_service()
 
         mock_instance.initialize.assert_called_once()
+
+
+class TestInitialiseConcurrency:
+    def test_concurrent_first_requests_build_services_once(self):
+        """Cold-boot race: requests arriving while initialise() is still
+        running must wait for it, not each build (and cache-load) their own
+        AnalysisService."""
+        container = ServiceContainer()
+        builds = []
+
+        def slow_build():
+            builds.append(1)
+            time.sleep(0.05)  # widen the window, like a slow Pi boot
+            container._initialised = True
+
+        container._initialise_services = slow_build
+        threads = [threading.Thread(target=container.initialise) for _ in range(6)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=5)
+
+        assert len(builds) == 1
