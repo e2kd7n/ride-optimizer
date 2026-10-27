@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-10-03 02:25:19 UTC / 2026-10-02 21:25:19 CDT
+**Last Updated:** 2026-10-27 03:47:30 UTC / 2026-10-26 22:47:30 CDT
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -45,7 +45,23 @@ This file reflects the current state of GitHub issues organized by release miles
 
 These issues need to be assigned to a release milestone and prioritized.
 
-**All issues are assigned to releases** ✅
+### 🔴 P0 - CRITICAL
+None
+
+### 🔴 P1 - HIGH
+None
+
+### 🟡 P2 - MEDIUM
+- #607 - Port Garmin integration from garth (unofficial SSO) to Garmin's official Personal API
+
+### 🟢 P3 - LOW
+None
+
+### 📋 P4 - FUTURE
+None
+
+### ⚠️ Unprioritized (No P-label)
+- #608 - Ride-data chat on the Reports tab (ephemeral Claude sessions, no history)
 
 ---
 
