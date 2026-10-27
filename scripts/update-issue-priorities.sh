@@ -526,7 +526,9 @@ echo "# Issue Prioritization"
 echo ""
 # Generate timestamp with both UTC and US Central time
 TIMESTAMP_UTC=$(date -u +"%Y-%m-%d %H:%M:%S UTC" 2>/dev/null || date +"%Y-%m-%d %H:%M:%S")
-TIMESTAMP_CENTRAL=$(TZ="America/Chicago" date +"%Y-%m-%d %H:%M:%S %Z" 2>/dev/null || date +"%Y-%m-%d %H:%M:%S")
+# POSIX rule rather than "America/Chicago": Git Bash on Windows ships no zoneinfo
+# database, so a named zone silently falls back to UTC (mislabelled "GMT").
+TIMESTAMP_CENTRAL=$(TZ="CST6CDT,M3.2.0,M11.1.0" date +"%Y-%m-%d %H:%M:%S %Z" 2>/dev/null || date +"%Y-%m-%d %H:%M:%S")
 echo "**Last Updated:** ${TIMESTAMP_UTC} / ${TIMESTAMP_CENTRAL}"
 echo ""
 echo "This file reflects the current state of GitHub issues organized by release milestone and priority within each release."
