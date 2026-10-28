@@ -52,6 +52,21 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
+        .record-card .record-name a {
+            color: inherit;
+            text-decoration: underline;
+            text-decoration-color: var(--color-text-muted);
+            text-underline-offset: 2px;
+        }
+        .record-card .record-name a:hover,
+        .record-card .record-name a:focus-visible {
+            color: var(--color-primary);
+            text-decoration-color: currentColor;
+        }
+        .record-card .record-name .bi {
+            font-size: var(--font-size-xs);
+            color: var(--color-text-muted);
+        }
         .record-card .record-date {
             font-size: var(--font-size-xs);
             color: var(--color-text-muted);
