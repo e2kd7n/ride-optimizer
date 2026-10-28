@@ -92,7 +92,7 @@ optimization:
 visualization:
   map:
     zoom_level: 13
-    tile_layer: "CartoDB Positron"
+    tile_layer: "OpenStreetMap"
   colors:
     optimal: "#28a745"  # Green - semantic color for optimal/success
     alternative: ["#dc3545", "#007bff", "#ffc107", "#6f42c1"]  # Red, Blue, Yellow, Purple

@@ -992,14 +992,7 @@ class PlannerService:
                 control_scale=True
             )
             
-            # Add tile layers
-            folium.TileLayer(
-                tiles='OpenStreetMap',
-                name='OpenStreetMap',
-                overlay=False,
-                control=True
-            ).add_to(map_obj)
-            
+            # Add tile layers - last one added is the default visible layer
             folium.TileLayer(
                 tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
                 attr='Esri',
@@ -1007,10 +1000,10 @@ class PlannerService:
                 overlay=False,
                 control=True
             ).add_to(map_obj)
-            
+
             folium.TileLayer(
-                tiles='CartoDB positron',
-                name='Light',
+                tiles='OpenStreetMap',
+                name='OpenStreetMap',
                 overlay=False,
                 control=True
             ).add_to(map_obj)

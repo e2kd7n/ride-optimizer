@@ -141,14 +141,6 @@ class RouteVisualizer:
         )
         
         # Add basemap layers in order - last one added will be the default visible layer
-        # OpenStreetMap (colorful, detailed)
-        folium.TileLayer(
-            tiles='OpenStreetMap',
-            name='OpenStreetMap',
-            overlay=False,
-            control=True
-        ).add_to(m)
-        
         # Satellite imagery (Esri World Imagery)
         folium.TileLayer(
             tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
@@ -158,15 +150,17 @@ class RouteVisualizer:
             control=True
         ).add_to(m)
         
-        # CartoDB Positron (clean grayscale) - add last so it's the default
+        # OpenStreetMap - add last so it's the default. CartoDB Positron used to be
+        # the default, but Carto now serves "API KEY REQUIRED" watermark tiles to
+        # keyless requests.
         folium.TileLayer(
-            tiles='CartoDB Positron',
-            name='CartoDB Positron',
+            tiles='OpenStreetMap',
+            name='OpenStreetMap',
             overlay=False,
             control=True
         ).add_to(m)
-        
-        logger.info(f"Created base map centered at ({center_lat:.4f}, {center_lon:.4f}) with multiple basemap options (default: CartoDB Positron)")
+
+        logger.info(f"Created base map centered at ({center_lat:.4f}, {center_lon:.4f}) with multiple basemap options (default: OpenStreetMap)")
         
         return m
     
@@ -516,10 +510,10 @@ class RouteVisualizer:
             control_scale=False
         )
         
-        # Add CartoDB Positron basemap
+        # Add OpenStreetMap basemap (Carto now requires an API key)
         folium.TileLayer(
-            tiles='CartoDB Positron',
-            name='CartoDB Positron',
+            tiles='OpenStreetMap',
+            name='OpenStreetMap',
             overlay=False,
             control=False
         ).add_to(preview_map)
