@@ -210,3 +210,92 @@
         .cal-day.cal-today {
             box-shadow: inset 0 0 0 2px var(--color-accent, var(--color-primary));
         }
+
+        /* Ride chat (#608) */
+        .chat-toggle h6 .chat-toggle-icon {
+            transition: transform 0.2s ease;
+        }
+        .chat-toggle[aria-expanded="true"] h6 .chat-toggle-icon {
+            transform: rotate(180deg);
+        }
+        .chat-log {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-2);
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .chat-log:not(:empty) {
+            margin-top: var(--space-2);
+        }
+        .chat-msg {
+            max-width: 88%;
+            padding: var(--space-2) var(--space-3);
+            border-radius: var(--space-3);
+            font-size: var(--font-size-sm);
+            line-height: 1.5;
+            overflow-wrap: anywhere;
+        }
+        .chat-msg-user {
+            align-self: flex-end;
+            background-color: var(--color-primary);
+            color: var(--surface);
+            white-space: pre-wrap;
+        }
+        .chat-msg-assistant {
+            align-self: flex-start;
+            background-color: var(--color-bg-selected);
+            color: var(--color-text);
+        }
+        .chat-msg-assistant p,
+        .chat-msg-assistant ul,
+        .chat-msg-assistant ol {
+            margin: 0 0 var(--space-2);
+        }
+        .chat-msg-assistant > :last-child {
+            margin-bottom: 0;
+        }
+        .chat-msg-assistant table {
+            font-size: var(--font-size-xs);
+            margin: 0 0 var(--space-2);
+            border-collapse: collapse;
+        }
+        .chat-msg-assistant th,
+        .chat-msg-assistant td {
+            padding: var(--space-1) var(--space-2);
+            border-bottom: 1px solid var(--color-border);
+            text-align: left;
+        }
+        .chat-msg-error {
+            align-self: flex-start;
+            border: 1px solid var(--danger);
+            color: var(--danger);
+            background-color: transparent;
+        }
+        .chat-msg-thinking {
+            color: var(--color-text-muted);
+        }
+        .chat-examples {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--space-1);
+            margin-top: var(--space-2);
+        }
+        .chat-examples:empty {
+            display: none;
+        }
+        .chat-form {
+            display: flex;
+            align-items: flex-end;
+            gap: var(--space-2);
+            margin-top: var(--space-2);
+        }
+        .chat-form textarea {
+            resize: none;
+            min-height: 40px;
+            max-height: 160px;
+        }
+        .chat-form .btn {
+            min-height: 40px;
+            min-width: 40px;
+        }

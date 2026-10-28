@@ -43,6 +43,8 @@ class ServiceContainer:
         self._exploration_service_lock: threading.Lock = threading.Lock()
         self.geocoding_service = None
         self.garmin_service = None
+        self.chat_service = None
+        self._chat_service_lock: threading.Lock = threading.Lock()
         # SettingsService is eager — constructed immediately
         from app.services.settings_service import SettingsService
         self.settings_service: SettingsService = SettingsService()
@@ -310,6 +312,33 @@ class ServiceContainer:
             from app.services.geocoding_service import GeocodingService
             self.geocoding_service = GeocodingService()
         return self.geocoding_service
+
+    def get_chat_service(self):
+        """Return ChatService, creating it on first access.
+
+        Cheap to build (no data loaded up front): its tools read the shared
+        activity cache and whatever analysis/route-library services the
+        container holds at call time.
+        """
+        if self.chat_service is None:
+            with self._chat_service_lock:
+                if self.chat_service is None:
+                    from app.api.activity_cache import load_cached_activities
+                    from app.services.chat_service import ChatService
+                    from app.services.chat_tools import ChatTools
+
+                    def _gear():
+                        analysis = self.analysis_service
+                        return analysis.data_fetcher.load_cached_gear() if analysis else None
+
+                    service = ChatService(ChatTools(
+                        activities_source=load_cached_activities,
+                        gear_source=_gear,
+                        route_library_source=lambda: self.route_library_service,
+                    ))
+                    service.initialize()
+                    self.chat_service = service
+        return self.chat_service
 
     def get_garmin_service(self):
         """Return GarminService, creating it on first access."""
