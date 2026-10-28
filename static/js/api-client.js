@@ -490,27 +490,6 @@ class APIClient {
         });
     }
 
-    /**
-     * Whether the Reports-page ride chat has an Anthropic key configured (#608).
-     */
-    async getChatStatus() {
-        return this.fetch('/chat/status');
-    }
-
-    /**
-     * Send the running chat transcript; returns {reply, tool_calls}.
-     * One attempt only (each call is billed), with a long timeout because a
-     * reply can take several tool-call rounds.
-     */
-    async sendChatMessage(messages) {
-        return this.fetch('/chat', {
-            method: 'POST',
-            body: JSON.stringify({ messages }),
-            timeoutMs: 150000,
-            maxAttempts: 1,
-        });
-    }
-
     async get(endpoint) {
         return this.fetch(endpoint, { method: 'GET' });
     }
