@@ -18,6 +18,38 @@ from .location_finder import Location
 from .route_namer import RouteNamer
 from .units import UnitConverter
 
+
+# Default Folium basemap. These maps are loaded into a blob: iframe (see
+# static/js/commute.js), which sends no Referer, so providers that require one
+# are out: tile.openstreetmap.org answers "403 Access blocked", and CartoDB
+# Positron now answers "API KEY REQUIRED" to every keyless request. Esri's
+# light gray canvas is keyless, Referer-free, and the closest look to Positron.
+_ESRI_TILES = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/{}/MapServer/tile/{{z}}/{{y}}/{{x}}'
+_ESRI_ATTR = 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors'
+
+
+def add_light_basemap(m: folium.Map, control: bool = True) -> None:
+    """Add the light gray canvas basemap plus its street-label overlay to a Folium map."""
+    folium.TileLayer(
+        tiles=_ESRI_TILES.format('World_Light_Gray_Base'),
+        attr=_ESRI_ATTR,
+        name='Light Gray',
+        overlay=False,
+        control=control,
+        max_native_zoom=16,
+        max_zoom=19
+    ).add_to(m)
+    # Labels are a separate overlay tile set; keep them always on
+    folium.TileLayer(
+        tiles=_ESRI_TILES.format('World_Light_Gray_Reference'),
+        attr=_ESRI_ATTR,
+        name='Labels',
+        overlay=True,
+        control=False,
+        max_native_zoom=16,
+        max_zoom=19
+    ).add_to(m)
+
 logger = SecureLogger(__name__)
 
 
@@ -150,17 +182,10 @@ class RouteVisualizer:
             control=True
         ).add_to(m)
         
-        # OpenStreetMap - add last so it's the default. CartoDB Positron used to be
-        # the default, but Carto now serves "API KEY REQUIRED" watermark tiles to
-        # keyless requests.
-        folium.TileLayer(
-            tiles='OpenStreetMap',
-            name='OpenStreetMap',
-            overlay=False,
-            control=True
-        ).add_to(m)
+        # Light gray canvas - add last so it's the default
+        add_light_basemap(m, control=True)
 
-        logger.info(f"Created base map centered at ({center_lat:.4f}, {center_lon:.4f}) with multiple basemap options (default: OpenStreetMap)")
+        logger.info(f"Created base map centered at ({center_lat:.4f}, {center_lon:.4f}) with multiple basemap options (default: Light Gray)")
         
         return m
     
@@ -510,13 +535,7 @@ class RouteVisualizer:
             control_scale=False
         )
         
-        # Add OpenStreetMap basemap (Carto now requires an API key)
-        folium.TileLayer(
-            tiles='OpenStreetMap',
-            name='OpenStreetMap',
-            overlay=False,
-            control=False
-        ).add_to(preview_map)
+        add_light_basemap(preview_map, control=False)
         
         # Add only the optimal route
         optimal_color = self.config.get('visualization.colors.optimal', '#FF0000')

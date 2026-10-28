@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 # cost on the Pi — see the same pattern in analysis_service.py.
 
 from src.long_ride_analyzer import LongRide
+from src.visualizer import add_light_basemap
 from src.config_manager import ConfigManager
 from app.services.weather_service import WeatherService
 
@@ -1001,13 +1002,8 @@ class PlannerService:
                 control=True
             ).add_to(map_obj)
 
-            folium.TileLayer(
-                tiles='OpenStreetMap',
-                name='OpenStreetMap',
-                overlay=False,
-                control=True
-            ).add_to(map_obj)
-            
+            add_light_basemap(map_obj, control=True)
+
             # Add home marker if provided
             if home_location:
                 folium.Marker(
