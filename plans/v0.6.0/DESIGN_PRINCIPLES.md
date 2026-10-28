@@ -1,7 +1,7 @@
 # Design Principles & Guidelines
 
-**Version:** 2.5
-**Last Updated:** 2026-09-14
+**Version:** 2.6
+**Last Updated:** 2026-10-27
 **Status:** Active
 
 ---
@@ -25,7 +25,7 @@ The app's visual identity is **Fair Weather** — built around the one decision 
 **Typography:**
 - Display (headlines, decision copy, CTAs): a geometric sans — `"Century Gothic", "Avenir Next", "Futura", -apple-system, sans-serif`.
 - Body (everything read at length): the existing system UI stack — `-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`.
-- No separate mono face in-product. Numerals that line up in a column (temperature, distance, elevation, match score) use `font-variant-numeric: tabular-nums` on the body/display face instead.
+- Numerals (as of v2.6): big and tabular figures (hero score, temperature, stat and cell values) use **Barlow Condensed SemiBold** via `--font-numeric`, self-hosted in `static/fonts/`, with `font-variant-numeric: tabular-nums`. Inline numbers in body copy stay on the body face. No mono face in-product.
 
 **Color — two grounds, not one inverted into the other.** Day is an overcast-bright sky; Night is a clear one. Accents shift in brightness between modes to stay correct on each ground, not just recolored. This supersedes the Primary Colors and Semantic Colors tables in §4 below, which are updated to these values.
 
@@ -86,7 +86,7 @@ The app's visual identity is **Fair Weather** — built around the one decision 
 **Principle:** Use size, color, and spacing to guide user attention.
 
 **Guidelines:**
-- Optimal route: Largest, most prominent (gradient border, elevated shadow)
+- Optimal route: Largest, most prominent. It leads with a verdict panel (colour + word + icon + big score), then LABEL/value cells. See the Glance layer in the brand book.
 - Alternative routes: Standard cards with subtle styling
 - Typography scale: H1 (2.5rem) → H2 (2rem) → H3 (1.5rem) → Body (1rem); every page must have exactly one `<h1>` as its first visible heading
 - Spacing scale: xs (4px) → sm (8px) → md (16px) → lg (24px) → xl (32px)
@@ -124,7 +124,7 @@ The app's visual identity is **Fair Weather** — built around the one decision 
 
 **Success (Green) - Optimal, Favorable, Good fit:**
 - `#2D7A52` (Day) / `#57B384` (Night) - Success (optimal routes, tailwind, favorable conditions)
-- `rgba(62,142,99,0.13)` - Success Light (backgrounds, selected states; use `rgba(87,179,132,0.16)` on Night surfaces)
+- `rgba(45,122,82,0.13)` - Success Light (backgrounds, selected states; use `rgba(87,179,132,0.16)` on Night surfaces)
 - `#1F5C3F` - Success Dark (text on light backgrounds)
 
 **Danger (Red) - Unfavorable, Poor fit:**
@@ -149,7 +149,7 @@ The app's visual identity is **Fair Weather** — built around the one decision 
 ### Color Usage Rules
 
 1. **Route States:**
-   - Selected: `rgba(62,142,99,0.13)` (success-tinted background) - clearly indicates selection
+   - Selected: `rgba(45,122,82,0.13)` (success-tinted background) - clearly indicates selection
    - Highlighted: `rgba(201,138,29,0.15)` (warning-tinted background) - temporary highlight
    - Hover: Line color (`#DCE3E6` Day / `#223243` Night) - subtle feedback
    - Dimmed: `#808080` at 40% opacity - unselected routes on map
@@ -167,8 +167,13 @@ The app's visual identity is **Fair Weather** — built around the one decision 
    - Unselected: `#808080` at 40% opacity
    - As of v2.5 (#569): reconciled with what `static/js/explore.js` actually ships — the previously documented generic Bootstrap `#28a745`/`#dc3545`/`#007bff`/`#ffc107` set was never implemented and, worse, reused this same document's own success-green/danger-red hues (§4 above) for what is here an arbitrary per-direction identity color, risking a route reading as "good"/"bad" rather than merely "northeast." The shipped palette is also the more deliberate, more recent design (#409/#489): it's keyed by compass direction rather than ordinal position, and pairs a light/base tone per direction for the two-phase (straight-line preview → road-routed) rendering the ordinal palette had no answer for.
 
-4. **Accessibility:**
+4. **Verdicts (v2.6, Glance layer):** A Good/Fair/Poor judgment uses one scale everywhere (score ≥ 70 Good, ≥ 50 Fair, else Poor; `scoreToRating()` / `VERDICTS` in `static/js/dashboard.js`, and `_get_route_color` / `_get_weather_color` server-side) and is always shown as colour + word + icon, using the fixed `--verdict-*` fills (`verdictChip()` for a compact chip). Things that aren't verdicts (workout type, route difficulty, "Today", "Primary", "x ridden") never use success/warning/danger colours. Use `bg-secondary`, cobalt, or `.badge-workout-type` instead.
+
+5. **Routes page, maps and charts:** Ordinal route colours, chart series and commute direction use the identity half of the route palette (cobalt, teal, purple, orange, magenta, amber, brown, slate) and never the verdict green/red. Commutes are cobalt to work and teal home. Full table: brand book §Route palette. Explore's compass-keyed `ROUTE_PALETTE` (item 3) is a separate, deliberate set.
+
+6. **Accessibility:**
    - All color combinations must meet WCAG AA contrast ratio (4.5:1 for text)
+   - Text on a filled surface takes that fill's `--on-*` token (`--on-accent`, `--on-accent-warm`, `--on-success`, `--on-warning`, `--on-danger`), never a hardcoded `white` / `text-white`. In Night, every accent fill is light enough that white text falls to 2.2–3.3:1.
    - Never rely on color alone to convey information
    - Provide text labels, icons, or patterns as alternatives
 
@@ -390,25 +395,25 @@ Before merging UI/UX changes:
 ```css
 .btn-primary {
     background: var(--accent); /* #0B6FA6 Day / #4FB3E8 Night */
-    color: white;
+    color: var(--on-accent);     /* white Day, night ground Night */
     border: none;
     padding: 12px 24px;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     font-weight: 700;
-    transition: all 0.2s;
+    transition: background-color 0.2s, border-color 0.2s, box-shadow 0.2s;
 }
 
+/* Calm display: hover changes colour/shadow only, nothing moves */
 .btn-primary:hover {
     filter: brightness(0.92);
-    transform: translateY(-1px);
     box-shadow: 0 4px 8px rgba(11, 111, 166, 0.3);
 }
 
 /* Reserve for exactly one primary CTA/badge per screen — see Brand Identity */
 .btn-cta {
     background: var(--accent-warm); /* #F2662D Day / #FF8A57 Night */
-    color: white;
-    border-radius: 999px;
+    color: var(--on-accent-warm);   /* ink, not white: white was 3.1:1 */
+    border-radius: var(--radius-pill);
 }
 ```
 
@@ -417,23 +422,25 @@ Before merging UI/UX changes:
 .card {
     background: var(--surface); /* #FFFFFF Day / #122232 Night */
     border: 1px solid var(--line);
-    border-radius: 16px;
+    border-radius: var(--radius-md); /* 16px */
     box-shadow: 0 1px 2px rgba(0,0,0,0.08);
-    padding: 20px;
-    margin-bottom: 20px;
-    transition: all 0.2s;
 }
 
-.card:hover {
+.card-body {
+    padding: var(--space-3); /* 16px, all sides — every row shares this left edge */
+}
+
+/* Only cards that are links lift on hover */
+a.card:hover,
+.card-interactive:hover {
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    transform: translateY(-2px);
 }
 ```
 
 ### Route State Styles
 ```css
 .route-row.selected {
-    background-color: rgba(62,142,99,0.13); /* success-tinted, both modes via var(--success) */
+    background-color: rgba(45,122,82,0.13); /* success-tinted, both modes via var(--success) */
     border-left: 4px solid var(--success);
     font-weight: 600;
 }
@@ -445,7 +452,6 @@ Before merging UI/UX changes:
 
 .route-row:hover {
     background-color: var(--line);
-    transform: translateX(4px);
 }
 ```
 
@@ -463,6 +469,7 @@ Before merging UI/UX changes:
 
 ## Version History
 
+- **v2.6** (2026-10-27): Glance layer, inspired by the CIQ data-field design system (see brand book §Glance layer). Day `--success` darkened to `#2D7A52` so it reaches 4.5:1. Added §4 rules for verdicts (one 70/50 scale; colour + word + icon) and for the route palette (identity colours never use the verdict green/red), and §4 Accessibility now requires the `--on-*` text-on-fill tokens. Barlow Condensed is now the numeral face. Common Patterns CSS updated: no hover translate, on-fill text colours, three radii.
 - **v2.5** (2026-09-14): §4 Map Routes categorical palette reconciled with what `static/js/explore.js`'s `ROUTE_PALETTE` actually ships (#569) — the doc's generic Bootstrap green/red/blue/yellow set was undocumented drift that also collided with this doc's own success/danger semantic colors; replaced with the shipped compass-direction-keyed blue/orange/purple/teal light+base pairs. See §4 for full reasoning.
 - **v2.4** (2026-09-03): Doc-drift cleanup (#547). §10 Buttons/Cards bullet lists no longer duplicate hardcoded values (`#667eea`, `#dc3545`, `10px` radius, mismatched shadow) that had drifted from the Common Patterns Library CSS — they now point at the CSS instead. Added "Resolved" annotations to the v0.17.0 field notes for PLACE-DASH-2 (Dashboard hero row, `templates/index.html:92,131`) and the v2.3 Route Detail column-ratio correction (`static/js/route-detail.js:474,534`), both confirmed fixed in code.
 - **v2.3** (2026-07-05): Corrected an internal contradiction in §3 — the v2.2 field note called Route Detail's `col-lg-5`/`col-lg-7` split "the reference implementation" for the map+controls side-by-side rule, but the v0.17.0 field note directly above it (finding PLACE-DETAIL-2) already flagged that same split as violating the column-ratio rule's `col-lg-6` minimum. Route Detail remains the reference example for side-by-side *placement* only; the ratio itself is a known, uncorrected deviation.
