@@ -57,7 +57,7 @@ Two grounds, not one inverted into the other: **Day** is an overcast-bright sky,
 | `--line` | Borders / dividers / hover | `#DCE3E6` | `#223243` |
 | `--accent` | Cobalt — structure, links, brand, info | `#0B6FA6` | `#4FB3E8` |
 | `--accent-warm` | Coral — **one** CTA/badge per screen only | `#F2662D` | `#FF8A57` |
-| `--success` | Good fit / favorable | `#3E8E63` | `#57B384` |
+| `--success` | Good fit / favorable | `#2D7A52` | `#57B384` |
 | `--warning` | Caution / neutral | `#C98A1D` | `#E0A63E` |
 | `--danger` | Poor fit / unfavorable | `#C4483A` | `#E2695C` |
 
@@ -71,7 +71,7 @@ Semantic colors (success/warning/danger) are functional, not brand — they sign
 |---|---|---|
 | `--on-accent` | `#FFFFFF` (5.5:1) | `#0B1620` (7.8:1) |
 | `--on-accent-warm` | `#0F2233` (5.2:1) | `#0B1620` (7.9:1) |
-| `--on-success` | `#FFFFFF` (4.0:1, bold/large text only) | `#0B1620` (7.1:1) |
+| `--on-success` | `#FFFFFF` (5.2:1) | `#0B1620` (7.1:1) |
 | `--on-warning` | `#0F2233` (5.5:1) | `#0B1620` (8.4:1) |
 | `--on-danger` | `#FFFFFF` (4.8:1) | `#0B1620` (5.6:1) |
 

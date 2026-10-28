@@ -39,7 +39,7 @@ The app's visual identity is **Fair Weather** — built around the one decision 
 | Line (borders/dividers) | `#DCE3E6` | `#223243` |
 | Accent — cobalt (brand, structure, links, info) | `#0B6FA6` | `#4FB3E8` |
 | Accent — coral (reserved for the single most important CTA/badge per screen) | `#F2662D` | `#FF8A57` |
-| Good fit / favorable / success | `#3E8E63` | `#57B384` |
+| Good fit / favorable / success | `#2D7A52` | `#57B384` |
 | Caution / neutral | `#C98A1D` | `#E0A63E` |
 | Poor fit / unfavorable / danger | `#C4483A` | `#E2695C` |
 
@@ -123,7 +123,7 @@ The app's visual identity is **Fair Weather** — built around the one decision 
 **Semantic Colors (WCAG AA Compliant):**
 
 **Success (Green) - Optimal, Favorable, Good fit:**
-- `#3E8E63` (Day) / `#57B384` (Night) - Success (optimal routes, tailwind, favorable conditions)
+- `#2D7A52` (Day) / `#57B384` (Night) - Success (optimal routes, tailwind, favorable conditions)
 - `rgba(62,142,99,0.13)` - Success Light (backgrounds, selected states; use `rgba(87,179,132,0.16)` on Night surfaces)
 - `#1F5C3F` - Success Dark (text on light backgrounds)
 

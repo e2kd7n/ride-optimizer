@@ -348,7 +348,7 @@ plans/
 ### Semantic Color System (Fair Weather, v2.2 — see brand book for Night-mode values)
 - **Cobalt (`#0B6FA6`)**: Brand, structure, links, informational — NOT `#667eea`/`#764ba2`, which are retired
 - **Coral (`#F2662D`)**: Reserved for exactly one CTA/badge per screen — never used structurally
-- **Green (`#3E8E63`)**: Optimal routes, favorable conditions, good fit
+- **Green (`#2D7A52`)**: Optimal routes, favorable conditions, good fit
 - **Red (`#C4483A`)**: Unfavorable conditions, warnings, poor fit
 - **Amber (`#C98A1D`)**: Neutral conditions, caution
 - All colors WCAG AA compliant for accessibility

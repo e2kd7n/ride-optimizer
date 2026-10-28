@@ -32,7 +32,7 @@
     --line: #DCE3E6;
     --accent: #0B6FA6;
     --accent-warm: #F2662D;
-    --success: #3E8E63;
+    --success: #2D7A52;
     --warning: #C98A1D;
     --danger: #C4483A;
     /* RGB triplet for alpha tints of the accent (kept in sync with --accent) */
@@ -44,7 +44,7 @@
        white fell to 2.2–3.3:1, so all of them take the night ground. */
     --on-accent: #FFFFFF;        /* 5.5:1 */
     --on-accent-warm: #0F2233;   /* 5.2:1 (white was 3.1) */
-    --on-success: #FFFFFF;       /* 4.0:1 — best available on this fill; bold/large only */
+    --on-success: #FFFFFF;       /* 5.2:1 */
     --on-warning: #0F2233;       /* 5.5:1 (white was 2.9) */
     --on-danger: #FFFFFF;        /* 4.8:1 */
 
@@ -88,7 +88,7 @@
     --bs-primary-rgb: 11, 111, 166;
     /* Info is retired — cobalt carries it (brand book) */
     --bs-info-rgb: 11, 111, 166;
-    --bs-success-rgb: 62, 142, 99;
+    --bs-success-rgb: 45, 122, 82;
     --bs-warning-rgb: 201, 138, 29;
     --bs-danger-rgb: 196, 72, 58;
 
@@ -1095,7 +1095,7 @@ tr:focus-visible {
 }
 
 .route-card-compact-weather.favorable {
-    background-color: rgba(62, 142, 99, 0.13);
+    background-color: rgba(45, 122, 82, 0.13);
     color: #1F5C3F;
 }
 
