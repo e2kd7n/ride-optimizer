@@ -696,7 +696,7 @@ class CommuteService:
             Dictionary with fit analysis
         """
         route = recommendation.get('route', {})
-        duration_min = route.get('duration', 0) / 60  # duration stored in seconds
+        duration_min = route.get('duration', 0)  # minutes (see _format_recommendation)
 
         workout_name = constraints.get('workout_name', 'Unknown Workout')
         workout_type = constraints.get('workout_type', 'Unknown')
@@ -768,9 +768,9 @@ class CommuteService:
         
         # Check if current route is too short
         route = recommendation.get('route', {})
-        duration_min = route.get('duration', 0) / 60  # duration stored in seconds
+        duration_min = route.get('duration', 0)  # minutes (see _format_recommendation)
         min_duration = constraints.get('min_duration_minutes')
-        
+
         if min_duration and duration_min < min_duration:
             # Route is too short, consider extension
             return True
