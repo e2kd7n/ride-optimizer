@@ -5,6 +5,17 @@ strava:
 ors:
   api_key: ${ORS_API_KEY}
 
+# Ride-data chat on the Reports page (#608). Needs ANTHROPIC_API_KEY in .env;
+# without it the chat is disabled and everything else runs normally.
+chat:
+  model: claude-sonnet-5-5
+  effort: low                # low | medium | high — low keeps quick Q&A fast and cheap
+  max_tokens: 16000          # per Claude response, thinking included
+  max_tool_iterations: 6     # tool-call rounds per question before forcing an answer
+  max_history_messages: 20   # older turns are dropped before sending, to bound cost
+  timeout_seconds: 60        # per API attempt; bounds how long one gunicorn thread is held
+  fallbacks: true            # re-run safety-classifier declines on Anthropic's recommended fallback model
+
 exploration:
   tile_zoom_level: 14  # "squadrat" grid zoom (TILE_ZOOM in src/coverage_tracker.py) — squadratinho (finer-grained) view uses the separate, non-configurable SQUADRATINHO_ZOOM=17 constant.
   ors_timeout_seconds: 15
