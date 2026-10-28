@@ -700,3 +700,22 @@ class TestRunFullAnalysisProgressCallbacks:
         result = analysis_service.run_full_analysis(stop_check=lambda: True)
         assert result['status'] == 'stopped'
 
+
+
+class TestPreviewAnalysis:
+    """The preview pass must not touch the real route groups cache (#612)."""
+
+    def test_preview_leaves_real_groups_cache_alone(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)  # RouteAnalyzer's default cache dir is ./cache
+        real_cache = tmp_path / 'cache' / 'route_groups_cache.json'
+        real_cache.parent.mkdir()
+        real_cache.write_text('{"sentinel": true}')
+        home = Location(lat=42.5, lon=-100.0, name='Home', activity_count=0)
+        work = Location(lat=42.55, lon=-99.93, name='Work', activity_count=0)
+
+        service = AnalysisService(weather_service=Mock())
+        with patch('app.services.analysis_service.LocationFinder') as finder:
+            finder.return_value.identify_home_work.return_value = (home, work)
+            service._run_preview_analysis([])
+
+        assert real_cache.read_text() == '{"sentinel": true}'

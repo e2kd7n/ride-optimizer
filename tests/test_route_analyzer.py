@@ -787,10 +787,12 @@ class TestGroupSimilarRoutes:
         acts = [self._make_commute_activity(1, "home_to_work")]
         analyzer = RouteAnalyzer(acts, home, work, _make_config(), n_workers=1,
                                  cache_dir=str(tmp_path))
-        # Simulate a cache built from many more activities than are present now.
+        # Simulate a cache built (under the current config) from many more
+        # activities than are present now.
         analyzer.groups_cache = {
             'activity_ids': list(range(1, 21)),
             'groups': [],
+            'config': analyzer._groups_cache_config(),
         }
         with caplog.at_level(logging.WARNING, logger="src.route_analyzer"):
             analyzer.group_similar_routes()
@@ -806,6 +808,7 @@ class TestGroupSimilarRoutes:
         analyzer.groups_cache = {
             'activity_ids': list(range(1, 21)),
             'groups': [],
+            'config': analyzer._groups_cache_config(),
         }
         with caplog.at_level(logging.WARNING, logger="src.route_analyzer"):
             analyzer.group_similar_routes()
@@ -827,6 +830,7 @@ class TestCacheIO:
             mock_init.return_value = None
             analyzer = RouteAnalyzer.__new__(RouteAnalyzer)
         # Manually set up only what the cache methods need
+        analyzer.config = cfg
         analyzer.cache_dir = tmp_path
         analyzer.cache_file = tmp_path / "route_similarity_cache.json"
         analyzer.groups_cache_file = tmp_path / "route_groups_cache.json"

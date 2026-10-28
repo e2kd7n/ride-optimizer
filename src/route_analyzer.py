@@ -43,6 +43,12 @@ except ImportError:
     FRECHET_AVAILABLE = False
     logger.warning("similaritymeasures not available, using Hausdorff distance only")
 
+# Bump SIMILARITY_CACHE_VERSION whenever the pairwise score's math or the route
+# hash changes, and GROUPS_CACHE_VERSION whenever grouping logic changes, so stale
+# on-disk results from the old code are discarded instead of silently reused (#612).
+SIMILARITY_CACHE_VERSION = 2
+GROUPS_CACHE_VERSION = 2
+
 
 def _similarity_worker(args):
     """
@@ -206,25 +212,34 @@ class RouteAnalyzer:
         # passed purely as a local) so a broken pool can be replaced mid-run and
         # the replacement stays visible across both direction passes.
         self._executor: Optional[ProcessPoolExecutor] = None
-        
+
+        # Set when stop_check ends a grouping pass early; a partial result must
+        # not be saved as the groups cache (#612).
+        self._stopped_early = False
+
     def _load_similarity_cache(self) -> Dict[str, float]:
         """Load similarity cache from disk."""
         if self.cache_file.exists():
             try:
                 with open(self.cache_file, 'r') as f:
                     cache = json.load(f)
-                logger.info(f"Loaded {len(cache)} cached similarity calculations")
-                return cache
+                if cache.get('version') != SIMILARITY_CACHE_VERSION:
+                    # Includes the pre-#612 unversioned format: a flat {key: score} dict.
+                    logger.info("Discarding similarity cache from an older scoring version")
+                    return {}
+                scores = cache.get('scores', {})
+                logger.info(f"Loaded {len(scores)} cached similarity calculations")
+                return scores
             except Exception as e:
                 logger.warning(f"Failed to load similarity cache: {e}")
                 return {}
         return {}
-    
+
     def _save_similarity_cache(self):
         """Save similarity cache to disk."""
         try:
             with open(self.cache_file, 'w') as f:
-                json.dump(self.similarity_cache, f)
+                json.dump({'version': SIMILARITY_CACHE_VERSION, 'scores': self.similarity_cache}, f)
             secure_chmod(self.cache_file)
             logger.info(f"Saved {len(self.similarity_cache)} similarity calculations to cache")
         except Exception as e:
@@ -242,7 +257,32 @@ class RouteAnalyzer:
                 logger.warning(f"Failed to load groups cache: {e}")
                 return {}
         return {}
-    
+
+    def _groups_cache_config(self) -> Dict[str, Any]:
+        """Everything besides the activity set that the cached groups depend on.
+
+        A cached grouping is only reused when this matches exactly, so changing
+        the threshold or the matching code forces a regroup (#612).
+        """
+        return {
+            'groups_cache_version': GROUPS_CACHE_VERSION,
+            'similarity_cache_version': SIMILARITY_CACHE_VERSION,
+            'similarity_threshold': self.similarity_threshold,
+            'outlier_tolerance_percentile': self.config.get(
+                'route_analysis.outlier_tolerance_percentile', 95.0),
+            'algorithm': 'frechet' if FRECHET_AVAILABLE else 'hausdorff',
+        }
+
+    def _groups_cache_reusable(self, routes: List[Route]) -> bool:
+        """True if the cached groups were built under the current config, and every
+        cached activity that's still present still has the same direction (a
+        home/work change can flip directions without changing the activity set)."""
+        if self.groups_cache.get('config') != self._groups_cache_config():
+            return False
+        cached_directions = self.groups_cache.get('directions', {})
+        return all(cached_directions.get(str(r.activity_id), r.direction) == r.direction
+                   for r in routes)
+
     def _save_groups_cache_with_ids(self, activity_ids: List[int], groups: List[RouteGroup]):
         """Save route groups cache to disk with activity ID tracking."""
         try:
@@ -292,8 +332,9 @@ class RouteAnalyzer:
             cache_data = {
                 'activity_ids': activity_ids,
                 'groups': serialized_groups,
-                'similarity_threshold': self.similarity_threshold,
-                'algorithm': 'frechet' if FRECHET_AVAILABLE else 'hausdorff',
+                'config': self._groups_cache_config(),
+                'directions': {str(r.activity_id): r.direction
+                               for group in groups for r in group.routes},
                 'timestamp': str(np.datetime64('now'))
             }
             
@@ -356,17 +397,10 @@ class RouteAnalyzer:
         Returns:
             Hash string
         """
-        # Create a string representation of coordinates (first, middle, last points)
-        coords = route.coordinates
-        if len(coords) > 10:
-            # Sample points to keep hash manageable
-            sample_coords = [coords[0], coords[len(coords)//4], coords[len(coords)//2],
-                           coords[3*len(coords)//4], coords[-1]]
-        else:
-            sample_coords = coords
-        
-        coord_str = ','.join([f"{lat:.6f},{lon:.6f}" for lat, lon in sample_coords])
-        return hashlib.sha256(coord_str.encode()).hexdigest()[:16]
+        # Hash the full geometry: a 5-point sample let two different tracks that
+        # agree at those points share cached scores (#612).
+        coords = np.asarray(route.coordinates, dtype=np.float64)
+        return hashlib.sha256(coords.tobytes()).hexdigest()[:16]
     
     def _get_cache_key(self, route1: Route, route2: Route) -> str:
         """
@@ -610,7 +644,9 @@ class RouteAnalyzer:
         if not routes:
             logger.warning("No routes to group")
             return []
-        
+
+        self._stopped_early = False
+
         # Check for cached groups
         if not self.force_reanalysis and self.groups_cache:
             cached_activity_ids = set(self.groups_cache.get('activity_ids', []))
@@ -619,8 +655,14 @@ class RouteAnalyzer:
             # Check if we can use incremental analysis
             new_activity_ids = current_activity_ids - cached_activity_ids
             removed_activity_ids = cached_activity_ids - current_activity_ids
-            
-            if not new_activity_ids and not removed_activity_ids:
+
+            if not self._groups_cache_reusable(routes):
+                # Threshold, matching code or ride directions changed since the
+                # cache was built — reusing it would keep the old grouping (#612).
+                logger.info("Full reanalysis: route grouping configuration changed")
+                tqdm.write("   🔄 Full reanalysis: configuration changed")
+
+            elif not new_activity_ids and not removed_activity_ids:
                 # Perfect cache hit - no changes
                 tqdm.write("   💾 Using cached route groups (instant!)")
                 cached_groups = self._deserialize_groups(self.groups_cache['groups'])
@@ -635,7 +677,11 @@ class RouteAnalyzer:
                 
                 # Merge new routes into existing groups
                 updated_groups = self._merge_new_routes(cached_groups, new_routes)
-                
+
+                if self._stopped_early:
+                    self._save_similarity_cache()
+                    return updated_groups
+
                 # Save updated cache
                 all_activity_ids = list(current_activity_ids)
                 self._save_groups_cache_with_ids(all_activity_ids, updated_groups)
@@ -644,25 +690,22 @@ class RouteAnalyzer:
                 return updated_groups
             
             else:
-                # Routes removed or config changed - full reanalysis needed
-                if removed_activity_ids:
-                    removed_pct = (len(removed_activity_ids) / len(cached_activity_ids) * 100
-                                   if cached_activity_ids else 0)
-                    msg = (f"Full reanalysis: {len(removed_activity_ids)} of "
-                           f"{len(cached_activity_ids)} previously-cached activities are "
-                           f"no longer present ({removed_pct:.0f}%) — route groups cache "
-                           f"will be rebuilt from the smaller activity set.")
-                    if removed_pct >= 10:
-                        logger.warning(
-                            msg + " This is a large drop — verify activities.json wasn't "
-                            "unexpectedly truncated (e.g. by a failed merge) rather than "
-                            "genuinely pruned before trusting the rebuilt cache."
-                        )
-                    else:
-                        logger.info(msg)
-                    tqdm.write(f"   🔄 Full reanalysis: {len(removed_activity_ids)} routes removed")
+                # Routes removed - full reanalysis needed
+                removed_pct = (len(removed_activity_ids) / len(cached_activity_ids) * 100
+                               if cached_activity_ids else 0)
+                msg = (f"Full reanalysis: {len(removed_activity_ids)} of "
+                       f"{len(cached_activity_ids)} previously-cached activities are "
+                       f"no longer present ({removed_pct:.0f}%) — route groups cache "
+                       f"will be rebuilt from the smaller activity set.")
+                if removed_pct >= 10:
+                    logger.warning(
+                        msg + " This is a large drop — verify activities.json wasn't "
+                        "unexpectedly truncated (e.g. by a failed merge) rather than "
+                        "genuinely pruned before trusting the rebuilt cache."
+                    )
                 else:
-                    tqdm.write("   🔄 Full reanalysis: configuration changed")
+                    logger.info(msg)
+                tqdm.write(f"   🔄 Full reanalysis: {len(removed_activity_ids)} routes removed")
         
         # Full analysis (no cache or force reanalysis)
         tqdm.write(f"   🔄 Full analysis: {len(routes)} routes")
@@ -692,7 +735,7 @@ class RouteAnalyzer:
                 groups.extend(htw_groups)
                 tqdm.write(f"   ✓ {len(htw_groups)} groups")
 
-            if work_to_home:
+            if work_to_home and not self._stopped_early:
                 tqdm.write(f"   → Processing {len(work_to_home)} work→home routes "
                            f"({self.n_workers} workers)")
                 wth_groups = self._group_routes_by_similarity(
@@ -710,7 +753,15 @@ class RouteAnalyzer:
         
         # Mark plus routes (routes >15% longer than median)
         groups = self._mark_plus_routes(groups)
-        
+
+        if self._stopped_early:
+            # Partial result: saving it would record the rides never reached as
+            # already grouped, and the next run's cache hit would drop them for
+            # good (#612). The similarity cache is still valid and keeps the
+            # rerun cheap.
+            self._save_similarity_cache()
+            return groups
+
         # Save to cache immediately with temporary names
         # (geocoding will happen in background and update cache when complete)
         activity_ids = [r.activity_id for r in routes]
@@ -965,7 +1016,8 @@ class RouteAnalyzer:
                 if cache_key in self.similarity_cache:
                     cached_similarities[i] = self.similarity_cache[cache_key]
                 elif not self._passes_geometric_filter(current, route):
-                    self.similarity_cache[cache_key] = 0.0
+                    # Not persisted: the prefilter is cheap, and a cached 0.0 would
+                    # outlive any change to the prefilter itself (#612).
                     cached_similarities[i] = 0.0
                     skipped_by_filter += 1
                     total_filtered += 1
@@ -1046,6 +1098,7 @@ class RouteAnalyzer:
             group_id += 1
 
             if self.stop_check and self.stop_check():
+                self._stopped_early = True
                 break
 
         groups.sort(key=lambda g: g.frequency, reverse=True)

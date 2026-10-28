@@ -10,6 +10,7 @@ This service orchestrates the main analysis workflow:
 
 import json
 import os
+import tempfile
 import threading
 from src.secure_logger import SecureLogger
 from pathlib import Path
@@ -347,7 +348,23 @@ class AnalysisService:
             activity_dates=data.get('activity_dates'),
             activity_names=data.get('activity_names'),
         )
-    
+
+    def _run_preview_analysis(self, preview_acts: List[Activity]) -> None:
+        """Best-effort grouping pass over the first few activities.
+
+        Runs in a throwaway cache dir: with the default cache/ dir its
+        force_reanalysis deleted the real route groups cache and replaced it with
+        groups for these few rides, which the full run then built on (#612).
+        """
+        lf = LocationFinder(preview_acts, self.config)
+        h, w = lf.identify_home_work()
+        with tempfile.TemporaryDirectory(prefix='ride_preview_') as tmp:
+            ra = RouteAnalyzer(activities=preview_acts, home=h, work=w,
+                               config=self.config, force_reanalysis=True,
+                               n_workers=_analysis_workers(),
+                               enable_geocoding=False, cache_dir=tmp)
+            ra.group_similar_routes()
+
     def run_full_analysis(self, force_refresh: bool = False, skip_strava_fetch: bool = False,
                           after: Optional[datetime] = None, before: Optional[datetime] = None,
                           on_progress=None, stop_check=None) -> Dict[str, Any]:
@@ -454,14 +471,7 @@ class AnalysisService:
                 _notify(phase='processing_preview', fetched=total, preview_count=preview_n,
                         label=f'Processing first {preview_n} of {total:,} activities for preview…')
                 try:
-                    preview_acts = self._activities[:preview_n]
-                    lf = LocationFinder(preview_acts, self.config)
-                    h, w = lf.identify_home_work()
-                    ra = RouteAnalyzer(activities=preview_acts, home=h, work=w,
-                                       config=self.config, force_reanalysis=True,
-                                       n_workers=_analysis_workers(),
-                                       enable_geocoding=False)
-                    ra.group_similar_routes()
+                    self._run_preview_analysis(self._activities[:preview_n])
                     logger.info(f"Preview analysis complete on {preview_n} activities")
                 except Exception as exc:
                     logger.warning(f"Preview analysis skipped ({exc})")

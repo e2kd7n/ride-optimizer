@@ -205,7 +205,6 @@ def test_group_id_stable_when_unrelated_ride_added(tmp_path):
 
 # ---------------------------------------------------------------- caches (#612)
 
-@pytest.mark.xfail(strict=True, reason='#612: groups cache is keyed on activity IDs only, not the threshold')
 def test_threshold_change_regroups(tmp_path):
     # NOTE for #613: if the threshold config key changes, update the override below.
     base = densify(STAIRCASE)
@@ -218,7 +217,6 @@ def test_threshold_change_regroups(tmp_path):
     assert len(strict.group_similar_routes([a, b])) == 2
 
 
-@pytest.mark.xfail(strict=True, reason='#612: stopping mid-run saves all IDs, so ungrouped rides are lost')
 def test_stopped_run_does_not_lose_rides(tmp_path):
     base = densify(STAIRCASE)
     rides = [route(shift(base, north=k * 2000)) for k in range(3)]  # three distinct routes
@@ -227,3 +225,41 @@ def test_stopped_run_does_not_lose_rides(tmp_path):
     groups = analyzer(cache, force=False).group_similar_routes(rides)
     grouped = {r.activity_id for g in groups for r in g.routes}
     assert grouped == {r.activity_id for r in rides}
+
+
+def test_direction_change_regroups(tmp_path):
+    """A home/work change can flip a ride's direction without changing the activity set."""
+    base = densify(STAIRCASE)
+    a, b = route(base), route(shift(base, north=2000))
+    cache = tmp_path / 'cache'
+    analyzer(cache, force=False).group_similar_routes([a, b])
+    b.direction = 'work_to_home'
+    groups = analyzer(cache, force=False).group_similar_routes([a, b])
+    assert {g.direction for g in groups if b.activity_id in {r.activity_id for r in g.routes}} \
+        == {'work_to_home'}
+
+
+def test_similarity_cache_from_older_version_is_discarded(tmp_path, monkeypatch):
+    import src.route_analyzer as ra
+    base = densify(STAIRCASE)
+    a, b = route(base), route(shift(base, north=20))
+    cache = tmp_path / 'cache'
+    analyzer(cache).group_similar_routes([a, b])
+    assert analyzer(cache).similarity_cache  # same version: reloaded
+    monkeypatch.setattr(ra, 'SIMILARITY_CACHE_VERSION', ra.SIMILARITY_CACHE_VERSION + 1)
+    assert analyzer(cache).similarity_cache == {}
+
+
+def test_legacy_unversioned_similarity_cache_is_discarded(tmp_path):
+    cache = tmp_path / 'cache'
+    cache.mkdir()
+    (cache / 'route_similarity_cache.json').write_text('{"aaaa_bbbb": 0.91}')
+    assert analyzer(cache).similarity_cache == {}
+
+
+def test_prefilter_rejections_are_not_cached(tmp_path):
+    base = densify(STAIRCASE)
+    far = route(shift(base, north=5000))  # centroid far outside the prefilter radius
+    an = analyzer(tmp_path / 'cache')
+    an.group_similar_routes([route(base), far])
+    assert an.similarity_cache == {}
