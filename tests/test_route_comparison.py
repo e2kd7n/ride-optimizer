@@ -2,7 +2,7 @@
 Tests for src/route_comparison.py — the shared route-similarity math used by
 both RouteAnalyzer (commute grouping) and LongRideAnalyzer (recreational ride
 grouping). See issue #463: this module exists so the two analyzers don't
-reimplement Fréchet/Hausdorff comparison independently.
+reimplement comparison math independently.
 """
 import numpy as np
 import pytest
@@ -18,10 +18,13 @@ from src.route_comparison import (
     bbox_overlap_ratio,
     passes_prefilter,
     combined_distance_km,
-    passes_prefilter_deg,
-    frechet_similarity_deg,
-    hausdorff_percentile_similarity_deg,
-    commute_similarity_score,
+    M_PER_DEG_LAT,
+    project_m,
+    resample_m,
+    track_deviation_metrics,
+    match_score,
+    route_geometry,
+    passes_commute_prefilter,
 )
 
 
@@ -66,54 +69,87 @@ class TestKmScaledHelpers:
         assert path_length_km(np.array([[41.88, -87.63]])) == 0.0
 
 
-class TestDegreeScaledHelpers:
-    """Covers the RouteAnalyzer (commute grouper) variants: raw lat/lon degrees,
-    flat 111km/degree conversion, and precomputed-geometry prefiltering."""
+class TestCommuteMetric:
+    """Covers the RouteAnalyzer (commute grouper) metric: metres with cos(lat),
+    arc-length resampling, p95 deviation + coverage (#613)."""
 
-    def test_frechet_similarity_deg_high_for_identical(self):
-        coords = _line()
-        assert frechet_similarity_deg(coords, coords) > 0.9
+    def test_project_m_scales_longitude_by_cos_lat(self):
+        xy = project_m([[60.0, 0.0], [60.0, 1.0]], lat0=60.0)
+        assert xy[1, 1] - xy[0, 1] == pytest.approx(M_PER_DEG_LAT * 0.5)
 
-    def test_frechet_similarity_deg_low_for_distant(self):
-        assert frechet_similarity_deg(_line(), _line(offset_lat=1.0)) < 0.5
+    def test_resample_m_spacing_and_endpoints(self):
+        pts = resample_m(np.array([[0.0, 0.0], [0.0, 95.0]]), 10.0)
+        assert len(pts) == 11
+        assert pts[-1, 1] == pytest.approx(95.0)
+        assert np.diff(pts[:-1, 1]) == pytest.approx(np.full(9, 10.0))
 
-    def test_hausdorff_percentile_similarity_deg_high_for_identical(self):
-        coords = _line()
-        assert hausdorff_percentile_similarity_deg(coords, coords) > 0.9
+    def test_identical_tracks_have_zero_deviation_full_coverage(self):
+        p95, cov = track_deviation_metrics(_line(), _line())
+        assert p95 == pytest.approx(0.0, abs=1e-6)
+        assert cov == 1.0
 
-    def test_hausdorff_percentile_similarity_deg_bounded(self):
-        sim = hausdorff_percentile_similarity_deg(_line(), _line(offset_lat=0.5))
-        assert 0.0 <= sim <= 1.0
+    def test_metrics_are_symmetric(self):
+        a, b = _line(), np.vstack([_line(), [[41.886, -87.628]]])
+        assert track_deviation_metrics(a, b) == pytest.approx(track_deviation_metrics(b, a))
 
-    def test_commute_similarity_score_matches_frechet_when_agreeing(self):
-        coords = _line()
-        assert commute_similarity_score(coords, coords) > 0.99
+    def test_parallel_offset_measured_in_metres(self):
+        # 0.0005° of longitude at 41.88° is ~41 m east.
+        p95, cov = track_deviation_metrics(_line(), _line(offset_lon=0.0005))
+        assert p95 == pytest.approx(0.0005 * M_PER_DEG_LAT * np.cos(np.radians(41.88)), rel=0.02)
+        assert cov == 1.0
 
-    def test_commute_similarity_score_falls_back_without_frechet(self):
-        coords = _line()
-        score_with = commute_similarity_score(coords, coords, frechet_available=True)
-        score_without = commute_similarity_score(coords, coords, frechet_available=False)
-        # Both should agree closely for identical routes even via different paths
-        assert score_with == pytest.approx(score_without, abs=0.05)
+    def test_distant_track_has_no_coverage(self):
+        assert track_deviation_metrics(_line(), _line(offset_lat=0.01))[1] == 0.0
 
-    def test_passes_prefilter_deg_none_geometry_passes(self):
-        assert passes_prefilter_deg(None, None, None, None, None, None) is True
+    def test_empty_track_raises(self):
+        with pytest.raises(ValueError):
+            track_deviation_metrics(np.empty((0, 2)), _line())
 
-    def test_passes_prefilter_deg_rejects_distant_centroid(self):
+    def test_match_score_is_one_at_the_thresholds(self):
+        assert match_score(100.0, 0.85, max_p95_m=100.0, min_coverage=0.85) == pytest.approx(1.0)
+        assert match_score(101.0, 0.99, max_p95_m=100.0, min_coverage=0.85) < 1.0
+        assert match_score(10.0, 0.80, max_p95_m=100.0, min_coverage=0.85) < 1.0
+
+    def test_route_geometry_length_in_metres(self):
+        _, _, length = route_geometry(_line())  # 5 steps of 0.001° latitude
+        assert length == pytest.approx(5 * 0.001 * M_PER_DEG_LAT)
+
+    def test_prefilter_none_geometry_passes(self):
+        assert passes_commute_prefilter(None, None, None, None, None, None) is True
+
+    def test_prefilter_rejects_distant_centroid(self):
         bbox1 = (41.87, -87.64, 41.89, -87.62)
         bbox2 = (43.87, -89.64, 43.89, -89.62)
-        assert passes_prefilter_deg(
-            bbox1, (41.88, -87.63), 0.01,
-            bbox2, (43.88, -89.63), 0.01,
+        assert passes_commute_prefilter(
+            bbox1, (41.88, -87.63), 5000.0,
+            bbox2, (43.88, -89.63), 5000.0,
         ) is False
 
-    def test_passes_prefilter_deg_rejects_length_ratio(self):
+    def test_prefilter_centroid_distance_is_isotropic(self):
+        # 1.8 km north and 1.8 km east must get the same verdict.
         bbox = (41.87, -87.64, 41.89, -87.62)
-        assert passes_prefilter_deg(
-            bbox, (41.88, -87.63), 0.001,
-            bbox, (41.88, -87.63), 1.0,
+        lat_off = 1800 / M_PER_DEG_LAT
+        lon_off = 1800 / (M_PER_DEG_LAT * np.cos(np.radians(41.88)))
+        north = passes_commute_prefilter(bbox, (41.88, -87.63), 5000.0,
+                                         bbox, (41.88 + lat_off, -87.63), 5000.0,
+                                         bbox_overlap_min=0)
+        east = passes_commute_prefilter(bbox, (41.88, -87.63), 5000.0,
+                                        bbox, (41.88, -87.63 + lon_off), 5000.0,
+                                        bbox_overlap_min=0)
+        assert north is east is True
+
+    def test_prefilter_rejects_length_ratio(self):
+        bbox = (41.87, -87.64, 41.89, -87.62)
+        assert passes_commute_prefilter(
+            bbox, (41.88, -87.63), 1000.0,
+            bbox, (41.88, -87.63), 5000.0,
             length_ratio_max=2.0,
         ) is False
+
+    def test_prefilter_straight_track_not_rejected_by_bbox(self):
+        bbox = (41.87, -87.63, 41.89, -87.63)  # zero width
+        assert passes_commute_prefilter(bbox, (41.88, -87.63), 2000.0,
+                                        bbox, (41.88, -87.63), 2000.0) is True
 
 
 class TestComparisonThresholds:

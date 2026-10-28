@@ -26,10 +26,11 @@ python scripts/matching_benchmark/run_benchmark.py --baseline /tmp/before.json
 | `--shuffles` | 3 | Extra grouping runs in shuffled ride order (order stability). |
 | `--skip-calibration` | off | Skip scoring every pair with the app. This is the slowest step. |
 | `--baseline` | none | A previous `summary.json` to diff the headline numbers against. |
+| `--set KEY=VALUE` | none | Override a `config.yaml` value for this run only (repeatable), e.g. `--set route_analysis.max_p95_deviation_m=75`. Use it to sweep thresholds. |
 
-A full run on the June 2026 snapshot (222 rides, 12,211 pairs) takes about 9 minutes on 16
-cores, mostly calibration and the grouping runs under today's Fréchet code. The reference labels
-are cached per snapshot, so later runs only pay for the app side.
+A full run on the June 2026 snapshot (222 rides, 12,211 pairs) takes under 2 minutes on 16
+cores since #613 (it was about 9 minutes under the old Fréchet code). The reference labels are
+cached per snapshot, so later runs only pay for the app side.
 
 ## What it measures
 
@@ -43,7 +44,9 @@ are cached per snapshot, so later runs only pay for the app side.
 2. **App grouping.** The app's real `RouteAnalyzer.group_similar_routes` is run in a temp cache
    dir with geocoding off, in snapshot order and in `--shuffles` random orders. Each grouping is
    scored for:
-   - **purity:** the share of within-group pairs that are the same route;
+   - **purity:** the share of within-group pairs the reference labels **same**. This is strict:
+     an **ambig** pair counts against it. "precision (excl ambig)" and the DIFFERENT count are
+     the measure of wrongly merged routes;
    - **pair recall:** the share of same-route pairs that end up in one group;
    - group and single-ride counts;
    - **group pairs that should merge;**
@@ -54,9 +57,9 @@ are cached per snapshot, so later runs only pay for the app side.
    `RouteAnalyzer.calculate_route_similarity`) and tabulated against the reference p95
    deviation. The run reports AUC, the best-F1 threshold, and precision/recall at the configured
    threshold.
-   - This assumes "higher score = more similar" and compares against
-     `RouteAnalyzer.similarity_threshold`. If #613 changes that contract, update `calibration()`
-     in the same change.
+   - This assumes "higher score = more similar", and that a score of 1.0 or more is a match
+     (`APP_MATCH_SCORE`, the contract of `RouteAnalyzer.calculate_route_similarity` since #613).
+     If that contract changes, update `calibration()` in the same change.
 4. **Order stability.** The adjusted Rand index between the snapshot-order grouping and each
    shuffled grouping (1.0 = identical).
 
@@ -92,6 +95,42 @@ order has a minimum of **0.607**.
 
 Targets for the epic (#616): recall ≥ 0.9, purity ≥ 0.99, min ARI = 1.0, and each main commute
 in one group.
+
+## After #613 (metric replacement)
+
+Same snapshot. Match rule: p95 deviation ≤ 100 m and mutual 50 m coverage ≥ 0.85.
+
+| | #611 baseline | After #613 |
+|---|---|---|
+| Groups | 203 | **115** |
+| Single-ride groups | 193 | 82 |
+| Pair recall | 0.084 | **0.978** |
+| Different-route pairs grouped | 0 | **0** |
+| Precision, ambig excluded | 1.000 | 1.000 |
+| Purity (strict, ambig counts against) | 1.000 | 0.689 |
+| Group pairs that should merge | 215 | 5 |
+| Main w→h reference route | 25 rides in 19 groups | 25 rides in 1 group |
+| Main h→w reference route | 19 rides in 12 groups | 19 rides in 2 groups |
+| Min ARI across shuffles | 0.607 | 0.794 |
+| Calibration AUC (ambig as diff) | 0.988 | 0.9997 |
+
+The strict purity drop is the 184 grouped pairs the reference calls **ambig**: most (about 146) have a
+p95 deviation of 75–100 m, which the reference (75 m) deliberately leaves undecided and the app
+(100 m) accepts. No pair the reference calls **diff** is grouped.
+
+**Threshold sweep** (`--set route_analysis.max_p95_deviation_m=…`, coverage fixed at 0.85):
+
+| p95 limit | Groups | Recall | Strict purity | Different grouped | Should merge |
+|---|---|---|---|---|---|
+| 75 m | 142 | 0.837 | 0.902 | 0 | 19 |
+| 90 m | 120 | 0.981 | 0.716 | 0 | 6 |
+| **100 m** | **115** | **0.978** | **0.689** | **0** | **5** |
+| 125 m | 110 | 0.988 | 0.661 | 0 | 4 |
+
+Recall plateaus from about 90 m, and nothing different is merged up to 125 m. 100 m is the
+recommended value from the analysis and sits in the middle of that plateau. Order stability is
+#614's job; the remaining split of the main h→w route and the 5 should-merge pairs are
+probably greedy-clustering artefacts, which #614 targets; re-check after it lands.
 
 ## Privacy
 

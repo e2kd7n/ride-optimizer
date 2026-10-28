@@ -116,7 +116,6 @@ class TestRouteAnalyzer:
         """Create mock configuration."""
         config = Mock()
         config.get = Mock(side_effect=lambda key, default=None: {
-            'analysis.similarity_threshold': 0.85,
             'analysis.n_workers': 1,
             'cache.directory': 'cache',
             'cache.enabled': True
@@ -189,115 +188,51 @@ class TestRouteAnalyzer:
         # Should extract routes going from home to work
         assert all(isinstance(r, Route) for r in routes)
     
-    def test_calculate_route_similarity_uses_frechet_when_available(
-        self, home_location, work_location, mock_config
+    def _pair(self, offset_lat=0.0):
+        coords = [(41.8781, -87.6298), (41.8800, -87.6288), (41.8819, -87.6278)]
+        return [
+            Route(activity_id=i, direction="home_to_work",
+                  coordinates=[(lat + off, lon) for lat, lon in coords],
+                  distance=5000.0, duration=1200, elevation_gain=50.0,
+                  timestamp=datetime.now(timezone.utc).isoformat(), average_speed=4.17)
+            for i, off in ((1, 0.0), (2, offset_lat))
+        ]
+
+    def test_calculate_route_similarity_caches_metrics_not_score(
+        self, home_location, work_location, mock_config, tmp_path
     ):
-        """Test Fréchet similarity is used as the primary metric."""
-        route1 = Route(
-            activity_id=1,
-            direction="home_to_work",
-            coordinates=[(41.8781, -87.6298), (41.8800, -87.6288), (41.8819, -87.6278)],
-            distance=5000.0,
-            duration=1200,
-            elevation_gain=50.0,
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            average_speed=4.17,
-            is_plus_route=False
-        )
-        route2 = Route(
-            activity_id=2,
-            direction="home_to_work",
-            coordinates=[(41.8781, -87.6298), (41.8801, -87.6289), (41.8819, -87.6278)],
-            distance=5050.0,
-            duration=1210,
-            elevation_gain=52.0,
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            average_speed=4.15,
-            is_plus_route=False
-        )
-        
-        analyzer = RouteAnalyzer([], home_location, work_location, mock_config, n_workers=1)
-        
-        with patch('src.route_analyzer.FRECHET_AVAILABLE', True), \
-             patch.object(analyzer, '_calculate_frechet_similarity', return_value=0.81) as mock_frechet, \
-             patch.object(analyzer, '_calculate_hausdorff_similarity', return_value=0.73) as mock_hausdorff:
-            similarity = analyzer.calculate_route_similarity(route1, route2)
-        
-        assert similarity == 0.81
-        mock_frechet.assert_called_once()
-        mock_hausdorff.assert_called_once()
-    
-    def test_calculate_route_similarity_penalizes_spatial_disagreement(
-        self, home_location, work_location, mock_config
+        """The cache holds threshold-independent (p95_m, coverage) metrics (#613)."""
+        route1, route2 = self._pair()
+        analyzer = RouteAnalyzer([], home_location, work_location, mock_config,
+                                 n_workers=1, cache_dir=tmp_path)
+
+        score = analyzer.calculate_route_similarity(route1, route2)
+
+        assert score >= 1.0
+        (metrics,) = analyzer.similarity_cache.values()
+        assert metrics == [pytest.approx(0.0, abs=1e-6), 1.0]
+
+    def test_calculate_route_similarity_rejects_distant_route(
+        self, home_location, work_location, mock_config, tmp_path
     ):
-        """Test Hausdorff validation penalizes low spatial agreement."""
-        route1 = Route(
-            activity_id=3,
-            direction="home_to_work",
-            coordinates=[(41.8781, -87.6298), (41.8819, -87.6278)],
-            distance=5000.0,
-            duration=1200,
-            elevation_gain=50.0,
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            average_speed=4.17,
-            is_plus_route=False
-        )
-        route2 = Route(
-            activity_id=4,
-            direction="home_to_work",
-            coordinates=[(41.8782, -87.6299), (41.8820, -87.6277)],
-            distance=5100.0,
-            duration=1215,
-            elevation_gain=51.0,
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            average_speed=4.16,
-            is_plus_route=False
-        )
-        
-        analyzer = RouteAnalyzer([], home_location, work_location, mock_config, n_workers=1)
-        
-        with patch('src.route_analyzer.FRECHET_AVAILABLE', True), \
-             patch.object(analyzer, '_calculate_frechet_similarity', return_value=0.80), \
-             patch.object(analyzer, '_calculate_hausdorff_similarity', return_value=0.40):
-            similarity = analyzer.calculate_route_similarity(route1, route2)
-        
-        assert similarity == pytest.approx(0.56)
-    
-    def test_calculate_route_similarity_falls_back_to_hausdorff(
-        self, home_location, work_location, mock_config
+        route1, route2 = self._pair(offset_lat=0.01)  # ~1.1 km north
+        analyzer = RouteAnalyzer([], home_location, work_location, mock_config,
+                                 n_workers=1, cache_dir=tmp_path)
+        assert analyzer.calculate_route_similarity(route1, route2) < 1.0
+
+    def test_calculate_route_similarity_failure_is_no_match_and_not_cached(
+        self, home_location, work_location, mock_config, tmp_path
     ):
-        """Test Hausdorff fallback when Fréchet is unavailable."""
-        route1 = Route(
-            activity_id=5,
-            direction="home_to_work",
-            coordinates=[(41.8781, -87.6298), (41.8819, -87.6278)],
-            distance=5000.0,
-            duration=1200,
-            elevation_gain=50.0,
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            average_speed=4.17,
-            is_plus_route=False
-        )
-        route2 = Route(
-            activity_id=6,
-            direction="home_to_work",
-            coordinates=[(41.8782, -87.6297), (41.8820, -87.6279)],
-            distance=5100.0,
-            duration=1220,
-            elevation_gain=55.0,
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            average_speed=4.10,
-            is_plus_route=False
-        )
-        
-        analyzer = RouteAnalyzer([], home_location, work_location, mock_config, n_workers=1)
-        
-        with patch('src.route_analyzer.FRECHET_AVAILABLE', False), \
-             patch.object(analyzer, '_calculate_hausdorff_similarity', return_value=0.67) as mock_hausdorff:
+        """A failed comparison must not silently switch to another metric (#613)."""
+        route1, route2 = self._pair()
+        analyzer = RouteAnalyzer([], home_location, work_location, mock_config,
+                                 n_workers=1, cache_dir=tmp_path)
+
+        with patch('src.route_analyzer.track_deviation_metrics', side_effect=ValueError("boom")):
             similarity = analyzer.calculate_route_similarity(route1, route2)
 
-        assert similarity == 0.67
-        mock_hausdorff.assert_called_once()
+        assert similarity == 0.0
+        assert analyzer.similarity_cache == {}
 
 
 # ---------------------------------------------------------------------------
@@ -309,11 +244,11 @@ def _make_location(lat=41.88, lon=-87.63, name="Home"):
     return Location(lat=lat, lon=lon, name=name, activity_count=10)
 
 
-def _make_config(similarity_threshold=0.70, outlier_percentile=95.0):
+def _make_config(max_p95_deviation_m=100.0, min_coverage=0.85):
     config = Mock()
     config.get.side_effect = lambda key, default=None: {
-        'route_analysis.similarity_threshold': similarity_threshold,
-        'route_analysis.outlier_tolerance_percentile': outlier_percentile,
+        'route_analysis.max_p95_deviation_m': max_p95_deviation_m,
+        'route_analysis.min_coverage': min_coverage,
         'route_analysis.enable_geocoding': False,
         'route_analysis.min_route_frequency': 1,
         'data_fetching.cache_duration_days': 7,
@@ -500,33 +435,26 @@ class TestSimilarityCalculations:
             [41.8900 + offset, -87.6200],
         ])
 
-    def test_hausdorff_identical_routes_high_similarity(self, analyzer):
-        coords = self._coords()
-        sim = analyzer._calculate_hausdorff_similarity(coords, coords)
-        assert sim > 0.9
+    def _route(self, offset=0.0):
+        return _make_route(coords=[tuple(c) for c in self._coords(offset)])
 
-    def test_hausdorff_different_routes_lower_similarity(self, analyzer):
-        coords1 = self._coords(0.0)
-        coords2 = self._coords(1.0)  # 1 degree offset ≈ 111 km away
-        sim = analyzer._calculate_hausdorff_similarity(coords1, coords2)
-        assert sim < 0.5
+    def test_identical_routes_match(self, analyzer):
+        assert analyzer.calculate_route_similarity(self._route(), self._route()) >= 1.0
 
-    def test_hausdorff_returns_0_to_1(self, analyzer):
-        c1 = self._coords(0.0)
-        c2 = self._coords(0.5)
-        sim = analyzer._calculate_hausdorff_similarity(c1, c2)
-        assert 0.0 <= sim <= 1.0
+    def test_distant_routes_do_not_match(self, analyzer):
+        # 1 degree offset ≈ 111 km away
+        assert analyzer.calculate_route_similarity(self._route(0.0), self._route(1.0)) < 1.0
 
-    def test_frechet_identical_routes_high_similarity(self, analyzer):
-        coords = self._coords()
-        sim = analyzer._calculate_frechet_similarity(coords, coords)
-        assert sim > 0.9
+    def test_score_is_non_negative(self, analyzer):
+        assert analyzer.calculate_route_similarity(self._route(0.0), self._route(0.5)) >= 0.0
 
-    def test_frechet_different_routes_lower_similarity(self, analyzer):
-        c1 = self._coords(0.0)
-        c2 = self._coords(1.0)
-        sim = analyzer._calculate_frechet_similarity(c1, c2)
-        assert sim < 0.5
+    def test_threshold_change_reuses_cached_metrics(self, analyzer):
+        a, b = self._route(0.0), self._route(0.0003)  # ~33 m north
+        assert analyzer._is_match(analyzer.calculate_route_similarity(a, b))
+        analyzer.max_p95_deviation_m = 20.0
+        with patch('src.route_analyzer.track_deviation_metrics') as metrics:
+            assert not analyzer._is_match(analyzer.calculate_route_similarity(a, b))
+        metrics.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -835,17 +763,18 @@ class TestCacheIO:
         analyzer.cache_file = tmp_path / "route_similarity_cache.json"
         analyzer.groups_cache_file = tmp_path / "route_groups_cache.json"
         analyzer.similarity_cache = {}
-        analyzer.similarity_threshold = 0.70
+        analyzer.max_p95_deviation_m = 100.0
+        analyzer.min_coverage = 0.85
         return analyzer
 
     def test_save_and_load_similarity_cache(self, analyzer_with_tmp):
         a = analyzer_with_tmp
-        a.similarity_cache = {"key1": 0.95, "key2": 0.80}
+        a.similarity_cache = {"key1": [12.5, 0.97], "key2": [140.0, 0.6]}
         a._save_similarity_cache()
         assert a.cache_file.exists()
         a.similarity_cache = {}
         loaded = a._load_similarity_cache()
-        assert loaded == {"key1": 0.95, "key2": 0.80}
+        assert loaded == {"key1": [12.5, 0.97], "key2": [140.0, 0.6]}
 
     def test_load_similarity_cache_missing_file(self, analyzer_with_tmp):
         result = analyzer_with_tmp._load_similarity_cache()

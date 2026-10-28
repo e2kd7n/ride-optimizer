@@ -2,15 +2,16 @@
 Shared route comparison utilities used by both commute and long-ride analyzers.
 
 Provides coordinate scaling, geometric pre-filters, and shape-distance
-calculations (Fréchet + Hausdorff) behind a single API so both pipelines
-converge on the same logic with per-use-case thresholds.
+calculations. Long rides still use Fréchet + Hausdorff (combined_distance_km,
+#615); commutes use metric deviation + coverage (track_deviation_metrics, #613).
 """
 
 import math
 from dataclasses import dataclass
 
 import numpy as np
-from scipy.spatial.distance import directed_hausdorff, cdist
+from scipy.spatial import cKDTree
+from scipy.spatial.distance import directed_hausdorff
 
 try:
     from similaritymeasures import frechet_dist
@@ -141,121 +142,136 @@ def combined_distance_km(coords1_km: np.ndarray,
     return h_dist
 
 
+
 # ---------------------------------------------------------------------------
-# Degree-space variants used by the commute route grouper (RouteAnalyzer).
+# Commute matching (RouteAnalyzer), #613.
 #
-# RouteAnalyzer compares routes that are all within a few km of each other
-# (a single commute corridor), so it works directly in raw lat/lon degrees
-# with a flat 111km/degree conversion rather than round-tripping through
-# coords_to_km's latitude-corrected km scaling used by the long-ride/loop
-# comparisons above. It also pre-filters using bbox/centroid/path-length
-# values cached once per Route (see Route.compute_geometry) instead of
-# recomputing them from full coordinate arrays on every candidate pair --
-# that caching matters for the O(n^2) inner loop over hundreds of commute
-# activities, so it is kept as a distinct entry point rather than forced
-# through passes_prefilter/combined_distance_km above.
+# Everything is measured in metres in a local equirectangular frame with the
+# longitude scaled by cos(lat), so a north and an east offset count the same.
+# Tracks are resampled by arc length, so the verdict doesn't depend on how
+# densely Strava's summary polyline happens to be sampled.
+#
+# Two rides match when both of these hold, in both directions:
+#   - p95 deviation: 95% of one track's samples lie within max_p95_m of the
+#     other track (tolerates GPS spikes, a one-block detour, a different
+#     parking spot), and
+#   - coverage: at least min_coverage of each track's samples lie within
+#     COVERAGE_RADIUS_M of the other (a ride that shares only half the route
+#     isn't the same route).
+#
+# track_deviation_metrics returns the raw (p95_m, coverage) pair, which doesn't
+# depend on the configured thresholds, so callers can cache it and still
+# re-decide when the thresholds change.
+#
+# Bump the caller's similarity-cache version when any constant here changes.
 # ---------------------------------------------------------------------------
 
-def passes_prefilter_deg(bbox1, centroid1, path_length_deg1,
-                         bbox2, centroid2, path_length_deg2,
-                         length_ratio_max: float = 2.0,
-                         centroid_max_deg: float = 0.02,
-                         bbox_overlap_min: float = 0.3) -> bool:
+M_PER_DEG_LAT = 111_320.0
+SAMPLE_STEP_M = 10.0
+DENSE_STEP_M = 5.0
+COVERAGE_RADIUS_M = 50.0
+DEVIATION_PERCENTILE = 95.0
+
+
+def project_m(coords, lat0: float) -> np.ndarray:
+    """[[lat, lon], ...] -> (N, 2) metres (northing, easting) with longitude
+    scaled by cos(lat0). lat0 must be shared by every track being compared."""
+    c = np.asarray(coords, dtype=float).reshape(-1, 2)
+    return np.column_stack([c[:, 0] * M_PER_DEG_LAT,
+                            c[:, 1] * M_PER_DEG_LAT * math.cos(math.radians(lat0))])
+
+
+def resample_m(xy: np.ndarray, step_m: float) -> np.ndarray:
+    """Points every step_m metres along a metric polyline (endpoints kept)."""
+    if len(xy) < 2:
+        return xy
+    seg = np.linalg.norm(np.diff(xy, axis=0), axis=1)
+    s = np.concatenate([[0.0], np.cumsum(seg)])
+    if s[-1] == 0:
+        return xy[:1]
+    t = np.append(np.arange(0.0, s[-1], step_m), s[-1])
+    return np.column_stack([np.interp(t, s, xy[:, 0]), np.interp(t, s, xy[:, 1])])
+
+
+def track_deviation_metrics(coords1, coords2) -> tuple:
+    """(p95 deviation in metres, mutual coverage) for two lat/lon tracks.
+
+    Each track's samples (every SAMPLE_STEP_M) are measured against the other
+    track densified to DENSE_STEP_M, which approximates point-to-segment
+    distance to within DENSE_STEP_M / 2. Both values are the worse of the two
+    directions, so the result is symmetric.
     """
-    Fast geometric pre-filter over precomputed degree-space route geometry.
-    Returns False if routes are obviously dissimilar. Any missing geometry
-    (None) skips the filter entirely -- callers can't reject what they can't
-    measure.
+    c1 = np.asarray(coords1, dtype=float).reshape(-1, 2)
+    c2 = np.asarray(coords2, dtype=float).reshape(-1, 2)
+    if len(c1) == 0 or len(c2) == 0:
+        raise ValueError("empty track")
+    lat0 = float(np.concatenate([c1[:, 0], c2[:, 0]]).mean())
+    xy1, xy2 = project_m(c1, lat0), project_m(c2, lat0)
+
+    def directed(a, b):
+        d = cKDTree(resample_m(b, DENSE_STEP_M)).query(resample_m(a, SAMPLE_STEP_M))[0]
+        return float(np.percentile(d, DEVIATION_PERCENTILE)), float(np.mean(d <= COVERAGE_RADIUS_M))
+
+    p95_12, cov_12 = directed(xy1, xy2)
+    p95_21, cov_21 = directed(xy2, xy1)
+    return max(p95_12, p95_21), min(cov_12, cov_21)
+
+
+def match_score(p95_m: float, coverage: float, max_p95_m: float, min_coverage: float) -> float:
+    """One number for ranking candidate matches: the tighter of the two criteria's
+    margins. >= 1.0 exactly when both criteria pass."""
+    return min(coverage / min_coverage, max_p95_m / max(p95_m, 1e-9))
+
+
+def route_geometry(coords) -> tuple:
+    """(bbox, centroid, path_length_m) for the cheap prefilter. bbox and centroid
+    are in degrees; path length is in metres."""
+    arr = np.asarray(coords, dtype=float).reshape(-1, 2)
+    bbox = (float(arr[:, 0].min()), float(arr[:, 1].min()),
+            float(arr[:, 0].max()), float(arr[:, 1].max()))
+    cen = (float(arr[:, 0].mean()), float(arr[:, 1].mean()))
+    xy = project_m(arr, cen[0])
+    length = float(np.linalg.norm(np.diff(xy, axis=0), axis=1).sum()) if len(arr) > 1 else 0.0
+    return bbox, cen, length
+
+
+def passes_commute_prefilter(bbox1, centroid1, path_length_m1,
+                             bbox2, centroid2, path_length_m2,
+                             length_ratio_max: float = 2.0,
+                             centroid_max_m: float = 2000.0,
+                             bbox_overlap_min: float = 0.3) -> bool:
     """
-    if (bbox1 is None or bbox2 is None
-            or path_length_deg1 is None or path_length_deg2 is None):
+    Cheap rejection of obviously different routes from precomputed geometry
+    (see route_geometry). Any missing geometry (None) skips the filter -- callers
+    can't reject what they can't measure.
+
+    Distances are in metres. The bbox overlap is a ratio of areas, which per-axis
+    scaling cancels out of, so it can stay in degrees and is still isotropic.
+    """
+    if (bbox1 is None or bbox2 is None or centroid1 is None or centroid2 is None
+            or path_length_m1 is None or path_length_m2 is None):
         return True
 
-    # 1) Path length ratio — reject if one route is far longer than the other
-    shorter = min(path_length_deg1, path_length_deg2)
-    longer = max(path_length_deg1, path_length_deg2)
+    shorter = min(path_length_m1, path_length_m2)
+    longer = max(path_length_m1, path_length_m2)
     if shorter > 0 and longer / shorter > length_ratio_max:
         return False
 
-    # 2) Centroid distance — reject if centroids are far apart
-    cdist_deg = ((centroid1[0] - centroid2[0]) ** 2 + (centroid1[1] - centroid2[1]) ** 2) ** 0.5
-    if cdist_deg > centroid_max_deg:
+    lat0 = (centroid1[0] + centroid2[0]) / 2
+    c1, c2 = project_m([centroid1], lat0)[0], project_m([centroid2], lat0)[0]
+    if float(np.linalg.norm(c1 - c2)) > centroid_max_m:
         return False
 
-    # 3) Bounding box overlap ratio — reject if boxes barely intersect
     min_lat1, min_lon1, max_lat1, max_lon1 = bbox1
     min_lat2, min_lon2, max_lat2, max_lon2 = bbox2
-
     inter_lat = max(0, min(max_lat1, max_lat2) - max(min_lat1, min_lat2))
     inter_lon = max(0, min(max_lon1, max_lon2) - max(min_lon1, min_lon2))
-    intersection = inter_lat * inter_lon
-
-    if intersection == 0:
-        return False
-
     area1 = (max_lat1 - min_lat1) * (max_lon1 - min_lon1)
     area2 = (max_lat2 - min_lat2) * (max_lon2 - min_lon2)
     smaller_area = min(area1, area2)
-    if smaller_area > 0 and intersection / smaller_area < bbox_overlap_min:
+    # A dead-straight north-south or east-west track has a zero-area box, which
+    # says nothing about overlap; the centroid check above still applies.
+    if smaller_area > 0 and inter_lat * inter_lon / smaller_area < bbox_overlap_min:
         return False
 
     return True
-
-
-def frechet_similarity_deg(coords1: np.ndarray, coords2: np.ndarray,
-                           distance_threshold_m: float = 300.0) -> float:
-    """
-    Fréchet-distance similarity for raw lat/lon-degree coordinates, using a
-    flat 111km/degree conversion (adequate over the few-km span of a single
-    commute corridor). Raises if similaritymeasures isn't installed --
-    callers fall back to hausdorff_percentile_similarity_deg.
-    """
-    if not FRECHET_AVAILABLE:
-        raise RuntimeError("similaritymeasures is not available")
-    dist_deg = frechet_dist(coords1, coords2)
-    normalized_dist_m = dist_deg * 111000
-    return 1 / (1 + normalized_dist_m / distance_threshold_m)
-
-
-def hausdorff_percentile_similarity_deg(coords1: np.ndarray, coords2: np.ndarray,
-                                        percentile: float = 95.0,
-                                        distance_threshold_m: float = 200.0) -> float:
-    """
-    Percentile-based (outlier-tolerant) Hausdorff similarity for raw
-    lat/lon-degree coordinates. Using the Nth percentile of nearest-neighbor
-    deviations instead of the max tolerates GPS glitches/brief detours while
-    still catching real route differences.
-    """
-    distances_1_to_2 = cdist(coords1, coords2).min(axis=1)
-    distances_2_to_1 = cdist(coords2, coords1).min(axis=1)
-    percentile_dist = max(
-        np.percentile(distances_1_to_2, percentile),
-        np.percentile(distances_2_to_1, percentile),
-    )
-    normalized_dist_m = percentile_dist * 111000
-    return 1 / (1 + normalized_dist_m / distance_threshold_m)
-
-
-def commute_similarity_score(coords1: np.ndarray, coords2: np.ndarray,
-                             percentile: float = 95.0,
-                             frechet_available: bool = FRECHET_AVAILABLE,
-                             disagreement_penalty: float = 0.7,
-                             disagreement_floor: float = 0.50) -> float:
-    """
-    Combined Fréchet+Hausdorff similarity score for commute route grouping.
-
-    Fréchet is the primary metric (order-sensitive, robust to GPS sampling
-    differences); percentile Hausdorff is a secondary spatial-disagreement
-    check -- if Hausdorff indicates the routes are spatially far apart even
-    though Fréchet looks close, the Fréchet score is penalized.
-    """
-    if frechet_available:
-        try:
-            frechet_sim = frechet_similarity_deg(coords1, coords2)
-            hausdorff_sim = hausdorff_percentile_similarity_deg(coords1, coords2, percentile)
-            if hausdorff_sim < disagreement_floor:
-                return frechet_sim * disagreement_penalty
-            return frechet_sim
-        except Exception:
-            pass
-    return hausdorff_percentile_similarity_deg(coords1, coords2, percentile)

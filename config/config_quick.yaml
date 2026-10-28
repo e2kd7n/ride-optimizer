@@ -26,7 +26,8 @@ route_filtering:
   exclude_virtual: true
 
 route_analysis:
-  similarity_threshold: 0.75
+  max_p95_deviation_m: 100
+  min_coverage: 0.85
   min_route_frequency: 2
 
 optimization:

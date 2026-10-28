@@ -30,56 +30,41 @@ from .location_finder import Location
 from .route_namer import RouteNamer, check_rate_limit_file
 from .json_storage import secure_chmod
 from .route_comparison import (
-    passes_prefilter_deg, frechet_similarity_deg,
-    hausdorff_percentile_similarity_deg,
+    passes_commute_prefilter, track_deviation_metrics, match_score, route_geometry,
 )
 
 logger = SecureLogger(__name__)
 
-try:
-    import similaritymeasures
-    FRECHET_AVAILABLE = True
-except ImportError:
-    FRECHET_AVAILABLE = False
-    logger.warning("similaritymeasures not available, using Hausdorff distance only")
-
 # Bump SIMILARITY_CACHE_VERSION whenever the pairwise score's math or the route
 # hash changes, and GROUPS_CACHE_VERSION whenever grouping logic changes, so stale
 # on-disk results from the old code are discarded instead of silently reused (#612).
-SIMILARITY_CACHE_VERSION = 2
-GROUPS_CACHE_VERSION = 2
+SIMILARITY_CACHE_VERSION = 3
+GROUPS_CACHE_VERSION = 3
 
 
 def _similarity_worker(args):
     """
     Module-level worker for ProcessPoolExecutor.
 
-    Computes Fréchet+Hausdorff similarity between a pivot route and a batch of
-    candidates. Must be a top-level function so it is picklable on all platforms.
+    Computes deviation metrics between a pivot route and a batch of candidates.
+    Must be a top-level function so it is picklable on all platforms.
 
-    args: (pivot_coords, candidates, frechet_available, hausdorff_percentile)
-      pivot_coords       – list of [lat, lon] pairs for the pivot route
-      candidates         – list of (original_idx, cache_key, candidate_coords)
-      frechet_available  – bool
-      hausdorff_percentile – float (e.g. 95.0)
+    args: (pivot_coords, candidates)
+      pivot_coords – list of [lat, lon] pairs for the pivot route
+      candidates   – list of (original_idx, cache_key, candidate_coords)
 
-    Returns list of (original_idx, cache_key, similarity_score).
+    Returns list of (original_idx, cache_key, [p95_m, coverage] or None). None
+    means the comparison failed; the caller logs it and treats it as no match.
     """
-    import numpy as np
-    from .route_comparison import commute_similarity_score
-
-    pivot_coords, candidates, frechet_available, hausdorff_percentile = args
-    pivot = np.array(pivot_coords)
+    pivot_coords, candidates = args
     results = []
 
     for (original_idx, cache_key, candidate_coords) in candidates:
-        candidate = np.array(candidate_coords)
-        score = commute_similarity_score(
-            pivot, candidate,
-            percentile=hausdorff_percentile,
-            frechet_available=frechet_available,
-        )
-        results.append((original_idx, cache_key, score))
+        try:
+            metrics = list(track_deviation_metrics(pivot_coords, candidate_coords))
+        except Exception:
+            metrics = None
+        results.append((original_idx, cache_key, metrics))
 
     return results
 
@@ -99,22 +84,13 @@ class Route:
     is_plus_route: bool = False  # True if distance is >25% above median
     bbox: Optional[Tuple[float, float, float, float]] = None  # (min_lat, min_lon, max_lat, max_lon)
     centroid: Optional[Tuple[float, float]] = None  # (lat, lon)
-    path_length_deg: Optional[float] = None  # sum of segment lengths in degrees (cheap proxy for distance)
+    path_length_m: Optional[float] = None  # polyline length, cos(lat)-corrected
 
     def compute_geometry(self):
-        """Populate bbox, centroid, and path_length_deg from coordinates."""
-        coords = self.coordinates
-        if not coords:
+        """Populate bbox, centroid, and path_length_m from coordinates."""
+        if not self.coordinates:
             return
-        arr = np.array(coords)
-        self.bbox = (float(arr[:, 0].min()), float(arr[:, 1].min()),
-                     float(arr[:, 0].max()), float(arr[:, 1].max()))
-        self.centroid = (float(arr[:, 0].mean()), float(arr[:, 1].mean()))
-        if len(arr) > 1:
-            diffs = np.diff(arr, axis=0)
-            self.path_length_deg = float(np.sqrt((diffs ** 2).sum(axis=1)).sum())
-        else:
-            self.path_length_deg = 0.0
+        self.bbox, self.centroid, self.path_length_m = route_geometry(self.coordinates)
 
 
 @dataclass
@@ -181,7 +157,9 @@ class RouteAnalyzer:
         self.stop_check = stop_check
         self.interactive = interactive
         self._enable_geocoding_override = enable_geocoding
-        self.similarity_threshold = config.get('route_analysis.similarity_threshold', 0.85)
+        # Match rule (#613): see route_comparison.track_deviation_metrics.
+        self.max_p95_deviation_m = float(config.get('route_analysis.max_p95_deviation_m', 100.0))
+        self.min_coverage = float(config.get('route_analysis.min_coverage', 0.85))
         self.route_namer = RouteNamer(config)
         self.force_reanalysis = force_reanalysis
         
@@ -217,7 +195,7 @@ class RouteAnalyzer:
         # not be saved as the groups cache (#612).
         self._stopped_early = False
 
-    def _load_similarity_cache(self) -> Dict[str, float]:
+    def _load_similarity_cache(self) -> Dict[str, List[float]]:
         """Load similarity cache from disk."""
         if self.cache_file.exists():
             try:
@@ -227,9 +205,9 @@ class RouteAnalyzer:
                     # Includes the pre-#612 unversioned format: a flat {key: score} dict.
                     logger.info("Discarding similarity cache from an older scoring version")
                     return {}
-                scores = cache.get('scores', {})
-                logger.info(f"Loaded {len(scores)} cached similarity calculations")
-                return scores
+                metrics = cache.get('metrics', {})
+                logger.info(f"Loaded {len(metrics)} cached similarity calculations")
+                return metrics
             except Exception as e:
                 logger.warning(f"Failed to load similarity cache: {e}")
                 return {}
@@ -239,7 +217,7 @@ class RouteAnalyzer:
         """Save similarity cache to disk."""
         try:
             with open(self.cache_file, 'w') as f:
-                json.dump({'version': SIMILARITY_CACHE_VERSION, 'scores': self.similarity_cache}, f)
+                json.dump({'version': SIMILARITY_CACHE_VERSION, 'metrics': self.similarity_cache}, f)
             secure_chmod(self.cache_file)
             logger.info(f"Saved {len(self.similarity_cache)} similarity calculations to cache")
         except Exception as e:
@@ -267,10 +245,8 @@ class RouteAnalyzer:
         return {
             'groups_cache_version': GROUPS_CACHE_VERSION,
             'similarity_cache_version': SIMILARITY_CACHE_VERSION,
-            'similarity_threshold': self.similarity_threshold,
-            'outlier_tolerance_percentile': self.config.get(
-                'route_analysis.outlier_tolerance_percentile', 95.0),
-            'algorithm': 'frechet' if FRECHET_AVAILABLE else 'hausdorff',
+            'max_p95_deviation_m': self.max_p95_deviation_m,
+            'min_coverage': self.min_coverage,
         }
 
     def _groups_cache_reusable(self, routes: List[Route]) -> bool:
@@ -307,7 +283,7 @@ class RouteAnalyzer:
                         'is_plus_route': group.representative_route.is_plus_route,
                         'bbox': group.representative_route.bbox,
                         'centroid': group.representative_route.centroid,
-                        'path_length_deg': group.representative_route.path_length_deg,
+                        'path_length_m': group.representative_route.path_length_m,
                     },
                     'routes': [
                         {
@@ -322,7 +298,7 @@ class RouteAnalyzer:
                             'is_plus_route': r.is_plus_route,
                             'bbox': r.bbox,
                             'centroid': r.centroid,
-                            'path_length_deg': r.path_length_deg,
+                            'path_length_m': r.path_length_m,
                         }
                         for r in group.routes
                     ]
@@ -360,9 +336,9 @@ class RouteAnalyzer:
             is_plus_route=data.get('is_plus_route', False),
             bbox=tuple(data['bbox']) if data.get('bbox') else None,
             centroid=tuple(data['centroid']) if data.get('centroid') else None,
-            path_length_deg=data.get('path_length_deg'),
+            path_length_m=data.get('path_length_m'),
         )
-        if route.bbox is None:
+        if route.bbox is None or route.path_length_m is None:
             route.compute_geometry()
         return route
 
@@ -421,20 +397,20 @@ class RouteAnalyzer:
     @staticmethod
     def _passes_geometric_filter(route1: 'Route', route2: 'Route',
                                  length_ratio_max: float = 2.0,
-                                 centroid_max_deg: float = 0.02,
+                                 centroid_max_m: float = 2000.0,
                                  bbox_overlap_min: float = 0.3) -> bool:
         """Fast geometric pre-filter — returns False if routes are obviously dissimilar.
 
-        Delegates to the shared route_comparison.passes_prefilter_deg, using
-        Route's precomputed bbox/centroid/path_length_deg (see
+        Delegates to the shared route_comparison.passes_commute_prefilter, using
+        Route's precomputed bbox/centroid/path_length_m (see
         Route.compute_geometry) rather than recomputing geometry from full
         coordinate arrays on every candidate pair.
         """
-        return passes_prefilter_deg(
-            route1.bbox, route1.centroid, route1.path_length_deg,
-            route2.bbox, route2.centroid, route2.path_length_deg,
+        return passes_commute_prefilter(
+            route1.bbox, route1.centroid, route1.path_length_m,
+            route2.bbox, route2.centroid, route2.path_length_m,
             length_ratio_max=length_ratio_max,
-            centroid_max_deg=centroid_max_deg,
+            centroid_max_m=centroid_max_m,
             bbox_overlap_min=bbox_overlap_min,
         )
     def extract_routes(self, direction: str = 'both') -> List[Route]:
@@ -523,108 +499,33 @@ class RouteAnalyzer:
     
     def calculate_route_similarity(self, route1: Route, route2: Route) -> float:
         """
-        Calculate similarity between two routes using Fréchet distance as primary metric.
-        
-        Fréchet distance is superior for route comparison because:
-        - Considers the order of points (path similarity, like walking a dog)
-        - Better captures whether routes follow the same path
-        - More robust to GPS sampling differences
-        
-        Hausdorff is used as a secondary validation check.
-        
-        Results are cached to avoid expensive recalculations.
-        
-        Args:
-            route1: First route
-            route2: Second route
-            
-        Returns:
-            Similarity score (0-1, higher is more similar)
+        Match score for two routes: >= 1.0 means they are the same route (see
+        route_comparison.match_score), and higher means a closer match.
+
+        The underlying (p95 deviation, coverage) metrics are cached rather than
+        the score, so a threshold change re-decides without recomputing. A failed
+        comparison is logged and scored 0.0 (not cached) rather than silently
+        switching to a different metric.
         """
-        # Check cache first
         cache_key = self._get_cache_key(route1, route2)
-        if cache_key in self.similarity_cache:
-            logger.debug(f"Using cached similarity for {cache_key}")
-            return self.similarity_cache[cache_key]
-        
-        # Calculate similarity
-        coords1 = np.array(route1.coordinates)
-        coords2 = np.array(route2.coordinates)
-        
-        # Calculate Fréchet distance (primary metric)
-        if FRECHET_AVAILABLE:
-            frechet_sim = self._calculate_frechet_similarity(coords1, coords2)
-            
-            # Calculate Hausdorff as secondary validation
-            hausdorff_sim = self._calculate_hausdorff_similarity(coords1, coords2)
-            
-            # Use Fréchet as primary, but require Hausdorff to not strongly disagree
-            # If Hausdorff is very low (<0.50), it indicates routes are spatially far apart
-            if hausdorff_sim < 0.50:
-                # Routes are too far apart spatially, reduce Fréchet score
-                combined_similarity = frechet_sim * 0.7  # Penalize by 30%
-                logger.debug(f"Fréchet: {frechet_sim:.3f}, Hausdorff: {hausdorff_sim:.3f} (spatial disagreement), Combined: {combined_similarity:.3f}")
-            else:
-                # Hausdorff agrees or is neutral, use Fréchet as-is
-                combined_similarity = frechet_sim
-                logger.debug(f"Fréchet: {frechet_sim:.3f} (primary), Hausdorff: {hausdorff_sim:.3f} (validates)")
-        else:
-            # Fallback to Hausdorff if Fréchet not available
-            combined_similarity = self._calculate_hausdorff_similarity(coords1, coords2)
-            logger.debug(f"Hausdorff only (Fréchet unavailable): {combined_similarity:.3f}")
-        
-        # Cache the result
-        self.similarity_cache[cache_key] = combined_similarity
-        
-        return combined_similarity
-    
-    def _calculate_hausdorff_similarity(self, coords1: np.ndarray, coords2: np.ndarray) -> float:
-        """
-        Calculate similarity using percentile-based Hausdorff distance.
-        
-        Instead of using the maximum deviation (which is sensitive to outliers),
-        uses the Nth percentile of deviations. This allows X% of points to be
-        outliers (GPS glitches, brief detours) while still detecting substantive
-        route differences.
-        
-        Args:
-            coords1: First route coordinates
-            coords2: Second route coordinates
-            
-        Returns:
-            Similarity score (0-1)
-        """
-        # Get percentile from config (default 95.0 = ignore worst 5% of deviations)
-        percentile = self.config.get('route_analysis.outlier_tolerance_percentile', 95.0)
+        metrics = self.similarity_cache.get(cache_key)
+        if metrics is None:
+            try:
+                metrics = list(track_deviation_metrics(route1.coordinates, route2.coordinates))
+            except Exception as e:
+                logger.warning(f"Route comparison failed, treating as no match: {e}")
+                return 0.0
+            self.similarity_cache[cache_key] = metrics
+        return self._score(metrics)
 
-        # Delegates to the shared route_comparison implementation (also used by
-        # _similarity_worker, the ProcessPoolExecutor path) so both the sequential
-        # and parallel grouping paths stay on identical math.
-        return hausdorff_percentile_similarity_deg(coords1, coords2, percentile=percentile)
+    def _score(self, metrics: List[float]) -> float:
+        p95_m, coverage = metrics
+        return match_score(p95_m, coverage, self.max_p95_deviation_m, self.min_coverage)
 
-    def _calculate_frechet_similarity(self, coords1: np.ndarray, coords2: np.ndarray) -> float:
-        """
-        Calculate similarity using Fréchet distance.
+    @staticmethod
+    def _is_match(score: float) -> bool:
+        return score >= 1.0
 
-        Fréchet distance considers the order of points, like walking a dog on a leash.
-        It's better at detecting routes that follow the same path vs routes that are
-        spatially close but follow different paths.
-
-        Args:
-            coords1: First route coordinates
-            coords2: Second route coordinates
-
-        Returns:
-            Similarity score (0-1)
-        """
-        try:
-            # Delegates to the shared route_comparison implementation (also used by
-            # _similarity_worker, the ProcessPoolExecutor path).
-            return frechet_similarity_deg(coords1, coords2)
-        except Exception as e:
-            logger.warning(f"Fréchet distance calculation failed: {e}, falling back to Hausdorff")
-            return self._calculate_hausdorff_similarity(coords1, coords2)
-    
     def group_similar_routes(self, routes: List[Route] = None) -> List[RouteGroup]:
         """
         Group similar routes with intelligent caching and incremental analysis.
@@ -856,7 +757,7 @@ class RouteAnalyzer:
                 similarity = self.calculate_route_similarity(
                     route, group.representative_route
                 )
-                if similarity >= self.similarity_threshold and similarity > best_similarity:
+                if self._is_match(similarity) and similarity > best_similarity:
                     best_similarity = similarity
                     best_group_idx = idx
                     matched = True
@@ -987,7 +888,6 @@ class RouteAnalyzer:
 
         # Upper-bound on comparisons (worst case: no grouping occurs)
         comparisons_estimated = n * (n - 1) // 2
-        hausdorff_percentile = self.config.get('route_analysis.outlier_tolerance_percentile', 95.0)
 
         groups = []
         ungrouped = routes.copy()
@@ -1014,7 +914,7 @@ class RouteAnalyzer:
             for i, route in enumerate(ungrouped):
                 cache_key = self._get_cache_key(current, route)
                 if cache_key in self.similarity_cache:
-                    cached_similarities[i] = self.similarity_cache[cache_key]
+                    cached_similarities[i] = self._score(self.similarity_cache[cache_key])
                 elif not self._passes_geometric_filter(current, route):
                     # Not persisted: the prefilter is cheap, and a cached 0.0 would
                     # outlive any change to the prefilter itself (#612).
@@ -1031,10 +931,7 @@ class RouteAnalyzer:
                 chunks = [uncached[j:j + chunk_size]
                           for j in range(0, len(uncached), chunk_size)]
                 pivot_coords = list(current.coordinates)
-                task_args = [
-                    (pivot_coords, chunk, FRECHET_AVAILABLE, hausdorff_percentile)
-                    for chunk in chunks
-                ]
+                task_args = [(pivot_coords, chunk) for chunk in chunks]
                 try:
                     results = self._submit_similarity_tasks(task_args)
                 except BrokenProcessPool:
@@ -1048,9 +945,13 @@ class RouteAnalyzer:
                     self._executor.shutdown(wait=False, cancel_futures=True)
                     self._executor = ProcessPoolExecutor(max_workers=self.n_workers)
                     results = self._submit_similarity_tasks(task_args)
-                for (idx, ck, score) in results:
-                    self.similarity_cache[ck] = score
-                    cached_similarities[idx] = score
+                for (idx, ck, metrics) in results:
+                    if metrics is None:
+                        logger.warning("Route comparison failed, treating as no match")
+                        cached_similarities[idx] = 0.0
+                        continue
+                    self.similarity_cache[ck] = metrics
+                    cached_similarities[idx] = self._score(metrics)
             else:
                 # Sequential fallback (small batches or no executor)
                 for (i, cache_key, _) in uncached:
@@ -1062,7 +963,7 @@ class RouteAnalyzer:
             # ---- Find matches ----
             to_remove = []
             for i, similarity in cached_similarities.items():
-                if similarity >= self.similarity_threshold:
+                if self._is_match(similarity):
                     group.append(ungrouped[i])
                     to_remove.append(i)
 

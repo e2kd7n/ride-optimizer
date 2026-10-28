@@ -192,10 +192,10 @@ After marking any task complete:
 - **Cache file permissions**: Every cache writer must end up at 0o600 — automatic via `JSONStorage`, or via an explicit `secure_chmod()` call (`src/json_storage.py`) for bare `json.dump()` writers. No cache encryption layer exists by design (see Security & Authentication above).
 
 ### Route Analysis Algorithm
-- **Shared comparison math**: `route_analyzer.py` and `long_ride_analyzer.py` both delegate similarity math to `src/route_comparison.py` (#507) — change Fréchet/Hausdorff comparison logic there, not in either caller.
-- **Fréchet distance primary**: Uses `similaritymeasures` library for route matching (NOT Hausdorff alone)
-- **Dual validation**: Fréchet (300m threshold) + Hausdorff (0.50 threshold) for route similarity
-- **Percentile-based outlier tolerance**: Uses 95th percentile in Hausdorff to ignore GPS glitches
+- **Shared comparison math**: `route_analyzer.py` and `long_ride_analyzer.py` both delegate similarity math to `src/route_comparison.py` (#507) — change comparison logic there, not in either caller.
+- **Commute match rule (#613)**: tracks are projected to metres (cos(lat)-corrected) and resampled every 10 m; two rides match when the p95 deviation is ≤ `route_analysis.max_p95_deviation_m` (100) and mutual 50 m coverage is ≥ `route_analysis.min_coverage` (0.85). No degree-space distance math, and no silent fallback to another metric.
+- **Long rides**: still Fréchet + Hausdorff via `similaritymeasures` (`combined_distance_km`) until #615.
+- **Benchmark**: run `scripts/matching_benchmark/run_benchmark.py` before and after any matching change and record the numbers.
 - **Parallel processing**: Route grouping supports 1-8 workers via `--parallel` flag (default: 2)
 - **Route naming**: Segment-based naming samples 10 points along route (configurable in `config.yaml`)
 

@@ -102,7 +102,7 @@ def grouped_together(tmp_path, a, b):
     return len(groups) == 1
 
 
-# ---------------------------------------------------------------- sanity (pass today)
+# ---------------------------------------------------------------- sanity
 
 class TestSanity:
     def test_identical_tracks_group(self, tmp_path):
@@ -125,7 +125,6 @@ class TestSanity:
 
 # ---------------------------------------------------------------- metric (#613)
 
-@pytest.mark.xfail(strict=True, reason='#613: longitude not scaled by cos(lat) — east-west offsets count ~1.35x')
 def test_north_and_east_offsets_decided_alike(tmp_path):
     """A ride d metres off must get the same verdict whether the offset is north or east.
 
@@ -140,14 +139,12 @@ def test_north_and_east_offsets_decided_alike(tmp_path):
         assert north == east, f'{d} m offset: north={north} east={east}'
 
 
-@pytest.mark.xfail(strict=True, reason='#613: discrete Fréchet on raw vertices depends on point spacing')
 def test_point_spacing_does_not_matter(tmp_path):
     dense = densify(STAIRCASE, spacing=10)
     sparse = densify(STAIRCASE, spacing=400)  # like a heavily simplified summary_polyline
     assert grouped_together(tmp_path, route(dense), route(sparse))
 
 
-@pytest.mark.xfail(strict=True, reason='#613: max-type metric — a different parking spot rejects the ride')
 def test_start_and_end_250m_apart_still_match(tmp_path):
     base = densify(STAIRCASE)
     # Same ride, but starts on a side street 250 m south and parks 250 m further on.
@@ -155,7 +152,6 @@ def test_start_and_end_250m_apart_still_match(tmp_path):
     assert grouped_together(tmp_path, route(base), route(other))
 
 
-@pytest.mark.xfail(strict=True, reason='#613: max-type metric — a one-block detour rejects the ride')
 def test_one_block_detour_still_matches(tmp_path):
     base = densify(STAIRCASE)
     # 140 m-deep, 200 m-long detour around a block on the second east leg.
@@ -165,7 +161,6 @@ def test_one_block_detour_still_matches(tmp_path):
     assert grouped_together(tmp_path, route(base), route(densify(detour)))
 
 
-@pytest.mark.xfail(strict=True, reason='#613: max-type metric — one GPS spike rejects the ride')
 def test_single_gps_spike_still_matches(tmp_path):
     base = densify(STAIRCASE)
     spiked = list(base)
@@ -206,14 +201,13 @@ def test_group_id_stable_when_unrelated_ride_added(tmp_path):
 # ---------------------------------------------------------------- caches (#612)
 
 def test_threshold_change_regroups(tmp_path):
-    # NOTE for #613: if the threshold config key changes, update the override below.
     base = densify(STAIRCASE)
-    a, b = route(base), route(shift(base, north=110))  # scores ~0.73 today
+    a, b = route(base), route(shift(base, north=40))  # p95 deviation ~40 m
     cache = tmp_path / 'cache'
-    loose = analyzer(cache, _Config(**{'route_analysis.similarity_threshold': 0.5}), force=False)
+    loose = analyzer(cache, _Config(**{'route_analysis.max_p95_deviation_m': 100}), force=False)
     assert len(loose.group_similar_routes([a, b])) == 1
     # Constructed after the first run so it loads the cache that run wrote.
-    strict = analyzer(cache, _Config(**{'route_analysis.similarity_threshold': 0.99}), force=False)
+    strict = analyzer(cache, _Config(**{'route_analysis.max_p95_deviation_m': 30}), force=False)
     assert len(strict.group_similar_routes([a, b])) == 2
 
 

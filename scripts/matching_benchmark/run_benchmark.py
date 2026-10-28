@@ -100,9 +100,24 @@ def make_analyzer(config, cache_dir, n_workers=1, stop_check=None):
                          enable_geocoding=False, stop_check=stop_check)
 
 
-def load_app_config():
+def load_app_config(overrides=None):
+    """config/config.yaml with optional {dotted.key: value} overrides (--set)."""
     from src.config_manager import ConfigManager
-    return ConfigManager(str(REPO / 'config' / 'config.yaml'))
+    config = ConfigManager(str(REPO / 'config' / 'config.yaml'))
+    for key, value in (overrides or {}).items():
+        config.set(key, value)
+    return config
+
+
+def parse_overrides(pairs):
+    import yaml
+    out = {}
+    for item in pairs or []:
+        key, sep, value = item.partition('=')
+        if not sep:
+            raise SystemExit(f'--set expects key=value, got {item!r}')
+        out[key.strip()] = yaml.safe_load(value)
+    return out
 
 
 # ---------------------------------------------------------------- pool workers
@@ -110,13 +125,13 @@ def load_app_config():
 _W = {}
 
 
-def _init_worker(snapshot_path, lat0, want_app):
+def _init_worker(snapshot_path, lat0, want_app, overrides=None):
     rides, _, _, _ = load_snapshot(snapshot_path)
     _W['tracks'] = {a: reference.Track(r['coordinates'], lat0) for a, r in rides.items()}
     if want_app:
         _W['routes'] = {a: make_route(r) for a, r in rides.items()}
         _W['tmp'] = tempfile.mkdtemp(prefix='matchbench_')
-        _W['analyzer'] = make_analyzer(load_app_config(), _W['tmp'])
+        _W['analyzer'] = make_analyzer(load_app_config(overrides), _W['tmp'])
 
 
 def _ref_pair(pair):
@@ -248,6 +263,8 @@ def precision_recall_at(scores, y, threshold):
 
 
 CAL_BINS = [0, 25, 50, 75, 100, 150, 250, 500, 1000, float('inf')]
+# RouteAnalyzer.calculate_route_similarity returns a score where >= 1.0 is a match (#613).
+APP_MATCH_SCORE = 1.0
 
 
 def calibration(ref, app, threshold):
@@ -290,7 +307,8 @@ def run_app_grouping(rides, order, config, cache_dir, n_workers):
     for g in groups:
         for r in g.routes:
             partition[int(r.activity_id)] = g.id
-    return partition, analyzer.similarity_threshold
+    rule = dict(max_p95_deviation_m=analyzer.max_p95_deviation_m, min_coverage=analyzer.min_coverage)
+    return partition, rule
 
 
 # ---------------------------------------------------------------- report
@@ -324,7 +342,7 @@ def print_report(s, baseline=None):
     c = s['corpus']
     print(f"snapshot {c['snapshot_sha1'][:12]}  rides {c['rides']}  pairs {c['pairs']}  "
           f"reference labels {c['labels']}  (reference v{c['reference_version']})")
-    print(f"app similarity_threshold {s['app_threshold']}")
+    print(f"app match rule {s['app_match_rule']} (pairwise score >= {APP_MATCH_SCORE} matches)")
     print('\n-- Grouping vs reference --')
     print(fmt_partition('APP (current code, snapshot order)', s['app_current']))
     print(fmt_partition('SNAPSHOT (stored grouping, historical)', s['snapshot_stored']))
@@ -375,7 +393,11 @@ def main():
     ap.add_argument('--skip-calibration', action='store_true',
                     help='skip scoring every pair with the app (the slowest step)')
     ap.add_argument('--baseline', help='previous summary.json to diff headline numbers against')
+    ap.add_argument('--set', action='append', metavar='KEY=VALUE',
+                    help='override a config.yaml value for this run, e.g. '
+                         '--set route_analysis.max_p95_deviation_m=75 (repeatable)')
     args = ap.parse_args()
+    overrides = parse_overrides(args.set)
     # RouteAnalyzer prints emoji progress lines; a cp1252 Windows console can't encode them.
     for stream in (sys.stdout, sys.stderr):
         stream.reconfigure(encoding='utf-8', errors='replace')
@@ -405,18 +427,18 @@ def main():
         ref_cache.write_text(json.dumps([[a, b, m] for (a, b), m in ref.items()]))
     labels = Counter(m['label'] for m in ref.values())
 
-    config = load_app_config()
+    config = load_app_config(overrides)
     app = None
     if not args.skip_calibration:
         print('calibration: scoring every pair with the app (slow)...', flush=True)
-        with Pool(args.workers, initializer=_init_worker, initargs=(snapshot, lat0, True)) as pool:
+        with Pool(args.workers, initializer=_init_worker, initargs=(snapshot, lat0, True, overrides)) as pool:
             rows = pool.map(_app_pair, pairs, chunksize=16)
         app = {pair_key(a, b): (p, s) for a, b, p, s in rows}
 
     print('grouping: running RouteAnalyzer.group_similar_routes...', flush=True)
     with tempfile.TemporaryDirectory(prefix='matchbench_') as tmp:
         cache_dir = Path(tmp) / 'cache'
-        current, threshold = run_app_grouping(rides, order, config, cache_dir, args.app_workers)
+        current, rule = run_app_grouping(rides, order, config, cache_dir, args.app_workers)
         rng = random.Random(611)
         shuffled = []
         for _ in range(args.shuffles):
@@ -430,7 +452,7 @@ def main():
     summary = dict(
         corpus=dict(snapshot_sha1=sha, rides=len(rides), pairs=len(pairs), labels=dict(labels),
                     reference_version=reference.REFERENCE_VERSION),
-        app_threshold=threshold,
+        app_match_rule=rule,
         app_current=partition_metrics(current, ref, rides),
         snapshot_stored=partition_metrics(stored, ref, rides),
         order_stability=dict(shuffles=len(shuffled),
@@ -439,7 +461,7 @@ def main():
                              median_ari=float(np.median(aris)) if aris else 1.0),
     )
     if app is not None:
-        summary['calibration'] = calibration(ref, app, threshold)
+        summary['calibration'] = calibration(ref, app, APP_MATCH_SCORE)
         with open(out / 'pairs.csv', 'w', newline='') as f:
             w = csv.writer(f)
             w.writerow(['activity_a', 'activity_b', 'direction', 'label', 'cov_min', 'dev_p95',
