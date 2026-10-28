@@ -297,7 +297,7 @@
                         height: 100vh;
                         margin: 0;
                         font-family: Arial, sans-serif;
-                        background: #f8f9fa;
+                        background: #F3F6F7;
                     }
                     .error-message {
                         text-align: center;
@@ -305,7 +305,7 @@
                     }
                     .error-icon {
                         font-size: 3rem;
-                        color: #ffc107;
+                        color: #C98A1D;
                         margin-bottom: 1rem;
                     }
                 </style>

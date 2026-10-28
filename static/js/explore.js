@@ -327,7 +327,7 @@ function initMap() {
         _drawStartLatLng = e.latlng;
         if (drawAreaRect) { map.removeLayer(drawAreaRect); drawAreaRect = null; }
         drawAreaRect = L.rectangle(L.latLngBounds(e.latlng, e.latlng), {
-            color: '#0d6efd', weight: 2, fillOpacity: 0.08, dashArray: '4,4',
+            color: '#0B6FA6', weight: 2, fillOpacity: 0.08, dashArray: '4,4',
         }).addTo(map);
     });
     map.on('mousemove', (e) => {

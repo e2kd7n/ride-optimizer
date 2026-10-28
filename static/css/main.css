@@ -1978,7 +1978,7 @@ h5.card-title {
 
 .workout-fit-row-reasons {
     font-size: var(--font-size-xs);
-    color: var(--bs-secondary-color, #6c757d);
+    color: var(--ink-soft);
     padding-left: var(--space-3);
     margin-bottom: var(--space-2);
 }
@@ -2024,7 +2024,7 @@ h5.card-title {
     flex-wrap: wrap;
     gap: var(--space-2);
     font-size: var(--font-size-sm);
-    color: var(--bs-secondary-color, #6c757d);
+    color: var(--ink-soft);
 }
 
 
@@ -2168,26 +2168,24 @@ h5.card-title {
 .color-accent { color: var(--accent); }
 .color-ink-soft { color: var(--ink-soft); }
 .sticky-top-space3 { position: sticky; top: var(--space-3); }
-.marker-dot { width: 25px; height: 25px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
-.marker-color-green { background-color: #28a745; }
-.marker-color-blue { background-color: #007bff; }
-.marker-color-red { background-color: #dc3545; }
-.marker-color-yellow { background-color: #ffc107; }
-.marker-color-orange { background-color: #fd7e14; }
-.marker-color-purple { background-color: #6f42c1; }
 .commute-weather-badge { font-size: 0.9rem; padding: 0.4rem 0.6rem; }
 /* routes.js legend dots + Leaflet divIcon markers (#475: fixed color palette,
    see ROUTE_COLOR_CLASS in routes.js) */
 .legend-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: middle; }
 .marker-dot-sm { width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,.5); }
-.c-blue { background-color: #007bff; }
-.c-green { background-color: #28a745; }
-.c-red { background-color: #dc3545; }
-.c-yellow { background-color: #ffc107; }
-.c-teal { background-color: #17a2b8; }
-.c-purple { background-color: #6f42c1; }
-.c-orange { background-color: #fd7e14; }
-.c-gray { background-color: #6c757d; }
+/* Fair Weather route palette (Brand Book §Route palette). Identity hues
+   (cobalt..brown) never reuse the verdict green/red; green/amber/orange/red
+   appear only in the ordered distance/recency scales. */
+.c-blue { background-color: #0B6FA6; }
+.c-teal { background-color: #1F8A8A; }
+.c-purple { background-color: #7A4FA0; }
+.c-orange { background-color: #E8702A; }
+.c-magenta { background-color: #A8457E; }
+.c-amber { background-color: #C98A1D; }
+.c-brown { background-color: #8A5A3C; }
+.c-green { background-color: #2D7A52; }
+.c-red { background-color: #C4483A; }
+.c-gray { background-color: #5B7686; }
 .min-w-0 { min-width: 0; }
 .badge-plus { font-size: .65em; vertical-align: middle; }
 .fs-07em { font-size: .7em; }

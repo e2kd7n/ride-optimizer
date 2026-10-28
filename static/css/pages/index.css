@@ -93,12 +93,14 @@
             box-shadow: 0 4px 8px rgba(0,0,0,0.15);
         }
 
+        /* Direction identity, matching the commute map's polylines (cobalt to
+           work, teal home). Not green, which means Good. */
         .commute-card.to-work {
-            border-left: 4px solid var(--success-color);
+            border-left: 4px solid var(--accent);
         }
 
         .commute-card.to-home {
-            border-left: 4px solid var(--primary-color);
+            border-left: 4px solid #1F8A8A;
         }
 
         .commute-card-header {

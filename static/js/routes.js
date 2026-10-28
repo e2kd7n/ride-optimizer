@@ -10,7 +10,7 @@
         mapInstance: null,
         displayedRoutes: new Map(), // Map of routeId -> {polyline, markers}
         selectedRouteId: null, // Track currently selected route for z-index management
-        routeColors: ['#007bff', '#28a745', '#dc3545', '#ffc107', '#17a2b8', '#6f42c1', '#fd7e14']
+        routeColors: ['#0B6FA6', '#1F8A8A', '#7A4FA0', '#E8702A', '#A8457E', '#C98A1D', '#8A5A3C']
     };
 
     // Every route/legend color used on this page comes from a fixed palette
@@ -18,14 +18,16 @@
     // hex to a CSS class instead of an inline style="" so CSP style-src can
     // drop 'unsafe-inline' (#475).
     const ROUTE_COLOR_CLASS = {
-        '#007bff': 'c-blue',
-        '#28a745': 'c-green',
-        '#dc3545': 'c-red',
-        '#ffc107': 'c-yellow',
-        '#17a2b8': 'c-teal',
-        '#6f42c1': 'c-purple',
-        '#fd7e14': 'c-orange',
-        '#6c757d': 'c-gray'
+        '#0B6FA6': 'c-blue',
+        '#1F8A8A': 'c-teal',
+        '#7A4FA0': 'c-purple',
+        '#E8702A': 'c-orange',
+        '#A8457E': 'c-magenta',
+        '#C98A1D': 'c-amber',
+        '#8A5A3C': 'c-brown',
+        '#2D7A52': 'c-green',
+        '#C4483A': 'c-red',
+        '#5B7686': 'c-gray'
     };
 
     function colorClass(hex) {
@@ -56,20 +58,20 @@
 
     function distanceColor(distanceKm) {
         const mi = distanceKm * 0.621371;
-        if (mi < 10) return '#28a745';
-        if (mi < 20) return '#ffc107';
-        if (mi < 40) return '#fd7e14';
-        return '#dc3545';
+        if (mi < 10) return '#2D7A52';
+        if (mi < 20) return '#C98A1D';
+        if (mi < 40) return '#E8702A';
+        return '#C4483A';
     }
 
     function recencyColor(isoDate) {
-        if (!isoDate) return '#6c757d';
+        if (!isoDate) return '#5B7686';
         const days = (Date.now() - new Date(isoDate).getTime()) / 86400000;
-        if (days < 30) return '#007bff';
-        if (days < 90) return '#28a745';
-        if (days < 180) return '#ffc107';
-        if (days < 365) return '#fd7e14';
-        return '#6c757d';
+        if (days < 30) return '#0B6FA6';
+        if (days < 90) return '#2D7A52';
+        if (days < 180) return '#C98A1D';
+        if (days < 365) return '#E8702A';
+        return '#5B7686';
     }
 
     function getColorForRoute(route, index) {
@@ -96,11 +98,11 @@
 
         if (mode === 'distance') {
             legendEl.innerHTML = '<span class="me-2 fw-semibold">Distance:</span>'
-                + ['#28a745|<10' + unit, '#ffc107|10–20' + unit, '#fd7e14|20–40' + unit, '#dc3545|>40' + unit]
+                + ['#2D7A52|<10' + unit, '#C98A1D|10–20' + unit, '#E8702A|20–40' + unit, '#C4483A|>40' + unit]
                     .map(s => { const [c, l] = s.split('|'); return `<span class="me-2"><span class="legend-dot ${colorClass(c)}"></span> ${l}</span>`; }).join('');
         } else {
             legendEl.innerHTML = '<span class="me-2 fw-semibold">Last ridden:</span>'
-                + ['#007bff|<30d', '#28a745|1–3mo', '#ffc107|3–6mo', '#fd7e14|6–12mo', '#6c757d|>1yr']
+                + ['#0B6FA6|<30d', '#2D7A52|1–3mo', '#C98A1D|3–6mo', '#E8702A|6–12mo', '#5B7686|>1yr']
                     .map(s => { const [c, l] = s.split('|'); return `<span class="me-2"><span class="legend-dot ${colorClass(c)}"></span> ${l}</span>`; }).join('');
         }
     }

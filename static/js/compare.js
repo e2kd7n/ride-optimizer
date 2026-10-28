@@ -43,7 +43,7 @@
                 }).addTo(map);
 
                 const polyline = L.polyline(coordinates, {
-                    color: '#007bff',
+                    color: '#0B6FA6',
                     weight: 4,
                     opacity: 0.8
                 }).addTo(map);

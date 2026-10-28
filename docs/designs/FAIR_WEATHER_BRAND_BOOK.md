@@ -150,6 +150,18 @@ Big and tabular numbers (hero score, temperature, cell values, stat cards, route
 
 Three radii only: `--radius-sm` 8px (anything nested in a card, alerts, toasts, list rows, hourly cells), `--radius-md` 16px (cards), `--radius-pill` (buttons, badges, chips). 8px nested inside a 16px card with a 16px inset keeps the corners concentric. The 4px and 6px radii are retired.
 
+### Route palette
+
+Map polylines, legend dots and chart series take their colours from one fixed palette. These are the same values in `static/css/main.css` (`.c-*`), `static/js/routes.js`, and `app/api/maps_api.py::get_route_color`.
+
+| Use | Colours |
+|---|---|
+| **Identity** (route 1, route 2…, chart series, travel direction) | Cobalt `#0B6FA6`, Teal `#1F8A8A`, Purple `#7A4FA0`, Orange `#E8702A`, Magenta `#A8457E`, Amber `#C98A1D`, Brown `#8A5A3C`, Slate `#5B7686` |
+| **Ordered scale** (Routes page distance and recency legends) | Green `#2D7A52`, Amber `#C98A1D`, Orange `#E8702A` and Red `#C4483A`, with Cobalt for the newest and Slate for the oldest |
+| **Score** (a map line coloured by its match score) | The verdict fills above, on the same 70/50 scale |
+
+Identity colours never use the verdict green or red, so a route can't read as Good or Poor just because of its place in a list. Commutes are cobalt to work and teal home, on both the map and the cards. Bootstrap's default `#007bff`, `#28a745` and related colours are retired.
+
 ---
 
 ## Content rules introduced with this brand

@@ -507,16 +507,16 @@ class TestRouteColorAndConfidence:
     """Test _get_route_color and _get_confidence_label."""
 
     def test_route_color_high_score(self, commute_service):
-        assert commute_service._get_route_color(0.90) == '#28a745'
+        assert commute_service._get_route_color(0.90) == '#188038'
 
     def test_route_color_medium_score(self, commute_service):
-        assert commute_service._get_route_color(0.75) == '#007bff'
+        assert commute_service._get_route_color(0.75) == '#188038'
 
     def test_route_color_low_score(self, commute_service):
-        assert commute_service._get_route_color(0.55) == '#ffc107'
+        assert commute_service._get_route_color(0.55) == '#F2A900'
 
     def test_route_color_very_low_score(self, commute_service):
-        assert commute_service._get_route_color(0.30) == '#dc3545'
+        assert commute_service._get_route_color(0.30) == '#C62828'
 
     def test_confidence_high(self, commute_service):
         assert commute_service._get_confidence_label(0.90) == 'high'
@@ -1018,5 +1018,5 @@ class TestGenerateComparisonMapEmpty:
 
         html = commute_service.generate_comparison_map(routes, home, work)
         assert html is not None
-        assert '#28a745' in html  # Green for to_work
+        assert '#0B6FA6' in html  # Cobalt for to_work
 
