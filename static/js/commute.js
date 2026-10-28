@@ -128,7 +128,7 @@
             <div class="commute-route-name">${escapeHtml(route.name)}</div>
             <div class="commute-time-window">
                 <i class="bi bi-clock"></i> ${escapeHtml(timeWindow)}
-                ${isToday ? '<span class="badge bg-success ms-2">Today</span>' : '<span class="badge bg-info ms-2">Tomorrow</span>'}
+                ${isToday ? '<span class="badge bg-primary ms-2">Today</span>' : '<span class="badge bg-secondary ms-2">Tomorrow</span>'}
             </div>
             <div class="mb-2">
                 <span class="badge bg-${severity.color} commute-weather-badge" title="Weather conditions: ${severity.label}">

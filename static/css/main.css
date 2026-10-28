@@ -37,6 +37,7 @@
     --danger: #C4483A;
     /* RGB triplet for alpha tints of the accent (kept in sync with --accent) */
     --accent-rgb: 11, 111, 166;
+    --dir-home: #1A7575;         /* teal as text, 5.5:1 (map lines use #1F8A8A) */
 
     /* Text on a filled accent/semantic surface. The text colour belongs to
        the fill (CIQ rule): white only where it clears 4.5:1. Coral and
@@ -149,9 +150,9 @@
     --color-bg-selected: rgba(var(--accent-rgb), 0.1);
 
     /* Workout color tokens (#340) */
-    --workout-color: #e85d04;
-    --workout-bg: rgba(232, 93, 4, 0.08);
-    --workout-border: rgba(232, 93, 4, 0.3);
+    --workout-color: #B54708;    /* 4.9:1 on its own tint (#e85d04 was 3.2) */
+    --workout-bg: rgba(181, 71, 8, 0.08);
+    --workout-border: rgba(181, 71, 8, 0.3);
 }
 
 /* #519 (SEM-3): workout *category* is not a value judgment, so it needs its
@@ -159,6 +160,15 @@
    workout type collided with those same classes' use for fit-quality
    ratings on the same card (e.g. a Threshold badge and a "Poor fit" badge
    both rendering red for unrelated reasons). */
+/* Commute direction badges: outline in the direction's identity colour
+   (cobalt to work, teal home; Brand Book §Route palette). */
+.badge-dir {
+    background: transparent;
+    border: 1px solid currentColor;
+}
+.badge-dir-work { color: var(--accent); }
+.badge-dir-home { color: var(--dir-home); }
+
 .badge-workout-type {
     background: var(--workout-bg);
     color: var(--workout-color);
@@ -187,6 +197,7 @@ html[data-theme="night"] {
     --on-success: #0B1620;
     --on-warning: #0B1620;
     --on-danger: #0B1620;
+    --dir-home: #3FB5B5;         /* 6.5:1 on the Night surface */
     --bs-primary-rgb: 79, 179, 232;
     --bs-info-rgb: 79, 179, 232;
     --bs-success-rgb: 87, 179, 132;
@@ -522,6 +533,12 @@ a.card:hover,
 
 .bg-primary {
     background-color: var(--accent) !important;
+}
+
+/* Markup that pairs bg-primary with text-white (Settings card headers) gets
+   the fill's own text colour; white on the Night cobalt is 2.35:1. */
+.bg-primary.text-white {
+    color: var(--on-accent) !important;
 }
 
 /* Bootstrap badges hardcode white text; pair each fill with its own text
@@ -2337,6 +2354,13 @@ h5.card-title {
     letter-spacing: 0.04em;
     text-transform: uppercase;
     white-space: nowrap;
+}
+
+/* The icon is part of the verdict: it takes the chip's ink even inside rows
+   that tint their own leading icons (.workout-fit-row, .workout-fit-compact). */
+.verdict-chip > i.bi {
+    color: inherit;
+    margin: 0;
 }
 
 .verdict-chip .glance-chip-num {

@@ -663,30 +663,28 @@
         card.style.transition = 'background-color 0.1s ease, border-color 0.15s ease';
 
         const isSelected = state.selectedForComparison.some(r => r.id === route.id);
-        card.addEventListener('mouseenter', () => { card.style.backgroundColor = 'var(--bs-light, #f8f9fa)'; });
+        card.addEventListener('mouseenter', () => { card.style.backgroundColor = 'var(--surface-2)'; });
         card.addEventListener('mouseleave', () => { card.style.backgroundColor = ''; });
 
         const rawDifficulty = route.difficulty || 'Easy';
         const difficulty = rawDifficulty.charAt(0).toUpperCase() + rawDifficulty.slice(1).toLowerCase();
-        const difficultyColors = {
-            'Easy': 'bg-success', 'Moderate': 'bg-primary',
-            'Hard': 'bg-warning text-dark', 'Very hard': 'bg-danger'
-        };
         const difficultyIcons = {
             'Easy': 'bi-check-circle', 'Moderate': 'bi-dash-circle',
             'Hard': 'bi-exclamation-circle', 'Very hard': 'bi-exclamation-triangle-fill'
         };
 
         const favIcon   = route.is_favorite  ? '<i class="bi bi-star-fill text-warning me-1" aria-hidden="true"></i>' : '';
-        const plusBadge = route.is_plus_route ? '<span class="badge bg-success-subtle text-success-emphasis me-1 badge-plus">PLUS</span>' : '';
-        const diffBadge = `<span class="badge ${difficultyColors[difficulty]} flex-shrink-0 fs-07em" title="${difficulty}" aria-label="Difficulty: ${difficulty}"><i class="bi ${difficultyIcons[difficulty]}" aria-hidden="true"></i></span>`;
+        const plusBadge = route.is_plus_route ? '<span class="badge bg-primary-subtle text-primary-emphasis me-1 badge-plus">PLUS</span>' : '';
+        // Difficulty is a property, not a verdict: a neutral badge, with the
+        // icon (and title) carrying the level. Green/red mean Good/Poor.
+        const diffBadge = `<span class="badge bg-secondary flex-shrink-0 fs-07em" title="${difficulty}" aria-label="Difficulty: ${difficulty}"><i class="bi ${difficultyIcons[difficulty]}" aria-hidden="true"></i></span>`;
 
         // Direction badge for commute routes
         let dirBadge = '';
         if (route.direction === 'home_to_work') {
-            dirBadge = '<span class="badge border border-info-subtle text-info-emphasis flex-shrink-0 ms-1 fs-065em" title="Direction: To Work" aria-label="Direction: To Work"><i class="bi bi-sunrise" aria-hidden="true"></i> To Work</span>';
+            dirBadge = '<span class="badge badge-dir badge-dir-work flex-shrink-0 ms-1 fs-065em" title="Direction: To Work" aria-label="Direction: To Work"><i class="bi bi-sunrise" aria-hidden="true"></i> To Work</span>';
         } else if (route.direction === 'work_to_home') {
-            dirBadge = '<span class="badge border border-warning-subtle text-warning-emphasis flex-shrink-0 ms-1 fs-065em" title="Direction: To Home" aria-label="Direction: To Home"><i class="bi bi-sunset" aria-hidden="true"></i> To Home</span>';
+            dirBadge = '<span class="badge badge-dir badge-dir-home flex-shrink-0 ms-1 fs-065em" title="Direction: To Home" aria-label="Direction: To Home"><i class="bi bi-sunset" aria-hidden="true"></i> To Home</span>';
         }
 
         // Terrain label for sub-line (extracted from name)

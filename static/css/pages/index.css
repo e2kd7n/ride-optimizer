@@ -52,6 +52,14 @@
             gap: var(--space-1);
         }
         
+        /* Retry button in the banner's error state takes the banner's ink,
+           so it stays visible on both the Day and Night cobalt. */
+        .weather-banner .weather-retry-btn {
+            color: inherit;
+            border: 1px solid currentColor;
+            background: transparent;
+        }
+
         .weather-banner .comfort-badge {
             background: rgba(255,255,255,0.2);
             padding: var(--space-1) var(--space-2);

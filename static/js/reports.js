@@ -233,7 +233,7 @@ function renderGearCards(data) {
 
     const cards = data.gear.map(g => {
         const typeIcon = g.type === 'bike' ? '🚲' : g.type === 'shoe' ? '👟' : '⚙️';
-        const primary = g.primary ? '<span class="badge bg-success ms-1 fs-9">Primary</span>' : '';
+        const primary = g.primary ? '<span class="badge bg-primary ms-1 fs-9">Primary</span>' : '';
         const lastUsed = g.last_used ? `Last used ${g.last_used}` : '';
         const displayName = gearDisplayName(g);
         return `<div class="col-12 col-md-6">

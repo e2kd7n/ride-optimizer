@@ -31,8 +31,8 @@ async function loadDashboard() {
 const WORKOUT_TYPE_BADGE_CLASS = 'badge-workout-type';
 
 /**
- * Shared score-to-rating bucketing for the hero border and the route status
- * icon, so the two decision-critical widgets on the "Today" screen agree on
+ * Shared score-to-rating bucketing for every verdict on the "Today" screen
+ * (hero panel, route status, workout fit, ride options), so they all agree on
  * what a given score means (#546, SEM-2). Three buckets, not five — that's
  * all the semantic tokens (--success/--warning/--danger) the app has.
  */
@@ -190,7 +190,6 @@ function renderWorkoutOptionCards(options, esc) {
     if (options.commute) {
         const c = options.commute;
         const scorePct = Math.round((c.fit_score || 0) * 100);
-        const scoreClass = scorePct >= 70 ? 'bg-success' : scorePct >= 40 ? 'bg-warning text-dark' : 'bg-secondary';
         cards.push(`
             <div class="workout-option-card active" data-option="commute" role="button" tabindex="0">
                 <div class="workout-option-label"><i class="bi bi-signpost-2"></i> Commute${c.is_extended ? '+Workout' : ''}</div>
@@ -199,14 +198,15 @@ function renderWorkoutOptionCards(options, esc) {
                     ${c.duration_minutes ? `<span>${c.duration_minutes} min</span>` : ''}
                     ${c.route && c.route.distance ? `<span>${window.formatDistance(c.route.distance)}</span>` : ''}
                 </div>
-                <span class="badge ${scoreClass} mt-1">${scorePct > 0 ? scorePct + ' fit' : 'Commute fit'}</span>
+                ${scorePct > 0
+                    ? `<span class="mt-1">${verdictChip(scoreToRating(scorePct), `${scorePct} fit`)}</span>`
+                    : '<span class="badge bg-secondary mt-1">Commute fit</span>'}
             </div>`);
     }
 
     if (options.workout_ride) {
         const wr = options.workout_ride;
         const scorePct = Math.round((wr.fit_score || 0) * 100);
-        const scoreClass = scorePct >= 70 ? 'bg-success' : scorePct >= 40 ? 'bg-warning text-dark' : 'bg-secondary';
         cards.push(`
             <div class="workout-option-card" data-option="workout_ride" role="button" tabindex="0">
                 <div class="workout-option-label"><i class="bi bi-bicycle"></i> Dedicated Ride</div>
@@ -215,7 +215,9 @@ function renderWorkoutOptionCards(options, esc) {
                     ${wr.duration_minutes ? `<span>${wr.duration_minutes} min</span>` : ''}
                     ${wr.route && wr.route.distance ? `<span>${window.formatDistance(wr.route.distance)}</span>` : ''}
                 </div>
-                <span class="badge ${scoreClass} mt-1">${scorePct > 0 ? scorePct + ' match' : 'Best match'}</span>
+                ${scorePct > 0
+                    ? `<span class="mt-1">${verdictChip(scoreToRating(scorePct), `${scorePct} match`)}</span>`
+                    : '<span class="badge bg-secondary mt-1">Best match</span>'}
             </div>`);
     }
 
@@ -229,7 +231,7 @@ function renderWorkoutOptionCards(options, esc) {
                     ${gr.avg_duration_minutes ? `<span>~${gr.avg_duration_minutes} min</span>` : ''}
                     ${gr.avg_distance_miles ? `<span>~${gr.avg_distance_miles} mi</span>` : ''}
                 </div>
-                <span class="badge bg-info text-dark mt-1">${gr.frequency}x ridden</span>
+                <span class="badge bg-secondary mt-1">${gr.frequency}x ridden</span>
             </div>`);
     }
 
@@ -271,11 +273,7 @@ function renderWorkoutFitRow(rec) {
         'Recovery':  'bi-heart',
     };
 
-    const rating = fitScore >= 0.7 ? 'Good'
-                 : fitScore >= 0.4 ? 'Moderate' : 'Poor';
-    const ratingClass = rating === 'Good' ? 'bg-success-subtle text-success'
-                      : rating === 'Moderate' ? 'bg-warning-subtle text-dark'
-                      : 'bg-danger-subtle text-danger';
+    const fitChip = verdictChip(scoreToRating(fitScore * 100));
     const typeIcon = WORKOUT_TYPE_ICONS[workoutFit.workout_type] || 'bi-activity';
 
     const wType = esc(workoutFit.workout_type || '');
@@ -286,7 +284,7 @@ function renderWorkoutFitRow(rec) {
             <div class="workout-fit-row-header">
                 <i class="bi ${typeIcon}" aria-hidden="true"></i>
                 <span class="fw-semibold">Workout fit:</span>
-                <span class="badge ${ratingClass} ms-auto">${rating}</span>
+                <span class="ms-auto">${fitChip}</span>
             </div>
             ${reasons ? `<div class="workout-fit-row-reasons">${reasons}</div>` : ''}`;
 
@@ -317,11 +315,7 @@ function renderWorkoutFitCompact(rec) {
 
     const esc = window.escapeHtml;
     const fitScore = workoutFit.fit_score || 0;
-    const rating = fitScore >= 0.7 ? 'Good'
-                 : fitScore >= 0.4 ? 'Moderate' : 'Poor';
-    const ratingClass = rating === 'Good' ? 'bg-success-subtle text-success'
-                      : rating === 'Moderate' ? 'bg-warning-subtle text-dark'
-                      : 'bg-danger-subtle text-danger';
+    const fitChip = verdictChip(scoreToRating(fitScore * 100));
     const wName = esc(workoutFit.workout_name || 'Workout');
     // #587 — reuse the same workout-fit-row-reasons caption the hero card
     // (renderWorkoutFitRow, above) and #519's ride-option cards already use,
@@ -332,7 +326,7 @@ function renderWorkoutFitCompact(rec) {
         <div class="workout-fit-compact">
             <i class="bi bi-heart-pulse" aria-hidden="true"></i>
             <span>${wName} fit:</span>
-            <span class="badge ${ratingClass}">${rating}</span>
+            ${fitChip}
         </div>
         ${reasons ? `<div class="workout-fit-row-reasons">${reasons}</div>` : ''}`;
 }
@@ -351,9 +345,7 @@ function renderWorkoutRideOption(workoutRide) {
 
     const rideCards = workoutRide.rides.map(ride => {
         const scorePct = Math.round(ride.score * 100);
-        const scoreClass = scorePct >= 70 ? 'bg-success'
-                         : scorePct >= 50 ? 'bg-warning text-dark'
-                         : 'bg-danger';
+        const rating = scoreToRating(scorePct);
         // #519 — reuse the workout-fit-row-reasons caption pattern so the
         // "why this route" explanation reads the same way it does on the
         // commute hero card, instead of a bare unexplained score.
@@ -369,7 +361,7 @@ function renderWorkoutRideOption(workoutRide) {
                             <span><i class="bi bi-graph-up" aria-hidden="true"></i> ${ride.elevation_ft} ft</span>
                         </div>
                     </div>
-                    <span class="badge ${scoreClass}">${scorePct}</span>
+                    ${verdictChip(rating, `${VERDICTS[rating].word} <span class="glance-chip-num">${scorePct}</span>`)}
                 </div>
                 ${reasons ? `<div class="workout-fit-row-reasons">${reasons}</div>` : ''}
             </div>`;
@@ -458,7 +450,7 @@ async function loadWeather() {
         const weather = await window.apiClient.getWeather();
         
         if (!weather || !weather.current) {
-            container.innerHTML = '<span class="text-white opacity-75 small"><i class="bi bi-cloud-slash me-1"></i>Weather data unavailable</span>';
+            container.innerHTML = '<span class="opacity-75 small"><i class="bi bi-cloud-slash me-1"></i>Weather data unavailable</span>';
             return;
         }
         
@@ -512,7 +504,7 @@ async function loadWeather() {
         container.innerHTML = html;
     } catch (error) {
         console.error('Failed to load weather:', error);
-        container.innerHTML = '<span class="text-white small"><i class="bi bi-cloud-slash me-1"></i>Weather unavailable <button type="button" class="btn btn-sm btn-outline-light ms-2 py-0 px-1 weather-retry-btn">Retry</button></span>';
+        container.innerHTML = '<span class="small"><i class="bi bi-cloud-slash me-1"></i>Weather unavailable <button type="button" class="btn btn-sm ms-2 weather-retry-btn">Retry</button></span>';
         container.querySelector('.weather-retry-btn').addEventListener('click', loadWeather);
     }
 }
