@@ -27,7 +27,7 @@
         }
         .winner-badge {
             background-color: var(--success);
-            color: white;
+            color: var(--on-success);
             padding: var(--space-1) var(--space-2);
             border-radius: 4px;
             font-size: var(--font-size-xs);

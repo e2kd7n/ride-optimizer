@@ -41,6 +41,25 @@ function scoreToRating(score) {
 }
 
 /**
+ * Word + icon for each rating (Brand Book §Glance layer). Every verdict is
+ * carried by colour, word and icon together, so it still reads for a
+ * colour-blind rider or on a washed-out screen. The `verdict-<rating>` class
+ * supplies the matching fill and text colour.
+ */
+const VERDICTS = {
+    good: { word: 'Good', icon: 'bi-check-circle-fill' },
+    warn: { word: 'Fair', icon: 'bi-exclamation-triangle-fill' },
+    bad:  { word: 'Poor', icon: 'bi-x-circle-fill' },
+};
+
+/** Compact pill form of a verdict; `text` defaults to the verdict word. */
+function verdictChip(rating, text) {
+    const v = VERDICTS[rating] || VERDICTS.warn;
+    return `<span class="verdict-chip verdict-${rating}">`
+        + `<i class="bi ${v.icon}" aria-hidden="true"></i>${text || v.word}</span>`;
+}
+
+/**
  * Shared workout data cache — fetched once per dashboard load,
  * used by both the workout strip and the weather banner pill.
  */
@@ -537,17 +556,16 @@ function renderHeroCard(rec, isHero, secondaryRec) {
     const score = typeof rec.score === 'number' && rec.score <= 1
         ? Math.round(rec.score * 100)
         : Math.round(rec.score || 0);
-    const scoreClass = getScoreClass(score);
-    const scoreIcon = score >= 80 ? 'bi-check-circle-fill text-success'
-                    : score >= 60 ? 'bi-hand-thumbs-up-fill text-info'
-                    : score >= 40 ? 'bi-exclamation-triangle-fill text-warning'
-                    : 'bi-x-circle-fill text-danger';
+    // One bucketing for the panel colour, word, icon and chip (#546) — this
+    // card previously mixed three scales, so a 70 drew a green border next
+    // to a cobalt thumbs-up and a cobalt score badge.
+    const rating = scoreToRating(score);
+    const verdict = VERDICTS[rating];
     const isExtended = rec.is_workout_extended;
     const routeName = esc(route.name || 'Route') + (isExtended ? ' <span class="text-muted fw-normal">(extended)</span>' : '');
     const confidence = esc(rec.confidence || 'Recommended');
     const weatherSummary = rec.weather_summary ? esc(rec.weather_summary) : '';
     const reasons = rec.reasons || [];
-    const timeLabel = rec.time_impact && rec.time_impact.label ? esc(rec.time_impact.label) : null;
     const estMins = rec.time_impact && rec.time_impact.estimated_minutes;
     const departureTime = rec.departure_time ? esc(rec.departure_time) : null;
 
@@ -557,15 +575,12 @@ function renderHeroCard(rec, isHero, secondaryRec) {
         ? (typeof secondaryRec.score === 'number' && secondaryRec.score <= 1 ? Math.round(secondaryRec.score * 100) : Math.round(secondaryRec.score || 0))
         : null;
     const compareLabel = secondaryScore !== null
-        ? `Compare both directions — return score: ${secondaryScore}`
+        ? `Compare directions · return ${secondaryScore}`
         : 'Compare both directions';
 
-    const borderClass = `hero-border-${scoreToRating(score)}`;
     const windImpact = rec.wind_impact;
-    const windBadge = windImpact
-        ? `<span class="badge bg-light text-dark border ms-2" title="Wind impact on this route">
-               <i class="bi ${esc(windImpact.icon || 'bi-wind')}"></i> ${esc(windImpact.label)}
-           </span>`
+    const windNote = windImpact
+        ? `<span title="Wind impact on this route"><i class="bi ${esc(windImpact.icon || 'bi-wind')}" aria-hidden="true"></i>${esc(windImpact.label)}</span>`
         : '';
 
     const transit = rec.transit_recommendation;
@@ -588,41 +603,56 @@ function renderHeroCard(rec, isHero, secondaryRec) {
     })() : '';
 
     if (isHero) {
+        // Glance panel (Brand Book §Glance layer): the verdict as colour +
+        // word + icon, the score as the one big number, the route under it.
+        // Secondary facts drop to LABEL / value cells below the panel.
+        const cell = (label, value) => `
+            <div class="glance-cell">
+                <div class="glance-label">${label}</div>
+                <div class="glance-value">${value}</div>
+            </div>`;
+        const conditions = [
+            weatherSummary ? `<span><i class="bi bi-cloud-sun" aria-hidden="true"></i>${weatherSummary}</span>` : '',
+            windNote,
+            `<span class="badge bg-secondary">${confidence}</span>`,
+        ].filter(Boolean).join('');
         return `
-            <div class="hero-decision-card ${borderClass}">
-                <div class="hero-card-header">
-                    <span class="hero-route-name">
-                        <i class="bi ${scoreIcon} me-1"></i>${routeName}
-                        <span class="badge ${scoreClass} ms-2">${score}</span>
-                        ${windBadge}
-                    </span>
-                    <span class="hero-confidence badge bg-secondary">${confidence}</span>
+            <div class="hero-decision-card">
+                <div class="glance-panel verdict-${rating}" role="status"
+                     aria-label="${verdict.word}: ${esc(route.name || 'Route')}, match score ${score} of 100">
+                    <div class="glance-panel-main">
+                        <div class="glance-word"><i class="bi ${verdict.icon}" aria-hidden="true"></i>${verdict.word}</div>
+                        <div class="glance-sub hero-route-name">${routeName}</div>
+                    </div>
+                    <div class="glance-figure" aria-hidden="true">
+                        <span class="glance-num">${score}</span><span class="glance-unit">match</span>
+                    </div>
                 </div>
-                ${weatherSummary ? `<div class="hero-weather-summary"><i class="bi bi-cloud-sun me-1"></i>${weatherSummary}</div>` : ''}
-                ${estMins ? `<div class="hero-time-estimate"><i class="bi bi-clock me-1"></i>${timeLabel}</div>` : ''}
+                <div class="hero-conditions">${conditions}</div>
+                <div class="glance-cells">
+                    ${cell('Distance', route.distance ? esc(window.formatDistance(route.distance)) : '—')}
+                    ${cell('Climb', route.elevation != null ? esc(window.formatElevation(route.elevation)) : '—')}
+                    ${departureTime ? cell('Leave', departureTime) : ''}
+                    ${estMins ? cell('Ride time', `${estMins}<span class="glance-unit">min</span>`) : ''}
+                </div>
                 ${reasons.length ? `
-                    <div class="small fw-semibold text-muted mt-2 mb-1">Why this route?</div>
+                    <div class="glance-label hero-reasons-label">Why this route</div>
                     <ul class="hero-reasons">
                         ${reasons.map(r => `<li>${esc(r)}</li>`).join('')}
                     </ul>
                 ` : ''}
                 ${renderWorkoutFitRow(rec)}
-                <div class="hero-meta small text-muted mt-2">
-                    <span><i class="bi bi-signpost"></i> ${route.distance ? window.formatDistance(route.distance) : '—'}</span>
-                    <span class="ms-3"><i class="bi bi-graph-up"></i> ${route.elevation != null ? window.formatElevation(route.elevation) : '—'}</span>
-                    ${departureTime ? `<span class="ms-3"><i class="bi bi-alarm"></i> ${departureTime}</span>` : ''}
-                </div>
                 ${transitBanner}
-                <div class="mt-3 d-flex gap-2 flex-wrap">
+                <div class="hero-actions">
                     ${route.id ? `
                     <a href="route-detail.html?id=${encodeURIComponent(route.id)}" class="btn btn-cta btn-sm">
-                        <i class="bi bi-map me-1"></i>View route
+                        <i class="bi bi-map" aria-hidden="true"></i>View route
                     </a>` : ''}
                     <button type="button" class="btn btn-outline-secondary btn-sm commute-compare-toggle"
                             data-bs-toggle="collapse" data-bs-target="#commute-detail"
                             aria-expanded="false" aria-controls="commute-detail">
-                        <i class="bi bi-list-ul"></i> ${compareLabel}
-                        <i class="bi bi-chevron-down ms-1 commute-chevron"></i>
+                        <i class="bi bi-list-ul" aria-hidden="true"></i>${compareLabel}
+                        <i class="bi bi-chevron-down commute-chevron" aria-hidden="true"></i>
                     </button>
                 </div>
             </div>`;
@@ -631,11 +661,9 @@ function renderHeroCard(rec, isHero, secondaryRec) {
     // Compact secondary card with optional workout fit annotation (Design B §3)
     return `
         <div class="secondary-commute-card border rounded p-2 mt-3">
-            <div class="d-flex align-items-center justify-content-between">
-                <span class="small fw-semibold">
-                    <i class="bi ${scoreIcon} me-1"></i>${routeName}
-                </span>
-                <span class="badge ${scoreClass}">${score}</span>
+            <div class="d-flex align-items-center justify-content-between gap-2">
+                <span class="small fw-semibold text-truncate">${routeName}</span>
+                ${verdictChip(rating, `${verdict.word} <span class="glance-chip-num">${score}</span>`)}
             </div>
             ${weatherSummary ? `<div class="small text-muted mt-1">${weatherSummary}</div>` : ''}
             <div class="d-flex gap-3 mt-1 small text-muted">
@@ -737,9 +765,7 @@ async function loadRouteStatus() {
             const score = route.condition_score || 75;
             const rating = scoreToRating(score);
             const colorClass = `route-status-icon-${rating}`;
-            const icon = rating === 'good' ? 'bi-check-circle-fill'
-                : rating === 'warn' ? 'bi-exclamation-triangle-fill'
-                : 'bi-x-circle-fill';
+            const icon = VERDICTS[rating].icon;
             const name = esc((route.name || 'Route').slice(0, 22));
             return `
                 <div class="route-status-row d-flex align-items-center gap-2 py-1">
@@ -791,10 +817,10 @@ async function loadRouteStatus() {
  * semantic tiers (success/warning/danger) the rest of the dashboard uses —
  * mirrors PlannerService's own 'favorable'/'neutral'/'unfavorable' buckets.
  */
-function longRideFitClass(favorability) {
-    return favorability === 'favorable' ? 'bg-success-subtle text-success'
-         : favorability === 'unfavorable' ? 'bg-danger-subtle text-danger'
-         : 'bg-warning-subtle text-dark';
+function longRideFitRating(favorability) {
+    return favorability === 'favorable' ? 'good'
+         : favorability === 'unfavorable' ? 'bad'
+         : 'warn';
 }
 
 /** Wind speed in the user's preferred unit, matching window.formatDistance's convention. */
@@ -832,7 +858,7 @@ function renderLongRideDay(dayRec, isPrimary) {
                 <span class="${isPrimary ? 'hero-route-name' : 'small fw-semibold'}">
                     <i class="bi bi-calendar-check me-1"></i>${esc(dayLabel)}
                 </span>
-                <span class="badge ${longRideFitClass(favorability)}">${fitLabel}</span>
+                ${verdictChip(longRideFitRating(favorability), fitLabel)}
             </div>
             <div class="${isPrimary ? '' : 'small'} mt-1">${esc(ride.name || 'Ride')}</div>
             <div class="hero-meta small text-muted mt-1">
@@ -944,16 +970,6 @@ async function loadHourlyForecast() {
         console.error('Failed to load hourly forecast:', error);
         window.renderErrorStateInto(container, 'Hourly forecast unavailable.', { small: true, retry: loadHourlyForecast });
     }
-}
-
-/**
- * Utility: Get Bootstrap class for recommendation score
- */
-function getScoreClass(score) {
-    if (score >= 80) return 'bg-success';
-    if (score >= 60) return 'bg-primary';
-    if (score >= 40) return 'bg-warning';
-    return 'bg-danger';
 }
 
 /**

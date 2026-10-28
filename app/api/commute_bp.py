@@ -133,12 +133,15 @@ def _enrich_commute_recommendation(rec: Dict[str, Any]) -> Dict[str, Any]:
     enriched['reasons'] = reasons[:4]
 
     # time_impact
-    duration_secs = route.get('duration', 0)
-    duration_mins = round(duration_secs / 60) if duration_secs else None
+    # CommuteService already converts route duration to minutes
+    # (rep.duration / 60); dividing again here showed a 45-minute commute
+    # as "~1 minutes estimated".
+    duration_mins = round(route.get('duration') or 0) or None
     enriched['time_impact'] = {
         'estimated_minutes': duration_mins,
         'vs_average_minutes': None,
-        'label': f'~{duration_mins} minutes estimated' if duration_mins else None
+        'label': (f'~{duration_mins} minute{"" if duration_mins == 1 else "s"} estimated'
+                  if duration_mins else None)
     }
 
     # transit_recommendation

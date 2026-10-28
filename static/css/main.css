@@ -4,6 +4,17 @@
  */
 
 /* ===== Global Styles ===== */
+/* Glance numerals: Barlow Condensed SemiBold (SIL OFL 1.1, static/fonts/OFL.txt),
+   the same digit face the Connect IQ data fields use — self-hosted so the Pi
+   PWA renders it offline and CSP font-src 'self' covers it. */
+@font-face {
+    font-family: "Barlow Condensed";
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url("/fonts/barlow-condensed-latin-600.woff2") format("woff2");
+}
+
 /* Fair Weather brand tokens — see docs/designs/FAIR_WEATHER_BRAND_BOOK.md */
 :root {
     /* Tell the browser this page manages its own dark theme, so it doesn't
@@ -27,8 +38,39 @@
     /* RGB triplet for alpha tints of the accent (kept in sync with --accent) */
     --accent-rgb: 11, 111, 166;
 
+    /* Text on a filled accent/semantic surface. The text colour belongs to
+       the fill (CIQ rule): white only where it clears 4.5:1. Coral and
+       warning take ink by day; in Night every fill is light enough that
+       white fell to 2.2–3.3:1, so all of them take the night ground. */
+    --on-accent: #FFFFFF;        /* 5.5:1 */
+    --on-accent-warm: #0F2233;   /* 5.2:1 (white was 3.1) */
+    --on-success: #FFFFFF;       /* 4.0:1 — best available on this fill; bold/large only */
+    --on-warning: #0F2233;       /* 5.5:1 (white was 2.9) */
+    --on-danger: #FFFFFF;        /* 4.8:1 */
+
     /* Display face (headlines, decision copy, CTA labels) */
     --font-display: "Century Gothic", "Avenir Next", "Futura", -apple-system, sans-serif;
+    /* Glance numerals (hero score, temperature, label/value cells) */
+    --font-numeric: "Barlow Condensed", "Roboto Condensed", "Arial Narrow", sans-serif;
+
+    /* Verdict fills (Brand Book §Glance layer). Deliberately NOT redefined
+       for Night: like the CIQ fields, a verdict panel looks identical on both
+       grounds and only the page around it switches. Each fill carries its own
+       text colour, chosen for >= 5:1 contrast. */
+    --verdict-good: #188038;
+    --verdict-good-ink: #FFFFFF;
+    --verdict-warn: #F2A900;
+    --verdict-warn-ink: #111111;
+    --verdict-bad: #C62828;
+    --verdict-bad-ink: #FFFFFF;
+    --verdict-neutral: #455A64;
+    --verdict-neutral-ink: #FFFFFF;
+
+    /* Corner radii: three steps only. 8px for anything nested inside a card
+       (16px card - 8px inset = 8px keeps the corners concentric). */
+    --radius-sm: 8px;
+    --radius-md: 16px;
+    --radius-pill: 999px;
 
     /* Legacy aliases — pre-rebrand names kept so untouched code still works.
        Gradients are retired: flat cobalt everywhere. */
@@ -88,6 +130,7 @@
     --font-size-xs:      0.75rem;
     --font-size-sm:      0.875rem;
     --font-size-base:    1rem;
+    --font-size-md:      1.25rem;
     --font-size-lg:      1.5rem;
     --font-size-xl:      2rem;
     --font-size-hero:    2.5rem;
@@ -138,6 +181,12 @@ html[data-theme="night"] {
     --warning: #E0A63E;
     --danger: #E2695C;
     --accent-rgb: 79, 179, 232;
+    /* 5.6–8.4:1; white on these fills was 2.2–3.3:1 */
+    --on-accent: #0B1620;
+    --on-accent-warm: #0B1620;
+    --on-success: #0B1620;
+    --on-warning: #0B1620;
+    --on-danger: #0B1620;
     --bs-primary-rgb: 79, 179, 232;
     --bs-info-rgb: 79, 179, 232;
     --bs-success-rgb: 87, 179, 132;
@@ -347,22 +396,32 @@ a {
     transition: box-shadow 0.3s ease;
 }
 
-.card:hover {
+/* Lift only cards you can actually click — a static card that rises under
+   the pointer reads as a control and breaks the calm-display rule. */
+a.card:hover,
+.card-interactive:hover {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
+/* One inset on all four sides (was 8px top/bottom vs 16px sides, so a card
+   title sat closer to the card's top edge than to its left edge). */
 .card-body {
-    padding: var(--space-2) var(--space-3);
+    padding: var(--space-3);
 }
 
+/* Flex + gap, not an icon margin: the markup also has a literal space after
+   the <i>, which stacked on the margin into a ~2x gap. Flex drops that
+   whitespace, so every title gets exactly one 8px icon gap. */
 .card-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
     font-weight: 600;
     color: var(--dark-gray);
     margin-bottom: var(--space-2);
 }
 
 .card-title i {
-    margin-right: var(--space-2);
     color: var(--primary-color);
 }
 
@@ -370,15 +429,11 @@ a {
 .stat-card {
     padding: var(--space-3);
     text-align: center;
-    transition: transform 0.2s ease;
-}
-
-.stat-card:hover {
-    transform: translateY(-2px);
 }
 
 .stat-card h3 {
-    font-weight: 700;
+    font-family: var(--font-numeric);
+    font-weight: 600;
     margin: var(--space-2) 0;
     color: var(--dark-gray);
     font-variant-numeric: tabular-nums;
@@ -398,14 +453,31 @@ a {
 
 /* ===== Buttons ===== */
 /* Fully rounded, matching the mark's circular geometry */
+/* inline-flex + gap so an icon and label centre on the same line whether the
+   .btn is an <a> or a <button> — side-by-side link/button pairs previously
+   sat on different baselines. */
 .btn {
-    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    border-radius: var(--radius-pill);
     font-weight: 500;
-    transition: all 0.2s ease;
+    text-decoration: none;
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn .me-1,
+.btn .ms-1 {
+    margin: 0 !important;
+}
+
+/* An empty JS-filled slot (e.g. #more-filters-count) would still take a gap */
+.btn > span:empty:not([class]) {
+    display: none;
 }
 
 .btn:hover {
-    transform: translateY(-1px);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
@@ -413,7 +485,7 @@ a {
 .btn-primary {
     background: var(--accent);
     border-color: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
     font-weight: 700;
 }
 
@@ -423,7 +495,7 @@ a {
 .btn-primary:disabled {
     background: var(--accent);
     border-color: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
 }
 
 .btn-primary:hover {
@@ -441,7 +513,7 @@ a {
 .btn-outline-primary:active {
     background: var(--accent);
     border-color: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
 }
 
 .btn-link {
@@ -451,6 +523,13 @@ a {
 .bg-primary {
     background-color: var(--accent) !important;
 }
+
+/* Bootstrap badges hardcode white text; pair each fill with its own text
+   colour. (.text-dark on a badge still wins — it's !important.) */
+.badge.bg-primary { color: var(--on-accent); }
+.badge.bg-success { color: var(--on-success); }
+.badge.bg-warning { color: var(--on-warning); }
+.badge.bg-danger  { color: var(--on-danger); }
 
 .text-primary {
     color: var(--accent) !important;
@@ -470,7 +549,7 @@ a {
 .btn-cta {
     background: var(--accent-warm);
     border-color: var(--accent-warm);
-    color: #fff;
+    color: var(--on-accent-warm);
     border-radius: 999px;
     font-weight: 700;
 }
@@ -480,7 +559,7 @@ a {
 .btn-cta:active {
     background: var(--accent-warm);
     border-color: var(--accent-warm);
-    color: #fff;
+    color: var(--on-accent-warm);
     filter: brightness(0.94);
 }
 
@@ -507,7 +586,7 @@ a {
 /* ===== Alerts ===== */
 .alert {
     border: none;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     padding: var(--space-3);
 }
 
@@ -540,12 +619,11 @@ footer {
 
 .preset-filter.active {
     background-color: var(--primary-color) !important;
-    color: white !important;
+    color: var(--on-accent) !important;
     border-color: var(--primary-color) !important;
 }
 
 .preset-filter:hover {
-    transform: translateY(-1px);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
@@ -569,15 +647,15 @@ footer {
     cursor: pointer;
 }
 
+/* Hover shows with border + shadow only — no translate, so a card never
+   leaves its grid cell under the pointer. */
 .route-card:hover,
 .route-library-card:hover {
     border-color: var(--primary-color);
     box-shadow: 0 4px 8px rgba(var(--accent-rgb), 0.15);
-    transform: translateY(-4px);
 }
 
 .route-library-card:active {
-    transform: translateY(calc(-1 * var(--space-1)));
     box-shadow: 0 2px 4px rgba(var(--accent-rgb), 0.2);
 }
 
@@ -626,7 +704,9 @@ footer {
 }
 
 .route-stat-value {
-    font-size: var(--font-size-base);
+    font-family: var(--font-numeric);
+    font-size: var(--font-size-md);
+    line-height: 1.2;
     font-weight: 600;
     color: var(--dark-gray);
     font-variant-numeric: tabular-nums;
@@ -883,6 +963,13 @@ a:focus-visible {
     text-decoration-thickness: 2px;
 }
 
+/* A link styled as a button is a button: the focus ring is enough, and the
+   underline above (which outranks .btn) made a focused "View route" pill
+   look like a different control from the <button> beside it. */
+a.btn:focus-visible {
+    text-decoration: none;
+}
+
 .nav-link:focus-visible {
     outline: 3px solid var(--accent);
     outline-offset: var(--space-1);
@@ -908,7 +995,7 @@ tr:focus-visible {
     top: -40px;
     left: 0;
     background: var(--accent);
-    color: white;
+    color: var(--on-accent);
     padding: var(--space-2);
     text-decoration: none;
     z-index: 100;
@@ -924,7 +1011,7 @@ tr:focus-visible {
     display: flex;
     align-items: center;
     padding: var(--space-2) var(--space-3);
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     cursor: pointer;
     transition: all 0.2s ease;
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
@@ -936,7 +1023,6 @@ tr:focus-visible {
 
 .route-card-compact:hover {
     box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-    transform: translateX(4px);
 }
 
 .route-card-compact:focus {
@@ -1273,7 +1359,7 @@ tr:focus-visible {
     pointer-events: auto;
     min-width: 300px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     padding: var(--space-2) var(--space-3);
     transform: translateX(400px);
     opacity: 0;
@@ -1572,7 +1658,7 @@ input[type="radio"] {
     gap: var(--space-3);
     padding: var(--space-2) var(--space-3);
     background: var(--accent);
-    color: white;
+    color: var(--on-accent);
     border-radius: 16px;
     margin-bottom: var(--space-2);
     height: 72px;
@@ -1636,15 +1722,6 @@ input[type="radio"] {
     }
 }
 
-.card {
-    animation: fadeIn 0.3s ease-out;
-}
-
-.card:nth-child(1) { animation-delay: 0s; }
-.card:nth-child(2) { animation-delay: 0.05s; }
-.card:nth-child(3) { animation-delay: 0.1s; }
-.card:nth-child(4) { animation-delay: 0.15s; }
-.card:nth-child(5) { animation-delay: 0.2s; }
 
 /* ===== Conditions panel: collapse on mobile, expand on tap ===== */
 @media (max-width: 767.98px) {
@@ -1697,10 +1774,12 @@ input[type="radio"] {
         margin-top: var(--space-1);
     }
     
+    /* 48px comes from min-height; 16px vertical padding on top of it made
+       every phone button 56px+ and swallowed .btn-sm entirely. */
     .btn,
     button {
         min-height: 48px;
-        padding: var(--space-3) var(--space-4);
+        padding: var(--space-2) var(--space-4);
     }
 
     .nav-tabs .nav-link {
@@ -1791,19 +1870,16 @@ input[type="radio"] {
    ------------------------------------------------------------------- */
 
 /* Card title: explicit size from typography scale (h5 only; h6.card-title stays at default) */
+/* 20px: the brand book's card-title range is 1.1–1.35rem. At 24px a card
+   title outshouted the verdict inside it. */
 h5.card-title {
-    font-size: var(--font-size-lg);
+    font-size: var(--font-size-md);
 }
 
 /* --- Hero decision card: elevated shadow + branded border (#68) --- */
 .card.hero-card {
     box-shadow: 0 4px 16px rgba(var(--accent-rgb), 0.15) !important;
     border-color: rgba(var(--accent-rgb), 0.2) !important;
-    transition: box-shadow 0.2s ease;
-}
-
-.card.hero-card:hover {
-    box-shadow: 0 8px 24px rgba(var(--accent-rgb), 0.22) !important;
 }
 
 /* --- Optimal route card: flat cobalt border (gradients retired) (#68) --- */
@@ -1818,11 +1894,10 @@ h5.card-title {
     color: var(--accent);
 }
 
-/* Route row hover: left accent bar + lift */
+/* Route row hover: accent border, no sideways shift */
 .route-card-compact:hover {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-    transform: translateX(4px);
-    border-left-color: var(--primary-color);
+    border-color: var(--primary-color);
 }
 
 /* ===== Map iframe token (#297) ===== */
@@ -1859,15 +1934,15 @@ h5.card-title {
 /* Selected route tooltip - Issue #74 */
 .leaflet-tooltip.selected-route-tooltip {
     z-index: 1000 !important;
-    background-color: rgba(0, 123, 255, 0.95);
+    background-color: rgba(var(--accent-rgb), 0.95);
     border: 2px solid white;
     font-weight: 600;
-    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.5);
+    box-shadow: 0 4px 12px rgba(var(--accent-rgb), 0.5);
     transform: scale(1.05);
 }
 
 .leaflet-tooltip.selected-route-tooltip::before {
-    border-top-color: rgba(0, 123, 255, 0.95);
+    border-top-color: rgba(var(--accent-rgb), 0.95);
 }
 
 /* Hide Leaflet layer control (not needed per design guidelines) */
@@ -2023,7 +2098,7 @@ h5.card-title {
     min-width: 56px;
     text-align: center;
     padding: var(--space-1) var(--space-2);
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     background: var(--light-gray);
     font-size: var(--font-size-xs);
     line-height: 1.4;
@@ -2041,8 +2116,9 @@ h5.card-title {
 }
 
 .hourly-temp {
-    font-weight: 700;
-    font-size: var(--font-size-sm);
+    font-family: var(--font-numeric);
+    font-weight: 600;
+    font-size: var(--font-size-base);
     font-variant-numeric: tabular-nums;
 }
 
@@ -2065,14 +2141,14 @@ h5.card-title {
 .min-w-144px { min-width: 144px; }
 .max-w-180px { max-width: 180px; }
 .max-w-320px { max-width: 320px; }
-.icon-tile-56x80 { width: 56px; height: 80px; border-radius: 6px; }
+.icon-tile-56x80 { width: 56px; height: 80px; border-radius: var(--radius-sm); }
 .skeleton-line-gap { height: var(--space-2); margin-bottom: var(--space-2); }
 .skeleton-line { height: var(--space-2); }
 .chart-axis-label { font-size: 10px; margin-top: var(--space-1); text-align: center; }
 .text-case-normal { text-transform: none; letter-spacing: normal; font-weight: 400; }
 .table-header-muted { font-size: 10px; text-transform: uppercase; color: var(--color-text-muted); }
-.legend-swatch-caution { background: #e8a84c; border-color: #c8813a; }
-.legend-swatch-good { background: #4caf50; border-color: #2e7d32; }
+.legend-swatch-caution { background: var(--verdict-warn); border-color: var(--verdict-warn); }
+.legend-swatch-good { background: var(--verdict-good); border-color: var(--verdict-good); }
 .border-currentcolor { border-color: currentColor; }
 /* Plain (non-!important) hidden state — JS toggles visibility afterward via
    element.style.display, which needs to be able to override this. */
@@ -2088,7 +2164,7 @@ h5.card-title {
 .chart-max-height { max-height: var(--chart-height); }
 .opacity-35 { opacity: 0.35; }
 .th-sortable { cursor: pointer; user-select: none; }
-.th-sortable-active { color: var(--bs-primary, #0d6efd); }
+.th-sortable-active { color: var(--accent); }
 .color-accent { color: var(--accent); }
 .color-ink-soft { color: var(--ink-soft); }
 .sticky-top-space3 { position: sticky; top: var(--space-3); }
@@ -2125,13 +2201,170 @@ h5.card-title {
 .opacity-80 { opacity: 0.8; }
 .hero-weather-badge { font-size: 1rem; padding: var(--space-2) var(--space-3); }
 /* #546 (SEM-1/SEM-2): shared good/warn/bad rating (dashboard.js scoreToRating)
-   drives both the hero border and the route status icon, so the same score
-   means the same color on both widgets, via the real semantic tokens. */
-.hero-border-good { border-left: 4px solid var(--success); padding-left: var(--space-3); }
-.hero-border-warn { border-left: 4px solid var(--warning); padding-left: var(--space-3); }
-.hero-border-bad { border-left: 4px solid var(--danger); padding-left: var(--space-3); }
-.route-name-truncate { min-width: 120px; max-width: 140px; }
+   drives the hero panel, every verdict chip, and the route status icon, so
+   the same score means the same colour, word and icon everywhere. Fills use
+   the fixed --verdict-* tokens; marks on the page ground (icons, below) use
+   the theme-shifted --success/--warning/--danger, which stay legible as a
+   small glyph on both grounds where amber-on-white fill colour would not. */
+.route-name-truncate { min-width: 120px; max-width: 144px; }
 .route-status-icon { font-size: 1rem; flex-shrink: 0; }
 .route-status-icon-good { color: var(--success); }
 .route-status-icon-warn { color: var(--warning); }
 .route-status-icon-bad { color: var(--danger); }
+
+/* ===== Glance layer (Brand Book §Glance layer) =====
+   Borrowed from the Connect IQ data fields: one big signal per decision,
+   carried by colour + word + icon together, with a big condensed number;
+   secondary facts sit underneath as LABEL / value cells. */
+.verdict-good    { --v-fill: var(--verdict-good);    --v-ink: var(--verdict-good-ink); }
+.verdict-warn    { --v-fill: var(--verdict-warn);    --v-ink: var(--verdict-warn-ink); }
+.verdict-bad     { --v-fill: var(--verdict-bad);     --v-ink: var(--verdict-bad-ink); }
+.verdict-neutral { --v-fill: var(--verdict-neutral); --v-ink: var(--verdict-neutral-ink); }
+
+/* Hero panel: word + icon on the left, the number on the right */
+.glance-panel {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    border-radius: var(--radius-sm);
+    background: var(--v-fill);
+    color: var(--v-ink);
+}
+
+.glance-panel-main {
+    min-width: 0;
+}
+
+.glance-word {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-family: var(--font-display);
+    font-size: var(--font-size-lg);
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+.glance-sub {
+    margin-top: var(--space-1);
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    line-height: 1.5;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* The number and its unit share a baseline; unit small, never dimmed below 5:1 */
+.glance-figure {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-1);
+    flex-shrink: 0;
+}
+
+.glance-num {
+    font-family: var(--font-numeric);
+    font-size: var(--font-size-display);
+    font-weight: 600;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+
+.glance-unit {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+/* LABEL / value cells, split by 1px hairlines (no boxes) */
+.glance-cells {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+    margin: var(--space-3) 0;
+}
+
+.glance-cell {
+    padding: 0 var(--space-3);
+    border-left: 1px solid var(--line);
+    min-width: 0;
+}
+
+.glance-cell:first-child {
+    padding-left: 0;
+    border-left: none;
+}
+
+.glance-label {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    line-height: 1.33;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+}
+
+.glance-value {
+    font-family: var(--font-numeric);
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    line-height: 1.33;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.glance-value .glance-unit {
+    margin-left: var(--space-1);
+    color: var(--ink-soft);
+}
+
+/* Compact verdict: same fill/ink/icon as the panel, pill-shaped */
+.verdict-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: 0 var(--space-2);
+    min-height: 24px;
+    border-radius: var(--radius-pill);
+    background: var(--v-fill);
+    color: var(--v-ink);
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.verdict-chip .glance-chip-num {
+    font-family: var(--font-numeric);
+    font-size: var(--font-size-sm);
+    letter-spacing: 0;
+    font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 575.98px) {
+    .glance-num {
+        font-size: var(--font-size-hero);
+    }
+
+    .glance-word {
+        font-size: var(--font-size-md);
+    }
+
+    /* Two cells per row on a phone; hairline only between a row's cells */
+    .glance-cells {
+        grid-template-columns: repeat(2, 1fr);
+        row-gap: var(--space-2);
+    }
+
+    .glance-cell:nth-child(odd) {
+        padding-left: 0;
+        border-left: none;
+    }
+}

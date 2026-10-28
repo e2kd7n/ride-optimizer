@@ -65,6 +65,18 @@ Two grounds, not one inverted into the other: **Day** is an overcast-bright sky,
 
 Semantic colors (success/warning/danger) are functional, not brand — they signal fit/favorability and stay legible on both grounds independent of the accent hues.
 
+**Text on a fill belongs to the fill.** Anything filled with an accent or semantic colour (buttons, badges, the weather banner) takes its text from the matching `--on-*` token, never a hardcoded `#fff`:
+
+| Token | Day | Night |
+|---|---|---|
+| `--on-accent` | `#FFFFFF` (5.5:1) | `#0B1620` (7.8:1) |
+| `--on-accent-warm` | `#0F2233` (5.2:1) | `#0B1620` (7.9:1) |
+| `--on-success` | `#FFFFFF` (4.0:1, bold/large text only) | `#0B1620` (7.1:1) |
+| `--on-warning` | `#0F2233` (5.5:1) | `#0B1620` (8.4:1) |
+| `--on-danger` | `#FFFFFF` (4.8:1) | `#0B1620` (5.6:1) |
+
+White on the Night accents measured 2.2–3.3:1, and white on Day coral 3.1:1, so every primary button, CTA and score badge was below WCAG AA in at least one theme.
+
 ---
 
 ## Type
@@ -77,7 +89,8 @@ Semantic colors (success/warning/danger) are functional, not brand — they sign
 |---|---|
 | Display / hero decision | 2.5rem, 700 |
 | Section heading | 1.5–2rem, 700 |
-| Card title | 1.1–1.35rem, 700 |
+| Card title | 1.25rem (`--font-size-md`), 600 |
+| Glance number | 3rem / 2.5rem on phones, Barlow Condensed 600 (see Glance layer) |
 | Body | 1rem, 400 |
 | Caption / eyebrow | 0.72–0.78rem, 600, letter-spacing tracked |
 
@@ -85,9 +98,57 @@ Semantic colors (success/warning/danger) are functional, not brand — they sign
 
 ## Shape & elevation
 
-- Card radius: **16px** (up from the previous 10px/8px) — see `plans/v0.6.0/DESIGN_PRINCIPLES.md` §10 for the updated pattern library.
+- Card radius: **16px** (up from the previous 10px/8px) — see `plans/v0.6.0/DESIGN_PRINCIPLES.md` §10 for the updated pattern library. Nested elements use 8px (see Glance layer › Shape).
 - Buttons and badges: fully rounded (`border-radius: 999px`), matching the mark's circular geometry.
-- Shadows: quiet by default (`0 1px 2px rgba(0,0,0,0.08)`); reserve a visible lift for hover/interactive states only.
+- Shadows: quiet by default (`0 1px 2px rgba(0,0,0,0.08)`); reserve a visible lift for hover on things you can actually click (G5).
+
+---
+
+## Glance layer
+
+**Adopted:** 2026-10-25. Borrowed from the Connect IQ data-field design language (`ciq-edge/design/DESIGN.md`), where every field has to answer one question at 20 mph. The app answers the same kind of question ("is this a good ride today?"), so its decision moments use the same grammar. Fair Weather still owns the page (grounds, cobalt, coral, type). The glance layer only governs **verdicts and the numbers behind them**.
+
+### Principles
+
+| # | Principle | In the app |
+|---|---|---|
+| G1 | **One big signal** | A decision card leads with one coloured panel: verdict word + icon on the left, one big number on the right. Everything else sits below it. |
+| G2 | **Colour + word + icon** | A verdict is never colour alone. `Good` / `Fair` / `Poor` always travel with their icon, so they still read for colour-blind riders and on a washed-out phone in sun. |
+| G3 | **One score, one scale** | Every 0–100 score goes through `scoreToRating()` (≥70 good, ≥50 fair, else poor) and the `VERDICTS` table in `dashboard.js`. Don't add a second threshold ladder for the same score. |
+| G4 | **Same panel day and night** | Verdict fills don't change with the theme. Only the page around them switches. |
+| G5 | **Calm display** | Nothing jumps. A card doesn't lift or slide under the pointer unless it's a link (`a.card`, `.card-interactive`), and cards don't fade in on load. Hover feedback is border and shadow only, never `transform`. |
+| G6 | **LABEL / value** | Secondary facts are cells: an upper-case 12px tracked label over a condensed tabular value, split by 1px hairlines, with no boxes. No icon-prefixed runs of numbers. |
+
+### Verdict fills
+
+Fixed tokens, the same on both grounds. Each carries its own text colour, and every pair is ≥ 5:1.
+
+| Rating | Word | Icon | Fill token | Fill | Text | Contrast |
+|---|---|---|---|---|---|---|
+| good | Good | `bi-check-circle-fill` | `--verdict-good` | `#188038` | `#FFFFFF` | 5.0:1 |
+| warn | Fair | `bi-exclamation-triangle-fill` | `--verdict-warn` | `#F2A900` | `#111111` | 9.4:1 |
+| bad | Poor | `bi-x-circle-fill` | `--verdict-bad` | `#C62828` | `#FFFFFF` | 5.6:1 |
+| neutral | — | none | `--verdict-neutral` | `#455A64` | `#FFFFFF` | 7.2:1 |
+
+- **Fills vs marks.** Panels and chips use the `--verdict-*` fills. A small glyph sitting on the page ground (the Route Status icons) keeps the theme-shifted `--success` / `--warning` / `--danger`, because amber as a glyph on a white page would fall well under 3:1.
+- **Neutral never looks like a verdict.** "No data", "Recommended" and other states that give no advice use slate or `bg-secondary`, with no check and no cross.
+- **Coral is not a verdict.** It stays the one CTA per screen (see Color). A verdict panel and the coral CTA can share a card, because they say different things.
+
+### Numerals
+
+Big and tabular numbers (hero score, temperature, cell values, stat cards, route stats) use **Barlow Condensed SemiBold** via `--font-numeric`. It's the same face the CIQ fields bundle for their digits. It's self-hosted at `static/fonts/` (SIL OFL 1.1, licence alongside) so the Pi PWA renders it offline and CSP `font-src 'self'` covers it. Body copy and words stay on the existing stacks.
+
+### Components
+
+| Component | Classes | Spec |
+|---|---|---|
+| Glance panel | `.glance-panel.verdict-<rating>` | 16px inset, `--radius-sm`. `.glance-word` (24px display, upper case, icon gap 8px) and `.glance-sub` (route name) left; `.glance-num` (48px, 40px on phones) + `.glance-unit` right, on one baseline. Carries `role="status"` and an `aria-label` that spells out the verdict and score. |
+| Cells | `.glance-cells > .glance-cell > .glance-label + .glance-value` | Auto-fit columns ≥ 96px (2 per row on phones), 16px inset between cells, 1px `--line` hairline. A unit inside the value is `.glance-unit`. |
+| Verdict chip | `verdictChip(rating, text)` → `.verdict-chip.verdict-<rating>` | Pill, 24px tall, icon + word (+ optional `.glance-chip-num`). The compact form of the panel, for lists and secondary cards. |
+
+### Shape
+
+Three radii only: `--radius-sm` 8px (anything nested in a card, alerts, toasts, list rows, hourly cells), `--radius-md` 16px (cards), `--radius-pill` (buttons, badges, chips). 8px nested inside a 16px card with a 16px inset keeps the corners concentric. The 4px and 6px radii are retired.
 
 ---
 
