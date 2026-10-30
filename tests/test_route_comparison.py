@@ -25,6 +25,10 @@ from src.route_comparison import (
     match_score,
     route_geometry,
     passes_commute_prefilter,
+    PreparedTrack,
+    prepared_deviation_metrics,
+    possible_match_pairs,
+    P95_CAP_M,
 )
 
 
@@ -150,6 +154,44 @@ class TestCommuteMetric:
         bbox = (41.87, -87.63, 41.89, -87.63)  # zero width
         assert passes_commute_prefilter(bbox, (41.88, -87.63), 2000.0,
                                         bbox, (41.88, -87.63), 2000.0) is True
+
+
+class TestPossibleMatchPairs:
+    """The grid screen in front of the exact metric (#614): it may keep pairs
+    that don't match, but must never drop one that does."""
+
+    @staticmethod
+    def _tracks(offsets_m, lat0=41.88):
+        deg = 1 / M_PER_DEG_LAT
+        # A 2 km L-shaped track, offset north by each amount.
+        base = [(41.88, -87.63), (41.89, -87.63), (41.89, -87.6165)]
+        return [PreparedTrack([(lat + off * deg, lon) for lat, lon in base], lat0)
+                for off in offsets_m]
+
+    def test_never_drops_a_matching_pair(self):
+        tracks = self._tracks([0, 20, 45, 70, 95, 99, 104, 130, 400, 2000])
+        kept = {tuple(p) for p in possible_match_pairs(tracks, 100.0, 0.85)}
+        for i in range(len(tracks)):
+            for j in range(i + 1, len(tracks)):
+                score = match_score(*prepared_deviation_metrics(tracks[i], tracks[j]), 100.0, 0.85)
+                if score >= 1.0:
+                    assert (i, j) in kept, (i, j, score)
+
+    def test_drops_distant_pairs(self):
+        assert len(possible_match_pairs(self._tracks([0, 2000]), 100.0, 0.85)) == 0
+
+    def test_single_track_has_no_pairs(self):
+        assert possible_match_pairs(self._tracks([0]), 100.0, 0.85).shape == (0, 2)
+
+    def test_threshold_must_be_below_cap(self):
+        with pytest.raises(ValueError):
+            possible_match_pairs(self._tracks([0, 10]), P95_CAP_M, 0.85)
+
+    def test_prepared_metrics_match_raw_metrics(self):
+        a, b = _line(), _line(offset_lon=0.0005)
+        lat0 = float(np.vstack([a, b])[:, 0].mean())
+        assert prepared_deviation_metrics(PreparedTrack(a, lat0), PreparedTrack(b, lat0)) \
+            == pytest.approx(track_deviation_metrics(a, b))
 
 
 class TestComparisonThresholds:

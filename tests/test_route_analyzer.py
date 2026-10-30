@@ -394,25 +394,78 @@ class TestDetermineDirection:
 
 
 # ---------------------------------------------------------------------------
-# _select_representative_route tests
+# _cluster_by_centres tests (#614)
 # ---------------------------------------------------------------------------
 
-class TestSelectRepresentativeRoute:
+def _scores(n, matches):
+    s = np.zeros((n, n))
+    for i, j in matches:
+        s[i, j] = s[j, i] = 1.5
+    return s
+
+
+class TestClusterByCentres:
+    def test_no_matches_gives_singletons(self):
+        assert RouteAnalyzer._cluster_by_centres(np.zeros((3, 3))) == [(0, [0]), (1, [1]), (2, [2])]
+
+    def test_best_connected_route_is_the_centre(self):
+        # A chain 0-1-2: 1 matches both ends, so it leads one group of all three.
+        assert RouteAnalyzer._cluster_by_centres(_scores(3, [(0, 1), (1, 2)])) == [(1, [0, 1, 2])]
+
+    def test_chain_is_not_merged_beyond_the_centre(self):
+        # 0-1-2-3-4 chain: the centre takes only its direct matches, so the
+        # ends of a long chain never share a group they don't both match.
+        groups = RouteAnalyzer._cluster_by_centres(_scores(5, [(0, 1), (1, 2), (2, 3), (3, 4)]))
+        for centre, members in groups:
+            assert all(m == centre or abs(m - centre) == 1 for m in members)
+        assert sorted(m for _, ms in groups for m in ms) == [0, 1, 2, 3, 4]
+
+    def test_ties_go_to_the_lowest_index(self):
+        assert RouteAnalyzer._cluster_by_centres(_scores(2, [(0, 1)])) == [(0, [0, 1])]
+
+
+# ---------------------------------------------------------------------------
+# _assign_group_ids tests (#614)
+# ---------------------------------------------------------------------------
+
+class TestAssignGroupIds:
     @pytest.fixture
     def analyzer(self):
         return RouteAnalyzer([], _make_location(), _make_location(41.89, -87.62, "Work"),
                              _make_config(), n_workers=1)
 
-    def test_single_route_is_representative(self, analyzer):
-        r = _make_route(1, duration=2000)
-        assert analyzer._select_representative_route([r]) == r
+    @staticmethod
+    def _cached(group_id, activity_ids, name=None, direction="home_to_work"):
+        return {'id': group_id, 'direction': direction, 'name': name,
+                'routes': [{'activity_id': a} for a in activity_ids]}
 
-    def test_returns_median_by_duration(self, analyzer):
-        r1 = _make_route(1, duration=1000)
-        r2 = _make_route(2, duration=2000)
-        r3 = _make_route(3, duration=3000)
-        rep = analyzer._select_representative_route([r1, r2, r3])
-        assert rep.duration == 2000  # median
+    def test_fresh_ids_number_by_size(self, analyzer):
+        analyzer.groups_cache = {}
+        small = _make_group(routes=[_make_route(1)])
+        big = _make_group(routes=[_make_route(2), _make_route(3)])
+        analyzer._assign_group_ids([small, big])
+        assert (big.id, small.id) == ("home_to_work_0", "home_to_work_1")
+        assert big.name == "Route 0 to Work"
+
+    def test_takes_id_and_name_of_largest_overlap(self, analyzer):
+        analyzer.groups_cache = {'groups': [self._cached("home_to_work_7", [1, 2], "Via Elm"),
+                                            self._cached("home_to_work_3", [3], "Via Oak")]}
+        merged = _make_group(routes=[_make_route(a) for a in (1, 2, 3)])
+        analyzer._assign_group_ids([merged])
+        assert (merged.id, merged.name) == ("home_to_work_7", "Via Elm")
+
+    def test_new_group_never_reuses_a_retired_id(self, analyzer):
+        analyzer.groups_cache = {'groups': [self._cached("home_to_work_0", [1]),
+                                            self._cached("home_to_work_4", [2])]}
+        newcomer = _make_group(routes=[_make_route(9)])
+        analyzer._assign_group_ids([newcomer])
+        assert newcomer.id == "home_to_work_5"
+
+    def test_ids_do_not_cross_directions(self, analyzer):
+        analyzer.groups_cache = {'groups': [self._cached("work_to_home_2", [1], direction="work_to_home")]}
+        group = _make_group(routes=[_make_route(1)])
+        analyzer._assign_group_ids([group])
+        assert group.id == "home_to_work_0"
 
 
 # ---------------------------------------------------------------------------
@@ -807,37 +860,30 @@ class TestCacheIO:
 
 
 # ---------------------------------------------------------------------------
-# _merge_new_routes tests
+# Unclassified rides (#614, C10)
 # ---------------------------------------------------------------------------
 
-class TestMergeNewRoutes:
-    @pytest.fixture
-    def analyzer(self):
-        return RouteAnalyzer([], _make_location(), _make_location(41.89, -87.62, "Work"),
-                             _make_config(), n_workers=1)
+class TestUnclassifiedRides:
+    def _activity(self, start, end):
+        return Activity(id=1, name="Ride", type="Ride", start_date="2026-05-01T08:00:00+00:00",
+                        distance=12000.0, moving_time=2100, elapsed_time=2200,
+                        total_elevation_gain=80.0, average_speed=5.5, max_speed=9.0,
+                        start_latlng=start, end_latlng=end, polyline="_p~iF~ps|U_ulLnnqC_mqNvxq`@")
 
-    def test_no_new_routes_returns_unchanged(self, analyzer):
-        group = _make_group("g0", routes=[_make_route(1)])
-        result = analyzer._merge_new_routes([group], [])
-        assert len(result) == 1
+    def _analyzer(self, *acts):
+        return RouteAnalyzer(list(acts), _make_location(41.88, -87.63, "Home"),
+                             _make_location(41.98, -87.63, "Work"), _make_config(), n_workers=1)
 
-    def test_similar_new_route_merged_into_group(self, analyzer):
-        # Same coords → high similarity → merged into existing group
-        existing_route = _make_route(1)
-        new_route = _make_route(99, name="New Commute")
-        group = _make_group("g0", routes=[existing_route])
-        result = analyzer._merge_new_routes([group], [new_route])
-        total_routes = sum(len(g.routes) for g in result)
-        assert total_routes >= 1
+    def test_trimmed_commute_is_counted(self):
+        # Both ends ~1 km (> 500 m, < 2 km) from home and work: a privacy-zone trim.
+        an = self._analyzer(self._activity((41.889, -87.63), (41.971, -87.63)))
+        assert an.extract_routes() == []
+        assert an.unclassified_count == 1
 
-    def test_distinct_new_route_creates_new_group(self, analyzer):
-        # Very different coords → creates a second group
-        existing_route = _make_route(1, coords=[(41.88 + i * 0.001, -87.63) for i in range(6)])
-        new_route = _make_route(2, coords=[(42.88 + i * 0.001, -88.63) for i in range(6)])
-        group = _make_group("g0", routes=[existing_route])
-        result = analyzer._merge_new_routes([group], [new_route])
-        assert len(result) >= 1
-
+    def test_unrelated_ride_is_not_counted(self):
+        an = self._analyzer(self._activity((41.88, -87.63), (41.88, -87.63)))  # home loop
+        an.extract_routes()
+        assert an.unclassified_count == 0
 
 
 # ---------------------------------------------------------------------------

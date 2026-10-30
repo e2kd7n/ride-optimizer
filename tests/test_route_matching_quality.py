@@ -171,7 +171,6 @@ def test_single_gps_spike_still_matches(tmp_path):
 
 # ---------------------------------------------------------------- clustering (#614)
 
-@pytest.mark.xfail(strict=True, reason='#614: greedy pivot clustering depends on input order')
 def test_grouping_does_not_depend_on_input_order(tmp_path):
     # Five copies of one ride, each 35 m further north: neighbours match, the
     # outermost pair doesn't — the classic case where a pivot-based greedy pass
@@ -185,17 +184,66 @@ def test_grouping_does_not_depend_on_input_order(tmp_path):
     assert len(results) == 1, f'{len(results)} different groupings across input orders'
 
 
-@pytest.mark.xfail(strict=True, reason='#614: group IDs are positional, so favourites drift')
+def test_every_member_matches_its_representative(tmp_path):
+    # The same 35 m steps: the outermost rides are 140 m apart, so grouping must
+    # not chain them into one group through the rides between them.
+    base = densify(STAIRCASE)
+    rides = [route(shift(base, north=k * 35)) for k in range(5)]
+    an = analyzer(tmp_path / 'cache')
+    for g in an.group_similar_routes(rides):
+        for r in g.routes:
+            assert an._is_match(an.calculate_route_similarity(r, g.representative_route))
+
+
 def test_group_id_stable_when_unrelated_ride_added(tmp_path):
     commute = route(densify(STAIRCASE))
     unrelated = route(shift(densify(STAIRCASE), north=3000))
+    cache = tmp_path / 'cache'
 
     def id_of(groups, ride):
         return next(g.id for g in groups if ride.activity_id in {r.activity_id for r in g.routes})
 
-    before = id_of(analyzer(tmp_path / 'a').group_similar_routes([commute]), commute)
-    after = id_of(analyzer(tmp_path / 'b').group_similar_routes([unrelated, commute]), commute)
+    # The unrelated ride sorts first by activity ID, so positional IDs would shift.
+    unrelated.activity_id, commute.activity_id = commute.activity_id, unrelated.activity_id
+    before = id_of(analyzer(cache, force=False).group_similar_routes([commute]), commute)
+    after = id_of(analyzer(cache, force=False).group_similar_routes([unrelated, commute]), commute)
     assert before == after
+
+
+def test_group_ids_and_names_survive_a_full_recompute(tmp_path):
+    base = densify(STAIRCASE)
+    rides = [route(base), route(shift(base, north=20)), route(shift(base, north=2000))]
+    cache = tmp_path / 'cache'
+    first = analyzer(cache, force=False).group_similar_routes(rides)
+    an = analyzer(cache, force=False)
+    for g in an.groups_cache['groups']:
+        g['name'] = f"Named {g['id']}"  # as background geocoding would
+    an._save_groups_cache_with_ids([r.activity_id for r in rides], an._deserialize_groups(an.groups_cache['groups']))
+    again = analyzer(cache, force=True).group_similar_routes(list(reversed(rides)))
+    assert {(g.id, frozenset(r.activity_id for r in g.routes)) for g in again} \
+        == {(g.id, frozenset(r.activity_id for r in g.routes)) for g in first}
+    assert all(g.name == f'Named {g.id}' for g in again)
+
+
+def test_incremental_run_matches_full_recompute(tmp_path):
+    base = densify(STAIRCASE)
+    old = [route(shift(base, north=k * 35)) for k in range(3)] + [route(shift(base, north=2000))]
+    new = [route(shift(base, north=k * 35)) for k in (3, 4)] + [route(shift(base, north=2030))]
+    cache = tmp_path / 'cache'
+    analyzer(cache, force=False).group_similar_routes(old)
+    incremental = analyzer(cache, force=False).group_similar_routes(old + new)
+    full = analyzer(tmp_path / 'fresh').group_similar_routes(new + old)
+    assert partition(incremental) == partition(full)
+
+
+def test_plus_route_flags_are_recomputed(tmp_path):
+    base = densify(STAIRCASE)
+    rides = [route(base), route(base)]
+    for r in rides:
+        r.is_plus_route = True  # left over from an earlier run
+    groups = analyzer(tmp_path / 'cache').group_similar_routes(rides)
+    assert not any(g.is_plus_route for g in groups)
+    assert not any(r.is_plus_route for g in groups for r in g.routes)
 
 
 # ---------------------------------------------------------------- caches (#612)

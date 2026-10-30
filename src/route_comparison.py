@@ -10,6 +10,7 @@ import math
 from dataclasses import dataclass
 
 import numpy as np
+from scipy import sparse
 from scipy.spatial import cKDTree
 from scipy.spatial.distance import directed_hausdorff
 
@@ -171,6 +172,11 @@ SAMPLE_STEP_M = 10.0
 DENSE_STEP_M = 5.0
 COVERAGE_RADIUS_M = 50.0
 DEVIATION_PERCENTILE = 95.0
+# Deviations are stored capped at this, so max_p95_deviation_m must stay below it.
+P95_CAP_M = 400.0
+# Grid cell for possible_match_pairs' bounds; any size is exact, this one is fast.
+SCREEN_CELL_M = 50.0
+_CELL_KEY_SPAN = 1 << 32
 
 
 def project_m(coords, lat0: float) -> np.ndarray:
@@ -193,34 +199,127 @@ def resample_m(xy: np.ndarray, step_m: float) -> np.ndarray:
     return np.column_stack([np.interp(t, s, xy[:, 0]), np.interp(t, s, xy[:, 1])])
 
 
-def track_deviation_metrics(coords1, coords2) -> tuple:
-    """(p95 deviation in metres, mutual coverage) for two lat/lon tracks.
+class PreparedTrack:
+    """A track projected with a shared lat0 and resampled once, so comparing it
+    against many others doesn't redo that work per pair (#614).
 
-    Each track's samples (every SAMPLE_STEP_M) are measured against the other
-    track densified to DENSE_STEP_M, which approximates point-to-segment
-    distance to within DENSE_STEP_M / 2. Both values are the worse of the two
-    directions, so the result is symmetric.
+    samples: points every SAMPLE_STEP_M, measured against other tracks.
+    dense:   points every DENSE_STEP_M, which other tracks are measured against.
     """
+
+    def __init__(self, coords, lat0: float):
+        c = np.asarray(coords, dtype=float).reshape(-1, 2)
+        if len(c) == 0:
+            raise ValueError("empty track")
+        xy = project_m(c, lat0)
+        self.samples = resample_m(xy, SAMPLE_STEP_M)
+        self.dense = resample_m(xy, DENSE_STEP_M)
+        self._tree = None
+
+    @property
+    def tree(self) -> cKDTree:
+        if self._tree is None:
+            self._tree = cKDTree(self.dense)
+        return self._tree
+
+
+def prepared_deviation_metrics(t1: PreparedTrack, t2: PreparedTrack) -> tuple:
+    """(p95 deviation in metres, mutual coverage) for two PreparedTracks that
+    share a lat0.
+
+    Each track's samples are measured against the other's dense points, which
+    approximates point-to-segment distance to within DENSE_STEP_M / 2. Both
+    values are the worse of the two directions, so the result is symmetric.
+    Deviations are capped at P95_CAP_M, which lets the tree search stop early;
+    a p95 at the cap means "at least that far".
+    """
+    def directed(a, b):
+        d = b.tree.query(a.samples, distance_upper_bound=P95_CAP_M)[0]
+        d = np.minimum(d, P95_CAP_M)
+        return float(np.percentile(d, DEVIATION_PERCENTILE)), float(np.mean(d <= COVERAGE_RADIUS_M))
+
+    p95_12, cov_12 = directed(t1, t2)
+    p95_21, cov_21 = directed(t2, t1)
+    return max(p95_12, p95_21), min(cov_12, cov_21)
+
+
+def track_deviation_metrics(coords1, coords2) -> tuple:
+    """prepared_deviation_metrics for two raw lat/lon tracks, projected about
+    their joint mean latitude. Raises ValueError on an empty track."""
     c1 = np.asarray(coords1, dtype=float).reshape(-1, 2)
     c2 = np.asarray(coords2, dtype=float).reshape(-1, 2)
     if len(c1) == 0 or len(c2) == 0:
         raise ValueError("empty track")
     lat0 = float(np.concatenate([c1[:, 0], c2[:, 0]]).mean())
-    xy1, xy2 = project_m(c1, lat0), project_m(c2, lat0)
-
-    def directed(a, b):
-        d = cKDTree(resample_m(b, DENSE_STEP_M)).query(resample_m(a, SAMPLE_STEP_M))[0]
-        return float(np.percentile(d, DEVIATION_PERCENTILE)), float(np.mean(d <= COVERAGE_RADIUS_M))
-
-    p95_12, cov_12 = directed(xy1, xy2)
-    p95_21, cov_21 = directed(xy2, xy1)
-    return max(p95_12, p95_21), min(cov_12, cov_21)
+    return prepared_deviation_metrics(PreparedTrack(c1, lat0), PreparedTrack(c2, lat0))
 
 
 def match_score(p95_m: float, coverage: float, max_p95_m: float, min_coverage: float) -> float:
     """One number for ranking candidate matches: the tighter of the two criteria's
     margins. >= 1.0 exactly when both criteria pass."""
     return min(coverage / min_coverage, max_p95_m / max(p95_m, 1e-9))
+
+
+def possible_match_pairs(tracks: list, max_p95_m: float, min_coverage: float) -> np.ndarray:
+    """(i, j) index pairs, i < j, that *could* pass match_score >= 1.0.
+
+    Every other pair is guaranteed not to match, so only these need the exact
+    (and much slower) prepared_deviation_metrics. The bounds come from a grid of
+    SCREEN_CELL_M cells: a sample within r metres of a dense point lies within
+    ceil(r / SCREEN_CELL_M) cells of it on each axis. So the share of A's samples
+    whose cell is within that many cells of one of B's is an upper bound on the
+    share of A within r of B -- for r = COVERAGE_RADIUS_M that bounds coverage,
+    and for r = max_p95_m it bounds how many samples can be within the p95.
+    All tracks' pairs are bounded at once with two sparse matrix products.
+    """
+    n = len(tracks)
+    if n < 2:
+        return np.empty((0, 2), dtype=np.int64)
+    if max_p95_m >= P95_CAP_M:
+        raise ValueError(f"max_p95_m must be below P95_CAP_M ({P95_CAP_M} m)")
+
+    # Cells as single int64 keys (row * _CELL_KEY_SPAN + col): 1-D unique is far
+    # faster than unique over rows, and the span leaves room for any
+    # projected coordinate on Earth.
+    def keys(xy):
+        c = np.floor(xy / SCREEN_CELL_M).astype(np.int64)
+        return c[:, 0] * _CELL_KEY_SPAN + c[:, 1]
+
+    sample_keys, sample_shares = [], []
+    for t in tracks:
+        k, counts = np.unique(keys(t.samples), return_counts=True)
+        sample_keys.append(k)
+        sample_shares.append(counts / len(t.samples))
+    dense_keys = [np.unique(keys(t.dense)) for t in tracks]
+
+    def reach(radius_m):
+        r = int(math.ceil(radius_m / SCREEN_CELL_M))
+        offs = np.array([dx * _CELL_KEY_SPAN + dy
+                         for dx in range(-r, r + 1) for dy in range(-r, r + 1)])
+        return [np.unique(dk[:, None] + offs[None, :]) for dk in dense_keys]
+
+    def matrix(key_lists, values=None):
+        rows = np.repeat(np.arange(n), [len(k) for k in key_lists])
+        cols = np.searchsorted(columns, np.concatenate(key_lists))
+        vals = np.concatenate(values) if values is not None else np.ones(len(rows))
+        return sparse.csr_matrix((vals, (rows, cols)), shape=(n, len(columns)))
+
+    reach_cov, reach_p95 = reach(COVERAGE_RADIUS_M), reach(max_p95_m)
+    columns = np.unique(np.concatenate(sample_keys + reach_p95 + reach_cov))
+    shares = matrix(sample_keys, sample_shares)  # n x cells, rows sum to 1
+    # [a, b]: upper bound on the share of a's samples within reach of b.
+    within_p95 = (shares @ matrix(reach_p95).T).toarray()
+    within_cov = (shares @ matrix(reach_cov).T).toarray()
+
+    # p95 <= max_p95_m needs more than 0.95 * (n - 1) of n samples within
+    # max_p95_m (np.percentile's linear interpolation); 0.95 - 1/n is looser.
+    n_samples = np.array([len(t.samples) for t in tracks], dtype=float)
+    p95_ok = within_p95 >= (DEVIATION_PERCENTILE / 100.0 - 1.0 / n_samples)[:, None] - 1e-9
+    cov_ok = within_cov >= min_coverage - 1e-9
+    ok = p95_ok & cov_ok
+    ok &= ok.T
+    i, j = np.nonzero(np.triu(ok, k=1))
+    return np.column_stack([i, j])
 
 
 def route_geometry(coords) -> tuple:

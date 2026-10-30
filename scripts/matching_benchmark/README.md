@@ -128,9 +128,50 @@ p95 deviation of 75–100 m, which the reference (75 m) deliberately leaves unde
 | 125 m | 110 | 0.988 | 0.661 | 0 | 4 |
 
 Recall plateaus from about 90 m, and nothing different is merged up to 125 m. 100 m is the
-recommended value from the analysis and sits in the middle of that plateau. Order stability is
-#614's job; the remaining split of the main h→w route and the 5 should-merge pairs are
-probably greedy-clustering artefacts, which #614 targets; re-check after it lands.
+recommended value from the analysis and sits in the middle of that plateau.
+
+## After #614 (clustering)
+
+Same snapshot and match rule. The greedy pass (each ride compared only with the first ride of
+each group, in input order) is replaced by centre (Butina) clustering: the ride matching the most
+other ungrouped rides becomes a centre and takes every ungrouped ride that matches it, repeated
+until none are left.
+
+| | After #613 | After #614 |
+|---|---|---|
+| Groups | 115 | **112** |
+| Single-ride groups | 82 | 81 |
+| Pair recall | 0.978 | **0.990** |
+| Different-route pairs grouped | 0 | **0** |
+| Purity (strict, ambig counts against) | 0.689 | 0.659 |
+| Group pairs that should merge | 5 | 3 |
+| Main h→w reference route | 19 rides in 2 groups | **19 rides in 1 group** |
+| Main w→h reference route | 25 rides in 1 group | **25 rides in 1 group** |
+| Min ARI across shuffles | 0.794 | **1.000** |
+
+The small strict-purity drop is 29 more **ambig** pairs inside the now-larger groups; nothing the
+reference calls **diff** is grouped.
+
+**Why not hierarchical linkage** (the analysis's first suggestion). Cut at the match threshold on
+exact all-pairs distances (`d = max(p95 / limit, min_coverage / coverage)`):
+
+| Method | Recall | Strict purity | Main h→w / w→h split into |
+|---|---|---|---|
+| complete | 0.748 | 0.896 | 3 / 2 groups |
+| average | 0.938 | 0.793 | 2 / 2 |
+| single | 1.000 | 0.591 | 1 / 1 (but chains, unbounded) |
+| **centre (Butina)** | **0.990** | **0.659** | **1 / 1** |
+
+Identical rides sit at `d ≈ 0.87` on this scale (coverage tops out near 98%), so complete and
+average linkage have almost no room under the cut, and one borderline ride splits a main route.
+Single linkage chains with no bound on how far apart two members can be. Centre clustering
+bounds every member by the match rule against its centre.
+
+**Speed.** Each ride is projected and resampled once, and `possible_match_pairs` exactly rules
+out (via 50 m grid bounds and two sparse matrix products) the ~95% of pairs that can't match, so
+only plausible pairs get the exact metric. On ~1,100 synthetic rides (jittered copies of this
+snapshot, 2 workers) a cold grouping took 30 s and an incremental run 16 s on a desktop; the
+greedy code took 20.5 minutes for 1,141 rides on the Pi.
 
 ## Privacy
 

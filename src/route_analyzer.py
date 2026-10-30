@@ -14,7 +14,7 @@ import os
 import threading
 import subprocess
 import sys
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
 from typing import List, Tuple, Dict, Any, Optional
@@ -30,7 +30,8 @@ from .location_finder import Location
 from .route_namer import RouteNamer, check_rate_limit_file
 from .json_storage import secure_chmod
 from .route_comparison import (
-    passes_commute_prefilter, track_deviation_metrics, match_score, route_geometry,
+    PreparedTrack, passes_commute_prefilter, possible_match_pairs,
+    prepared_deviation_metrics, track_deviation_metrics, match_score, route_geometry,
 )
 
 logger = SecureLogger(__name__)
@@ -38,35 +39,58 @@ logger = SecureLogger(__name__)
 # Bump SIMILARITY_CACHE_VERSION whenever the pairwise score's math or the route
 # hash changes, and GROUPS_CACHE_VERSION whenever grouping logic changes, so stale
 # on-disk results from the old code are discarded instead of silently reused (#612).
-SIMILARITY_CACHE_VERSION = 3
-GROUPS_CACHE_VERSION = 3
+SIMILARITY_CACHE_VERSION = 4
+GROUPS_CACHE_VERSION = 4
+
+DIRECTIONS = ('home_to_work', 'work_to_home')
+DIRECTION_LABELS = {'home_to_work': 'home→work', 'work_to_home': 'work→home'}
+PLUS_ROUTE_FACTOR = 1.15
+# Below this many uncached comparisons a process pool costs more than it saves.
+MIN_PARALLEL_PAIRS = 200
+MIN_PAIRS_PER_CHUNK = 25
+# Commute direction needs both ends within this of home/work; a ride with both
+# ends within NEAR_MISS_M of them (but not that close) is counted as unclassified.
+ENDPOINT_RADIUS_M = 500
+NEAR_MISS_M = 2000
+
+# Per-process state for _pair_metrics_worker, set by _init_pair_worker: each
+# direction's route coordinates and lat0, and the tracks prepared so far.
+_worker_coords: Dict[str, list] = {}
+_worker_lat0s: Dict[str, float] = {}
+_worker_tracks: Dict[Tuple[str, int], PreparedTrack] = {}
 
 
-def _similarity_worker(args):
+def _init_pair_worker(coords_by_direction, lat0_by_direction):
+    global _worker_coords, _worker_lat0s, _worker_tracks
+    _worker_coords, _worker_lat0s, _worker_tracks = coords_by_direction, lat0_by_direction, {}
+
+
+def _worker_track(direction: str, index: int) -> PreparedTrack:
+    key = (direction, index)
+    if key not in _worker_tracks:
+        _worker_tracks[key] = PreparedTrack(_worker_coords[direction][index],
+                                            _worker_lat0s[direction])
+    return _worker_tracks[key]
+
+
+def _pair_metrics_worker(chunk):
     """
-    Module-level worker for ProcessPoolExecutor.
+    Module-level worker for ProcessPoolExecutor (must be picklable).
 
-    Computes deviation metrics between a pivot route and a batch of candidates.
-    Must be a top-level function so it is picklable on all platforms.
-
-    args: (pivot_coords, candidates)
-      pivot_coords – list of [lat, lon] pairs for the pivot route
-      candidates   – list of (original_idx, cache_key, candidate_coords)
-
-    Returns list of (original_idx, cache_key, [p95_m, coverage] or None). None
-    means the comparison failed; the caller logs it and treats it as no match.
+    chunk: (direction, [(i, j), ...]) indices into that direction's routes.
+    Returns (direction, [(i, j, [p95_m, coverage] or None), ...]). None means
+    the comparison failed; the caller logs it and treats it as no match.
     """
-    pivot_coords, candidates = args
+    direction, pairs = chunk
     results = []
-
-    for (original_idx, cache_key, candidate_coords) in candidates:
+    for i, j in pairs:
         try:
-            metrics = list(track_deviation_metrics(pivot_coords, candidate_coords))
+            metrics = list(prepared_deviation_metrics(_worker_track(direction, i),
+                                                      _worker_track(direction, j)))
         except Exception:
             metrics = None
-        results.append((original_idx, cache_key, metrics))
-
-    return results
+        results.append((i, j, metrics))
+    return direction, results
 
 
 @dataclass
@@ -136,7 +160,8 @@ class RouteAnalyzer:
                 so tests with force_reanalysis=True don't unlink the real cache.
             config: Configuration object
             n_workers: Number of parallel workers for route grouping (1-8)
-            force_reanalysis: If True, clear cache and reprocess all routes
+            force_reanalysis: If True, regroup every route instead of reusing the
+                cached groups (cached pair metrics and group IDs are still used)
             progress_callback: Optional callable(routes_done, routes_total, direction, ...)
             stop_check: Optional callable() → bool; returns True when caller wants early exit
             interactive: If True, background geocoding prompts for approval on stdin and
@@ -172,28 +197,21 @@ class RouteAnalyzer:
         # Route grouping cache
         self.groups_cache_file = self.cache_dir / 'route_groups_cache.json'
         
-        # Clear cache if force reanalysis
-        if force_reanalysis and self.groups_cache_file.exists():
-            tqdm.write("   🗑️  Clearing route groups cache (force reanalysis)")
-            self.groups_cache_file.unlink()
-            self.groups_cache = {}
-        else:
-            self.groups_cache = self._load_groups_cache()
+        # Loaded even under force_reanalysis, which regroups instead of reusing
+        # it: the regroup still takes its group IDs and names from it (#614).
+        self.groups_cache = self._load_groups_cache()
         
         # Background geocoding thread and subprocess
         self._geocoding_thread = None
         self._geocoding_lock = threading.Lock()
         self._terminal_process = None
 
-        # Active ProcessPoolExecutor for route-similarity comparisons, set for the
-        # duration of group_similar_routes(). Held on the instance (rather than
-        # passed purely as a local) so a broken pool can be replaced mid-run and
-        # the replacement stays visible across both direction passes.
-        self._executor: Optional[ProcessPoolExecutor] = None
-
         # Set when stop_check ends a grouping pass early; a partial result must
         # not be saved as the groups cache (#612).
         self._stopped_early = False
+
+        # Rides between home and work that extract_routes couldn't classify (C10).
+        self.unclassified_count = 0
 
     def _load_similarity_cache(self) -> Dict[str, List[float]]:
         """Load similarity cache from disk."""
@@ -389,8 +407,10 @@ class RouteAnalyzer:
         Returns:
             Cache key string
         """
-        hash1 = self._get_route_hash(route1)
-        hash2 = self._get_route_hash(route2)
+        return self._pair_key(self._get_route_hash(route1), self._get_route_hash(route2))
+
+    @staticmethod
+    def _pair_key(hash1: str, hash2: str) -> str:
         # Sort hashes to ensure same key regardless of order
         return f"{min(hash1, hash2)}_{max(hash1, hash2)}"
 
@@ -424,15 +444,17 @@ class RouteAnalyzer:
             List of Route objects
         """
         routes = []
-        
+        self.unclassified_count = 0
+
         for activity in self.activities:
             if not activity.polyline:
                 continue
-            
+
             # Determine route direction
-            route_direction = self._determine_direction(activity)
-            
+            route_direction, near_miss = self._classify_direction(activity)
+
             if route_direction is None:
+                self.unclassified_count += near_miss
                 continue
             
             if direction != 'both' and route_direction != direction:
@@ -462,6 +484,10 @@ class RouteAnalyzer:
             routes.append(route)
         
         logger.info(f"Extracted {len(routes)} routes (direction: {direction})")
+        if self.unclassified_count:
+            logger.info(f"{self.unclassified_count} rides run between home and work but "
+                        f"don't start and end within {ENDPOINT_RADIUS_M} m of them, so "
+                        f"they aren't grouped as commutes (unclassified)")
         
         return routes
     
@@ -475,27 +501,28 @@ class RouteAnalyzer:
         Returns:
             'home_to_work', 'work_to_home', or None
         """
+        return self._classify_direction(activity)[0]
+
+    def _classify_direction(self, activity: Activity) -> Tuple[Optional[str], bool]:
+        """(direction or None, near_miss). near_miss is True for a ride that isn't
+        classified but has both ends within NEAR_MISS_M of home and work — likely
+        a commute trimmed by a privacy zone or ended at a mid-route stop (C10)."""
         if not activity.start_latlng or not activity.end_latlng:
-            return None
-        
-        # Calculate distances
-        start_to_home = geodesic(activity.start_latlng, (self.home.lat, self.home.lon)).meters
-        start_to_work = geodesic(activity.start_latlng, (self.work.lat, self.work.lon)).meters
-        end_to_home = geodesic(activity.end_latlng, (self.home.lat, self.home.lon)).meters
-        end_to_work = geodesic(activity.end_latlng, (self.work.lat, self.work.lon)).meters
-        
-        # Use larger radius for matching (500m)
-        max_distance = 500
-        
-        # Check if starts near home and ends near work
-        if start_to_home < max_distance and end_to_work < max_distance:
-            return 'home_to_work'
-        
-        # Check if starts near work and ends near home
-        if start_to_work < max_distance and end_to_home < max_distance:
-            return 'work_to_home'
-        
-        return None
+            return None, False
+
+        home, work = (self.home.lat, self.home.lon), (self.work.lat, self.work.lon)
+        start_to_home = geodesic(activity.start_latlng, home).meters
+        start_to_work = geodesic(activity.start_latlng, work).meters
+        end_to_home = geodesic(activity.end_latlng, home).meters
+        end_to_work = geodesic(activity.end_latlng, work).meters
+
+        if start_to_home < ENDPOINT_RADIUS_M and end_to_work < ENDPOINT_RADIUS_M:
+            return 'home_to_work', False
+        if start_to_work < ENDPOINT_RADIUS_M and end_to_home < ENDPOINT_RADIUS_M:
+            return 'work_to_home', False
+        near_miss = (max(start_to_home, end_to_work) < NEAR_MISS_M
+                     or max(start_to_work, end_to_home) < NEAR_MISS_M)
+        return None, near_miss
     
     def calculate_route_similarity(self, route1: Route, route2: Route) -> float:
         """
@@ -528,20 +555,23 @@ class RouteAnalyzer:
 
     def group_similar_routes(self, routes: List[Route] = None) -> List[RouteGroup]:
         """
-        Group similar routes with intelligent caching and incremental analysis.
-        
-        Uses cached groups when possible, only processes new routes incrementally,
-        and only uses parallelism when beneficial (>100 new routes).
-        
+        Group routes that are the same route (see route_comparison.match_score).
+
+        Returns the cached groups when the ride set and config are unchanged.
+        Otherwise every ride is regrouped: the grouping is a pure function of
+        the pairwise metrics, so an incremental run (new rides, cached metrics
+        for the old pairs) gives exactly the groups a full recompute would
+        (#614). Group IDs and names carry over from the previous groups.
+
         Args:
             routes: List of routes to group (if None, extracts all routes)
-            
+
         Returns:
             List of RouteGroup objects
         """
         if routes is None:
             routes = self.extract_routes()
-        
+
         if not routes:
             logger.warning("No routes to group")
             return []
@@ -552,16 +582,14 @@ class RouteAnalyzer:
         if not self.force_reanalysis and self.groups_cache:
             cached_activity_ids = set(self.groups_cache.get('activity_ids', []))
             current_activity_ids = set(r.activity_id for r in routes)
-            
-            # Check if we can use incremental analysis
             new_activity_ids = current_activity_ids - cached_activity_ids
             removed_activity_ids = cached_activity_ids - current_activity_ids
 
             if not self._groups_cache_reusable(routes):
                 # Threshold, matching code or ride directions changed since the
                 # cache was built — reusing it would keep the old grouping (#612).
-                logger.info("Full reanalysis: route grouping configuration changed")
-                tqdm.write("   🔄 Full reanalysis: configuration changed")
+                logger.info("Regrouping: route grouping configuration changed")
+                tqdm.write("   🔄 Regrouping: configuration changed")
 
             elif not new_activity_ids and not removed_activity_ids:
                 # Perfect cache hit - no changes
@@ -569,32 +597,11 @@ class RouteAnalyzer:
                 cached_groups = self._deserialize_groups(self.groups_cache['groups'])
                 logger.info(f"Loaded {len(cached_groups)} route groups from cache")
                 return cached_groups
-            
-            elif new_activity_ids and not removed_activity_ids:
-                # Incremental analysis - only new routes
-                tqdm.write(f"   ⚡ Incremental analysis: {len(new_activity_ids)} new routes")
-                new_routes = [r for r in routes if r.activity_id in new_activity_ids]
-                cached_groups = self._deserialize_groups(self.groups_cache['groups'])
-                
-                # Merge new routes into existing groups
-                updated_groups = self._merge_new_routes(cached_groups, new_routes)
 
-                if self._stopped_early:
-                    self._save_similarity_cache()
-                    return updated_groups
-
-                # Save updated cache
-                all_activity_ids = list(current_activity_ids)
-                self._save_groups_cache_with_ids(all_activity_ids, updated_groups)
-                self._save_similarity_cache()
-                
-                return updated_groups
-            
-            else:
-                # Routes removed - full reanalysis needed
+            elif removed_activity_ids:
                 removed_pct = (len(removed_activity_ids) / len(cached_activity_ids) * 100
                                if cached_activity_ids else 0)
-                msg = (f"Full reanalysis: {len(removed_activity_ids)} of "
+                msg = (f"Regrouping: {len(removed_activity_ids)} of "
                        f"{len(cached_activity_ids)} previously-cached activities are "
                        f"no longer present ({removed_pct:.0f}%) — route groups cache "
                        f"will be rebuilt from the smaller activity set.")
@@ -606,54 +613,14 @@ class RouteAnalyzer:
                     )
                 else:
                     logger.info(msg)
-                tqdm.write(f"   🔄 Full reanalysis: {len(removed_activity_ids)} routes removed")
-        
-        # Full analysis (no cache or force reanalysis)
-        tqdm.write(f"   🔄 Full analysis: {len(routes)} routes")
-        
-        # Separate by direction
-        home_to_work = [r for r in routes if r.direction == 'home_to_work']
-        work_to_home = [r for r in routes if r.direction == 'work_to_home']
+                tqdm.write(f"   🔄 Regrouping: {len(removed_activity_ids)} routes removed")
 
-        groups = []
-        grand_total = len(home_to_work) + len(work_to_home)
+            else:
+                tqdm.write(f"   ⚡ Incremental analysis: {len(new_activity_ids)} new routes "
+                           f"(earlier comparisons come from the cache)")
 
-        # Parallelise the inner comparison loop across n_workers processes.
-        # The outer (pivot) loop remains sequential because each iteration
-        # depends on which routes the previous one removed.
-        # With a single worker a pool would only fork one extra copy of the
-        # numpy stack for zero parallelism (a real cost on the Pi), so run
-        # the sequential path instead.
-        self._executor = (ProcessPoolExecutor(max_workers=self.n_workers)
-                          if self.n_workers > 1 else None)
-        try:
-            if home_to_work:
-                tqdm.write(f"   → Processing {len(home_to_work)} home→work routes "
-                           f"({self.n_workers} workers)")
-                htw_groups = self._group_routes_by_similarity(
-                    home_to_work, 'home_to_work',
-                    offset=0, total=grand_total, executor=self._executor)
-                groups.extend(htw_groups)
-                tqdm.write(f"   ✓ {len(htw_groups)} groups")
-
-            if work_to_home and not self._stopped_early:
-                tqdm.write(f"   → Processing {len(work_to_home)} work→home routes "
-                           f"({self.n_workers} workers)")
-                wth_groups = self._group_routes_by_similarity(
-                    work_to_home, 'work_to_home',
-                    offset=len(home_to_work), total=grand_total, executor=self._executor)
-                groups.extend(wth_groups)
-                tqdm.write(f"   ✓ {len(wth_groups)} groups")
-        finally:
-            if self._executor is not None:
-                self._executor.shutdown(wait=False, cancel_futures=True)
-                self._executor = None
-
-        tqdm.write(f"   Total: {len(groups)} groups")
-        logger.info(f"Created {len(groups)} route groups from {len(routes)} routes")
-        
-        # Mark plus routes (routes >15% longer than median)
-        groups = self._mark_plus_routes(groups)
+        tqdm.write(f"   🔄 Grouping {len(routes)} routes ({self.n_workers} workers)")
+        groups = self._regroup(routes)
 
         if self._stopped_early:
             # Partial result: saving it would record the rides never reached as
@@ -663,375 +630,317 @@ class RouteAnalyzer:
             self._save_similarity_cache()
             return groups
 
+        tqdm.write(f"   Total: {len(groups)} groups")
+        logger.info(f"Created {len(groups)} route groups from {len(routes)} routes")
+
         # Save to cache immediately with temporary names
         # (geocoding will happen in background and update cache when complete)
         activity_ids = [r.activity_id for r in routes]
         self._save_groups_cache_with_ids(activity_ids, groups)
-        
+
         # Start background geocoding (non-blocking)
         # This will update the cache and regenerate the report when complete
         if self._geocoding_enabled():
             self._start_background_geocoding(groups, auto_approve=not self.interactive)
-        
+
         # Save similarity cache after grouping
         self._save_similarity_cache()
-        
-        return groups
-    
-    def _merge_new_routes(self, existing_groups: List[RouteGroup],
-                         new_routes: List[Route]) -> List[RouteGroup]:
-        """
-        Merge new routes into existing groups incrementally.
-        
-        Args:
-            existing_groups: Existing route groups from cache
-            new_routes: New routes to merge
-            
-        Returns:
-            Updated list of route groups
-        """
-        if not new_routes:
-            return existing_groups
-        
-        tqdm.write(f"   → Merging {len(new_routes)} new routes into {len(existing_groups)} groups")
-        
-        # Separate new routes by direction
-        new_htw = [r for r in new_routes if r.direction == 'home_to_work']
-        new_wth = [r for r in new_routes if r.direction == 'work_to_home']
-        
-        # Separate existing groups by direction
-        htw_groups = [g for g in existing_groups if g.direction == 'home_to_work']
-        wth_groups = [g for g in existing_groups if g.direction == 'work_to_home']
-        
-        # Merge each direction
-        updated_groups = []
-        
-        if new_htw:
-            updated_htw = self._merge_routes_into_groups(htw_groups, new_htw, 'home_to_work')
-            updated_groups.extend(updated_htw)
-            tqdm.write(f"   ✓ Merged into {len(updated_htw)} home→work groups")
-        else:
-            updated_groups.extend(htw_groups)
-        
-        if new_wth:
-            updated_wth = self._merge_routes_into_groups(wth_groups, new_wth, 'work_to_home')
-            updated_groups.extend(updated_wth)
-            tqdm.write(f"   ✓ Merged into {len(updated_wth)} work→home groups")
-        else:
-            updated_groups.extend(wth_groups)
-        
-        # Re-mark plus routes after merge
-        updated_groups = self._mark_plus_routes(updated_groups)
-        
-        return updated_groups
-    
-    def _merge_routes_into_groups(self, groups: List[RouteGroup],
-                                  new_routes: List[Route],
-                                  direction: str) -> List[RouteGroup]:
-        """
-        Merge new routes into existing groups for a specific direction.
-        
-        Args:
-            groups: Existing route groups
-            new_routes: New routes to merge
-            direction: Route direction
-            
-        Returns:
-            Updated list of route groups
-        """
-        if not new_routes:
-            return groups
-        
-        # Try to match each new route to existing groups
-        unmatched_routes = []
-        
-        for route in new_routes:
-            matched = False
-            best_similarity = 0
-            best_group_idx = -1
-            
-            # Find best matching group
-            for idx, group in enumerate(groups):
-                if not self._passes_geometric_filter(route, group.representative_route):
-                    continue
-                similarity = self.calculate_route_similarity(
-                    route, group.representative_route
-                )
-                if self._is_match(similarity) and similarity > best_similarity:
-                    best_similarity = similarity
-                    best_group_idx = idx
-                    matched = True
-            
-            if matched:
-                # Add to existing group
-                groups[best_group_idx].routes.append(route)
-                groups[best_group_idx].frequency += 1
-                # Update representative if needed (keep median)
-                groups[best_group_idx].representative_route = self._select_representative_route(
-                    groups[best_group_idx].routes
-                )
-            else:
-                unmatched_routes.append(route)
-        
-        # Create new groups for unmatched routes
-        if unmatched_routes:
-            new_groups = self._group_routes_by_similarity(unmatched_routes, direction)
-            # Renumber new group IDs to avoid conflicts
-            next_id = len(groups)
-            for group in new_groups:
-                group.id = f"{direction}_{next_id}"
-                next_id += 1
-            groups.extend(new_groups)
-        
-        # Re-sort by frequency
-        groups.sort(key=lambda g: g.frequency, reverse=True)
-        
-        return groups
-    
-    def _mark_plus_routes(self, groups: List[RouteGroup]) -> List[RouteGroup]:
-        """
-        Mark route groups that are significantly longer than typical commutes.
-        
-        A "plus route" is one where the distance is >15% above the median distance
-        for that direction (home_to_work or work_to_home).
-        
-        Args:
-            groups: List of route groups
-            
-        Returns:
-            Updated list of route groups with is_plus_route flag set
-        """
-        if not groups:
-            return groups
-        
-        # Separate by direction
-        htw_groups = [g for g in groups if g.direction == 'home_to_work']
-        wth_groups = [g for g in groups if g.direction == 'work_to_home']
-        
-        # Calculate median distance for each direction
-        for direction_groups in [htw_groups, wth_groups]:
-            if not direction_groups:
-                continue
-            
-            # Get all distances
-            distances = []
-            for group in direction_groups:
-                for route in group.routes:
-                    distances.append(route.distance)
-            
-            if not distances:
-                continue
-            
-            # Calculate median
-            median_distance = np.median(distances)
-            threshold = median_distance * 1.15  # 15% above median
-            
-            direction = direction_groups[0].direction
-            direction_label = direction.replace('_', '→')
-            
-            # Mark groups where representative route exceeds threshold
-            plus_count = 0
-            for group in direction_groups:
-                if group.representative_route.distance > threshold:
-                    group.is_plus_route = True
-                    # Also mark individual routes
-                    for route in group.routes:
-                        if route.distance > threshold:
-                            route.is_plus_route = True
-                    plus_count += 1
-            
-            if plus_count > 0:
-                tqdm.write(f"   ⭐ {plus_count} {direction_label} PLUS routes")
-                tqdm.write(f"      (>{median_distance/1000:.1f}km + 15%)")
 
         return groups
 
-    def _submit_similarity_tasks(self, task_args: List[Tuple]) -> List[Tuple[int, str, float]]:
-        """Submit a batch of _similarity_worker tasks to self._executor and collect results.
+    def _regroup(self, routes: List[Route]) -> List[RouteGroup]:
+        """Group every route from scratch, per direction, reusing cached metrics.
 
-        Raises BrokenProcessPool if a worker dies outright instead of returning normally.
+        1. Each route is projected and resampled once (PreparedTrack).
+        2. possible_match_pairs rules out, exactly and cheaply, the pairs that
+           can't match; only the rest need the slow exact metric.
+        3. Uncached metrics are computed (in parallel when worthwhile).
+        4. _cluster_by_centres groups the routes from the match graph.
+
+        Routes are sorted by activity ID first, so the result doesn't depend on
+        input order. Returns [] if stop_check ends the run early.
         """
-        futures = [self._executor.submit(_similarity_worker, args) for args in task_args]
-        results = []
-        for fut in futures:
-            results.extend(fut.result())
-        return results
+        by_direction = {}
+        for direction in DIRECTIONS:
+            rs = sorted((r for r in routes if r.direction == direction),
+                        key=lambda r: r.activity_id)
+            if rs:
+                by_direction[direction] = rs
 
-    def _group_routes_by_similarity(self, routes: List[Route], direction: str,
-                                    offset: int = 0, total: int = 0,
-                                    executor: Optional[Any] = None) -> List[RouteGroup]:
-        """
-        Group routes by similarity using threshold-based clustering.
-        Route naming is deferred to background thread for performance.
+        lat0s, tracks, hashes, candidates = {}, {}, {}, {}
+        for direction, rs in by_direction.items():
+            lat0s[direction] = self._shared_lat0(rs)
+            tracks[direction] = [self._prepare_track(r, lat0s[direction]) for r in rs]
+            hashes[direction] = [self._get_route_hash(r) for r in rs]
+            valid = [k for k, t in enumerate(tracks[direction]) if t is not None]
+            pairs = possible_match_pairs([tracks[direction][k] for k in valid],
+                                         self.max_p95_deviation_m, self.min_coverage)
+            candidates[direction] = [(valid[i], valid[j]) for i, j in pairs]
 
-        The outer loop is sequential (each pivot depends on prior removals).
-        The inner comparison loop is parallelised via the provided executor:
-        uncached pairs are split into n_workers chunks and dispatched as a
-        single round-trip per pivot, then results are merged back into the
-        instance similarity cache.
+        todo = [(direction, i, j)
+                for direction, pairs in candidates.items() for i, j in pairs
+                if self._pair_key(hashes[direction][i], hashes[direction][j])
+                not in self.similarity_cache]
+        n_candidates = sum(len(p) for p in candidates.values())
+        tqdm.write(f"   → {n_candidates} possible matches to check, "
+                   f"{n_candidates - len(todo)} already cached")
 
-        Args:
-            routes:    Routes to group.
-            direction: Route direction label.
-            offset:    Routes already consumed in previous direction (for progress).
-            total:     Grand total across both directions (for progress percentage).
-            executor:  ProcessPoolExecutor to use for parallel comparisons, or None
-                       to run sequentially.
-        """
-        debug_logger = SecureLogger('debug')
-
-        if not routes:
+        if not self._compute_pair_metrics(todo, by_direction, lat0s, tracks, hashes):
+            self._stopped_early = True
             return []
 
-        n = len(routes)
-        debug_logger.info(f"Starting similarity grouping for {n} {direction} routes")
-
-        # Upper-bound on comparisons (worst case: no grouping occurs)
-        comparisons_estimated = n * (n - 1) // 2
-
         groups = []
-        ungrouped = routes.copy()
-        group_id = 0
-        total_comparisons = 0
-        routes_consumed = 0
-        grand_total = total or n
+        for direction, rs in by_direction.items():
+            n = len(rs)
+            scores = np.zeros((n, n))
+            for i, j in candidates[direction]:
+                metrics = self.similarity_cache.get(
+                    self._pair_key(hashes[direction][i], hashes[direction][j]))
+                if metrics is not None:  # None: the comparison failed, so no match
+                    scores[i, j] = scores[j, i] = self._score(metrics)
+            direction_groups = [
+                RouteGroup(id='', direction=direction, routes=[rs[k] for k in members],
+                           representative_route=rs[centre], frequency=len(members))
+                for centre, members in self._cluster_by_centres(scores)
+            ]
+            tqdm.write(f"   ✓ {DIRECTION_LABELS[direction]}: {n} routes → "
+                       f"{len(direction_groups)} groups")
+            groups.extend(direction_groups)
 
-        # Minimum uncached candidates per pivot to bother parallelising.
-        # Below this the IPC round-trip cost exceeds the compute savings.
-        MIN_PARALLEL = 8
-        total_filtered = 0
+        self._assign_group_ids(groups)
+        self._mark_plus_routes(groups)
+        groups.sort(key=lambda g: (DIRECTIONS.index(g.direction), -g.frequency, g.id))
+        return groups
 
-        while ungrouped:
-            current = ungrouped.pop(0)
-            group = [current]
-            routes_consumed += 1
+    @staticmethod
+    def _shared_lat0(routes: List[Route]) -> float:
+        """Projection latitude shared by one direction's routes: the median
+        centroid latitude, rounded to 0.1° so that adding rides almost never
+        moves it. Any lat0 within a few tenths of a degree changes deviations
+        by well under a metre."""
+        lats = [r.centroid[0] for r in routes if r.centroid is not None]
+        return round(float(np.median(lats)), 1) if lats else 0.0
 
-            # ---- Separate cached from uncached candidates ----
-            cached_similarities: Dict[int, float] = {}
-            uncached: List[Tuple[int, str, List]] = []  # (idx, cache_key, coords)
-            skipped_by_filter = 0
+    @staticmethod
+    def _prepare_track(route: Route, lat0: float) -> Optional[PreparedTrack]:
+        try:
+            return PreparedTrack(route.coordinates, lat0)
+        except Exception as e:
+            logger.warning(f"Route activity_id={route.activity_id} has no usable track, "
+                           f"so it can't match another route: {e}")
+            return None
 
-            for i, route in enumerate(ungrouped):
-                cache_key = self._get_cache_key(current, route)
-                if cache_key in self.similarity_cache:
-                    cached_similarities[i] = self._score(self.similarity_cache[cache_key])
-                elif not self._passes_geometric_filter(current, route):
-                    # Not persisted: the prefilter is cheap, and a cached 0.0 would
-                    # outlive any change to the prefilter itself (#612).
-                    cached_similarities[i] = 0.0
-                    skipped_by_filter += 1
-                    total_filtered += 1
-                else:
-                    uncached.append((i, cache_key, route.coordinates))
+    def _compute_pair_metrics(self, todo, by_direction, lat0s, tracks, hashes) -> bool:
+        """Compute the (p95, coverage) metrics of every (direction, i, j) in todo
+        into self.similarity_cache, reporting progress as it goes.
 
-            # ---- Dispatch uncached comparisons ----
-            if executor is not None and len(uncached) >= MIN_PARALLEL:
-                # Split into n_workers chunks for a single round-trip per pivot
-                chunk_size = max(1, len(uncached) // self.n_workers)
-                chunks = [uncached[j:j + chunk_size]
-                          for j in range(0, len(uncached), chunk_size)]
-                pivot_coords = list(current.coordinates)
-                task_args = [(pivot_coords, chunk) for chunk in chunks]
-                try:
-                    results = self._submit_similarity_tasks(task_args)
-                except BrokenProcessPool:
-                    # A worker died outright (segfault/OOM/killed) rather than raising
-                    # a normal exception. Restart the pool once and retry this pivot's
-                    # comparisons — if it dies again, let the exception propagate.
-                    debug_logger.warning(
-                        "Worker process died mid-comparison; restarting the pool "
-                        "and retrying this pivot once."
-                    )
-                    self._executor.shutdown(wait=False, cancel_futures=True)
-                    self._executor = ProcessPoolExecutor(max_workers=self.n_workers)
-                    results = self._submit_similarity_tasks(task_args)
-                for (idx, ck, metrics) in results:
-                    if metrics is None:
-                        logger.warning("Route comparison failed, treating as no match")
-                        cached_similarities[idx] = 0.0
-                        continue
-                    self.similarity_cache[ck] = metrics
-                    cached_similarities[idx] = self._score(metrics)
-            else:
-                # Sequential fallback (small batches or no executor)
-                for (i, cache_key, _) in uncached:
-                    score = self.calculate_route_similarity(current, ungrouped[i])
-                    cached_similarities[i] = score
+        Failed comparisons are logged and left uncached, so they count as no
+        match. Returns False if stop_check asked to stop.
+        """
+        total = len(todo)
+        grand_total = sum(len(rs) for rs in by_direction.values())
 
-            total_comparisons += len(ungrouped)
-
-            # ---- Find matches ----
-            to_remove = []
-            for i, similarity in cached_similarities.items():
-                if self._is_match(similarity):
-                    group.append(ungrouped[i])
-                    to_remove.append(i)
-
-            for i in reversed(sorted(to_remove)):
-                ungrouped.pop(i)
-
-            debug_logger.info(
-                f"Group {group_id}: {len(group)} routes, "
-                f"{len(ungrouped)} remaining, {total_comparisons} total comparisons"
-                + (f" ({skipped_by_filter} skipped by geo filter)" if skipped_by_filter else "")
-            )
-
-            # ---- Emit progress ----
+        def report(done):
             if self.progress_callback:
                 try:
                     self.progress_callback(
-                        offset + routes_consumed, grand_total, direction,
-                        total_comparisons, comparisons_estimated,
-                    )
+                        grand_total if total == 0 else int(grand_total * done / total),
+                        grand_total, todo[min(done, total - 1)][0] if total else '',
+                        done, total)
                 except Exception:
                     pass
 
-            direction_label = "to Work" if direction == "home_to_work" else "to Home"
-            route_group = RouteGroup(
-                id=f"{direction}_{group_id}",
-                direction=direction,
-                routes=group,
-                representative_route=self._select_representative_route(group),
-                frequency=len(group),
-                name=f"Route {group_id} {direction_label}",
-            )
-            groups.append(route_group)
-            group_id += 1
+        if not todo:
+            report(0)
+            return True
 
-            if self.stop_check and self.stop_check():
-                self._stopped_early = True
-                break
+        def store(direction, results):
+            for i, j, metrics in results:
+                if metrics is None:
+                    logger.warning("Route comparison failed, treating as no match")
+                    continue
+                self.similarity_cache[self._pair_key(
+                    hashes[direction][i], hashes[direction][j])] = metrics
 
-        groups.sort(key=lambda g: g.frequency, reverse=True)
+        # Chunks small enough for steady progress and stop checks, each within
+        # one direction.
+        chunk_size = max(MIN_PAIRS_PER_CHUNK, -(-total // (self.n_workers * 16)))
+        chunks = [(direction, [(i, j) for d, i, j in todo[k:k + chunk_size]
+                               if d == direction])
+                  for k in range(0, total, chunk_size)
+                  for direction in DIRECTIONS]
+        chunks = [c for c in chunks if c[1]]
 
-        expensive_comparisons = total_comparisons - total_filtered
-        filter_pct = (total_filtered / total_comparisons * 100) if total_comparisons else 0
-        debug_logger.info(
-            f"Grouping complete for {n} {direction} routes: "
-            f"{len(groups)} groups, {total_comparisons} comparisons "
-            f"({total_filtered} filtered [{filter_pct:.0f}%], "
-            f"{expensive_comparisons} expensive)"
-        )
+        def run_in_process(pending):
+            done_here = 0
+            for direction, pairs in pending:
+                ts = tracks[direction]
+                results = []
+                for i, j in pairs:
+                    try:
+                        metrics = list(prepared_deviation_metrics(ts[i], ts[j]))
+                    except Exception:
+                        metrics = None
+                    results.append((i, j, metrics))
+                store(direction, results)
+                done_here += len(pairs)
+                yield done_here
+
+        done = 0
+        if self.n_workers > 1 and total >= MIN_PARALLEL_PAIRS:
+            coords = {d: [r.coordinates for r in rs] for d, rs in by_direction.items()}
+            executor = ProcessPoolExecutor(max_workers=self.n_workers,
+                                           initializer=_init_pair_worker,
+                                           initargs=(coords, lat0s))
+            futures = {executor.submit(_pair_metrics_worker, c): c for c in chunks}
+            remaining = dict(futures)
+            try:
+                for fut in as_completed(futures):
+                    direction, results = fut.result()
+                    store(direction, results)
+                    del remaining[fut]
+                    done += len(results)
+                    report(done)
+                    if self.stop_check and self.stop_check():
+                        return False
+            except BrokenProcessPool:
+                # A worker died outright (segfault/OOM/killed) rather than raising.
+                # Finish what's left in this process rather than fail the run.
+                logger.warning("A comparison worker process died; finishing the "
+                               f"remaining {len(remaining)} chunks in-process")
+                base = done
+                for done_here in run_in_process(list(remaining.values())):
+                    report(base + done_here)
+                    if self.stop_check and self.stop_check():
+                        return False
+            finally:
+                executor.shutdown(wait=False, cancel_futures=True)
+        else:
+            for done in run_in_process(chunks):
+                report(done)
+                if self.stop_check and self.stop_check():
+                    return False
+        return True
+
+    @staticmethod
+    def _cluster_by_centres(scores: np.ndarray) -> List[Tuple[int, List[int]]]:
+        """Group indices into [(centre, members)], given symmetric match scores
+        (0 where a pair can't match).
+
+        Repeatedly takes the ungrouped route that matches the most other
+        ungrouped routes as a centre, and groups it with every ungrouped route
+        that matches it (Butina clustering). Ties go to the higher total match
+        score, then the lower index — with routes sorted by activity ID the
+        result doesn't depend on input order (#614). Every member matches its
+        group's centre, so a group can't chain into a different route, and the
+        centre is the group's representative.
+        """
+        n = len(scores)
+        match = scores >= 1.0
+        np.fill_diagonal(match, True)
+        ungrouped = np.ones(n, dtype=bool)
+        result = []
+        while ungrouped.any():
+            live = match & ungrouped[None, :]
+            degree = live.sum(axis=1)
+            total_score = np.where(live, scores, 0.0).sum(axis=1)
+            candidates = np.flatnonzero(ungrouped)
+            # lexsort: last key is primary; ties fall to the lowest index.
+            order = np.lexsort((candidates, -total_score[candidates], -degree[candidates]))
+            centre = int(candidates[order[0]])
+            members = np.flatnonzero(match[centre] & ungrouped)
+            ungrouped[members] = False
+            result.append((centre, [int(m) for m in members]))
+        return result
+
+    def _assign_group_ids(self, groups: List[RouteGroup]) -> None:
+        """Give each group a stable ID and name (#614).
+
+        A group takes the ID (and name) of the previous group it shares the most
+        rides with, so IDs — which saved plans and favourites refer to — survive
+        a regroup, an incremental run, and a threshold change. Groups with no
+        predecessor get the next unused number in their direction, never a
+        retired one, so an old ID can't come to mean a different route.
+        """
+        previous = {}
+        for g in (self.groups_cache or {}).get('groups', []):
+            previous[g['id']] = (g['direction'],
+                                 {r['activity_id'] for r in g.get('routes', [])},
+                                 g.get('name'))
+
+        claims = []
+        for k, group in enumerate(groups):
+            members = {r.activity_id for r in group.routes}
+            for old_id, (direction, old_members, _) in previous.items():
+                overlap = len(members & old_members)
+                if direction == group.direction and overlap:
+                    claims.append((-overlap, old_id, min(members), k))
+        taken_ids, assigned = set(), {}
+        for _, old_id, _, k in sorted(claims):
+            if old_id not in taken_ids and k not in assigned:
+                taken_ids.add(old_id)
+                assigned[k] = old_id
+
+        next_number = {}
+        for old_id, (direction, _, _) in previous.items():
+            suffix = old_id[len(direction) + 1:]
+            if old_id.startswith(direction + '_') and suffix.isdigit():
+                next_number[direction] = max(next_number.get(direction, 0), int(suffix) + 1)
+        new_groups = sorted((k for k in range(len(groups)) if k not in assigned),
+                            key=lambda k: (-groups[k].frequency,
+                                           min(r.activity_id for r in groups[k].routes)))
+        for k in new_groups:
+            direction = groups[k].direction
+            number = next_number.get(direction, 0)
+            next_number[direction] = number + 1
+            assigned[k] = f"{direction}_{number}"
+
+        for k, group in enumerate(groups):
+            group.id = assigned[k]
+            old = previous.get(group.id)
+            if old and old[2]:
+                group.name = old[2]
+            else:
+                direction_label = "to Work" if group.direction == "home_to_work" else "to Home"
+                group.name = f"Route {group.id.rsplit('_', 1)[-1]} {direction_label}"
+
+    def _mark_plus_routes(self, groups: List[RouteGroup]) -> List[RouteGroup]:
+        """
+        Flag longer-than-usual routes. Flags are recomputed from scratch on
+        every call (#614), so they never stick from an earlier run.
+
+        - A group is a "plus route" when its representative is >15% longer than
+          the median commute in that direction (all rides pooled, so it's the
+          typical day's distance).
+        - A ride is flagged when it's >15% longer than its own group's median.
+
+        Args:
+            groups: List of route groups
+
+        Returns:
+            The same groups, with is_plus_route set
+        """
+        for direction in DIRECTIONS:
+            direction_groups = [g for g in groups if g.direction == direction]
+            distances = [r.distance for g in direction_groups for r in g.routes]
+            if not distances:
+                continue
+            threshold = np.median(distances) * PLUS_ROUTE_FACTOR
+
+            plus_count = 0
+            for group in direction_groups:
+                group.is_plus_route = bool(group.representative_route.distance > threshold)
+                plus_count += group.is_plus_route
+                group_threshold = np.median([r.distance for r in group.routes]) * PLUS_ROUTE_FACTOR
+                for route in group.routes:
+                    route.is_plus_route = bool(route.distance > group_threshold)
+
+            if plus_count > 0:
+                tqdm.write(f"   ⭐ {plus_count} {DIRECTION_LABELS[direction]} PLUS routes")
+                tqdm.write(f"      (>{threshold / PLUS_ROUTE_FACTOR / 1000:.1f}km + 15%)")
 
         return groups
 
-    def _select_representative_route(self, routes: List[Route]) -> Route:
-        """
-        Select representative route from group (median by duration).
-        
-        Args:
-            routes: List of routes in group
-            
-        Returns:
-            Representative Route object
-        """
-        # Sort by duration
-        sorted_routes = sorted(routes, key=lambda r: r.duration)
-        
-        # Return median route
-        median_idx = len(sorted_routes) // 2
-        return sorted_routes[median_idx]
-    
     def _geocoding_enabled(self) -> bool:
         """Whether background geocoding should run for this instance.
 
