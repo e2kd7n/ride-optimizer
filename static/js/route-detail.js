@@ -51,7 +51,7 @@
                 }).addTo(mapInstance);
 
                 const polyline = L.polyline(coordinates, {
-                    color: '#007bff',
+                    color: '#0B6FA6',
                     weight: 5,
                     opacity: 0.85
                 }).addTo(mapInstance);
@@ -174,8 +174,8 @@
                             datasets: [{
                                 label: 'Avg Speed (km/h)',
                                 data: speedData,
-                                borderColor: '#007bff',
-                                backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                                borderColor: '#0B6FA6',
+                                backgroundColor: 'rgba(11, 111, 166, 0.1)',
                                 tension: 0.3,
                                 fill: true
                             }]
@@ -193,8 +193,8 @@
                             datasets: [{
                                 label: 'Duration (min)',
                                 data: durationData,
-                                borderColor: '#28a745',
-                                backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                                borderColor: '#1F8A8A',
+                                backgroundColor: 'rgba(31, 138, 138, 0.1)',
                                 tension: 0.3,
                                 fill: true
                             }]
@@ -212,8 +212,8 @@
                             datasets: [{
                                 label: 'Avg Heart Rate (bpm)',
                                 data: heartrateData,
-                                borderColor: '#dc3545',
-                                backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                                borderColor: '#A8457E',
+                                backgroundColor: 'rgba(168, 69, 126, 0.1)',
                                 tension: 0.3,
                                 fill: true,
                                 spanGaps: true
@@ -234,8 +234,8 @@
                             datasets: [{
                                 label: 'Avg Power (watts)',
                                 data: powerData,
-                                borderColor: '#ffc107',
-                                backgroundColor: 'rgba(255, 193, 7, 0.1)',
+                                borderColor: '#E8702A',
+                                backgroundColor: 'rgba(232, 112, 42, 0.1)',
                                 tension: 0.3,
                                 fill: true,
                                 spanGaps: true

@@ -2,13 +2,13 @@
         .map-container {
             height: var(--map-height-standard);
             width: 100%;
-            border-radius: 8px;
+            border-radius: var(--radius-sm);
         }
 
         /* Weather banner styles — flat cobalt (Fair Weather; gradients retired) */
         .weather-banner {
             background: var(--accent);
-            color: white;
+            color: var(--on-accent);
             border-radius: 16px 16px 0 0;
             padding: var(--space-3) var(--space-4);
             box-shadow: 0 2px 8px rgba(0,0,0,0.15);
@@ -18,15 +18,24 @@
             flex-wrap: wrap;
         }
 
+        /* The icon takes the banner's own ink. getWeatherIcon()'s text-*
+           classes (text-primary for rain/default) drew cobalt on the cobalt
+           banner, so the icon disappeared. */
         .weather-banner .weather-icon {
             font-size: var(--font-size-display);
-            opacity: 0.9;
+        }
+
+        .weather-banner .weather-icon,
+        .weather-banner .weather-icon i {
+            color: var(--on-accent) !important;
         }
 
         .weather-banner .weather-temp {
-            font-size: var(--font-size-hero);
-            font-weight: 700;
+            font-family: var(--font-numeric);
+            font-size: var(--font-size-display);
+            font-weight: 600;
             line-height: 1;
+            font-variant-numeric: tabular-nums;
         }
 
         .weather-banner .weather-details {
@@ -43,6 +52,14 @@
             gap: var(--space-1);
         }
         
+        /* Retry button in the banner's error state takes the banner's ink,
+           so it stays visible on both the Day and Night cobalt. */
+        .weather-banner .weather-retry-btn {
+            color: inherit;
+            border: 1px solid currentColor;
+            background: transparent;
+        }
+
         .weather-banner .comfort-badge {
             background: rgba(255,255,255,0.2);
             padding: var(--space-1) var(--space-2);
@@ -61,7 +78,7 @@
             }
 
             .weather-banner .weather-temp {
-                font-size: var(--font-size-lg);
+                font-size: var(--font-size-hero);
             }
 
             .weather-banner .weather-details {
@@ -81,16 +98,17 @@
         }
 
         .commute-card:hover {
-            transform: translateY(-2px);
             box-shadow: 0 4px 8px rgba(0,0,0,0.15);
         }
 
+        /* Direction identity, matching the commute map's polylines (cobalt to
+           work, teal home). Not green, which means Good. */
         .commute-card.to-work {
-            border-left: 4px solid var(--success-color);
+            border-left: 4px solid var(--accent);
         }
 
         .commute-card.to-home {
-            border-left: 4px solid var(--primary-color);
+            border-left: 4px solid #1F8A8A;
         }
 
         .commute-card-header {
@@ -154,17 +172,12 @@
         }
 
         /* â”€â”€ Hero Decision Card (#286) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+        /* No padding of its own: every row inside shares the card-body's
+           16px inset, so the panel, cells, reasons and buttons all start on
+           the same left edge. (A 4px padding here used to override the old
+           left-border's 16px inset and pin content against the border.) */
         .hero-decision-card {
-            padding: var(--space-1) 0;
-        }
-
-        .hero-card-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: var(--space-2);
-            flex-wrap: wrap;
-            gap: var(--space-2);
+            padding: 0;
         }
 
         .hero-route-name {
@@ -172,29 +185,58 @@
             font-weight: 700;
         }
 
-        .hero-weather-summary {
+        /* Conditions line under the panel: weather, wind, confidence */
+        .hero-conditions {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: var(--space-2);
+            margin-top: var(--space-2);
             font-size: var(--font-size-sm);
             color: var(--ink-soft);
+        }
+
+        .hero-conditions i {
+            margin-right: var(--space-1);
+        }
+
+        .hero-reasons-label {
             margin-bottom: var(--space-1);
         }
 
-        .hero-time-estimate {
-            font-size: var(--font-size-sm);
-            font-weight: 600;
-            color: var(--ink);
-            margin-bottom: var(--space-2);
-        }
-
+        /* Bullets sit on the same left edge as everything else (no hanging
+           disc indent). Neutral dots, not checks — a Poor route's reasons
+           can be negative. */
         .hero-reasons {
-            margin: var(--space-2) 0 var(--space-2) var(--space-3);
+            margin: 0 0 var(--space-3);
             padding: 0;
             font-size: var(--font-size-sm);
             color: var(--ink-soft);
-            list-style: disc;
+            list-style: none;
         }
 
         .hero-reasons li {
+            display: flex;
+            align-items: flex-start;
+            gap: var(--space-2);
             margin-bottom: var(--space-1);
+        }
+
+        .hero-reasons li::before {
+            content: '';
+            flex-shrink: 0;
+            width: 4px;
+            height: 4px;
+            margin-top: 0.6em;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        .hero-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--space-2);
+            margin-top: var(--space-3);
         }
 
         .hero-meta {
@@ -227,12 +269,6 @@
         /* Long ride planner "more days" chevron rotation (#596) */
         .long-ride-chevron { transition: transform 0.2s; display: inline-block; }
         [data-bs-target="#long-ride-other-days"][aria-expanded="true"] .long-ride-chevron { transform: rotate(180deg); }
-
-        .card {
-            border-radius: 16px;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.08);
-            border: 1px solid var(--line);
-        }
 
         .weather-hourly-strip {
             background: rgba(var(--accent-rgb), 0.08);

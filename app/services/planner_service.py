@@ -1050,7 +1050,7 @@ class PlannerService:
                         <strong>Variety Score:</strong> {ride.get('variety_score', 0) * 100:.0f}%<br>
                         <strong>Forecast:</strong> {escape(self._get_weather_summary(weather))}
                     </div>
-                    {'<div style="margin-top: 8px;"><span style="background: #6f42c1; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.85em;">🔄 Loop</span></div>' if ride.get('is_loop') else ''}
+                    {'<div style="margin-top: 8px;"><span style="background: #7A4FA0; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.85em;">🔄 Loop</span></div>' if ride.get('is_loop') else ''}
                 </div>
                 """
                 
@@ -1124,10 +1124,10 @@ class PlannerService:
     def _get_weather_color(self, weather_score: float) -> str:
         """Semantic weather color for route display."""
         if weather_score >= 0.7:
-            return '#28a745'
+            return '#188038'
         if weather_score >= 0.5:
-            return '#ffc107'
-        return '#dc3545'
+            return '#F2A900'
+        return '#C62828'
     
     def _add_weather_segmented_route(self,
                                      feature_group: 'folium.FeatureGroup',

@@ -8,7 +8,7 @@
 
         .wizard-header {
             background: var(--accent); /* flat cobalt — Fair Weather, gradients retired */
-            color: white;
+            color: var(--on-accent);
             border-radius: 16px 16px 0 0;
             padding: var(--space-5);
             text-align: center;

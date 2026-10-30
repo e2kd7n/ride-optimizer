@@ -206,6 +206,17 @@ def _compute_summary(activities):
     }
 
 
+def _activity_url(a):
+    """External page for an activity on the service it was imported from.
+
+    There's no in-app activity detail page, so records link out instead.
+    Activities cached before the `source` field existed are all Strava.
+    """
+    if getattr(a, 'source', None) == 'garmin':
+        return f'https://connect.garmin.com/modern/activity/{a.id}'
+    return f'https://www.strava.com/activities/{a.id}'
+
+
 def _compute_records(activities):
     """Personal records across activities."""
     if not activities:
@@ -214,6 +225,8 @@ def _compute_records(activities):
     def _fmt(a):
         return {
             'id': a.id, 'name': a.name,
+            'source': getattr(a, 'source', None) or 'strava',
+            'url': _activity_url(a),
             'date': _activity_local_date_str(a) or '',
             'distance_mi': round(_meters_to_miles(a.distance), 1),
             'speed_mph': round(_ms_to_mph(a.average_speed), 1),

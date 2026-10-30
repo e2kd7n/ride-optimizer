@@ -900,15 +900,6 @@
 
         // ── TrainerRoad ─────────────────────────────────────────
 
-        const TR_TYPE_BADGES = {
-            'Endurance':  'bg-info text-dark',
-            'Tempo':      'bg-primary-subtle text-primary',
-            'Threshold':  'bg-warning-subtle text-dark',
-            'VO2Max':     'bg-danger-subtle text-danger',
-            'Sprint':     'bg-danger-subtle text-danger',
-            'Anaerobic':  'bg-danger-subtle text-danger',
-            'Recovery':   'bg-success-subtle text-success',
-        };
 
         async function loadTrainerRoadStatus() {
             const statusBadge = document.getElementById('tr-status-badge');
@@ -1037,7 +1028,9 @@
                 const rows = workouts.map(w => {
                     const d = new Date(w.workout_date + 'T00:00:00');
                     const day = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                    const badgeClass = TR_TYPE_BADGES[w.workout_type] || 'bg-secondary';
+                    // Workout category isn't a verdict: one neutral class for every type,
+                    // as on the dashboard (#519, SEM-3).
+                    const badgeClass = 'badge-workout-type';
                     return `<tr>
                         <td class="fw-semibold">${esc(day)}</td>
                         <td>${esc(w.workout_name || '—')}</td>

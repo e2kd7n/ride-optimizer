@@ -507,16 +507,16 @@ class TestRouteColorAndConfidence:
     """Test _get_route_color and _get_confidence_label."""
 
     def test_route_color_high_score(self, commute_service):
-        assert commute_service._get_route_color(0.90) == '#28a745'
+        assert commute_service._get_route_color(0.90) == '#188038'
 
     def test_route_color_medium_score(self, commute_service):
-        assert commute_service._get_route_color(0.75) == '#007bff'
+        assert commute_service._get_route_color(0.75) == '#188038'
 
     def test_route_color_low_score(self, commute_service):
-        assert commute_service._get_route_color(0.55) == '#ffc107'
+        assert commute_service._get_route_color(0.55) == '#F2A900'
 
     def test_route_color_very_low_score(self, commute_service):
-        assert commute_service._get_route_color(0.30) == '#dc3545'
+        assert commute_service._get_route_color(0.30) == '#C62828'
 
     def test_confidence_high(self, commute_service):
         assert commute_service._get_confidence_label(0.90) == 'high'
@@ -812,7 +812,7 @@ class TestAnalyzeWorkoutFit:
     """Test _analyze_workout_fit."""
 
     def test_duration_matches(self, commute_service):
-        recommendation = {'route': {'duration': 2700}}  # 45 min (seconds)
+        recommendation = {'route': {'duration': 45}}  # 45 min
         constraints = {
             'workout_name': 'Endurance',
             'workout_type': 'Endurance',
@@ -827,7 +827,7 @@ class TestAnalyzeWorkoutFit:
         assert result['indoor_fallback'] is False
 
     def test_duration_too_short(self, commute_service):
-        recommendation = {'route': {'duration': 600}}  # 10 min (seconds)
+        recommendation = {'route': {'duration': 10}}  # 10 min
         constraints = {
             'workout_name': 'Long Ride',
             'workout_type': 'Endurance',
@@ -840,7 +840,7 @@ class TestAnalyzeWorkoutFit:
         assert result['fit_score'] < 0.5
 
     def test_duration_too_long(self, commute_service):
-        recommendation = {'route': {'duration': 7200}}  # 120 min (seconds)
+        recommendation = {'route': {'duration': 120}}  # 120 min
         constraints = {
             'workout_name': 'Recovery',
             'workout_type': 'Recovery',
@@ -853,7 +853,7 @@ class TestAnalyzeWorkoutFit:
         assert 'longer than recommended' in result['fit_reasons'][0]
 
     def test_indoor_fallback_penalty(self, commute_service):
-        recommendation = {'route': {'duration': 2400}}  # 40 min (seconds)
+        recommendation = {'route': {'duration': 40}}  # 40 min
         constraints = {
             'workout_name': 'Sprint Intervals',
             'workout_type': 'VO2Max',
@@ -877,7 +877,7 @@ class TestShouldExtendForWorkout:
             'indoor_fallback': False,
             'min_duration_minutes': 60
         }
-        recommendation = {'route': {'duration': 1800}}  # 30 min in seconds < 60 min target
+        recommendation = {'route': {'duration': 30}}  # 30 min < 60 min target
         assert commute_service._should_extend_for_workout(constraints, recommendation) is True
 
     def test_no_extend_for_indoor_intensity(self, commute_service):
@@ -886,7 +886,7 @@ class TestShouldExtendForWorkout:
             'indoor_fallback': False,
             'min_duration_minutes': 60
         }
-        recommendation = {'route': {'duration': 1800}}  # 30 min in seconds
+        recommendation = {'route': {'duration': 30}}  # 30 min
         assert commute_service._should_extend_for_workout(constraints, recommendation) is False
 
     def test_extends_for_untyped_workout(self, commute_service):
@@ -895,7 +895,7 @@ class TestShouldExtendForWorkout:
             'indoor_fallback': False,
             'min_duration_minutes': 90
         }
-        recommendation = {'route': {'duration': 2220}}  # 37 min in seconds
+        recommendation = {'route': {'duration': 37}}  # 37 min
         assert commute_service._should_extend_for_workout(constraints, recommendation) is True
 
     def test_extends_for_tempo_workout(self, commute_service):
@@ -904,7 +904,7 @@ class TestShouldExtendForWorkout:
             'indoor_fallback': False,
             'min_duration_minutes': 75
         }
-        recommendation = {'route': {'duration': 2220}}  # 37 min in seconds
+        recommendation = {'route': {'duration': 37}}  # 37 min
         assert commute_service._should_extend_for_workout(constraints, recommendation) is True
 
     def test_no_extend_for_indoor_fallback(self, commute_service):
@@ -913,7 +913,7 @@ class TestShouldExtendForWorkout:
             'indoor_fallback': True,
             'min_duration_minutes': 60
         }
-        recommendation = {'route': {'duration': 1800}}  # 30 min in seconds
+        recommendation = {'route': {'duration': 30}}  # 30 min
         assert commute_service._should_extend_for_workout(constraints, recommendation) is False
 
     def test_no_extend_when_duration_sufficient(self, commute_service):
@@ -922,7 +922,7 @@ class TestShouldExtendForWorkout:
             'indoor_fallback': False,
             'min_duration_minutes': 30
         }
-        recommendation = {'route': {'duration': 2400}}  # 40 min in seconds > 30 min target
+        recommendation = {'route': {'duration': 40}}  # 40 min > 30 min target
         assert commute_service._should_extend_for_workout(constraints, recommendation) is False
 
 
@@ -1018,5 +1018,5 @@ class TestGenerateComparisonMapEmpty:
 
         html = commute_service.generate_comparison_map(routes, home, work)
         assert html is not None
-        assert '#28a745' in html  # Green for to_work
+        assert '#0B6FA6' in html  # Cobalt for to_work
 

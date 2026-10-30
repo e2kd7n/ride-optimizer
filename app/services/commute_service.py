@@ -291,12 +291,13 @@ class CommuteService:
                     logger.warning(f"Skipping commute map route {route_id}: no coordinates")
                     continue
                 
-                # Use direction-based colors: green for to_work, blue for to_home
+                # Direction identity colors (brand route palette): cobalt to work,
+                # teal home. Not green/red, which mean Good/Poor everywhere else.
                 direction = route_option.get('direction', '')
                 if direction == 'to_work':
-                    color = '#28a745'  # Green
+                    color = '#0B6FA6'  # Cobalt
                 elif direction == 'to_home':
-                    color = '#007bff'  # Blue
+                    color = '#1F8A8A'  # Teal
                 else:
                     # Fallback to score-based color if direction not specified
                     color = self._get_route_color(route_option.get('score', 0))
@@ -370,14 +371,13 @@ class CommuteService:
             return None
     
     def _get_route_color(self, score: float) -> str:
-        """Map recommendation score to semantic route color."""
-        if score >= 0.85:
-            return '#28a745'
+        """Map recommendation score to its verdict fill (same 70/50 scale and
+        colors as the dashboard's VERDICTS table)."""
         if score >= 0.7:
-            return '#007bff'
+            return '#188038'
         if score >= 0.5:
-            return '#ffc107'
-        return '#dc3545'
+            return '#F2A900'
+        return '#C62828'
     
     def _get_confidence_label(self, score: float) -> str:
         """Convert numeric score to a coarse confidence label."""
@@ -696,7 +696,7 @@ class CommuteService:
             Dictionary with fit analysis
         """
         route = recommendation.get('route', {})
-        duration_min = route.get('duration', 0) / 60  # duration stored in seconds
+        duration_min = route.get('duration', 0)  # minutes (see _format_recommendation)
 
         workout_name = constraints.get('workout_name', 'Unknown Workout')
         workout_type = constraints.get('workout_type', 'Unknown')
@@ -768,9 +768,9 @@ class CommuteService:
         
         # Check if current route is too short
         route = recommendation.get('route', {})
-        duration_min = route.get('duration', 0) / 60  # duration stored in seconds
+        duration_min = route.get('duration', 0)  # minutes (see _format_recommendation)
         min_duration = constraints.get('min_duration_minutes')
-        
+
         if min_duration and duration_min < min_duration:
             # Route is too short, consider extension
             return True

@@ -234,7 +234,7 @@ def get_commute_map_data() -> Dict:
             'show': True,  # Show all commute routes
             'routes': [{
                 'coordinates': sampled_coords,
-                'color': '#28a745' if is_recommended else get_route_color(i),
+                'color': get_route_color(i),
                 'weight': 5 if is_recommended else 3,
                 'opacity': 0.9 if is_recommended else 0.6,
                 'popup_html': f"""
@@ -309,7 +309,7 @@ def get_route_detail_map_data(route_id: str) -> Dict:
     safe_name = _safe_name(route_group, 'Route')
     route = {
         'coordinates': coords,
-        'color': '#007bff',
+        'color': '#0B6FA6',
         'weight': 4,
         'opacity': 0.8,
         'popup_html': f"""
@@ -348,16 +348,17 @@ def get_route_detail_map_data(route_id: str) -> Dict:
 
 
 def get_route_color(index: int) -> str:
-    """Get color for route by index."""
+    """Get color for route by index (Brand Book route palette; identity
+    hues only, never the verdict green/red)."""
     colors = [
-        '#007bff',  # Blue
-        '#28a745',  # Green
-        '#dc3545',  # Red
-        '#ffc107',  # Yellow
-        '#17a2b8',  # Cyan
-        '#6f42c1',  # Purple
-        '#fd7e14',  # Orange
-        '#20c997',  # Teal
+        '#0B6FA6',  # Cobalt
+        '#1F8A8A',  # Teal
+        '#7A4FA0',  # Purple
+        '#E8702A',  # Orange
+        '#A8457E',  # Magenta
+        '#C98A1D',  # Amber
+        '#8A5A3C',  # Brown
+        '#5B7686',  # Slate
     ]
     return colors[index % len(colors)]
 

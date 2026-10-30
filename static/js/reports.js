@@ -113,22 +113,22 @@ function renderRecords(r) {
 
     if (r.longest_ride) {
         setText('rec-longest', `${fmt(r.longest_ride.distance_mi)} mi`);
-        setText('rec-longest-name', r.longest_ride.name);
+        setRecordName('rec-longest-name', r.longest_ride);
         setText('rec-longest-date', r.longest_ride.date);
     }
     if (r.most_elevation) {
         setText('rec-elev', `${fmtInt(r.most_elevation.elevation_ft)} ft`);
-        setText('rec-elev-name', r.most_elevation.name);
+        setRecordName('rec-elev-name', r.most_elevation);
         setText('rec-elev-date', r.most_elevation.date);
     }
     if (r.fastest_speed) {
         setText('rec-speed', `${fmt(r.fastest_speed.speed_mph)} mph`);
-        setText('rec-speed-name', r.fastest_speed.name);
+        setRecordName('rec-speed-name', r.fastest_speed);
         setText('rec-speed-date', r.fastest_speed.date);
     }
     if (r.most_kilojoules) {
         setText('rec-kj', `${fmtInt(r.most_kilojoules.kilojoules)} kJ`);
-        setText('rec-kj-name', r.most_kilojoules.name);
+        setRecordName('rec-kj-name', r.most_kilojoules);
         setText('rec-kj-date', r.most_kilojoules.date);
         document.getElementById('rec-kj-card').style.display = '';
     } else {
@@ -233,7 +233,7 @@ function renderGearCards(data) {
 
     const cards = data.gear.map(g => {
         const typeIcon = g.type === 'bike' ? '🚲' : g.type === 'shoe' ? '👟' : '⚙️';
-        const primary = g.primary ? '<span class="badge bg-success ms-1 fs-9">Primary</span>' : '';
+        const primary = g.primary ? '<span class="badge bg-primary ms-1 fs-9">Primary</span>' : '';
         const lastUsed = g.last_used ? `Last used ${g.last_used}` : '';
         const displayName = gearDisplayName(g);
         return `<div class="col-12 col-md-6">
@@ -567,6 +567,26 @@ function showNoData(msg) {
 function setText(id, val) {
     const el = document.getElementById(id);
     if (el) el.textContent = val ?? '—';
+}
+
+// Record names link out to the activity on Strava/Garmin Connect (whichever it was imported
+// from) — there's no in-app activity detail page to link to.
+function setRecordName(id, rec) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (!rec.url) { el.textContent = rec.name ?? '—'; return; }
+    const service = rec.source === 'garmin' ? 'Garmin Connect' : 'Strava';
+    const a = document.createElement('a');
+    a.href = rec.url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.textContent = rec.name ?? '—';
+    a.title = `${rec.name ?? 'Activity'} — view on ${service}`;
+    const icon = document.createElement('i');
+    icon.className = 'bi bi-box-arrow-up-right ms-1';
+    icon.setAttribute('aria-hidden', 'true');
+    a.appendChild(icon);
+    el.replaceChildren(a);
 }
 
 function fmt(n) {

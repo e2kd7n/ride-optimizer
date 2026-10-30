@@ -808,7 +808,7 @@ class TestPlannerMapWeatherOverlays:
         assert html is not None
         assert 'Weather Overlay' in html
         assert 'Favorable' in html
-        assert '#28a745' in html
+        assert '#188038' in html
     
     def test_generate_long_rides_map_handles_empty_weather(self, initialized_service, mock_long_ride):
         """Planner map should still render when forecast data is missing."""
@@ -1125,13 +1125,13 @@ class TestWeatherStatusAndColor:
 
     def test_favorable_status(self, planner_service):
         assert planner_service._get_weather_status(0.8) == 'Favorable'
-        assert planner_service._get_weather_color(0.8) == '#28a745'
+        assert planner_service._get_weather_color(0.8) == '#188038'
 
     def test_acceptable_status(self, planner_service):
         assert planner_service._get_weather_status(0.55) == 'Acceptable'
-        assert planner_service._get_weather_color(0.55) == '#ffc107'
+        assert planner_service._get_weather_color(0.55) == '#F2A900'
 
     def test_unfavorable_status(self, planner_service):
         assert planner_service._get_weather_status(0.3) == 'Unfavorable'
-        assert planner_service._get_weather_color(0.3) == '#dc3545'
+        assert planner_service._get_weather_color(0.3) == '#C62828'
 
