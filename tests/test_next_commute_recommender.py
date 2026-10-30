@@ -250,6 +250,7 @@ class TestMetricsCalculation:
         """Test that empty route groups are skipped."""
         empty_group = Mock(spec=RouteGroup)
         empty_group.id = "empty"
+        empty_group.direction = "home_to_work"
         empty_group.routes = []
         
         with patch('src.next_commute_recommender.WeatherFetcher'), \
@@ -659,3 +660,59 @@ class TestCommuteRecommendationDataclass:
         assert recommendation.forecast_weather is not None
 
 
+
+
+def _route(activity_id, direction, distance, duration, plus=False):
+    return Route(
+        activity_id=activity_id, direction=direction,
+        coordinates=[(42.3601, -71.0589), (42.3656, -71.0596)],
+        distance=distance, duration=duration, elevation_gain=50.0,
+        timestamp="2026-10-01T08:00:00Z", average_speed=distance / duration,
+        activity_name="Ride to work +" if plus else "Ride to work", is_plus_route=plus,
+    )
+
+
+def _group(group_id, direction, routes, plus=False):
+    return RouteGroup(
+        id=group_id, direction=direction, routes=routes,
+        representative_route=routes[0], frequency=len(routes), is_plus_route=plus,
+    )
+
+
+class TestPlusRoutesExcluded:
+    """PLUS routes (detours, "Ride to work +") aren't commute options."""
+
+    def _make(self, mock_config, home_location, work_location, groups):
+        with patch('src.next_commute_recommender.WeatherFetcher'), \
+             patch('src.next_commute_recommender.WindImpactCalculator'):
+            return NextCommuteRecommender(groups, mock_config, home_location,
+                                          work_location, enable_weather=False)
+
+    def test_plus_groups_are_not_ranked_or_scaled(self, mock_config, home_location, work_location):
+        plain = _group("home_to_work_1", "home_to_work",
+                       [_route(i, "home_to_work", 16000, 3000) for i in range(3)])
+        plus = _group("home_to_work_2", "home_to_work",
+                      [_route(9, "home_to_work", 40000, 7500, plus=True)], plus=True)
+        rec = self._make(mock_config, home_location, work_location, [plain, plus])
+
+        assert [g.id for g in rec.commute_groups] == ["home_to_work_1"]
+        assert "home_to_work_2" not in rec.metrics
+        assert rec.max_distance == 16000  # the detour doesn't stretch the scale
+        options = rec.get_all_recommendations("to_work")
+        assert [o.route_group.id for o in options] == ["home_to_work_1"]
+
+    def test_plus_rides_in_a_plain_group_dont_count(self, mock_config, home_location, work_location):
+        routes = [_route(i, "home_to_work", 16000, 3000) for i in range(3)]
+        routes.append(_route(9, "home_to_work", 16500, 4800, plus=True))
+        rec = self._make(mock_config, home_location, work_location,
+                         [_group("home_to_work_1", "home_to_work", routes)])
+        metrics = rec.metrics["home_to_work_1"]
+        assert metrics.usage_frequency == 3
+        assert metrics.avg_duration == 3000
+
+    def test_direction_with_only_plus_groups_keeps_them(self, mock_config, home_location, work_location):
+        plus = _group("work_to_home_1", "work_to_home",
+                      [_route(1, "work_to_home", 40000, 7500, plus=True)], plus=True)
+        rec = self._make(mock_config, home_location, work_location, [plus])
+        assert [g.id for g in rec.commute_groups] == ["work_to_home_1"]
+        assert rec.metrics["work_to_home_1"].usage_frequency == 1

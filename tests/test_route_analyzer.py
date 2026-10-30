@@ -537,6 +537,23 @@ class TestMarkPlusRoutes:
         # The function marks individual route groups based on their distance vs median
         assert isinstance(result, list)
 
+    def test_labelled_ride_is_plus_even_at_normal_distance(self, analyzer):
+        routes = [_make_route(i, distance=12000.0) for i in range(4)]
+        routes.append(_make_route(10, distance=12000.0, name="Ride to work +"))
+        result = analyzer._mark_plus_routes([_make_group(routes=routes)])
+        assert [r.is_plus_route for r in result[0].routes] == [False] * 4 + [True]
+        assert result[0].is_plus_route is False  # one label doesn't make the route PLUS
+
+    def test_group_of_mostly_labelled_rides_is_plus(self, analyzer):
+        plain = _make_group("g1", routes=[_make_route(i, distance=12000.0) for i in range(5)])
+        labelled = _make_group("g2", routes=[
+            _make_route(20, distance=12500.0, name="Ride to work +"),
+            _make_route(21, distance=12500.0, name="Ride to work +"),
+            _make_route(22, distance=12500.0, name="Ride to work"),
+        ])
+        result = analyzer._mark_plus_routes([plain, labelled])
+        assert [g.is_plus_route for g in result] == [False, True]
+
 
 # ---------------------------------------------------------------------------
 # _deserialize_groups tests

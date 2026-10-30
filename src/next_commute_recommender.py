@@ -56,6 +56,9 @@ class NextCommuteRecommender:
             enable_weather: Whether to include weather analysis (default True)
         """
         self.route_groups = route_groups
+        # PLUS groups (detours, "Ride to work +") aren't commute options and
+        # mustn't stretch the time/distance scales the real ones are scored on.
+        self.commute_groups = self._commute_candidates(route_groups)
         self.config = config
         self.home_location = home_location
         self.work_location = work_location
@@ -87,15 +90,27 @@ class NextCommuteRecommender:
         self.metrics = {}
         self._calculate_all_metrics()
         self._find_normalization_bounds()
-    
+
+    @staticmethod
+    def _commute_candidates(route_groups: List[RouteGroup]) -> List[RouteGroup]:
+        """Non-PLUS groups, per direction; a direction with only PLUS groups keeps them."""
+        candidates = []
+        for direction in ('home_to_work', 'work_to_home'):
+            groups = [g for g in route_groups if g.direction == direction]
+            plain = [g for g in groups if not g.is_plus_route]
+            candidates.extend(plain or groups)
+        return candidates
+
     def _calculate_all_metrics(self):
-        """Calculate metrics for all route groups."""
+        """Calculate metrics for the commute candidate groups."""
         import numpy as np
         from .route_analyzer import RouteMetrics
-        
-        for group in self.route_groups:
-            routes = group.routes
-            
+
+        for group in self.commute_groups:
+            # A PLUS ride that matched a plain route still isn't a plain commute,
+            # so it doesn't count toward that route's uses or typical time.
+            routes = [r for r in group.routes if not r.is_plus_route] or group.routes
+
             if not routes:
                 logger.warning(f"Skipping empty route group: {group.id}")
                 continue
@@ -358,7 +373,7 @@ class NextCommuteRecommender:
             current_time = datetime.now()
 
         direction_key = "home_to_work" if direction == "to_work" else "work_to_home"
-        direction_routes = [g for g in self.route_groups if g.direction == direction_key]
+        direction_routes = [g for g in self.commute_groups if g.direction == direction_key]
 
         if not direction_routes:
             logger.warning(f"No routes found for direction: {direction_key}")
@@ -461,8 +476,8 @@ class NextCommuteRecommender:
         """
         # Filter routes by direction
         direction_key = "home_to_work" if direction == "to_work" else "work_to_home"
-        direction_routes = [g for g in self.route_groups if g.direction == direction_key]
-        
+        direction_routes = [g for g in self.commute_groups if g.direction == direction_key]
+
         if not direction_routes:
             logger.warning(f"No routes found for direction: {direction_key}")
             return None

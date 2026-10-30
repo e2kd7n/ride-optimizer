@@ -45,6 +45,13 @@ GROUPS_CACHE_VERSION = 4
 DIRECTIONS = ('home_to_work', 'work_to_home')
 DIRECTION_LABELS = {'home_to_work': 'home→work', 'work_to_home': 'work→home'}
 PLUS_ROUTE_FACTOR = 1.15
+
+
+def is_labelled_plus(activity_name: Optional[str]) -> bool:
+    """Whether the rider marked a commute as extended ("Ride to work +")."""
+    return '+' in (activity_name or '')
+
+
 # Below this many uncached comparisons a process pool costs more than it saves.
 MIN_PARALLEL_PAIRS = 200
 MIN_PAIRS_PER_CHUNK = 25
@@ -596,7 +603,8 @@ class RouteAnalyzer:
                 tqdm.write("   💾 Using cached route groups (instant!)")
                 cached_groups = self._deserialize_groups(self.groups_cache['groups'])
                 logger.info(f"Loaded {len(cached_groups)} route groups from cache")
-                return cached_groups
+                # Cheap, and keeps the flags current if the PLUS rule changed.
+                return self._mark_plus_routes(cached_groups)
 
             elif removed_activity_ids:
                 removed_pct = (len(removed_activity_ids) / len(cached_activity_ids) * 100
@@ -911,8 +919,9 @@ class RouteAnalyzer:
 
         - A group is a "plus route" when its representative is >15% longer than
           the median commute in that direction (all rides pooled, so it's the
-          typical day's distance).
-        - A ride is flagged when it's >15% longer than its own group's median.
+          typical day's distance), or when most of its rides are labelled plus.
+        - A ride is flagged when it's >15% longer than its own group's median,
+          or when the rider labelled it plus ("Ride to work +").
 
         Args:
             groups: List of route groups
@@ -929,11 +938,16 @@ class RouteAnalyzer:
 
             plus_count = 0
             for group in direction_groups:
-                group.is_plus_route = bool(group.representative_route.distance > threshold)
-                plus_count += group.is_plus_route
                 group_threshold = np.median([r.distance for r in group.routes]) * PLUS_ROUTE_FACTOR
                 for route in group.routes:
-                    route.is_plus_route = bool(route.distance > group_threshold)
+                    route.is_plus_route = bool(
+                        route.distance > group_threshold or is_labelled_plus(route.activity_name)
+                    )
+                labelled = sum(is_labelled_plus(r.activity_name) for r in group.routes)
+                group.is_plus_route = bool(
+                    group.representative_route.distance > threshold or labelled * 2 > len(group.routes)
+                )
+                plus_count += group.is_plus_route
 
             if plus_count > 0:
                 tqdm.write(f"   ⭐ {plus_count} {DIRECTION_LABELS[direction]} PLUS routes")
