@@ -1,8 +1,10 @@
 # Route-matching benchmark
 
-A regression benchmark for commute route matching (#611, epic #616). Run it before and after
-**any** change to `src/route_comparison.py`, `src/route_analyzer.py` or the
-`route_analysis` config, and put the before/after numbers in the commit or PR.
+A regression benchmark for route matching (#611, epic #616): commutes (`run_benchmark.py`) and
+long rides (`run_long_ride_benchmark.py`, see [Long rides](#long-rides-615)). Run it before and
+after **any** change to `src/route_comparison.py`, `src/route_analyzer.py`,
+`src/long_ride_analyzer.py` or the `route_analysis` / `long_rides` config, and put the
+before/after numbers in the commit or PR.
 
 Background and the original audit: [docs/analysis/route-matching-review-2026-10.md](../../docs/analysis/route-matching-review-2026-10.md).
 
@@ -173,6 +175,86 @@ only plausible pairs get the exact metric. On ~1,100 synthetic rides (jittered c
 snapshot, 2 workers) a cold grouping took 30 s and an incremental run 16 s on a desktop; the
 greedy code took 20.5 minutes for 1,141 rides on the Pi.
 
+## Long rides (#615)
+
+[run_long_ride_benchmark.py](run_long_ride_benchmark.py) does the same for `LongRideAnalyzer`. Its
+input is a copy of `data/cache/activities.json` plus a JSON list of commute activity IDs (the
+IDs in the live `route_groups.json`), which the app excludes from long rides. Both go under the
+gitignored `data/cache/matching_benchmark/`.
+
+```bash
+python scripts/matching_benchmark/run_long_ride_benchmark.py \
+    --activities data/cache/matching_benchmark/activities.json \
+    --commute-ids data/cache/matching_benchmark/commute_ids.json
+# Threshold sweep: --app-cache keeps pair metrics between runs (they don't depend on thresholds)
+python scripts/matching_benchmark/run_long_ride_benchmark.py --app-cache data/cache/matching_benchmark/app_cache \
+    --shuffles 0 --set long_rides.min_coverage=0.85
+```
+
+**Reference.** It uses the same labels as for commutes (`reference.compare_long`), plus a one-way
+"part of" relation: one ride meets the "same" bar against the other, but not the other way round.
+A real corpus has millions of pairs, so `reference.long_ride_candidates` first rules out, with an
+exact 100 m-cell bound, every pair that can only be **diff**. The labels are cached per input and
+take about 20 minutes on 16 cores the first time.
+
+The report covers:
+- purity and recall, as for commutes;
+- **same-name rides on different geometry** that get grouped;
+- **link recall/precision:** of the reference part-of relations between rides in different
+  groups, how many group pairs the app links (`LongRide.part_of`);
+- order stability.
+
+### Baseline and after (October 2026 activities, 3,753 long rides)
+
+Input sha1 `67ee1b6d7dd4`: 7.04M pairs, of which 1.12M survive the screen. Labels: 33,876 same,
+396,686 ambig, everything else diff; 102,001 part-of pairs.
+
+| | Before (#614 code: names + Fréchet/Hausdorff < 1.2 km) | After #615 |
+|---|---|---|
+| Groups | 1,620 | 1,886 |
+| Single-ride groups | 1,285 | 1,610 |
+| Pair recall | 0.408 | **0.980** |
+| Different-route pairs grouped | **7,683** | **0** |
+| Precision, ambig excluded | 0.643 | **1.000** |
+| Purity (strict) | 0.269 | 0.590 |
+| Same-name, different-geometry pairs grouped (of 5,308) | 2,040 | **0** |
+| Group links (reference wants about 6–7.5k) | none | 5,809 (recall 0.731, precision 0.748) |
+| Min ARI across shuffles | 0.801 | **1.000** |
+| Cold grouping, one process, desktop | 2,588 s | 263 s (67 s with a warm cache) |
+
+The old code's compact-looking 1,620 groups (production showed 1,626) came from merging
+different routes: by exact name, and by a 1.2 km average distance that spans parallel roads. The
+new code has more groups because it stops doing that, but it finds 2.4× as many same-route pairs.
+
+**Rule (defaults in `config.yaml`).** Two rides are the same route when mutual 50 m coverage is
+≥ 0.9 (≥ 0.75 if they share a non-generic name) and their lengths are within 1.5×. There is no
+p95 limit, so a longer turnaround or a short detour still matches. A shorter route with ≥ 0.9 of
+itself along a longer one is linked to it.
+
+**Sweep** (one shared `--app-cache`, so mostly warm):
+
+| min_coverage / name prior | Groups | Recall | Different grouped | Same-name different | Link recall / precision |
+|---|---|---|---|---|---|
+| 0.85 / 0.60 | 1,568 | 0.970 | 110 | 73 | 0.643 / 0.821 |
+| 0.85 / 0.75 | 1,622 | 0.971 | 36 | 0 | 0.647 / 0.815 |
+| 0.85 / 0.75, p95 ≤ 200 m | 2,107 | 0.980 | 0 | 0 | 0.778 / 0.807 |
+| 0.88 / 0.75 | 1,792 | 0.965 | 0 | 0 | 0.723 / 0.756 |
+| 0.90 / 0.70 | 1,857 | 0.979 | 1 | 1 | 0.716 / 0.749 |
+| **0.90 / 0.75** | **1,886** | **0.980** | **0** | **0** | **0.731 / 0.748** |
+| 0.90 / 0.80 | 1,926 | 0.978 | 0 | 0 | 0.758 / 0.747 |
+| 0.90 / none (0.90) | 2,004 | 0.982 | 0 | 0 | 0.769 / 0.739 |
+| 0.92 / 0.75 | 2,006 | 0.968 | 0 | 0 | 0.771 / 0.697 |
+
+- A name prior of 0.6 merges same-named different routes, and 0.70 lets the first one through.
+  At 0.75 it merges about 120 groups with no errors.
+- Length-ratio limits from 1.3 to 2.0 change recall by under 0.005.
+- A p95 limit gives the same recall with no errors. But it splits off any variant with more
+  than 5% of its length elsewhere, so it stays off by default.
+
+Strict purity stays low because the reference's "same" bar (p95 ≤ 75 m) is far stricter than
+"a variant of the same route". Most within-group ambig pairs are such variants. "Different
+grouped" is the error measure.
+
 ## Privacy
 
 The repo is public, and these rides start and end at the user's home and workplace.
@@ -196,6 +278,20 @@ The repo is public, and these rides start and end at the user's home and workpla
 - cache invalidation;
 - a stopped run.
 
+For long rides (#615) it also covers:
+- reversed, rotated, and reversed-and-rotated loops;
+- point spacing;
+- parallel roads;
+- a longer turnaround and a short detour (same route);
+- a sub-segment and an extension (linked, not merged);
+- one-way vs out-and-back;
+- same name on different geometry (not merged);
+- the name prior;
+- generic Strava names;
+- fallback shape names;
+- order invariance;
+- member-to-centre matching;
+- cache reuse and discard.
+
 Known defects are `xfail(strict=True)` with the issue that fixes them. When a fix makes one
-pass, remove its marker in the same change. Long-ride matching isn't covered yet; extending
-both the benchmark and the tests to long rides is the first step of #615.
+pass, remove its marker in the same change.

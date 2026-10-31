@@ -2,7 +2,7 @@
 
 **Module:** `src/long_ride_analyzer.py`  
 **Version:** 2.4.0+  
-**Last Updated:** 2026-05-07
+**Last Updated:** 2026-10-31
 
 ---
 
@@ -42,9 +42,15 @@ class LongRide:
     is_loop: bool                             # True if start/end within 500m
     type: str                                 # Activity type (Ride, GravelRide, etc.)
     uses: int = 1                             # Number of times route ridden
-    activity_ids: List[int] = None            # All activity IDs for this route
+    activity_ids: List[int] = None            # All activity IDs for this route, most recent first
     activity_dates: List[str] = None          # Dates for each activity
+    activity_names: List[str] = None          # Strava names for each activity
+    part_of: List[int] = []                   # Representative IDs of routes this one lies along
+    contains: List[int] = []                  # Representative IDs of routes lying along this one
 ```
+
+`activity_id` and the other ride fields describe the group's **representative**: its
+clustering centre, the ride that matches the most others (see `group_similar_rides`).
 
 **Properties:**
 - `distance_km: float` - Distance in kilometers
@@ -75,12 +81,13 @@ class RideRecommendation:
 ### Constructor
 
 ```python
-def __init__(self, activities: List[Activity], config)
+def __init__(self, activities: List[Activity], config, cache_dir: str = "cache")
 ```
 
 **Parameters:**
 - `activities` (List[Activity]): List of all Strava Activity objects
 - `config`: Configuration object with settings
+- `cache_dir`: Directory for the pair-metrics cache (`long_ride_similarity_cache.json`)
 
 **Example:**
 ```python
@@ -131,175 +138,79 @@ print(f"Found {len(long_rides)} long rides")
 
 ---
 
-### 2. group_rides_by_name
+### 2. group_similar_rides
 
-Group long ride activities by their Strava activity names.
+Group long-ride activities into unique routes by geometry (#615).
 
 ```python
-def group_rides_by_name(
+def group_similar_rides(
     self,
-    long_ride_activities: List[Activity]
-) -> Tuple[Dict[str, List[Activity]], List[Activity]]
-```
-
-**Parameters:**
-- `long_ride_activities`: List of Activity objects
-
-**Returns:**
-- Tuple of (name_groups dict, unnamed_rides list)
-
-**Behavior:**
-- Groups activities with identical names
-- Treats generic names ("Morning Ride", etc.) as unnamed
-- Normalizes names (strips whitespace)
-
-**Example:**
-```python
-name_groups, unnamed = analyzer.group_rides_by_name(long_rides)
-print(f"Created {len(name_groups)} named groups")
-print(f"Found {len(unnamed)} unnamed rides")
-```
-
----
-
-### 3. consolidate_similar_named_groups
-
-Consolidate named groups with similar routes despite different names.
-
-```python
-def consolidate_similar_named_groups(
-    self,
-    name_groups: Dict[str, List[Activity]],
-    similarity_threshold: float = 2.0
-) -> Dict[str, List[Activity]]
-```
-
-**Parameters:**
-- `name_groups`: Dictionary mapping activity names to lists of activities
-- `similarity_threshold`: Maximum combined Fréchet+Hausdorff distance (km) to consider routes similar (default: 2.0)
-
-**Returns:**
-- Updated name_groups dictionary with similar routes consolidated
-
-**Algorithm:**
-- Uses Fréchet distance + Hausdorff distance
-- Compares representative routes from each group
-- Merges groups below similarity threshold
-- Preserves most common or shortest name
-
-**Example:**
-```python
-consolidated = analyzer.consolidate_similar_named_groups(name_groups, 2.0)
-```
-
----
-
-### 4. consolidate_named_groups
-
-Convert named activity groups into representative LongRide objects.
-
-```python
-def consolidate_named_groups(
-    self,
-    name_groups: Dict[str, List[Activity]]
+    long_ride_activities: List[Activity],
+    on_progress=None
 ) -> List[LongRide]
 ```
 
 **Parameters:**
-- `name_groups`: Dictionary mapping activity names to lists of activities
+- `long_ride_activities`: Activities already filtered by `classify_activities`
+- `on_progress`: Optional `callable(label=str)` for status updates
 
-**Returns:**
-- List of LongRide objects representing each unique named route
+**Returns:** `LongRide` objects, most-ridden first.
 
-**Behavior:**
-- Selects most recent activity as representative
-- Aggregates usage count across all activities
-- Collects all activity IDs and dates
-- Detects loop routes (start/end within 500m)
+**How it matches.** It uses the same metric as commutes (`src/route_comparison.py`, #613). Tracks
+are projected to metres and resampled by arc length (every 25 m, measured against a 10 m copy of
+the other track). Two rides are the **same route** when:
+- at least `min_coverage` (0.85) of each lies within 50 m of the other;
+- their lengths are within `max_length_ratio` (1.5), because coverage can't tell one lap from
+  two, or a one-way ride from the out-and-back on the same road;
+- and, only if `max_p95_deviation_m` is set, 95% of each lies within that many metres.
+
+Coverage treats a track as a set of points. So a loop ridden in reverse, or started somewhere
+else, still matches, and a longer turnaround or a short detour is still the same route.
+
+**Names are only a prior.** Two rides with the same non-generic name (case and spacing ignored)
+need just `name_min_coverage` (0.6), but they never match on the name alone. Generic Strava names
+("Morning Ride", "Night Gravel Ride", ...) carry no prior. Rides with different names merge when
+the geometry agrees.
+
+**Clustering.** Rides are grouped by centre (Butina) clustering, the same as commutes (#614). The
+result doesn't depend on input order, and every member matches its group's representative.
+
+**Links, not merges.** When a group's representative is shorter than another group's and at
+least `contains_min_coverage` (0.9) of it lies along that one, the shorter route gets
+`part_of=[other]` and the longer gets `contains=[this]`. This covers a sub-segment, a one-way ride
+along an out-and-back, or a route plus a long extension.
+
+**Names.** Each group takes the most common non-generic name among its rides. If there is none,
+it gets a description of its shape: `Loop Ride (42.3km)`, `Out & Back (50.0km)` or
+`Point to Point (25.0km)`.
+
+**Cost.** An exact cell-grid bound (`coverage_bound_pairs`) rules out every pair that can't reach
+the coverage bar, so only plausible pairs get the exact metric. Their directed metrics are cached
+in `cache_dir` under a versioned key. A failed comparison is logged and counts as no match;
+nothing is cached as "infinitely far".
 
 **Example:**
 ```python
-consolidated_rides = analyzer.consolidate_named_groups(name_groups)
+commutes, long_ride_acts = analyzer.classify_activities(commute_activities)
+routes = analyzer.group_similar_rides(long_ride_acts)
+for r in routes[:5]:
+    print(r.name, r.uses, r.part_of)
 ```
 
 ---
 
-### 5. match_unnamed_rides_to_groups
-
-Match unnamed/generic rides to existing named groups using route similarity.
+### 3. is_generic_name
 
 ```python
-def match_unnamed_rides_to_groups(
-    self,
-    unnamed_rides: List[Activity],
-    named_groups: Dict[str, List[Activity]],
-    similarity_threshold: float = 2.0,
-    use_parallel: bool = True,
-    max_workers: int = None
-) -> Tuple[Dict[str, List[Activity]], List[Activity]]
+def is_generic_name(self, name: Optional[str]) -> bool
 ```
 
-**Parameters:**
-- `unnamed_rides`: List of activities with generic/no names
-- `named_groups`: Dictionary of existing named route groups
-- `similarity_threshold`: Maximum combined Fréchet+Hausdorff distance (km) for similarity (default: 2.0)
-- `use_parallel`: Whether to use parallel processing (default: True)
-- `max_workers`: Maximum worker processes (default: auto 2-6 based on workload)
-
-**Returns:**
-- Tuple of (updated_named_groups, still_unnamed_rides)
-
-**Performance:**
-- Automatic worker selection based on dataset size:
-  - < 20 rides: 2 workers
-  - 20-100 rides: 4 workers
-  - > 100 rides: 6 workers
-- Sequential processing for < 10 rides
-- Uses ProcessPoolExecutor for parallelization
-
-**Example:**
-```python
-updated_groups, still_unnamed = analyzer.match_unnamed_rides_to_groups(
-    unnamed_rides,
-    name_groups,
-    similarity_threshold=2.0,
-    use_parallel=True
-)
-```
+True for an empty name or a Strava default ("Morning Ride", "Afternoon Mountain Bike Ride", ...).
+Add localised defaults with `long_rides.generic_names`.
 
 ---
 
-### 6. generate_fallback_names
-
-Generate geocoded names for rides that couldn't be matched to named groups.
-
-```python
-def generate_fallback_names(
-    self,
-    unnamed_rides: List[Activity]
-) -> Dict[str, List[Activity]]
-```
-
-**Parameters:**
-- `unnamed_rides`: List of activities without specific names
-
-**Returns:**
-- Dictionary mapping generated names to activities
-
-**Naming Convention:**
-- Loop rides: "Loop Ride (XX.Xkm)"
-- Out & back: "Out & Back (XX.Xkm)"
-- Generic: "Ride (XX.Xkm)"
-- No data: "Unnamed Ride"
-
-**Example:**
-```python
-fallback_groups = analyzer.generate_fallback_names(still_unnamed)
-```
-
----
-
-### 7. extract_long_rides
+### 4. extract_long_rides
 
 Convert activities to LongRide objects.
 
@@ -328,7 +239,7 @@ long_rides = analyzer.extract_long_rides(long_ride_activities)
 
 ---
 
-### 8. find_rides_near_location
+### 5. find_rides_near_location
 
 Find rides that pass near a clicked location.
 
@@ -368,7 +279,7 @@ nearby_rides = analyzer.find_rides_near_location(
 
 ---
 
-### 9. calculate_wind_score
+### 6. calculate_wind_score
 
 Calculate wind favorability score for a ride.
 
@@ -413,7 +324,7 @@ print(f"Recommendation: {analysis['recommendation']}")
 
 ---
 
-### 10. get_ride_recommendations
+### 7. get_ride_recommendations
 
 Get ride recommendations for a clicked location with weather analysis.
 
@@ -463,7 +374,7 @@ for rec in recommendations[:5]:  # Top 5
 
 ---
 
-### 11. format_wind_analysis
+### 8. format_wind_analysis
 
 Format wind analysis into human-readable description.
 
@@ -508,8 +419,13 @@ long_rides:
   # Minimum distance to classify as long ride (km)
   min_distance_km: 15
 
-  # Max combined Fréchet+Hausdorff distance (km) for route matching
-  similarity_threshold: 1.2
+  # Route matching (#615); see group_similar_rides
+  min_coverage: 0.85
+  max_p95_deviation_m: null
+  name_min_coverage: 0.6
+  max_length_ratio: 1.5
+  contains_min_coverage: 0.9
+  generic_names: []
 
   # Search radius for location-based recommendations (km)
   search_radius_km: 5
@@ -519,7 +435,7 @@ long_rides:
   default_target_distance_km: 40
 ```
 
-`use_parallel` and `max_workers` are Python call-site arguments to `match_unnamed_rides_to_groups()` (see above), not config-driven — there is no `long_rides.use_parallel`/`long_rides.max_workers` config key. Route-naming density is controlled by the top-level `route_naming` block (`sampling_density`, `commute_sampling_density`, etc. — see `docs/TECHNICAL_SPEC.md` § Configuration System); there is no `sample_points`/`max_name_length` key.
+There is no `long_rides.use_parallel`/`long_rides.max_workers` config key. Route-naming density is controlled by the top-level `route_naming` block (`sampling_density`, `commute_sampling_density`, etc. — see `docs/TECHNICAL_SPEC.md` § Configuration System); there is no `sample_points`/`max_name_length` key.
 
 ---
 
@@ -541,25 +457,10 @@ analyzer = LongRideAnalyzer(activities, config)
 # Step 1: Classify activities
 commutes, long_rides = analyzer.classify_activities(commute_activities)
 
-# Step 2: Group by name
-name_groups, unnamed = analyzer.group_rides_by_name(long_rides)
+# Step 2: Group into unique routes
+consolidated_rides = analyzer.group_similar_rides(long_rides)
 
-# Step 3: Consolidate similar named groups
-name_groups = analyzer.consolidate_similar_named_groups(name_groups)
-
-# Step 4: Match unnamed rides
-name_groups, still_unnamed = analyzer.match_unnamed_rides_to_groups(
-    unnamed, name_groups
-)
-
-# Step 5: Generate fallback names
-fallback_groups = analyzer.generate_fallback_names(still_unnamed)
-name_groups.update(fallback_groups)
-
-# Step 6: Create LongRide objects
-consolidated_rides = analyzer.consolidate_named_groups(name_groups)
-
-# Step 7: Get recommendations for a location
+# Step 3: Get recommendations for a location
 recommendations = analyzer.get_ride_recommendations(
     consolidated_rides,
     41.8781,  # Chicago
@@ -578,50 +479,18 @@ for rec in recommendations[:5]:
         print(f"  {analyzer.format_wind_analysis(rec.wind_analysis)}")
 ```
 
-### Parallel Processing Example
+### Custom Matching Thresholds
 
-```python
-# Automatic worker selection (recommended)
-updated_groups, still_unnamed = analyzer.match_unnamed_rides_to_groups(
-    unnamed_rides,
-    name_groups,
-    use_parallel=True,
-    max_workers=None  # Auto: 2-6 workers based on dataset size
-)
+Thresholds come from config:
 
-# Manual worker count
-updated_groups, still_unnamed = analyzer.match_unnamed_rides_to_groups(
-    unnamed_rides,
-    name_groups,
-    use_parallel=True,
-    max_workers=4  # Force 4 workers
-)
-
-# Disable parallel processing
-updated_groups, still_unnamed = analyzer.match_unnamed_rides_to_groups(
-    unnamed_rides,
-    name_groups,
-    use_parallel=False
-)
+```yaml
+long_rides:
+  min_coverage: 0.9          # stricter: variants must share more of the route
+  max_p95_deviation_m: 150   # also require 95% of each ride within 150 m of the other
 ```
 
-### Custom Similarity Thresholds
-
-The default is `2.0` km (combined Fréchet+Hausdorff distance) — see `consolidate_similar_named_groups()` above.
-
-```python
-# Stricter matching (routes must be very similar)
-name_groups = analyzer.consolidate_similar_named_groups(
-    name_groups,
-    similarity_threshold=0.5  # 500m tolerance
-)
-
-# Looser matching (group more variations together)
-name_groups = analyzer.consolidate_similar_named_groups(
-    name_groups,
-    similarity_threshold=3.0  # 3km tolerance
-)
-```
+Measure the effect on real rides with `scripts/matching_benchmark/run_long_ride_benchmark.py`
+before changing the defaults.
 
 ---
 
@@ -663,22 +532,20 @@ logger.setLevel(logging.INFO)
 
 ### Dataset Size
 
-- **< 100 rides**: Fast, no optimization needed
-- **100-500 rides**: Use parallel processing (automatic)
-- **> 500 rides**: Consider increasing `max_workers` to 6-8
+Grouping cost is dominated by the pairs that survive the coverage screen; later runs reuse cached
+pair metrics. See `scripts/matching_benchmark/README.md` for timings on real data.
 
 ### Memory Usage
 
-- Each LongRide object: ~1-5 KB (depends on GPS point count)
-- 1000 rides: ~1-5 MB memory
-- Parallel processing: Additional memory per worker process
+- Prepared tracks are built on demand and only the 256 most recently used are kept, so memory
+  doesn't grow with the number of rides.
+- The screen works on compact per-ride cell lists, in blocks of rows.
 
 ### Optimization Tips
 
 1. **Use caching**: Cache activity data to avoid repeated API calls
 2. **Filter early**: Apply distance filters before grouping
-3. **Adjust thresholds**: Higher similarity thresholds = faster processing
-4. **Limit search radius**: Smaller radius = fewer comparisons
+3. **Limit search radius**: Smaller radius = fewer comparisons
 
 ---
 

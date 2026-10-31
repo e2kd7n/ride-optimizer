@@ -100,7 +100,14 @@ visualization:
 
 long_rides:
   min_distance_km: 15  # Minimum distance to be considered a long ride
-  similarity_threshold: 1.2  # Max combined Fréchet+Hausdorff distance (km) for route matching
+  # Two long rides are the same route when, measured both ways (#615):
+  min_coverage: 0.9             # this share of each track lies within 50 m of the other
+  max_p95_deviation_m: null     # and (if set) 95% of each lies within this many metres;
+                                # null: coverage alone decides, so variants still match
+  name_min_coverage: 0.75       # ...or this, when both rides share a (non-generic) name
+  max_length_ratio: 1.5         # and the longer is at most this times the shorter (laps, out-and-backs)
+  contains_min_coverage: 0.9    # a shorter ride this much along another is linked as part of it
+  generic_names: []             # extra names to treat like "Morning Ride", e.g. localised defaults
   search_radius_km: 5  # Radius to search for rides near clicked location
   default_target_duration_hours: 2.0  # Default target ride duration
   default_target_distance_km: 40  # Default target ride distance

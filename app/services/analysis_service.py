@@ -325,6 +325,8 @@ class AnalysisService:
             'activity_ids': getattr(long_ride, 'activity_ids', None),
             'activity_dates': getattr(long_ride, 'activity_dates', None),
             'activity_names': getattr(long_ride, 'activity_names', None),
+            'part_of': list(getattr(long_ride, 'part_of', None) or []),
+            'contains': list(getattr(long_ride, 'contains', None) or []),
         }
 
     def _deserialize_long_ride(self, data: Dict[str, Any]):
@@ -347,6 +349,8 @@ class AnalysisService:
             activity_ids=data.get('activity_ids'),
             activity_dates=data.get('activity_dates'),
             activity_names=data.get('activity_names'),
+            part_of=data.get('part_of') or [],
+            contains=data.get('contains') or [],
         )
 
     def _run_preview_analysis(self, preview_acts: List[Activity]) -> None:

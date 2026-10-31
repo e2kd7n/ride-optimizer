@@ -23,7 +23,6 @@ def check_dependencies():
         'folium': 'folium',
         'pyyaml': 'yaml',
         'python-dotenv': 'dotenv',
-        'similaritymeasures': 'similaritymeasures',
     }
     
     print("Checking dependencies for long ride recommendations...")

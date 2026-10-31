@@ -1,147 +1,17 @@
 """
 Shared route comparison utilities used by both commute and long-ride analyzers.
 
-Provides coordinate scaling, geometric pre-filters, and shape-distance
-calculations. Long rides still use Fréchet + Hausdorff (combined_distance_km,
-#615); commutes use metric deviation + coverage (track_deviation_metrics, #613).
+Both compare tracks in metres on arc-length-resampled tracks: p95 deviation and
+50 m coverage (track_deviation_metrics, #613), grouped by centre clustering
+(cluster_by_centres, #614). Long rides add directed coverage, so a ride lying
+along part of another can be linked to it without being merged into it (#615).
 """
 
 import math
-from dataclasses import dataclass
 
 import numpy as np
 from scipy import sparse
 from scipy.spatial import cKDTree
-from scipy.spatial.distance import directed_hausdorff
-
-try:
-    from similaritymeasures import frechet_dist
-    FRECHET_AVAILABLE = True
-except ImportError:
-    FRECHET_AVAILABLE = False
-
-
-@dataclass
-class ComparisonThresholds:
-    """Per-use-case thresholds for the geometric filter and distance comparison."""
-    centroid_max_km: float = 5.0
-    extent_point_max_km: float = 10.0
-    length_ratio_max: float = 1.25
-    bbox_overlap_min: float = 0.0
-    similarity_km: float = 2.0
-
-
-COMMUTE_THRESHOLDS = ComparisonThresholds(
-    centroid_max_km=2.5,
-    extent_point_max_km=5.0,
-    length_ratio_max=1.5,
-    bbox_overlap_min=0.3,
-    similarity_km=0.5,
-)
-
-LONG_RIDE_THRESHOLDS = ComparisonThresholds(
-    centroid_max_km=5.0,
-    extent_point_max_km=10.0,
-    length_ratio_max=1.25,
-    bbox_overlap_min=0.0,
-    similarity_km=2.0,
-)
-
-
-def coords_to_km(coords: np.ndarray) -> np.ndarray:
-    if len(coords) == 0:
-        return coords
-    mean_lat = float(np.mean(coords[:, 0]))
-    lat_km = 111.32
-    lon_km = 111.32 * math.cos(math.radians(mean_lat))
-    result = coords.copy().astype(float)
-    result[:, 0] *= lat_km
-    result[:, 1] *= lon_km
-    return result
-
-
-def extent_point(coords_km: np.ndarray) -> np.ndarray:
-    """Return the coordinate farthest from the start point."""
-    dists = np.linalg.norm(coords_km - coords_km[0], axis=1)
-    return coords_km[int(np.argmax(dists))]
-
-
-def centroid(coords_km: np.ndarray) -> np.ndarray:
-    return coords_km.mean(axis=0)
-
-
-def path_length_km(coords_km: np.ndarray) -> float:
-    if len(coords_km) < 2:
-        return 0.0
-    return float(np.sum(np.linalg.norm(np.diff(coords_km, axis=0), axis=1)))
-
-
-def bbox_overlap_ratio(coords1_km: np.ndarray, coords2_km: np.ndarray) -> float:
-    """Overlap of bounding boxes as fraction of the smaller box's area."""
-    min1 = coords1_km.min(axis=0)
-    max1 = coords1_km.max(axis=0)
-    min2 = coords2_km.min(axis=0)
-    max2 = coords2_km.max(axis=0)
-
-    inter = np.maximum(0, np.minimum(max1, max2) - np.maximum(min1, min2))
-    intersection = float(inter[0] * inter[1])
-    if intersection == 0:
-        return 0.0
-
-    area1 = float((max1[0] - min1[0]) * (max1[1] - min1[1]))
-    area2 = float((max2[0] - min2[0]) * (max2[1] - min2[1]))
-    smaller = min(area1, area2)
-    return intersection / smaller if smaller > 0 else 0.0
-
-
-def passes_prefilter(coords1_km: np.ndarray,
-                     coords2_km: np.ndarray,
-                     thresholds: ComparisonThresholds) -> bool:
-    """
-    Fast geometric pre-filter. Returns False if routes are obviously dissimilar.
-
-    Evaluates (in order of cheapness): path length ratio, centroid distance,
-    extent point distance, bounding box overlap.
-    """
-    len1 = path_length_km(coords1_km)
-    len2 = path_length_km(coords2_km)
-    if len1 > 0 and len2 > 0:
-        ratio = max(len1, len2) / min(len1, len2)
-        if ratio > thresholds.length_ratio_max:
-            return False
-
-    cdist_km = float(np.linalg.norm(centroid(coords1_km) - centroid(coords2_km)))
-    if cdist_km > thresholds.centroid_max_km:
-        return False
-
-    if len(coords1_km) >= 2 and len(coords2_km) >= 2:
-        ext_dist = float(np.linalg.norm(
-            extent_point(coords1_km) - extent_point(coords2_km)))
-        if ext_dist > thresholds.extent_point_max_km:
-            return False
-
-    if thresholds.bbox_overlap_min > 0:
-        if bbox_overlap_ratio(coords1_km, coords2_km) < thresholds.bbox_overlap_min:
-            return False
-
-    return True
-
-
-def combined_distance_km(coords1_km: np.ndarray,
-                         coords2_km: np.ndarray) -> float:
-    """
-    Average of Fréchet and max-directed Hausdorff distances in km-scaled space.
-    Falls back to Hausdorff-only when similaritymeasures is unavailable.
-    """
-    h_dist = max(
-        directed_hausdorff(coords1_km, coords2_km)[0],
-        directed_hausdorff(coords2_km, coords1_km)[0],
-    )
-    if FRECHET_AVAILABLE:
-        f_dist = frechet_dist(coords1_km, coords2_km)
-        return (f_dist + h_dist) / 2
-    return h_dist
-
 
 
 # ---------------------------------------------------------------------------
@@ -203,17 +73,21 @@ class PreparedTrack:
     """A track projected with a shared lat0 and resampled once, so comparing it
     against many others doesn't redo that work per pair (#614).
 
-    samples: points every SAMPLE_STEP_M, measured against other tracks.
-    dense:   points every DENSE_STEP_M, which other tracks are measured against.
+    samples: points every sample_step_m, measured against other tracks.
+    dense:   points every dense_step_m, which other tracks are measured against.
+
+    Long rides use coarser steps (LONG_RIDE_SAMPLE_STEP_M / LONG_RIDE_DENSE_STEP_M)
+    to keep memory and time per pair bounded on 100+ km tracks.
     """
 
-    def __init__(self, coords, lat0: float):
+    def __init__(self, coords, lat0: float,
+                 sample_step_m: float = SAMPLE_STEP_M, dense_step_m: float = DENSE_STEP_M):
         c = np.asarray(coords, dtype=float).reshape(-1, 2)
         if len(c) == 0:
             raise ValueError("empty track")
         xy = project_m(c, lat0)
-        self.samples = resample_m(xy, SAMPLE_STEP_M)
-        self.dense = resample_m(xy, DENSE_STEP_M)
+        self.samples = resample_m(xy, sample_step_m)
+        self.dense = resample_m(xy, dense_step_m)
         self._tree = None
 
     @property
@@ -233,14 +107,21 @@ def prepared_deviation_metrics(t1: PreparedTrack, t2: PreparedTrack) -> tuple:
     Deviations are capped at P95_CAP_M, which lets the tree search stop early;
     a p95 at the cap means "at least that far".
     """
+    p95_12, cov_12, p95_21, cov_21 = directed_deviation_metrics(t1, t2)
+    return max(p95_12, p95_21), min(cov_12, cov_21)
+
+
+def directed_deviation_metrics(t1: PreparedTrack, t2: PreparedTrack) -> tuple:
+    """(p95_12, cov_12, p95_21, cov_21): the p95 deviation of t1's samples from
+    t2 and the share of them within COVERAGE_RADIUS_M of t2, then the same for
+    t2 against t1. Coverage of A by B is "how much of A lies along B", so it
+    tells a sub-segment (A inside B) from an extension (B inside A) (#615)."""
     def directed(a, b):
         d = b.tree.query(a.samples, distance_upper_bound=P95_CAP_M)[0]
         d = np.minimum(d, P95_CAP_M)
         return float(np.percentile(d, DEVIATION_PERCENTILE)), float(np.mean(d <= COVERAGE_RADIUS_M))
 
-    p95_12, cov_12 = directed(t1, t2)
-    p95_21, cov_21 = directed(t2, t1)
-    return max(p95_12, p95_21), min(cov_12, cov_21)
+    return directed(t1, t2) + directed(t2, t1)
 
 
 def track_deviation_metrics(coords1, coords2) -> tuple:
@@ -320,6 +201,142 @@ def possible_match_pairs(tracks: list, max_p95_m: float, min_coverage: float) ->
     ok &= ok.T
     i, j = np.nonzero(np.triu(ok, k=1))
     return np.column_stack([i, j])
+
+
+def cluster_by_centres(n: int, edges) -> list:
+    """Group indices 0..n-1 into [(centre, members)], given the match edges
+    (i, j, score); only edges with score >= 1.0 count as matches.
+
+    Repeatedly takes the ungrouped item that matches the most other ungrouped
+    items as a centre, and groups it with every ungrouped item that matches it
+    (Butina clustering). Ties go to the higher total match score, then the
+    lower index, so with items in a fixed order (activity ID) the result
+    doesn't depend on input order (#614). Every member matches its group's
+    centre, so a group can't chain into a different route, and the centre is
+    the group's representative. Members are listed in index order.
+    """
+    neighbours = [dict() for _ in range(n)]
+    for i, j, score in edges:
+        if score >= 1.0 and i != j:
+            neighbours[i][j] = neighbours[j][i] = float(score)
+    # An ungrouped item's degree counts itself plus its ungrouped matches.
+    degree = np.array([len(nb) + 1 for nb in neighbours], dtype=np.int64)
+    ungrouped = np.ones(n, dtype=bool)
+    result = []
+    while ungrouped.any():
+        live = np.flatnonzero(ungrouped)
+        top = live[degree[live] == degree[live].max()]
+        centre = int(top[0])
+        if len(top) > 1:
+            best = None
+            for c in top:
+                row = np.zeros(n)
+                for v, score in neighbours[c].items():
+                    if ungrouped[v]:
+                        row[v] = score
+                total = row.sum()
+                if best is None or total > best:
+                    best, centre = total, int(c)
+        members = sorted([centre] + [v for v in neighbours[centre] if ungrouped[v]])
+        ungrouped[members] = False
+        for m in members:
+            for v in neighbours[m]:
+                degree[v] -= 1
+        result.append((centre, members))
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Long rides (LongRideAnalyzer), #615.
+#
+# Same metric as commutes, but a long-ride corpus is thousands of 15-300 km
+# tracks: all of them resampled every 10 m would not fit in the Pi's memory,
+# and all pairs (millions) would take hours. So long rides are resampled more
+# coarsely, and coverage_bound_pairs screens out, exactly and from compact
+# per-track cell lists, the pairs whose coverage can't reach a threshold.
+# ---------------------------------------------------------------------------
+
+LONG_RIDE_SAMPLE_STEP_M = 25.0
+LONG_RIDE_DENSE_STEP_M = 10.0
+LONG_SCREEN_CELL_M = 100.0
+# Cells are hashed into this many columns. A collision can only make a bound
+# looser, never tighter, so it stays a valid upper bound.
+_SCREEN_COLUMNS = 1 << 26
+_BOUND_SLACK = 1e-5
+
+
+def _hash_cells(cells: np.ndarray) -> np.ndarray:
+    h = ((cells[:, 0] * 73856093) ^ (cells[:, 1] * 19349663)) & (_SCREEN_COLUMNS - 1)
+    return h.astype(np.int32)
+
+
+def coverage_cells(track: PreparedTrack) -> tuple:
+    """Compact screening summary of a track for coverage_bound_pairs:
+    (sample_columns, sample_shares, near_columns). A sample within
+    COVERAGE_RADIUS_M of a dense point lies within r cells of it on each axis,
+    so it falls in one of the dense points' "near" cells."""
+    r = int(math.ceil(COVERAGE_RADIUS_M / LONG_SCREEN_CELL_M))
+    cols, counts = np.unique(
+        _hash_cells(np.floor(track.samples / LONG_SCREEN_CELL_M).astype(np.int64)),
+        return_counts=True)
+    dense = np.unique(np.floor(track.dense / LONG_SCREEN_CELL_M).astype(np.int64), axis=0)
+    offsets = np.array([(dx, dy) for dx in range(-r, r + 1) for dy in range(-r, r + 1)])
+    near = np.unique((dense[:, None, :] + offsets[None, :, :]).reshape(-1, 2), axis=0)
+    return cols, (counts / len(track.samples)).astype(np.float32), np.unique(_hash_cells(near))
+
+
+def coverage_bound_pairs(cells: list, min_mutual: float, min_either: float,
+                         block_rows: int = 64) -> tuple:
+    """Pairs that could reach a coverage threshold, with their upper bounds.
+
+    cells: coverage_cells() of each track. Returns arrays (i, j, bound_ij,
+    bound_ji) over i < j, where bound_ij is an upper bound on the share of
+    track i within COVERAGE_RADIUS_M of track j, keeping pairs where
+    min(bounds) >= min_mutual or max(bounds) >= min_either. Every other pair
+    is guaranteed to have coverage below both.
+
+    Memory matters here (a real corpus has millions of near-cells): matrices
+    are float32/int32 and built straight from the per-track lists, only the
+    small shares matrix is ever transposed, and the products are taken in
+    blocks of rows. Bounds are rounded up by _BOUND_SLACK to absorb float32
+    error, so they stay upper bounds.
+    """
+    n = len(cells)
+    empty = (np.empty(0, dtype=np.int64),) * 2 + (np.empty(0),) * 2
+    if n < 2:
+        return empty
+
+    # Renumber the hashed columns actually used to 0..m-1, so a transpose
+    # indexes m columns rather than all _SCREEN_COLUMNS.
+    used = np.unique(np.concatenate([c[0] for c in cells] + [c[2] for c in cells]))
+
+    def matrix(column_lists, value_lists=None):
+        # Each list is sorted and unique, and so stays after renumbering.
+        indptr = np.zeros(n + 1, dtype=np.int64)
+        indptr[1:] = np.cumsum([len(c) for c in column_lists])
+        indices = np.concatenate([np.searchsorted(used, c).astype(np.int32) for c in column_lists])
+        data = (np.concatenate(value_lists).astype(np.float32) if value_lists is not None
+                else np.ones(len(indices), dtype=np.float32))
+        return sparse.csr_matrix((data, indices, indptr), shape=(n, len(used)))
+
+    shares = matrix([c[0] for c in cells], [c[1] for c in cells])
+    near = matrix([c[2] for c in cells])
+    shares_t = shares.T.tocsr()
+    out = [[], [], [], []]
+    for start in range(0, n, block_rows):
+        stop = min(n, start + block_rows)
+        # [a, b]: bound on a within reach of b, then on b within reach of a.
+        ab = (near @ shares[start:stop].T).T.toarray().astype(np.float64) + _BOUND_SLACK
+        ba = (near[start:stop] @ shares_t).toarray().astype(np.float64) + _BOUND_SLACK
+        rows = np.arange(start, stop)[:, None]
+        keep = ((np.arange(n)[None, :] > rows)
+                & ((np.minimum(ab, ba) >= min_mutual) | (np.maximum(ab, ba) >= min_either)))
+        a, b = np.nonzero(keep)
+        out[0].append(a + start)
+        out[1].append(b)
+        out[2].append(ab[a, b])
+        out[3].append(ba[a, b])
+    return tuple(np.concatenate(o) for o in out)
 
 
 def route_geometry(coords) -> tuple:

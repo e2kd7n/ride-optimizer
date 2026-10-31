@@ -90,3 +90,70 @@ def label(m: dict) -> str:
     if m['cov_min'] <= DIFF_MAX_COVERAGE:
         return 'diff'
     return 'ambig'
+
+
+# ---------------------------------------------------------------- long rides (#615)
+#
+# Long rides add a one-way relation: A is "part of" B when A on its own meets the
+# 'same' bar against B (>= 90% of A within 50 m of B, A's p95 <= 75 m) but the
+# pair isn't 'same' -- a sub-segment, or B is A plus an extension.
+#
+# Long-ride corpora have millions of pairs, so long_ride_candidates screens them
+# first with an exact bound: a sample within 50 m of a dense point of B lies in
+# the same or a neighbouring CELL_M cell, so the share of A's samples in cells
+# next to B's cells bounds A's coverage by B from above. A pair is only
+# compared when that bound exceeds DIFF_MAX_COVERAGE in some direction; every
+# other pair is exactly 'diff' and part of nothing.
+
+LONG_REFERENCE_VERSION = 1
+CELL_M = 100.0
+
+
+def compare_long(a: Track, b: Track) -> dict:
+    """compare() plus the directed values and the part-of relation."""
+    dab = b.tree.query(a.samples)[0]
+    dba = a.tree.query(b.samples)[0]
+    m = dict(
+        cov_ab=float(np.mean(dab <= COVERAGE_RADIUS_M)),
+        cov_ba=float(np.mean(dba <= COVERAGE_RADIUS_M)),
+        p95_ab=float(np.percentile(dab, 95)),
+        p95_ba=float(np.percentile(dba, 95)),
+    )
+    m['cov_min'] = min(m['cov_ab'], m['cov_ba'])
+    m['dev_p95'] = max(m['p95_ab'], m['p95_ba'])
+    m['label'] = label(m)
+    a_in_b = m['cov_ab'] >= SAME_MIN_COVERAGE and m['p95_ab'] <= SAME_MAX_P95_M
+    b_in_a = m['cov_ba'] >= SAME_MIN_COVERAGE and m['p95_ba'] <= SAME_MAX_P95_M
+    m['part_of'] = ('' if m['label'] == 'same' else
+                    'a_in_b' if a_in_b and not b_in_a else
+                    'b_in_a' if b_in_a and not a_in_b else '')
+    return m
+
+
+def long_ride_candidates(coords_list, lat0):
+    """(i, j) pairs, i < j, that could be anything but 'diff' (see above)."""
+    from scipy import sparse
+    n = len(coords_list)
+    shift = 1 << 31  # cell (x, y) -> one int64 key
+    rows_s, keys_s, vals_s, rows_n, keys_n = [], [], [], [], []
+    for t, coords in enumerate(coords_list):
+        xy = project(coords, lat0)
+        samples, _ = resample(xy, SAMPLE_STEP_M)
+        dense, _ = resample(xy, DENSE_STEP_M)
+        c = np.floor(samples / CELL_M).astype(np.int64)
+        k, counts = np.unique(c[:, 0] * shift + c[:, 1], return_counts=True)
+        rows_s.append(np.full(len(k), t)); keys_s.append(k); vals_s.append(counts / len(samples))
+        d = np.unique(np.floor(dense / CELL_M).astype(np.int64), axis=0)
+        near = np.unique(np.concatenate([(d[:, 0] + dx) * shift + d[:, 1] + dy
+                                         for dx in (-1, 0, 1) for dy in (-1, 0, 1)]))
+        rows_n.append(np.full(len(near), t)); keys_n.append(near)
+    cols, inv = np.unique(np.concatenate(keys_s + keys_n), return_inverse=True)
+    n_s = sum(len(k) for k in keys_s)
+    shares = sparse.csr_matrix((np.concatenate(vals_s), (np.concatenate(rows_s), inv[:n_s])),
+                               shape=(n, len(cols)))
+    near = sparse.csr_matrix((np.ones(len(inv) - n_s), (np.concatenate(rows_n), inv[n_s:])),
+                             shape=(n, len(cols)))
+    bound = (shares @ near.T).tocoo()  # [a, b] bounds the share of a within 50 m of b
+    keep = (bound.data > DIFF_MAX_COVERAGE) & (bound.row != bound.col)
+    pairs = {(min(a, b), max(a, b)) for a, b in zip(bound.row[keep].tolist(), bound.col[keep].tolist())}
+    return sorted(pairs)

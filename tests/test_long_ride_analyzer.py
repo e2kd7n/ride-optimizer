@@ -43,6 +43,12 @@ def _make_activity(
     )
 
 
+@pytest.fixture(autouse=True)
+def _cache_dir(tmp_path, monkeypatch):
+    # LongRideAnalyzer's default cache_dir is relative ("cache"): keep tests out of the repo's.
+    monkeypatch.chdir(tmp_path)
+
+
 def _make_analyzer(activities=None, min_distance_km=15):
     config = Mock()
     config.get.side_effect = lambda key, default=None: {
@@ -177,138 +183,6 @@ class TestClassifyActivities:
 
 
 # ---------------------------------------------------------------------------
-# group_rides_by_name tests
-# ---------------------------------------------------------------------------
-
-class TestGroupRidesByName:
-    def test_groups_same_name(self):
-        a1 = _make_activity(1, name="Old School", start_date="2026-05-01T08:00:00+00:00")
-        a2 = _make_activity(2, name="Old School", start_date="2026-05-08T08:00:00+00:00")
-        analyzer = _make_analyzer([a1, a2])
-        groups, unnamed = analyzer.group_rides_by_name([a1, a2])
-        assert "Old School" in groups
-        assert len(groups["Old School"]) == 2
-        assert len(unnamed) == 0
-
-    def test_generic_names_go_to_unnamed(self):
-        generic = _make_activity(3, name="Morning Ride")
-        analyzer = _make_analyzer([generic])
-        groups, unnamed = analyzer.group_rides_by_name([generic])
-        assert len(groups) == 0
-        assert len(unnamed) == 1
-
-    def test_empty_name_goes_to_unnamed(self):
-        noname = _make_activity(4, name="")
-        analyzer = _make_analyzer([noname])
-        groups, unnamed = analyzer.group_rides_by_name([noname])
-        assert len(unnamed) == 1
-
-    def test_different_names_separate_groups(self):
-        a1 = _make_activity(5, name="Route A")
-        a2 = _make_activity(6, name="Route B")
-        analyzer = _make_analyzer([a1, a2])
-        groups, _ = analyzer.group_rides_by_name([a1, a2])
-        assert "Route A" in groups
-        assert "Route B" in groups
-
-
-# ---------------------------------------------------------------------------
-# consolidate_named_groups tests
-# ---------------------------------------------------------------------------
-
-class TestConsolidateNamedGroups:
-    def test_creates_long_ride_from_named_group(self):
-        activity = _make_activity(
-            1, name="Sunday Loop",
-            start_latlng=(41.88, -87.63),
-            end_latlng=(41.88, -87.63),
-        )
-        analyzer = _make_analyzer([activity])
-        rides = analyzer.consolidate_named_groups({"Sunday Loop": [activity]})
-        assert len(rides) == 1
-        assert rides[0].name == "Sunday Loop"
-        assert rides[0].uses == 1
-
-    def test_uses_count_from_multiple_activities(self):
-        a1 = _make_activity(1, name="Loop", start_date="2026-04-01T08:00:00+00:00")
-        a2 = _make_activity(2, name="Loop", start_date="2026-05-01T08:00:00+00:00")
-        analyzer = _make_analyzer([a1, a2])
-        rides = analyzer.consolidate_named_groups({"Loop": [a1, a2]})
-        assert rides[0].uses == 2
-
-    def test_skips_activities_without_polyline(self):
-        bad = _make_activity(3, name="Bad Ride", polyline=None)
-        analyzer = _make_analyzer([bad])
-        rides = analyzer.consolidate_named_groups({"Bad Ride": [bad]})
-        assert len(rides) == 0
-
-    def test_uses_most_recent_as_representative(self):
-        old = _make_activity(1, name="Route", start_date="2026-01-01T08:00:00+00:00")
-        new = _make_activity(2, name="Route", start_date="2026-05-01T08:00:00+00:00")
-        analyzer = _make_analyzer([old, new])
-        rides = analyzer.consolidate_named_groups({"Route": [old, new]})
-        assert rides[0].activity_id == 2  # most recent
-
-    def test_is_loop_detection_close_start_end(self):
-        # Same start/end = loop
-        activity = _make_activity(
-            1, name="Loop",
-            start_latlng=(41.88, -87.63),
-            end_latlng=(41.88001, -87.63001),  # ~15m away
-        )
-        analyzer = _make_analyzer([activity])
-        rides = analyzer.consolidate_named_groups({"Loop": [activity]})
-        assert rides[0].is_loop is True
-
-    def test_is_not_loop_far_start_end(self):
-        activity = _make_activity(
-            1, name="Out&Back",
-            start_latlng=(41.88, -87.63),
-            end_latlng=(41.99, -87.50),  # far away
-        )
-        analyzer = _make_analyzer([activity])
-        rides = analyzer.consolidate_named_groups({"Out&Back": [activity]})
-        assert rides[0].is_loop is False
-
-
-# ---------------------------------------------------------------------------
-# generate_fallback_names tests
-# ---------------------------------------------------------------------------
-
-class TestGenerateFallbackNames:
-    def test_generates_loop_name(self):
-        act = _make_activity(
-            1, start_latlng=(41.88, -87.63), end_latlng=(41.88001, -87.63001),
-            distance=50000.0
-        )
-        analyzer = _make_analyzer([act])
-        groups = analyzer.generate_fallback_names([act])
-        names = list(groups.keys())
-        assert any("Loop" in n for n in names)
-
-    def test_generates_out_and_back_name(self):
-        act = _make_activity(
-            1, start_latlng=(41.88, -87.63), end_latlng=(41.99, -87.50),
-            distance=40000.0
-        )
-        analyzer = _make_analyzer([act])
-        groups = analyzer.generate_fallback_names([act])
-        names = list(groups.keys())
-        assert any("Out" in n or "Back" in n for n in names)
-
-    def test_no_start_latlng_skipped(self):
-        act = _make_activity(1, start_latlng=None, distance=50000.0)
-        analyzer = _make_analyzer([act])
-        groups = analyzer.generate_fallback_names([act])
-        assert len(groups) == 0
-
-    def test_empty_input(self):
-        analyzer = _make_analyzer()
-        groups = analyzer.generate_fallback_names([])
-        assert groups == {}
-
-
-# ---------------------------------------------------------------------------
 # group_similar_rides integration test
 # ---------------------------------------------------------------------------
 
@@ -318,7 +192,7 @@ class TestGroupSimilarRides:
         result = analyzer.group_similar_rides([])
         assert result == []
 
-    def test_named_activities_grouped(self):
+    def test_same_named_identical_rides_grouped(self):
         a1 = _make_activity(1, name="Old School", start_date="2026-04-01T08:00:00+00:00")
         a2 = _make_activity(2, name="Old School", start_date="2026-05-01T08:00:00+00:00")
         analyzer = _make_analyzer([a1, a2])
@@ -326,28 +200,43 @@ class TestGroupSimilarRides:
         assert len(result) == 1
         assert result[0].name == "Old School"
         assert result[0].uses == 2
+        # Most recent first, as the route library expects.
+        assert result[0].activity_ids == [2, 1]
+        assert result[0].activity_dates == ["2026-05-01", "2026-04-01"]
 
-    def test_distinct_names_become_distinct_rides(self):
-        # Use different polylines so routes are not merged by similarity check.
-        # "_p~iF~ps|U" → SF area; "krz_Hxobi@..." → different region
-        a1 = _make_activity(1, name="Route Alpha",
-                             polyline="_p~iF~ps|U_ulLnnqC_mqNvxq`@")
-        a2 = _make_activity(2, name="Route Beta",
-                             polyline="egsrHpebn@sA}@gBqAkBoA",  # different coords
-                             start_latlng=(41.88, -87.63), end_latlng=(41.90, -87.61))
-        analyzer = _make_analyzer([a1, a2])
-        result = analyzer.group_similar_rides([a1, a2])
-        # With different polylines the routes are distinct; we get 1 or 2 rides
-        # depending on distance — at minimum 1 ride should be returned
-        assert len(result) >= 1
+    def test_distinct_tracks_become_distinct_rides(self):
+        a1 = _make_activity(1, name="Route Alpha", polyline="_p~iF~ps|U_ulLnnqC_mqNvxq`@")
+        a2 = _make_activity(2, name="Route Beta", polyline="egsrHpebn@sA}@gBqAkBoA",
+                            start_latlng=(41.88, -87.63), end_latlng=(41.90, -87.61))
+        result = _make_analyzer([a1, a2]).group_similar_rides([a1, a2])
+        assert {r.activity_id for r in result} == {1, 2}
 
-    def test_generic_named_activities_get_fallback_names(self):
+    def test_generic_named_ride_gets_fallback_name(self):
         generic = _make_activity(1, name="Morning Ride",
                                  start_latlng=(41.88, -87.63),
                                  end_latlng=(41.99, -87.50),
                                  distance=40000.0)
-        analyzer = _make_analyzer([generic])
-        result = analyzer.group_similar_rides([generic])
+        result = _make_analyzer([generic]).group_similar_rides([generic])
         assert len(result) == 1
-        # fallback name should reference distance or type
-        assert result[0].name != ""
+        assert result[0].name == "Point to Point (40.0km)"
+
+    def test_loop_flag_from_start_and_end(self):
+        loop = _make_activity(1, name="Loop", start_latlng=(41.88, -87.63),
+                              end_latlng=(41.88001, -87.63001))  # ~15 m apart
+        far = _make_activity(2, name="Out", start_latlng=(41.88, -87.63),
+                             end_latlng=(41.99, -87.50), polyline="egsrHpebn@sA}@gBqAkBoA")
+        by_id = {r.activity_id: r for r in _make_analyzer().group_similar_rides([loop, far])}
+        assert by_id[1].is_loop is True and by_id[2].is_loop is False
+
+    def test_undecodable_polyline_is_skipped(self):
+        bad = _make_activity(1, polyline="")  # decodes to no points
+        good = _make_activity(2)
+        result = _make_analyzer().group_similar_rides([bad, good])
+        assert [r.activity_id for r in result] == [2]
+
+    def test_writes_cache_under_cache_dir(self, tmp_path):
+        a1, a2 = _make_activity(1), _make_activity(2)
+        config = Mock()
+        config.get.side_effect = lambda key, default=None: default
+        LongRideAnalyzer([], config, cache_dir=str(tmp_path / "c")).group_similar_rides([a1, a2])
+        assert (tmp_path / "c" / "long_ride_similarity_cache.json").exists()

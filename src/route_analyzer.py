@@ -30,7 +30,7 @@ from .location_finder import Location
 from .route_namer import RouteNamer, check_rate_limit_file
 from .json_storage import secure_chmod
 from .route_comparison import (
-    PreparedTrack, passes_commute_prefilter, possible_match_pairs,
+    PreparedTrack, cluster_by_centres, passes_commute_prefilter, possible_match_pairs,
     prepared_deviation_metrics, track_deviation_metrics, match_score, route_geometry,
 )
 
@@ -842,33 +842,11 @@ class RouteAnalyzer:
     @staticmethod
     def _cluster_by_centres(scores: np.ndarray) -> List[Tuple[int, List[int]]]:
         """Group indices into [(centre, members)], given symmetric match scores
-        (0 where a pair can't match).
-
-        Repeatedly takes the ungrouped route that matches the most other
-        ungrouped routes as a centre, and groups it with every ungrouped route
-        that matches it (Butina clustering). Ties go to the higher total match
-        score, then the lower index — with routes sorted by activity ID the
-        result doesn't depend on input order (#614). Every member matches its
-        group's centre, so a group can't chain into a different route, and the
-        centre is the group's representative.
-        """
-        n = len(scores)
-        match = scores >= 1.0
-        np.fill_diagonal(match, True)
-        ungrouped = np.ones(n, dtype=bool)
-        result = []
-        while ungrouped.any():
-            live = match & ungrouped[None, :]
-            degree = live.sum(axis=1)
-            total_score = np.where(live, scores, 0.0).sum(axis=1)
-            candidates = np.flatnonzero(ungrouped)
-            # lexsort: last key is primary; ties fall to the lowest index.
-            order = np.lexsort((candidates, -total_score[candidates], -degree[candidates]))
-            centre = int(candidates[order[0]])
-            members = np.flatnonzero(match[centre] & ungrouped)
-            ungrouped[members] = False
-            result.append((centre, [int(m) for m in members]))
-        return result
+        (0 where a pair can't match), by route_comparison.cluster_by_centres
+        (Butina clustering, shared with long rides). With routes sorted by
+        activity ID the result doesn't depend on input order (#614)."""
+        i, j = np.nonzero(np.triu(scores >= 1.0, k=1))
+        return cluster_by_centres(len(scores), zip(i.tolist(), j.tolist(), scores[i, j].tolist()))
 
     def _assign_group_ids(self, groups: List[RouteGroup]) -> None:
         """Give each group a stable ID and name (#614).

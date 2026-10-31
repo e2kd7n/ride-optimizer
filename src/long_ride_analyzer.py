@@ -2,29 +2,66 @@
 Long Ride Analysis Module
 
 Analyzes non-commute cycling activities for recreational ride recommendations.
+
+Long rides are grouped by geometry with the same metric as commutes (#613):
+tracks in metres, resampled by arc length, compared by p95 deviation and 50 m
+coverage, then grouped by centre clustering (#614). Coverage doesn't care
+where a loop starts, and the rides are compared as sets of points, so a loop
+ridden in reverse or started elsewhere still matches. The Strava name is only
+a prior: two rides with the same name match at a lower coverage bar, but never
+without geometric agreement. Rides that lie along part of another route (a
+sub-segment, or the other is an extension) are linked to it, not merged (#615).
 """
 
+import hashlib
 import json
-from .secure_logger import SecureLogger
+import re
+from collections import Counter, OrderedDict
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Tuple, Dict, Optional
-from dataclasses import dataclass
-from concurrent.futures import ProcessPoolExecutor, as_completed
-from functools import partial
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 from geopy.distance import geodesic
 import polyline
 
 from .data_fetcher import Activity
-from .route_namer import RouteNamer
-from .route_comparison import (
-    coords_to_km, passes_prefilter, combined_distance_km,
-    LONG_RIDE_THRESHOLDS,
-)
 from .json_storage import secure_chmod
+from .route_comparison import (
+    COVERAGE_RADIUS_M, LONG_RIDE_DENSE_STEP_M, LONG_RIDE_SAMPLE_STEP_M,
+    PreparedTrack, cluster_by_centres, coverage_bound_pairs, coverage_cells,
+    directed_deviation_metrics, match_score,
+)
+from .secure_logger import SecureLogger
 
 logger = SecureLogger(__name__)
+
+# Bump when the pairwise metric, the resample steps or the track hash change,
+# so cached metrics from the old code are discarded (#612).
+SIMILARITY_CACHE_VERSION = 2
+
+# Start and end within this of each other: a loop or an out-and-back.
+LOOP_RADIUS_M = 500
+# An out-and-back retraces itself: this share of the outbound half lies along
+# the return half.
+OUT_AND_BACK_MIN_COVERAGE = 0.7
+# Prepared tracks kept in memory while computing pair metrics. Each long ride is
+# a few hundred KB prepared, so this bounds memory on the Pi.
+TRACK_CACHE_SIZE = 256
+
+# Strava's default names ("Morning Ride", "Night Gravel Ride", "Afternoon
+# Mountain Bike Ride", ...) and other placeholders say nothing about the route.
+_RIDE_KIND = r'((gravel|road|mountain bike|e-?bike|e-?mountain bike|bike|cycling|velomobile) )?ride'
+_GENERIC_NAME = re.compile(
+    rf'^((early )?morning|afternoon|evening|night|lunch|midday) {_RIDE_KIND}$'
+    rf'|^{_RIDE_KIND}$|^untitled( ride)?$|^unnamed( (ride|activity))?$')
+
+VIRTUAL_KEYWORDS = ('zwift', 'trainer', 'indoor', 'rouvy', 'sufferfest', 'peloton')
+
+
+def normalize_name(name: Optional[str]) -> str:
+    """Case- and whitespace-insensitive form of a ride name."""
+    return ' '.join((name or '').casefold().split())
 
 
 @dataclass
@@ -46,17 +83,21 @@ class LongRide:
     activity_ids: List[int] = None  # List of all activity IDs that make up this route
     activity_dates: List[str] = None  # List of dates for each activity
     activity_names: List[str] = None  # Strava names for each activity
-    
+    # Linked, not merged (#615): representative activity IDs of the long rides
+    # this route lies along (part_of) and of those lying along it (contains).
+    part_of: List[int] = field(default_factory=list)
+    contains: List[int] = field(default_factory=list)
+
     @property
     def distance_km(self) -> float:
         """Distance in kilometers."""
         return self.distance / 1000
-    
+
     @property
     def duration_hours(self) -> float:
         """Duration in hours."""
         return self.duration / 3600
-    
+
     @property
     def midpoint(self) -> Tuple[float, float]:
         """Calculate midpoint of the ride."""
@@ -69,616 +110,404 @@ class LongRide:
 class LongRideAnalyzer:
     """Analyzes non-commute rides for recreational recommendations."""
 
-    _SIMILARITY_CACHE_PATH = "cache/long_ride_similarity_cache.json"
+    _SIMILARITY_CACHE_FILE = "long_ride_similarity_cache.json"
 
-    def __init__(self, activities: List[Activity], config):
+    def __init__(self, activities: List[Activity], config, cache_dir: str = "cache"):
         """
         Initialize long ride analyzer.
-        
+
         Args:
             activities: List of all Activity objects
             config: Configuration object
+            cache_dir: Directory for the pair-metrics cache
         """
         self.activities = activities
         self.config = config
-        self.route_namer = RouteNamer(config)
-        self._similarity_cache: Dict[str, float] = self._load_similarity_cache()
-        
-    def _load_similarity_cache(self) -> Dict[str, float]:
-        """Load long-ride similarity cache from disk."""
-        p = Path(self._SIMILARITY_CACHE_PATH)
-        if p.exists():
-            try:
-                cache = json.loads(p.read_text())
-                logger.info(f"Loaded {len(cache)} long-ride similarity values from cache")
-                return cache
-            except Exception as e:
-                logger.warning(f"Could not load long-ride similarity cache: {e}")
-        return {}
+        self.cache_file = Path(cache_dir) / self._SIMILARITY_CACHE_FILE
+        # Two rides are the same route when at least min_coverage of each lies
+        # within 50 m of the other, and (if set) 95% of each lies within
+        # max_p95_deviation_m. Unlike commutes, a long-ride variant (a longer
+        # turnaround, a different few km) is still the route, so by default
+        # only coverage decides.
+        p95 = config.get('long_rides.max_p95_deviation_m', None)
+        self.max_p95_deviation_m = float(p95) if p95 is not None else None
+        self.min_coverage = float(config.get('long_rides.min_coverage', 0.9))
+        # ... except that rides sharing a (non-generic) name only need this coverage.
+        self.name_min_coverage = float(config.get('long_rides.name_min_coverage', 0.75))
+        # Coverage can't tell one lap from two, or a one-way ride from the
+        # out-and-back on the same road: same-route rides must also be within
+        # this length ratio.
+        self.max_length_ratio = float(config.get('long_rides.max_length_ratio', 1.5))
+        # A ride is part of another when this share of it lies along the other
+        # (and it's the shorter of the two).
+        self.contains_min_coverage = float(config.get('long_rides.contains_min_coverage', 0.9))
+        extra = config.get('long_rides.generic_names', None) or []
+        self.extra_generic_names = {normalize_name(n) for n in extra}
+        self._similarity_cache: Dict[str, List[float]] = self._load_similarity_cache()
 
-    def _save_similarity_cache(self) -> None:
-        """Persist long-ride similarity cache to disk."""
+    # ------------------------------------------------------------ cache
+
+    def _load_similarity_cache(self) -> Dict[str, List[float]]:
+        """Load the pair-metrics cache, discarding one from older code."""
+        if not self.cache_file.exists():
+            return {}
         try:
-            p = Path(self._SIMILARITY_CACHE_PATH)
-            p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(json.dumps(self._similarity_cache))
-            secure_chmod(p)
-            logger.debug(f"Saved {len(self._similarity_cache)} long-ride similarity values to cache")
+            cache = json.loads(self.cache_file.read_text())
+        except Exception as e:
+            logger.warning(f"Could not load long-ride similarity cache: {e}")
+            return {}
+        if not isinstance(cache, dict) or cache.get('version') != SIMILARITY_CACHE_VERSION:
+            # Includes the pre-#615 format: a flat {"id:id": km} dict whose
+            # prefilter rejections were stored as a permanent inf.
+            logger.info("Discarding long-ride similarity cache from an older version")
+            return {}
+        metrics = cache.get('metrics', {})
+        logger.info(f"Loaded {len(metrics)} long-ride pair metrics from cache")
+        return metrics
+
+    def _save_similarity_cache(self, used_keys) -> None:
+        """Persist the metrics of the pairs this run used. Pairs of rides that no
+        longer exist are dropped, so the file doesn't grow without bound."""
+        metrics = {k: self._similarity_cache[k] for k in used_keys if k in self._similarity_cache}
+        try:
+            self.cache_file.parent.mkdir(parents=True, exist_ok=True)
+            self.cache_file.write_text(json.dumps({'version': SIMILARITY_CACHE_VERSION,
+                                                   'metrics': metrics}))
+            secure_chmod(self.cache_file)
+            logger.debug(f"Saved {len(metrics)} long-ride pair metrics to cache")
         except Exception as e:
             logger.warning(f"Could not save long-ride similarity cache: {e}")
+
+    @staticmethod
+    def _track_hash(coords: np.ndarray) -> str:
+        return hashlib.sha256(np.ascontiguousarray(coords, dtype=np.float64).tobytes()).hexdigest()[:16]
+
+    # ------------------------------------------------------------ classification
 
     def classify_activities(self, commute_activities: List[Activity]) -> Tuple[List[Activity], List[Activity]]:
         """
         Classify activities into commutes and long rides.
-        
+
         Args:
             commute_activities: List of identified commute activities
-            
+
         Returns:
             Tuple of (commute_activities, long_ride_activities)
         """
         commute_ids = {act.id for act in commute_activities}
-        
+
         # Filter for cycling activities that are not commutes
         long_rides = []
         for activity in self.activities:
             # Skip if it's a commute
             if activity.id in commute_ids:
                 continue
-            
+
             # Must be a cycling activity, but exclude virtual rides
             if 'Ride' not in activity.type:
                 continue
-            
+
             # Skip virtual rides by activity type
             if 'VirtualRide' in activity.type or 'Virtual' in activity.type:
                 logger.debug(f"Skipping virtual ride: {activity.name} (type={activity.type})")
                 continue
-            
+
             # Must have GPS data (virtual rides often don't have real GPS)
             if not activity.start_latlng or not activity.end_latlng or not activity.polyline:
                 continue
-            
+
             # Additional check: Skip by activity name keywords
             if activity.name:
                 name_lower = activity.name.lower()
-                virtual_keywords = ['zwift', 'trainer', 'indoor', 'rouvy', 'sufferfest', 'peloton']
-                if any(keyword in name_lower for keyword in virtual_keywords):
+                if any(keyword in name_lower for keyword in VIRTUAL_KEYWORDS):
                     logger.debug(f"Skipping virtual ride: {activity.name} (name contains virtual keyword)")
                     continue
-            
+
             # Apply distance filter (configurable, default > 15km for long rides)
             min_distance = self.config.get('long_rides.min_distance_km', 15) * 1000
             if activity.distance < min_distance:
                 continue
-            
+
             long_rides.append(activity)
-        
+
         logger.info(f"Classified {len(commute_activities)} commutes and {len(long_rides)} long rides")
-        
+
         return commute_activities, long_rides
-    def group_rides_by_name(self, long_ride_activities: List[Activity]) -> Tuple[Dict[str, List[Activity]], List[Activity]]:
-        """
-        Group long ride activities by their Strava activity name.
-        This is the primary grouping mechanism since users often name similar routes the same.
-        
-        Args:
-            long_ride_activities: List of Activity objects
-            
-        Returns:
-            Tuple of (name_groups dict, unnamed_rides list)
-        """
-        name_groups: Dict[str, List[Activity]] = {}
-        unnamed_rides: List[Activity] = []
-        
-        for activity in long_ride_activities:
-            # Handle unnamed or generic names
-            if not activity.name or activity.name.strip() in ['', 'Morning Ride', 'Afternoon Ride', 'Evening Ride', 'Lunch Ride']:
-                unnamed_rides.append(activity)
-                continue
-            
-            # Normalize the name (strip whitespace)
-            normalized_name = activity.name.strip()
-            
-            if normalized_name not in name_groups:
-                name_groups[normalized_name] = []
-            name_groups[normalized_name].append(activity)
-        
-        # Log statistics
-        logger.info(f"Grouped {len(long_ride_activities)} long rides into {len(name_groups)} named groups")
-        logger.info(f"Found {len(unnamed_rides)} rides with generic/no names")
-        
-        # Log top groups
-        sorted_groups = sorted(name_groups.items(), key=lambda x: len(x[1]), reverse=True)
-        for name, activities in sorted_groups[:10]:
-            logger.info(f"  '{name}': {len(activities)} rides")
-        
-        return name_groups, unnamed_rides
-    
-    @staticmethod
-    def _coords_to_km(coords: np.ndarray) -> np.ndarray:
-        return coords_to_km(coords)
 
-    def consolidate_similar_named_groups(self, name_groups: Dict[str, List[Activity]],
-                                        similarity_threshold: float = 2.0,
-                                        on_progress=None) -> Dict[str, List[Activity]]:
-        """
-        Consolidate named groups that have similar routes despite different names.
-        This helps group route variations like "Old School" vs "Old School / Lake Bluff return".
-        
-        Args:
-            name_groups: Dictionary mapping activity names to lists of activities
-            similarity_threshold: Maximum combined Fréchet+Hausdorff distance (km) to consider routes similar
+    def is_generic_name(self, name: Optional[str]) -> bool:
+        """True for an empty name or a Strava default such as "Morning Ride",
+        "Night Ride" or "Afternoon Gravel Ride", which says nothing about the
+        route. Localised defaults can be added via long_rides.generic_names."""
+        n = normalize_name(name)
+        return not n or bool(_GENERIC_NAME.match(n)) or n in self.extra_generic_names
 
-        Returns:
-            Updated name_groups dictionary with similar routes consolidated
-        """
-        if len(name_groups) <= 1:
-            return name_groups
-
-        # Get representative routes for each group
-        group_representatives = {}
-        for name, activities in name_groups.items():
-            rep = sorted(activities, key=lambda a: a.start_date, reverse=True)[0]
-            if rep.polyline:
-                try:
-                    coords = np.array(polyline.decode(rep.polyline))
-                    group_representatives[name] = self._coords_to_km(coords)
-                except (ValueError, AttributeError) as e:
-                    logger.debug(f"Failed to decode polyline for group '{name}': {e}")
-                    continue
-
-        # Build representative activity ID map once (used as similarity cache keys)
-        rep_ids = {}
-        for n, acts in name_groups.items():
-            rep = sorted(acts, key=lambda a: a.start_date, reverse=True)[0]
-            rep_ids[n] = rep.id
-
-        # Find groups to merge
-        merged_groups = {}
-        processed = set()
-
-        group_names = list(group_representatives.keys())
-        n_groups = len(group_names)
-        for i, name1 in enumerate(group_names):
-            if name1 in processed:
-                continue
-
-            if on_progress and i % 5 == 0:
-                try:
-                    on_progress(label=f'Comparing named groups… {i}/{n_groups}')
-                except Exception:
-                    pass
-
-            # Start a new merged group with this name as the primary
-            merged_activities = list(name_groups[name1])
-            processed.add(name1)
-
-            # Check all other groups for similarity
-            for name2 in group_names[i+1:]:
-                if name2 in processed:
-                    continue
-
-                try:
-                    # Cache key: sorted pair of representative activity IDs
-                    rid1, rid2 = rep_ids[name1], rep_ids[name2]
-                    cache_key = f"{min(rid1, rid2)}:{max(rid1, rid2)}"
-
-                    if cache_key in self._similarity_cache:
-                        combined_distance = self._similarity_cache[cache_key]
-                    else:
-                        # Pre-filter: skip if average recorded distances differ by more
-                        # than 25%. Uses Strava's recorded activity.distance rather than
-                        # coordinate-derived path length -- summary polylines are
-                        # simplified (Douglas-Peucker), so path length from decoded
-                        # points can undercount the real distance. Cheaper and more
-                        # accurate than the length-ratio check inside passes_prefilter,
-                        # so it stays as a first-pass filter ahead of it.
-                        dists1 = [a.distance for a in name_groups[name1] if a.distance]
-                        dists2 = [a.distance for a in name_groups[name2] if a.distance]
-                        if dists1 and dists2:
-                            avg1 = sum(dists1) / len(dists1)
-                            avg2 = sum(dists2) / len(dists2)
-                            if avg1 > 0 and avg2 > 0 and max(avg1, avg2) / min(avg1, avg2) > 1.25:
-                                self._similarity_cache[cache_key] = float('inf')
-                                continue
-
-                        # Calculate route similarity in km-scaled coordinates
-                        coords1_km = group_representatives[name1]
-                        coords2_km = group_representatives[name2]
-
-                        # Shared geometric pre-filter (centroid + extent-point distance;
-                        # length-ratio and bbox-overlap checks are no-ops here since
-                        # LONG_RIDE_THRESHOLDS already applied the distance-based ratio
-                        # check above and bbox_overlap_min is 0).
-                        if not passes_prefilter(coords1_km, coords2_km, LONG_RIDE_THRESHOLDS):
-                            self._similarity_cache[cache_key] = float('inf')
-                            continue
-
-                        combined_distance = combined_distance_km(coords1_km, coords2_km)
-                        self._similarity_cache[cache_key] = combined_distance
-
-                    # If routes are similar, merge them
-                    if combined_distance < similarity_threshold:
-                        merged_activities.extend(name_groups[name2])
-                        processed.add(name2)
-                        logger.info(f"Consolidating '{name2}' into '{name1}' (similarity: {combined_distance:.3f} km)")
-                        
-                except (ValueError, IndexError, TypeError) as e:
-                    logger.debug(f"Failed to calculate similarity between '{name1}' and '{name2}': {e}")
-                    continue
-            
-            # Use the most common name or shortest name as the group name
-            if len(merged_activities) > len(name_groups[name1]):
-                # Find the most common name among merged activities
-                name_counts = {}
-                for act in merged_activities:
-                    name_counts[act.name] = name_counts.get(act.name, 0) + 1
-                primary_name = max(name_counts.items(), key=lambda x: (x[1], -len(x[0])))[0]
-            else:
-                primary_name = name1
-            
-            merged_groups[primary_name] = merged_activities
-        
-        # Add any groups that weren't processed (no polyline data)
-        for name in name_groups:
-            if name not in processed:
-                merged_groups[name] = name_groups[name]
-        
-        if len(merged_groups) < len(name_groups):
-            logger.info(f"Consolidated {len(name_groups)} named groups into {len(merged_groups)} groups using route similarity")
-
-        self._save_similarity_cache()
-        return merged_groups
-    
-    def consolidate_named_groups(self, name_groups: Dict[str, List[Activity]]) -> List[LongRide]:
-        """
-        Consolidate activities with the same name into representative LongRide objects.
-        For each named group, select the most recent or best representative ride.
-        
-        Args:
-            name_groups: Dictionary mapping activity names to lists of activities
-            
-        Returns:
-            List of LongRide objects representing each unique named route
-        """
-        consolidated_rides = []
-        
-        for route_name, activities in name_groups.items():
-            # Sort by date (most recent first)
-            sorted_activities = sorted(activities, key=lambda a: a.start_date, reverse=True)
-            
-            # Use the most recent activity as the representative
-            representative = sorted_activities[0]
-            
-            try:
-                # Decode polyline
-                if not representative.polyline:
-                    continue
-                    
-                coordinates = polyline.decode(representative.polyline)
-                
-                # Check if it's a loop (start and end within 500m)
-                if representative.start_latlng and representative.end_latlng:
-                    start_end_distance = geodesic(
-                        representative.start_latlng,
-                        representative.end_latlng
-                    ).meters
-                    is_loop = start_end_distance < 500
-                else:
-                    is_loop = False
-                
-                # Collect all activity IDs, dates, and names
-                activity_ids = [act.id for act in sorted_activities]
-                activity_dates = [act.start_date[:10] if act.start_date else "Unknown" for act in sorted_activities]
-                activity_names = [act.name or "" for act in sorted_activities]
-
-                long_ride = LongRide(
-                    activity_id=representative.id,
-                    name=route_name,  # Use the consistent route name
-                    coordinates=coordinates,
-                    distance=representative.distance,
-                    duration=representative.moving_time,
-                    elevation_gain=representative.total_elevation_gain,
-                    timestamp=representative.start_date,
-                    average_speed=representative.average_speed,
-                    start_location=representative.start_latlng or (0.0, 0.0),
-                    end_location=representative.end_latlng or (0.0, 0.0),
-                    is_loop=is_loop,
-                    type=representative.sport_type if representative.sport_type else representative.type,
-                    uses=len(activities),  # Number of times this route has been ridden
-                    activity_ids=activity_ids,  # All activity IDs
-                    activity_dates=activity_dates,  # All activity dates
-                    activity_names=activity_names  # All Strava activity names
-                )
-                
-                consolidated_rides.append(long_ride)
-                logger.debug(f"Consolidated '{route_name}': {len(activities)} rides -> 1 representative")
-                
-            except Exception as e:
-                logger.warning(f"Failed to process named group '{route_name}': {e}")
-                continue
-        
-        logger.info(f"Consolidated {sum(len(acts) for acts in name_groups.values())} activities into {len(consolidated_rides)} unique named routes")
-        
-        return consolidated_rides
-    @staticmethod
-    def _compare_route_to_groups(activity_data: Tuple[int, str, List],
-                                 group_representatives: Dict[str, np.ndarray],
-                                 similarity_threshold: float) -> Tuple[int, Optional[str], float]:
-        """
-        Helper function for parallel route comparison.
-
-        Args:
-            activity_data: Tuple of (activity_id, polyline, group_representatives)
-            group_representatives: Dict of group names to representative coordinates
-                                   already converted to km-scaled coordinates
-            similarity_threshold: Maximum combined distance (km) to consider routes similar
-
-        Returns:
-            Tuple of (activity_id, best_match_name, best_distance)
-        """
-        activity_id, activity_polyline, _ = activity_data
-
-        try:
-            raw_coords = np.array(polyline.decode(activity_polyline))
-            route_coords = coords_to_km(raw_coords)
-
-            best_match = None
-            best_distance = float('inf')
-
-            for group_name, rep_coords_km in group_representatives.items():
-                try:
-                    # Shared geometric pre-filter (length-ratio, centroid, extent-point;
-                    # bbox-overlap is a no-op since LONG_RIDE_THRESHOLDS.bbox_overlap_min
-                    # is 0), same thresholds used by consolidate_similar_named_groups.
-                    if not passes_prefilter(route_coords, rep_coords_km, LONG_RIDE_THRESHOLDS):
-                        continue
-
-                    combined_distance = combined_distance_km(route_coords, rep_coords_km)
-
-                    if combined_distance < best_distance:
-                        best_distance = combined_distance
-                        best_match = group_name
-                except (ValueError, IndexError, TypeError):
-                    continue
-
-            if best_match and best_distance < similarity_threshold:
-                return (activity_id, best_match, best_distance)
-            else:
-                return (activity_id, None, best_distance)
-
-        except Exception:
-            return (activity_id, None, float('inf'))
-    
-    def match_unnamed_rides_to_groups(self, unnamed_rides: List[Activity],
-                                     named_groups: Dict[str, List[Activity]],
-                                     similarity_threshold: float = 2.0,
-                                     use_parallel: bool = True,
-                                     max_workers: int = None,
-                                     on_progress=None) -> Tuple[Dict[str, List[Activity]], List[Activity]]:
-        """
-        Match unnamed/generic rides to existing named groups using route similarity.
-        Uses Fréchet distance to validate if routes are similar enough to be grouped together.
-
-        Args:
-            unnamed_rides: List of activities with generic/no names
-            named_groups: Dictionary of existing named route groups
-            similarity_threshold: Maximum combined Fréchet+Hausdorff distance (km) to consider routes similar
-            use_parallel: Whether to use parallel processing (default: True)
-            max_workers: Maximum number of worker processes (default: intelligent 2-6 based on workload)
-            
-        Returns:
-            Tuple of (updated_named_groups, still_unnamed_rides)
-        """
-        if not unnamed_rides:
-            return named_groups, []
-        
-        # Get representative routes for each named group, pre-converted to km
-        group_representatives = {}
-        for name, activities in named_groups.items():
-            rep = sorted(activities, key=lambda a: a.start_date, reverse=True)[0]
-            if rep.polyline:
-                try:
-                    coords = np.array(polyline.decode(rep.polyline))
-                    group_representatives[name] = self._coords_to_km(coords)
-                except (ValueError, AttributeError) as e:
-                    logger.debug(f"Failed to decode polyline for group '{name}': {e}")
-                    continue
-
-        # Prepare data for parallel processing
-        activities_data = [
-            (act.id, act.polyline, group_representatives)
-            for act in unnamed_rides if act.polyline
-        ]
-        
-        matches = {}
-        still_unnamed = []
-        
-        # Determine optimal worker count if not specified
-        if max_workers is None and use_parallel:
-            import os
-            cpu_count = os.cpu_count() or 2
-            workload_size = len(activities_data)
-
-            # Intelligent worker selection based on workload
-            if workload_size < 20:
-                # Small workload: 2 workers (minimum parallelism)
-                optimal_workers = 2
-            elif workload_size < 100:
-                # Medium workload: 4 workers (good balance)
-                optimal_workers = min(4, cpu_count)
-            else:
-                # Large workload: up to 6 workers (maximum efficiency)
-                optimal_workers = min(6, cpu_count)
-
-            # Memory-constrained deployments (the Pi container) cap this via
-            # ANALYSIS_N_WORKERS so analysis never forks extra numpy stacks.
-            env_cap = os.getenv('ANALYSIS_N_WORKERS')
-            if env_cap:
-                try:
-                    optimal_workers = max(1, min(optimal_workers, int(env_cap)))
-                except ValueError:
-                    pass
-
-            max_workers = optimal_workers
-            logger.info(f"Using {max_workers} workers for {workload_size} comparisons")
-
-        # A 1-worker pool forks a full extra process for zero parallelism —
-        # fall through to the sequential path instead.
-        if max_workers is not None and max_workers <= 1:
-            use_parallel = False
-
-        if use_parallel and len(activities_data) >= 10:
-            # Use parallel processing (threshold: 10 items minimum)
-            logger.info(f"Using parallel processing to match {len(activities_data)} unnamed rides...")
-            
-            compare_func = partial(
-                self._compare_route_to_groups,
-                group_representatives=group_representatives,
-                similarity_threshold=similarity_threshold
-            )
-            
-            with ProcessPoolExecutor(max_workers=max_workers) as executor:
-                futures = {executor.submit(compare_func, data): data[0] for data in activities_data}
-                
-                for future in as_completed(futures):
-                    activity_id, best_match, distance = future.result()
-                    if best_match:
-                        matches[activity_id] = (best_match, distance)
-        else:
-            # Use sequential processing for small datasets (<10 items)
-            n_unnamed = len(activities_data)
-            for seq_idx, (activity_id, activity_polyline, _) in enumerate(activities_data):
-                if on_progress and seq_idx % 10 == 0:
-                    try:
-                        on_progress(label=f'Matching unnamed rides… {seq_idx}/{n_unnamed}')
-                    except Exception:
-                        pass
-                result = self._compare_route_to_groups(
-                    (activity_id, activity_polyline, None),
-                    group_representatives,
-                    similarity_threshold
-                )
-                _, best_match, distance = result
-                if best_match:
-                    matches[activity_id] = (best_match, distance)
-        
-        # Apply matches
-        matched_count = 0
-        for activity in unnamed_rides:
-            if activity.id in matches:
-                group_name, distance = matches[activity.id]
-                named_groups[group_name].append(activity)
-                matched_count += 1
-                logger.debug(f"Matched unnamed ride {activity.id} to '{group_name}' (distance: {distance:.3f})")
-            else:
-                still_unnamed.append(activity)
-        
-        logger.info(f"Matched {matched_count} unnamed rides to existing groups")
-        logger.info(f"Remaining unnamed rides: {len(still_unnamed)}")
-        
-        return named_groups, still_unnamed
-    
-    def generate_fallback_names(self, unnamed_rides: List[Activity]) -> Dict[str, List[Activity]]:
-        """
-        Generate geocoded names for rides that couldn't be matched to named groups.
-        Only used as a fallback when activity names are absent or too generic.
-        
-        Args:
-            unnamed_rides: List of activities without specific names
-            
-        Returns:
-            Dictionary mapping generated names to activities
-        """
-        fallback_groups = {}
-        
-        for activity in unnamed_rides:
-            try:
-                if not activity.start_latlng:
-                    continue
-                
-                # Generate simple name based on distance and type
-                if activity.distance:
-                    distance_km = activity.distance / 1000
-                    # Determine if it's a loop
-                    if activity.start_latlng and activity.end_latlng:
-                        start_end_dist = geodesic(activity.start_latlng, activity.end_latlng).meters
-                        if start_end_dist < 500:
-                            generated_name = f"Loop Ride ({distance_km:.1f}km)"
-                        else:
-                            generated_name = f"Out & Back ({distance_km:.1f}km)"
-                    else:
-                        generated_name = f"Ride ({distance_km:.1f}km)"
-                else:
-                    generated_name = "Unnamed Ride"
-                
-                if generated_name not in fallback_groups:
-                    fallback_groups[generated_name] = []
-                fallback_groups[generated_name].append(activity)
-                
-            except Exception as e:
-                logger.warning(f"Failed to generate name for activity {activity.id}: {e}")
-                continue
-        
-        logger.info(f"Generated {len(fallback_groups)} fallback names for unnamed rides")
-        
-        return fallback_groups
+    # ------------------------------------------------------------ grouping
 
     def group_similar_rides(self, long_ride_activities: List[Activity],
                             on_progress=None) -> List[LongRide]:
         """
-        Full pipeline: group activities into unique LongRide objects.
+        Group long-ride activities into unique routes.
 
-        Steps:
-        1. Group by Strava activity name
-        2. Consolidate similarly-named groups via route similarity
-        3. Match unnamed/generic rides to existing named groups
-        4. Generate fallback names for remaining unnamed rides
-        5. Consolidate into LongRide objects
+        1. Each ride's track is projected and resampled (coarser than commutes).
+        2. coverage_bound_pairs rules out, exactly and cheaply, the pairs whose
+           coverage can't reach the bar; only the rest get the exact metric
+           (cached across runs).
+        3. Two rides match when mutual coverage >= min_coverage (or
+           name_min_coverage if they share a non-generic name), their lengths
+           are within max_length_ratio, and (if set) p95 deviation <=
+           max_p95_deviation_m. cluster_by_centres groups them; each group's
+           centre is its representative.
+        4. A group whose representative is shorter than another's and lies
+           along it is linked to it (part_of / contains).
+
+        Rides are processed in activity-ID order, so the result doesn't depend
+        on input order.
 
         Args:
             long_ride_activities: Activities already filtered to non-commute long rides
             on_progress: Optional callable(label=str) for status updates
 
         Returns:
-            List of unique LongRide objects
+            List of LongRide objects, most-ridden first
         """
-        def _notify(label):
+        def notify(label):
             if on_progress:
                 try:
                     on_progress(label=label)
                 except Exception:
                     pass
 
-        if not long_ride_activities:
+        rides, coords = [], []
+        for activity in sorted(long_ride_activities, key=lambda a: a.id):
+            try:
+                c = np.asarray(polyline.decode(activity.polyline), dtype=float).reshape(-1, 2)
+                if len(c) == 0:
+                    raise ValueError("empty polyline")
+            except Exception as e:
+                logger.warning(f"Long ride {activity.id} has no usable track, skipping it: {e}")
+                continue
+            rides.append(activity)
+            coords.append(c)
+        if not rides:
             return []
 
-        similarity_threshold = self.config.get('long_rides.similarity_threshold', 1.2)
+        n = len(rides)
+        notify(f'Preparing {n} long-ride tracks…')
+        lat0 = round(float(np.median([c[:, 0].mean() for c in coords])), 1)
+        hashes = [self._track_hash(c) for c in coords]
+        # Non-generic names as integer codes (0 = no name prior).
+        name_ids = {}
+        name_code = np.array([0 if self.is_generic_name(a.name) else
+                              name_ids.setdefault(normalize_name(a.name), len(name_ids) + 1)
+                              for a in rides])
+        tracks = _TrackCache(coords, lat0)
+        cells, lengths = [], np.empty(n)
+        for k in range(n):
+            t = tracks.get(k)
+            cells.append(coverage_cells(t))
+            lengths[k] = float(np.linalg.norm(np.diff(t.samples, axis=0), axis=1).sum())
 
-        _notify(f'Grouping {len(long_ride_activities)} long rides by name…')
-        name_groups, unnamed_rides = self.group_rides_by_name(long_ride_activities)
+        tracks.clear()  # the screen's peak doesn't need them; pairs rebuild them lazily
+        notify(f'Screening {n} long rides for possible matches…')
+        # Pairs stay numpy arrays: a real corpus leaves ~1M of them after the
+        # screen, too many for Python tuples on the Pi.
+        bi, bj, b_ij, b_ji = coverage_bound_pairs(
+            cells, min(self.min_coverage, self.name_min_coverage), self.contains_min_coverage)
+        del cells
+        pair_min_cov = np.where((name_code[bi] > 0) & (name_code[bi] == name_code[bj]),
+                                self.name_min_coverage, self.min_coverage)
+        similar_length = (np.maximum(lengths[bi], lengths[bj])
+                          <= np.minimum(lengths[bi], lengths[bj]) * self.max_length_ratio)
+        candidate = (np.minimum(b_ij, b_ji) >= pair_min_cov - 1e-9) & similar_length
+        min_cov_of = {(i, j): c for i, j, c in zip(bi[candidate].tolist(), bj[candidate].tolist(),
+                                                    pair_min_cov[candidate].tolist())}
+        used_keys = set()
+        metrics = self._pair_metrics(list(min_cov_of), tracks, hashes, coords, used_keys, notify)
 
-        if name_groups:
-            _notify(f'Comparing {len(name_groups)} named route groups…')
-            name_groups = self.consolidate_similar_named_groups(
-                name_groups,
-                similarity_threshold=similarity_threshold,
-                on_progress=on_progress)
+        edges = []
+        for (i, j), m in metrics.items():
+            score = self._match_score(m, min_cov_of[(i, j)])
+            if score >= 1.0:
+                edges.append((i, j, score))
+        clusters = cluster_by_centres(n, edges)
 
-        if unnamed_rides and name_groups:
-            _notify(f'Matching {len(unnamed_rides)} unnamed rides to groups…')
-            name_groups, unnamed_rides = self.match_unnamed_rides_to_groups(
-                unnamed_rides, name_groups,
-                similarity_threshold=similarity_threshold,
-                use_parallel=False,
-                on_progress=on_progress,
-            )
+        notify(f'Linking {len(clusters)} long-ride routes…')
+        centres = {centre for centre, _ in clusters}
+        is_centre = np.zeros(n, dtype=bool)
+        is_centre[list(centres)] = True
+        thr = self.contains_min_coverage - 1e-9
+        # The shorter of the two must be able to lie along the longer.
+        could_link = (is_centre[bi] & is_centre[bj]
+                      & (((lengths[bi] < lengths[bj]) & (b_ij >= thr))
+                         | ((lengths[bj] < lengths[bi]) & (b_ji >= thr))))
+        link_pairs = list(zip(bi[could_link].tolist(), bj[could_link].tolist()))
+        del bi, bj, b_ij, b_ji
+        link_metrics = self._pair_metrics(link_pairs, tracks, hashes, coords, used_keys, notify)
+        part_of = {c: [] for c in centres}
+        contains = {c: [] for c in centres}
+        for (i, j), (p95_ij, cov_ij, p95_ji, cov_ji) in link_metrics.items():
+            # Centres never match each other (the later one would have joined
+            # the earlier one's group), so a link is never a hidden match.
+            if lengths[i] < lengths[j] and self._lies_along(p95_ij, cov_ij):
+                part_of[i].append(rides[j].id)
+                contains[j].append(rides[i].id)
+            elif lengths[j] < lengths[i] and self._lies_along(p95_ji, cov_ji):
+                part_of[j].append(rides[i].id)
+                contains[i].append(rides[j].id)
 
-        fallback_groups = self.generate_fallback_names(unnamed_rides) if unnamed_rides else {}
-        all_groups = {**name_groups, **fallback_groups}
+        self._save_similarity_cache(used_keys)
 
-        _notify(f'Finalizing {len(all_groups)} long ride groups…')
-        return self.consolidate_named_groups(all_groups)
+        long_rides = []
+        for centre, members in clusters:
+            ride = self._make_long_ride(rides[centre], coords[centre], [rides[m] for m in members],
+                                        tracks.get(centre))
+            ride.part_of = sorted(part_of[centre])
+            ride.contains = sorted(contains[centre])
+            long_rides.append(ride)
+        long_rides.sort(key=lambda r: (-r.uses, r.activity_id))
+
+        logger.info(f"Grouped {n} long rides into {len(long_rides)} routes "
+                    f"({sum(1 for r in long_rides if r.uses > 1)} ridden more than once, "
+                    f"{sum(1 for r in long_rides if r.part_of)} part of another)")
+        return long_rides
+
+    def _match_score(self, metrics, min_coverage: float) -> float:
+        """>= 1.0 when two rides are the same route (route_comparison.match_score)."""
+        p95_ij, cov_ij, p95_ji, cov_ji = metrics
+        coverage = min(cov_ij, cov_ji)
+        if self.max_p95_deviation_m is None:
+            return coverage / min_coverage
+        return match_score(max(p95_ij, p95_ji), coverage, self.max_p95_deviation_m, min_coverage)
+
+    def _lies_along(self, p95_m: float, coverage: float) -> bool:
+        """One direction of a pair: does this ride lie along the other?"""
+        return (coverage >= self.contains_min_coverage
+                and (self.max_p95_deviation_m is None or p95_m <= self.max_p95_deviation_m))
+
+    def _pair_metrics(self, pairs, tracks, hashes, coords, used_keys, notify) -> Dict:
+        """{(i, j): (p95_ij, cov_ij, p95_ji, cov_ji)} for the given pairs, from
+        the cache where possible. A failed comparison is logged and left out
+        (no match, no link) rather than recorded as a distance."""
+        result, todo = {}, []
+        for i, j in pairs:
+            key, flipped = self._pair_key(hashes[i], hashes[j])
+            used_keys.add(key)
+            cached = self._similarity_cache.get(key)
+            if cached is not None:
+                result[(i, j)] = tuple(cached[2:] + cached[:2]) if flipped else tuple(cached)
+            else:
+                todo.append((i, j, key, flipped))
+        if not todo:
+            return result
+
+        # Visit pairs area by area, so the tracks they need stay in the cache.
+        def area(k):
+            c = coords[k][0]
+            return (round(c[0] * 20), round(c[1] * 20))  # ~5 km cells
+        todo.sort(key=lambda t: (area(t[0]), t[0], t[1]))
+        logger.info(f"Comparing {len(todo)} long-ride pairs ({len(result)} cached)")
+        failures = 0
+        for done, (i, j, key, flipped) in enumerate(todo):
+            if done % 2000 == 0:
+                notify(f'Comparing long rides… {done}/{len(todo)}')
+            try:
+                m = directed_deviation_metrics(tracks.get(i), tracks.get(j))
+            except Exception as e:
+                failures += 1
+                logger.warning(f"Long-ride comparison failed, treating as no match: {e}")
+                continue
+            result[(i, j)] = m
+            self._similarity_cache[key] = list(m[2:] + m[:2]) if flipped else list(m)
+        if failures:
+            logger.warning(f"{failures} long-ride comparisons failed")
+        return result
+
+    @staticmethod
+    def _pair_key(hash1: str, hash2: str) -> Tuple[str, bool]:
+        """Order-independent cache key, and whether (hash1, hash2) is the
+        reverse of the stored order (directed metrics are stored for it)."""
+        if hash1 <= hash2:
+            return f"{hash1}_{hash2}", False
+        return f"{hash2}_{hash1}", True
+
+    # ------------------------------------------------------------ output
+
+    def _make_long_ride(self, representative: Activity, coords: np.ndarray,
+                        members: List[Activity], track: PreparedTrack) -> LongRide:
+        """One LongRide for a group, described by its representative ride."""
+        by_date = sorted(members, key=lambda a: (a.start_date or '', a.id), reverse=True)
+        if representative.start_latlng and representative.end_latlng:
+            is_loop = geodesic(representative.start_latlng,
+                               representative.end_latlng).meters < LOOP_RADIUS_M
+        else:
+            is_loop = False
+        return LongRide(
+            activity_id=representative.id,
+            name=self._group_name(members, representative, is_loop, track),
+            coordinates=[tuple(p) for p in coords.tolist()],
+            distance=representative.distance,
+            duration=representative.moving_time,
+            elevation_gain=representative.total_elevation_gain,
+            timestamp=representative.start_date,
+            average_speed=representative.average_speed,
+            start_location=representative.start_latlng or (0.0, 0.0),
+            end_location=representative.end_latlng or (0.0, 0.0),
+            is_loop=is_loop,
+            type=representative.sport_type if representative.sport_type else representative.type,
+            uses=len(members),
+            activity_ids=[a.id for a in by_date],
+            activity_dates=[a.start_date[:10] if a.start_date else "Unknown" for a in by_date],
+            activity_names=[a.name or "" for a in by_date],
+        )
+
+    def _group_name(self, members: List[Activity], representative: Activity,
+                    is_loop: bool, track: PreparedTrack) -> str:
+        """The members' most common non-generic name (ties: the shorter, then
+        alphabetical), else a description of the representative's shape."""
+        counts = Counter((a.name or '').strip() for a in members if not self.is_generic_name(a.name))
+        if counts:
+            return min(counts.items(), key=lambda kv: (-kv[1], len(kv[0]), kv[0]))[0]
+        km = (representative.distance or 0) / 1000
+        if not is_loop:
+            kind = "Point to Point"
+        elif _retraces_itself(track):
+            kind = "Out & Back"
+        else:
+            kind = "Loop Ride"
+        return f"{kind} ({km:.1f}km)"
 
 
+def _retraces_itself(track: PreparedTrack) -> bool:
+    """True if the outbound half of the track mostly lies along the return half."""
+    from scipy.spatial import cKDTree
+    s = track.samples
+    if len(s) < 4:
+        return False
+    half = len(s) // 2
+    d = cKDTree(s[half:]).query(s[:half])[0]
+    # Samples are LONG_RIDE_SAMPLE_STEP_M apart, so allow half a step on top.
+    return float(np.mean(d <= COVERAGE_RADIUS_M + LONG_RIDE_SAMPLE_STEP_M / 2)) >= OUT_AND_BACK_MIN_COVERAGE
+
+
+class _TrackCache:
+    """Prepared long-ride tracks on demand, keeping the TRACK_CACHE_SIZE most
+    recently used: preparing every track at once would hold hundreds of MB."""
+
+    def __init__(self, coords: List[np.ndarray], lat0: float):
+        self.coords, self.lat0 = coords, lat0
+        self._tracks: "OrderedDict[int, PreparedTrack]" = OrderedDict()
+
+    def get(self, k: int) -> PreparedTrack:
+        track = self._tracks.get(k)
+        if track is not None:
+            self._tracks.move_to_end(k)
+            return track
+        track = PreparedTrack(self.coords[k], self.lat0,
+                              LONG_RIDE_SAMPLE_STEP_M, LONG_RIDE_DENSE_STEP_M)
+        self._tracks[k] = track
+        if len(self._tracks) > TRACK_CACHE_SIZE:
+            self._tracks.popitem(last=False)
+        return track
+
+    def clear(self) -> None:
+        self._tracks.clear()

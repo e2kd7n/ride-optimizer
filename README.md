@@ -26,7 +26,7 @@ If you encounter this project hosted elsewhere without proper attribution or wit
 ### Commute Analysis
 - 🔍 **Automatic Location Detection**: Identifies your home and work locations from activity patterns
 - 📊 **Multi-Criteria Analysis**: Evaluates routes based on time, distance, safety, and weather
-- 🧮 **Advanced Route Matching**: Uses Fréchet distance algorithm for accurate path similarity detection
+- 🧮 **Route Matching**: Groups rides by how much of each lies along the other, measured in metres
 - 🏷️ **Intelligent Route Naming**: Segment-based naming shows complete journey (e.g., "Wells St → Lakefront Trail → North Ave")
 - 🌤️ **Real-Time Weather Analysis**: Considers wind speed and direction for optimal route selection
 - 🎯 **Personalized Recommendations**: Suggests optimal routes based on your preferences and current conditions
@@ -452,7 +452,7 @@ ride-optimizer/
 │   ├── auth_secure.py        # Strava authentication
 │   ├── data_fetcher.py       # Activity data retrieval
 │   ├── location_finder.py    # Home/work identification
-│   ├── route_analyzer.py     # Route analysis (Fréchet distance)
+│   ├── route_analyzer.py     # Commute route grouping
 │   ├── optimizer.py          # Route scoring
 │   ├── visualizer.py         # Map generation
 │   └── report_generator.py   # HTML report creation (CLI)
@@ -529,21 +529,20 @@ ride-optimizer/
 
 ### Route Matching
 
-The system uses an advanced **Fréchet distance** algorithm for route similarity matching:
+Rides are compared in metres on tracks resampled by arc length (`src/route_comparison.py`):
 
-**Key Features:**
-- **Path-aware matching**: Considers the order of GPS points (like walking a dog on a leash)
-- **Robust to GPS sampling**: Handles ~76m average spacing between GPS points
-- **Dual validation**: Uses Hausdorff distance as secondary check for spatial proximity
-- **Proven accuracy**: Validated on 9,251 route pairs with 100% agreement
+- **Coverage:** the share of each ride within 50 m of the other. Two commutes match at ≥ 0.85
+  coverage when 95% of each also lies within 100 m of the other (#613). Long rides match on
+  coverage and similar length, so a loop ridden in reverse or started elsewhere, a longer
+  turnaround or a short detour is still the same route (#615).
+- **Grouping:** order-independent centre (Butina) clustering, so every ride in a group matches
+  the group's representative (#614).
+- **Long-ride names:** a shared Strava name only lowers the coverage bar. It never merges rides
+  on its own. A ride that lies along part of a longer route is linked to it, not merged.
 
-**Technical Details:**
-- Primary metric: Fréchet distance (300m threshold)
-- Secondary validation: Hausdorff distance (0.50 threshold)
-- Grouping threshold: 0.70 similarity score (configurable)
-- Library: `similaritymeasures` package
-
-See [SIMILARITY_ALGORITHM_CHANGE.md](archive/completed_analysis/SIMILARITY_ALGORITHM_CHANGE.md) for complete technical documentation.
+All thresholds are in metres in `config/config.yaml`. See
+[the route matching review](docs/analysis/route-matching-review-2026-10.md) and
+`scripts/matching_benchmark/` for measurements on real rides.
 
 ## Data Privacy & Security
 

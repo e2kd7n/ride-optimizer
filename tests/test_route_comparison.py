@@ -8,17 +8,13 @@ import numpy as np
 import pytest
 
 from src.route_comparison import (
-    ComparisonThresholds,
-    COMMUTE_THRESHOLDS,
-    LONG_RIDE_THRESHOLDS,
-    coords_to_km,
-    extent_point,
-    centroid,
-    path_length_km,
-    bbox_overlap_ratio,
-    passes_prefilter,
-    combined_distance_km,
     M_PER_DEG_LAT,
+    LONG_RIDE_DENSE_STEP_M,
+    LONG_RIDE_SAMPLE_STEP_M,
+    cluster_by_centres,
+    coverage_bound_pairs,
+    coverage_cells,
+    directed_deviation_metrics,
     project_m,
     resample_m,
     track_deviation_metrics,
@@ -37,40 +33,6 @@ def _line(offset_lat=0.0, offset_lon=0.0, n=6):
         [41.8800 + offset_lat + i * 0.001, -87.6300 + offset_lon]
         for i in range(n)
     ])
-
-
-class TestKmScaledHelpers:
-    def test_coords_to_km_identity_on_empty(self):
-        assert len(coords_to_km(np.empty((0, 2)))) == 0
-
-    def test_combined_distance_km_zero_for_identical_routes(self):
-        coords_km = coords_to_km(_line())
-        assert combined_distance_km(coords_km, coords_km) == pytest.approx(0.0, abs=1e-6)
-
-    def test_combined_distance_km_grows_with_offset(self):
-        c1 = coords_to_km(_line())
-        c2 = coords_to_km(_line(offset_lat=0.5))  # ~55km away
-        assert combined_distance_km(c1, c2) > 10
-
-    def test_passes_prefilter_rejects_distant_centroids(self):
-        c1 = coords_to_km(_line())
-        c2 = coords_to_km(_line(offset_lat=1.0))
-        assert passes_prefilter(c1, c2, COMMUTE_THRESHOLDS) is False
-
-    def test_passes_prefilter_accepts_nearby_routes(self):
-        c1 = coords_to_km(_line())
-        c2 = coords_to_km(_line(offset_lon=0.0005))
-        assert passes_prefilter(c1, c2, LONG_RIDE_THRESHOLDS) is True
-
-    def test_bbox_overlap_ratio_full_overlap_is_one(self):
-        # A pure north-south line has zero-width bbox in one axis, so use a
-        # route with variation on both axes to get a non-degenerate box.
-        square = np.array([[41.88, -87.63], [41.89, -87.63], [41.89, -87.62], [41.88, -87.62]])
-        c1 = coords_to_km(square)
-        assert bbox_overlap_ratio(c1, c1) == pytest.approx(1.0)
-
-    def test_path_length_km_zero_for_single_point(self):
-        assert path_length_km(np.array([[41.88, -87.63]])) == 0.0
 
 
 class TestCommuteMetric:
@@ -194,8 +156,101 @@ class TestPossibleMatchPairs:
             == pytest.approx(track_deviation_metrics(a, b))
 
 
-class TestComparisonThresholds:
-    def test_commute_and_long_ride_thresholds_are_distinct_instances(self):
-        assert isinstance(COMMUTE_THRESHOLDS, ComparisonThresholds)
-        assert isinstance(LONG_RIDE_THRESHOLDS, ComparisonThresholds)
-        assert COMMUTE_THRESHOLDS is not LONG_RIDE_THRESHOLDS
+class TestDirectedMetrics:
+    def test_sub_segment_is_covered_one_way(self):
+        whole = _line(n=21)
+        part = whole[5:11]
+        lat0 = 41.89
+        p95_pw, cov_pw, _, cov_wp = directed_deviation_metrics(PreparedTrack(part, lat0),
+                                                               PreparedTrack(whole, lat0))
+        assert cov_pw == 1.0 and p95_pw < 5.0  # within the 5 m dense spacing
+        assert cov_wp < 0.4
+
+    def test_symmetric_metrics_are_the_worse_direction(self):
+        a, b = PreparedTrack(_line(n=21), 41.89), PreparedTrack(_line(n=21)[5:11], 41.89)
+        p95_ab, cov_ab, p95_ba, cov_ba = directed_deviation_metrics(a, b)
+        assert prepared_deviation_metrics(a, b) == (max(p95_ab, p95_ba), min(cov_ab, cov_ba))
+
+    def test_coarse_long_ride_steps(self):
+        t = PreparedTrack(_line(n=21), 41.89, LONG_RIDE_SAMPLE_STEP_M, LONG_RIDE_DENSE_STEP_M)
+        assert np.diff(t.samples[:-1, 0]) == pytest.approx(np.full(len(t.samples) - 2,
+                                                                   LONG_RIDE_SAMPLE_STEP_M))
+
+
+class TestCoverageBoundPairs:
+    """The long-ride screen (#615): bounds must never be below the exact coverage."""
+
+    @staticmethod
+    def _tracks():
+        deg = 1 / M_PER_DEG_LAT
+        base = [(41.88 + i * 0.002, -87.63 + (i % 3) * 0.003) for i in range(15)]
+        variants = [base, base[3:9], base[::-1], [(la + 40 * deg, lo) for la, lo in base],
+                    [(la + 120 * deg, lo) for la, lo in base], base[:8] + [(41.95, -87.60)],
+                    [(la + 0.05, lo) for la, lo in base]]
+        return [PreparedTrack(v, 41.89, LONG_RIDE_SAMPLE_STEP_M, LONG_RIDE_DENSE_STEP_M)
+                for v in variants]
+
+    def test_bounds_are_upper_bounds(self):
+        tracks = self._tracks()
+        i, j, b_ij, b_ji = coverage_bound_pairs([coverage_cells(t) for t in tracks], 0.0, 0.0)
+        bounds = {(a, b): (u, v) for a, b, u, v in zip(i, j, b_ij, b_ji)}
+        for a in range(len(tracks)):
+            for b in range(a + 1, len(tracks)):
+                _, cov_ab, _, cov_ba = directed_deviation_metrics(tracks[a], tracks[b])
+                u, v = bounds.get((a, b), (0.0, 0.0))
+                assert cov_ab <= u + 1e-9 and cov_ba <= v + 1e-9, (a, b)
+
+    def test_never_drops_a_pair_that_reaches_the_threshold(self):
+        tracks = self._tracks()
+        i, j, _, _ = coverage_bound_pairs([coverage_cells(t) for t in tracks], 0.85, 0.9)
+        kept = set(zip(i.tolist(), j.tolist()))
+        for a in range(len(tracks)):
+            for b in range(a + 1, len(tracks)):
+                _, cov_ab, _, cov_ba = directed_deviation_metrics(tracks[a], tracks[b])
+                if min(cov_ab, cov_ba) >= 0.85 or max(cov_ab, cov_ba) >= 0.9:
+                    assert (a, b) in kept, (a, b)
+
+    def test_drops_distant_pairs_and_blocks_agree(self):
+        tracks = self._tracks()
+        cells = [coverage_cells(t) for t in tracks]
+        whole = coverage_bound_pairs(cells, 0.5, 0.5)
+        blocked = coverage_bound_pairs(cells, 0.5, 0.5, block_rows=2)
+        assert all(np.array_equal(x, y) for x, y in zip(whole, blocked))
+        assert 6 not in set(whole[0].tolist()) | set(whole[1].tolist())  # 5.5 km away
+
+    def test_single_track_has_no_pairs(self):
+        assert len(coverage_bound_pairs([coverage_cells(self._tracks()[0])], 0.5, 0.5)[0]) == 0
+
+
+class TestClusterByCentres:
+    @staticmethod
+    def _dense_reference(scores):
+        """The pre-#615 dense implementation, kept here as the specification."""
+        n = len(scores)
+        match = scores >= 1.0
+        np.fill_diagonal(match, True)
+        ungrouped = np.ones(n, dtype=bool)
+        result = []
+        while ungrouped.any():
+            live = match & ungrouped[None, :]
+            degree = live.sum(axis=1)
+            total = np.where(live, scores, 0.0).sum(axis=1)
+            cand = np.flatnonzero(ungrouped)
+            centre = int(cand[np.lexsort((cand, -total[cand], -degree[cand]))[0]])
+            members = np.flatnonzero(match[centre] & ungrouped)
+            ungrouped[members] = False
+            result.append((centre, [int(m) for m in members]))
+        return result
+
+    def test_matches_dense_reference_on_random_graphs(self):
+        rng = np.random.default_rng(615)
+        for _ in range(200):
+            n = int(rng.integers(1, 25))
+            s = np.triu(rng.uniform(0.5, 1.3, (n, n)) * (rng.random((n, n)) < 0.3), 1)
+            s = np.round(s, 2)  # rounding creates ties
+            s = s + s.T
+            edges = [(i, j, s[i, j]) for i in range(n) for j in range(i + 1, n) if s[i, j]]
+            assert cluster_by_centres(n, edges) == self._dense_reference(s)
+
+    def test_scores_below_one_are_not_matches(self):
+        assert cluster_by_centres(2, [(0, 1, 0.99)]) == [(0, [0]), (1, [1])]
