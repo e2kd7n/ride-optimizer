@@ -305,6 +305,7 @@ class RouteAnalyzer:
                         'elevation_gain': group.representative_route.elevation_gain,
                         'timestamp': group.representative_route.timestamp,
                         'average_speed': group.representative_route.average_speed,
+                        'activity_name': group.representative_route.activity_name,
                         'is_plus_route': group.representative_route.is_plus_route,
                         'bbox': group.representative_route.bbox,
                         'centroid': group.representative_route.centroid,
@@ -320,6 +321,7 @@ class RouteAnalyzer:
                             'elevation_gain': r.elevation_gain,
                             'timestamp': r.timestamp,
                             'average_speed': r.average_speed,
+                            'activity_name': r.activity_name,
                             'is_plus_route': r.is_plus_route,
                             'bbox': r.bbox,
                             'centroid': r.centroid,
@@ -358,6 +360,7 @@ class RouteAnalyzer:
             elevation_gain=data['elevation_gain'],
             timestamp=data['timestamp'],
             average_speed=data['average_speed'],
+            activity_name=data.get('activity_name', ''),
             is_plus_route=data.get('is_plus_route', False),
             bbox=tuple(data['bbox']) if data.get('bbox') else None,
             centroid=tuple(data['centroid']) if data.get('centroid') else None,
@@ -603,6 +606,12 @@ class RouteAnalyzer:
                 tqdm.write("   💾 Using cached route groups (instant!)")
                 cached_groups = self._deserialize_groups(self.groups_cache['groups'])
                 logger.info(f"Loaded {len(cached_groups)} route groups from cache")
+                # Names come from the current activities: caches written before
+                # names were stored have none, and a ride may have been renamed.
+                names = {r.activity_id: r.activity_name for r in routes}
+                for group in cached_groups:
+                    for route in group.routes + [group.representative_route]:
+                        route.activity_name = names.get(route.activity_id, route.activity_name)
                 # Cheap, and keeps the flags current if the PLUS rule changed.
                 return self._mark_plus_routes(cached_groups)
 

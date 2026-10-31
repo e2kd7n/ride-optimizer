@@ -246,6 +246,21 @@ def test_plus_route_flags_are_recomputed(tmp_path):
     assert not any(r.is_plus_route for g in groups for r in g.routes)
 
 
+def test_cache_hit_keeps_ride_names_and_plus_labels(tmp_path):
+    base = densify(STAIRCASE)
+    rides = [route(base) for _ in range(3)]
+    for r in rides:
+        r.activity_name = 'Ride to work'
+    rides[2].activity_name = 'Ride to work +'
+    cache = tmp_path / 'cache'
+    analyzer(cache, force=False).group_similar_routes(rides)
+    (group,) = analyzer(cache, force=False).group_similar_routes(rides)
+    by_id = {r.activity_id: r for r in group.routes}
+    assert by_id[rides[2].activity_id].activity_name == 'Ride to work +'
+    assert by_id[rides[2].activity_id].is_plus_route
+    assert not by_id[rides[0].activity_id].is_plus_route
+
+
 # ---------------------------------------------------------------- caches (#612)
 
 def test_threshold_change_regroups(tmp_path):
