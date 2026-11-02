@@ -571,6 +571,20 @@ class TestComparisonPopup:
         assert 'No Weather Route' in html
         assert 'Unavailable' in html
 
+    def test_popup_handles_0_to_100_score(self, commute_service):
+        # The recommender scores on 0-100; must not render as 5826%.
+        route_option = {
+            'route': {'name': 'Real Route', 'distance': 5, 'duration': 13, 'elevation': 10},
+            'score': 58.26,
+            'weather': None
+        }
+        html = commute_service._create_comparison_popup(route_option)
+        assert '58%' in html
+        assert '5826%' not in html
+        assert '#232' not in html
+        assert commute_service._get_route_color(58.26) == '#F2A900'
+        assert commute_service._get_confidence_label(90) == 'high'
+
 
 @pytest.mark.unit
 class TestWeatherMarkerStyle:

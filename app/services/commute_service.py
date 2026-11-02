@@ -313,7 +313,7 @@ class CommuteService:
                     weight=7,
                     opacity=0.85,
                     popup=folium.Popup(popup_html, max_width=320),
-                    tooltip=f"{route_name} • {route_option.get('score', 0) * 100:.0f}%",
+                    tooltip=f"{route_name} • {self._score_fraction(route_option.get('score', 0)) * 100:.0f}%",
                     className=f"commute-route route-{route_id} direction-{direction}",
                 ).add_to(map_obj)
                 
@@ -370,9 +370,18 @@ class CommuteService:
             logger.error(f"Failed to generate commute comparison map: {e}", exc_info=True)
             return None
     
+    @staticmethod
+    def _score_fraction(score: float) -> float:
+        """Normalize a recommendation score to 0-1. The recommender scores on
+        0-100, but callers/tests also pass 0-1 fractions (same rule as
+        commute.js)."""
+        score = score or 0
+        return score if score <= 1 else score / 100
+
     def _get_route_color(self, score: float) -> str:
         """Map recommendation score to its verdict fill (same 70/50 scale and
         colors as the dashboard's VERDICTS table)."""
+        score = self._score_fraction(score)
         if score >= 0.7:
             return '#188038'
         if score >= 0.5:
@@ -381,6 +390,7 @@ class CommuteService:
     
     def _get_confidence_label(self, score: float) -> str:
         """Convert numeric score to a coarse confidence label."""
+        score = self._score_fraction(score)
         if score >= 0.85:
             return 'high'
         if score >= 0.65:
@@ -395,7 +405,7 @@ class CommuteService:
         distance_km = route.get('distance', 0)
         duration_min = route.get('duration', 0)
         elevation_m = route.get('elevation', 0)
-        score_pct = route_option.get('score', 0) * 100
+        score_pct = self._score_fraction(route_option.get('score', 0)) * 100
         
         conditions = escape(str(weather.get('conditions', 'Unavailable')))
         temperature = weather.get('temperature')
@@ -423,9 +433,6 @@ class CommuteService:
                 <tr><td><b>Score</b></td><td>{score_pct:.0f}%</td></tr>
                 {''.join(weather_rows)}
             </table>
-            <div style="margin-top: 10px; font-size: 11px; color: #666;">
-                Future enhancement (#232): click route to highlight corresponding list item.
-            </div>
         </div>
         """
     
