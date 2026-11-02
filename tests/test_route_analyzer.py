@@ -7,6 +7,8 @@ import numpy as np
 import pytest
 from datetime import datetime, timezone
 from unittest.mock import Mock, patch
+import polyline
+
 from src.route_analyzer import Route, RouteGroup, RouteMetrics, RouteAnalyzer
 from src.data_fetcher import Activity
 
@@ -901,6 +903,57 @@ class TestUnclassifiedRides:
         an = self._analyzer(self._activity((41.88, -87.63), (41.88, -87.63)))  # home loop
         an.extract_routes()
         assert an.unclassified_count == 0
+
+
+class TestCorridorClassification:
+    """#618: near misses are commutes when they follow the commute corridor."""
+    HOME, WORK = (41.88, -87.63), (41.98, -87.63)  # ~11 km apart, due north
+
+    @staticmethod
+    def _line(a, b, step_deg=0.001):
+        n = max(1, int(round(max(abs(b[0] - a[0]), abs(b[1] - a[1])) / step_deg)))
+        return [(a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n) for k in range(n + 1)]
+
+    def _activity(self, activity_id, points):
+        return Activity(id=activity_id, name="Ride", type="Ride",
+                        start_date="2026-05-01T08:00:00+00:00", distance=11000.0,
+                        moving_time=2100, elapsed_time=2200, total_elevation_gain=80.0,
+                        average_speed=5.5, max_speed=9.0, start_latlng=points[0],
+                        end_latlng=points[-1], polyline=polyline.encode(points))
+
+    def _extract(self, *near_misses):
+        commutes = [self._activity(i, self._line(self.HOME, self.WORK)) for i in (1, 2)]
+        an = RouteAnalyzer(commutes + list(near_misses), _make_location(*self.HOME, "Home"),
+                           _make_location(*self.WORK, "Work"), _make_config(), n_workers=1)
+        return an, {r.activity_id: r.direction for r in an.extract_routes()}
+
+    def test_trimmed_start_is_a_commute(self):
+        an, dirs = self._extract(self._activity(10, self._line((41.89, -87.63), self.WORK)))
+        assert dirs[10] == 'home_to_work'
+        assert an.unclassified_count == 0
+
+    def test_end_at_a_second_entrance_is_a_commute(self):
+        to_side_door = self._line(self.HOME, self.WORK) + self._line(self.WORK, (41.98, -87.623))[1:]
+        an, dirs = self._extract(self._activity(10, to_side_door))
+        assert dirs[10] == 'home_to_work'
+
+    def test_detour_off_the_corridor_stays_unclassified(self):
+        east = -87.58
+        detour = (self._line((41.89, -87.63), (41.89, east))
+                  + self._line((41.89, east), (41.98, east))[1:]
+                  + self._line((41.98, east), (41.98, -87.6205))[1:])
+        an, dirs = self._extract(self._activity(10, detour))
+        assert 10 not in dirs
+        assert an.unclassified_count == 1
+
+    def test_corridor_is_per_direction(self):
+        # Same street, other direction: there are no work→home commutes to form
+        # a corridor, so it isn't accepted on the home→work one.
+        reverse = self._activity(10, self._line(self.WORK, (41.89, -87.63)))
+        an, dirs = self._extract(reverse)
+        assert 10 not in dirs
+        assert an.unclassified_count == 1
+        assert {r.activity_id for r in an.extract_routes('home_to_work')} == {1, 2}
 
 
 # ---------------------------------------------------------------------------

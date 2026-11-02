@@ -30,7 +30,8 @@ from .location_finder import Location
 from .route_namer import RouteNamer, check_rate_limit_file
 from .json_storage import secure_chmod
 from .route_comparison import (
-    PreparedTrack, cluster_by_centres, passes_commute_prefilter, possible_match_pairs,
+    PreparedTrack, cluster_by_centres, corridor_cells, corridor_share,
+    passes_commute_prefilter, possible_match_pairs,
     prepared_deviation_metrics, track_deviation_metrics, match_score, route_geometry,
 )
 
@@ -56,7 +57,8 @@ def is_labelled_plus(activity_name: Optional[str]) -> bool:
 MIN_PARALLEL_PAIRS = 200
 MIN_PAIRS_PER_CHUNK = 25
 # Commute direction needs both ends within this of home/work; a ride with both
-# ends within NEAR_MISS_M of them (but not that close) is counted as unclassified.
+# ends within NEAR_MISS_M of them (but not that close) is a commute only if it
+# follows the commute corridor (#618), and is counted as unclassified otherwise.
 ENDPOINT_RADIUS_M = 500
 NEAR_MISS_M = 2000
 
@@ -454,52 +456,76 @@ class RouteAnalyzer:
             List of Route objects
         """
         routes = []
+        near_misses = []
         self.unclassified_count = 0
 
         for activity in self.activities:
             if not activity.polyline:
                 continue
 
-            # Determine route direction
-            route_direction, near_miss = self._classify_direction(activity)
+            route_direction, near_miss_direction = self._classify_direction(activity)
+            if route_direction is None and near_miss_direction is None:
+                continue
 
-            if route_direction is None:
-                self.unclassified_count += near_miss
-                continue
-            
-            if direction != 'both' and route_direction != direction:
-                continue
-            
-            # Decode polyline
             try:
                 coordinates = polyline.decode(activity.polyline)
             except Exception as e:
-                logger.warning(f"Failed to decode polyline for activity {activity.id}: {e}")
+                logger.warning(f"Failed to decode polyline for activity_id={activity.id}: {e}")
                 continue
-            
-            # Create route object
-            route = Route(
-                activity_id=activity.id,
-                direction=route_direction,
-                coordinates=coordinates,
-                distance=activity.distance,
-                duration=activity.moving_time,
-                elevation_gain=activity.total_elevation_gain,
-                timestamp=activity.start_date,
-                average_speed=activity.average_speed,
-                activity_name=activity.name
-            )
-            route.compute_geometry()
 
-            routes.append(route)
-        
+            if route_direction is None:
+                near_misses.append((activity, near_miss_direction, coordinates))
+            else:
+                routes.append(self._route_from_activity(activity, route_direction, coordinates))
+
+        # A near miss (an end trimmed by a privacy zone, a recording started late,
+        # a second entrance) is still a commute if it rides the corridor the
+        # endpoint-classified commutes ride (#618). The corridor is built from
+        # those alone, so the result doesn't depend on processing order.
+        by_shape = 0
+        if near_misses:
+            lat0 = (self.home.lat + self.work.lat) / 2
+            corridors = {d: corridor_cells([r.coordinates for r in routes if r.direction == d], lat0)
+                         for d in DIRECTIONS}
+            for activity, near_miss_direction, coordinates in near_misses:
+                share = corridor_share(coordinates, lat0, corridors[near_miss_direction])
+                if share >= self.min_coverage:
+                    routes.append(self._route_from_activity(activity, near_miss_direction, coordinates))
+                    by_shape += 1
+                else:
+                    self.unclassified_count += 1
+
+        if direction != 'both':
+            routes = [r for r in routes if r.direction == direction]
+
         logger.info(f"Extracted {len(routes)} routes (direction: {direction})")
+        if by_shape:
+            logger.info(f"{by_shape} of them end within {NEAR_MISS_M} m but not "
+                        f"{ENDPOINT_RADIUS_M} m of home/work, and were classified by "
+                        f"following the commute corridor")
         if self.unclassified_count:
             logger.info(f"{self.unclassified_count} rides run between home and work but "
-                        f"don't start and end within {ENDPOINT_RADIUS_M} m of them, so "
-                        f"they aren't grouped as commutes (unclassified)")
-        
+                        f"don't start and end within {ENDPOINT_RADIUS_M} m of them or "
+                        f"follow the commute corridor, so they aren't grouped as "
+                        f"commutes (unclassified)")
+
         return routes
+
+    @staticmethod
+    def _route_from_activity(activity: Activity, direction: str, coordinates) -> Route:
+        route = Route(
+            activity_id=activity.id,
+            direction=direction,
+            coordinates=coordinates,
+            distance=activity.distance,
+            duration=activity.moving_time,
+            elevation_gain=activity.total_elevation_gain,
+            timestamp=activity.start_date,
+            average_speed=activity.average_speed,
+            activity_name=activity.name
+        )
+        route.compute_geometry()
+        return route
     
     def _determine_direction(self, activity: Activity) -> str:
         """
@@ -513,12 +539,13 @@ class RouteAnalyzer:
         """
         return self._classify_direction(activity)[0]
 
-    def _classify_direction(self, activity: Activity) -> Tuple[Optional[str], bool]:
-        """(direction or None, near_miss). near_miss is True for a ride that isn't
-        classified but has both ends within NEAR_MISS_M of home and work — likely
-        a commute trimmed by a privacy zone or ended at a mid-route stop (C10)."""
+    def _classify_direction(self, activity: Activity) -> Tuple[Optional[str], Optional[str]]:
+        """(direction, near_miss_direction); at most one is set. A near miss has
+        both ends within NEAR_MISS_M of home and work but not ENDPOINT_RADIUS_M:
+        likely a commute trimmed by a privacy zone or ended at a second entrance
+        (C10). extract_routes decides those by route shape (#618)."""
         if not activity.start_latlng or not activity.end_latlng:
-            return None, False
+            return None, None
 
         home, work = (self.home.lat, self.home.lon), (self.work.lat, self.work.lon)
         start_to_home = geodesic(activity.start_latlng, home).meters
@@ -527,12 +554,14 @@ class RouteAnalyzer:
         end_to_work = geodesic(activity.end_latlng, work).meters
 
         if start_to_home < ENDPOINT_RADIUS_M and end_to_work < ENDPOINT_RADIUS_M:
-            return 'home_to_work', False
+            return 'home_to_work', None
         if start_to_work < ENDPOINT_RADIUS_M and end_to_home < ENDPOINT_RADIUS_M:
-            return 'work_to_home', False
-        near_miss = (max(start_to_home, end_to_work) < NEAR_MISS_M
-                     or max(start_to_work, end_to_home) < NEAR_MISS_M)
-        return None, near_miss
+            return 'work_to_home', None
+        if max(start_to_home, end_to_work) < NEAR_MISS_M:
+            return None, 'home_to_work'
+        if max(start_to_work, end_to_home) < NEAR_MISS_M:
+            return None, 'work_to_home'
+        return None, None
     
     def calculate_route_similarity(self, route1: Route, route2: Route) -> float:
         """

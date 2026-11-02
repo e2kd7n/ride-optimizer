@@ -47,6 +47,10 @@ P95_CAP_M = 400.0
 # Grid cell for possible_match_pairs' bounds; any size is exact, this one is fast.
 SCREEN_CELL_M = 50.0
 _CELL_KEY_SPAN = 1 << 32
+# Commute corridor (#618): grid cell size, and how many rides must pass through
+# a cell for it to be part of the corridor.
+CORRIDOR_CELL_M = 25.0
+CORRIDOR_MIN_SUPPORT = 2
 
 
 def project_m(coords, lat0: float) -> np.ndarray:
@@ -141,6 +145,39 @@ def match_score(p95_m: float, coverage: float, max_p95_m: float, min_coverage: f
     return min(coverage / min_coverage, max_p95_m / max(p95_m, 1e-9))
 
 
+def _grid_keys(xy: np.ndarray, cell_m: float) -> np.ndarray:
+    """Grid cells of metric points as single int64 keys (row * _CELL_KEY_SPAN +
+    col): 1-D unique is far faster than unique over rows, and the span leaves
+    room for any projected coordinate on Earth."""
+    c = np.floor(xy / cell_m).astype(np.int64)
+    return c[:, 0] * _CELL_KEY_SPAN + c[:, 1]
+
+
+def corridor_cells(tracks_coords: list, lat0: float,
+                   min_support: int = CORRIDOR_MIN_SUPPORT) -> np.ndarray:
+    """Sorted grid keys of the corridor a set of rides follows (#618): the
+    CORRIDOR_CELL_M cells that at least min_support of them pass through,
+    widened by one cell so a ride a lane or a GPS wobble away still counts.
+    Requiring support keeps one ride's one-off detour out of the corridor."""
+    per_track = [np.unique(_grid_keys(resample_m(project_m(c, lat0), SAMPLE_STEP_M),
+                                      CORRIDOR_CELL_M))
+                 for c in tracks_coords if len(c) >= 2]
+    if not per_track:
+        return np.empty(0, dtype=np.int64)
+    cells, support = np.unique(np.concatenate(per_track), return_counts=True)
+    core = cells[support >= min_support]
+    offs = np.array([dx * _CELL_KEY_SPAN + dy for dx in (-1, 0, 1) for dy in (-1, 0, 1)])
+    return np.unique(core[:, None] + offs[None, :])
+
+
+def corridor_share(coords, lat0: float, cells: np.ndarray) -> float:
+    """Share of a ride's length (samples every SAMPLE_STEP_M) inside corridor_cells."""
+    if len(cells) == 0 or len(coords) < 2:
+        return 0.0
+    keys = _grid_keys(resample_m(project_m(coords, lat0), SAMPLE_STEP_M), CORRIDOR_CELL_M)
+    return float(np.isin(keys, cells).mean())
+
+
 def possible_match_pairs(tracks: list, max_p95_m: float, min_coverage: float) -> np.ndarray:
     """(i, j) index pairs, i < j, that *could* pass match_score >= 1.0.
 
@@ -159,12 +196,8 @@ def possible_match_pairs(tracks: list, max_p95_m: float, min_coverage: float) ->
     if max_p95_m >= P95_CAP_M:
         raise ValueError(f"max_p95_m must be below P95_CAP_M ({P95_CAP_M} m)")
 
-    # Cells as single int64 keys (row * _CELL_KEY_SPAN + col): 1-D unique is far
-    # faster than unique over rows, and the span leaves room for any
-    # projected coordinate on Earth.
     def keys(xy):
-        c = np.floor(xy / SCREEN_CELL_M).astype(np.int64)
-        return c[:, 0] * _CELL_KEY_SPAN + c[:, 1]
+        return _grid_keys(xy, SCREEN_CELL_M)
 
     sample_keys, sample_shares = [], []
     for t in tracks:

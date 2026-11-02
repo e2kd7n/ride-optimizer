@@ -12,6 +12,8 @@ from src.route_comparison import (
     LONG_RIDE_DENSE_STEP_M,
     LONG_RIDE_SAMPLE_STEP_M,
     cluster_by_centres,
+    corridor_cells,
+    corridor_share,
     coverage_bound_pairs,
     coverage_cells,
     directed_deviation_metrics,
@@ -254,3 +256,32 @@ class TestClusterByCentres:
 
     def test_scores_below_one_are_not_matches(self):
         assert cluster_by_centres(2, [(0, 1, 0.99)]) == [(0, [0]), (1, [1])]
+
+
+class TestCorridor:
+    """Near-miss commute classification (#618)."""
+    LAT0 = 41.93
+
+    @staticmethod
+    def _street(lon, lat_from=41.88, lat_to=41.98):
+        return [(lat_from + (lat_to - lat_from) * k / 100, lon) for k in range(101)]
+
+    def test_ride_on_the_corridor_is_inside_it(self):
+        cells = corridor_cells([self._street(-87.63)] * 2, self.LAT0)
+        assert corridor_share(self._street(-87.63, lat_from=41.89), self.LAT0, cells) == 1.0
+        # One lane over (~15 m) still counts.
+        assert corridor_share(self._street(-87.6302), self.LAT0, cells) == 1.0
+
+    def test_one_rides_detour_is_not_corridor(self):
+        cells = corridor_cells([self._street(-87.63)] * 2 + [self._street(-87.60)], self.LAT0)
+        assert corridor_share(self._street(-87.60), self.LAT0, cells) == 0.0
+        two = corridor_cells([self._street(-87.60)] * 2, self.LAT0)
+        assert corridor_share(self._street(-87.60), self.LAT0, two) == 1.0
+
+    def test_partly_on_the_corridor(self):
+        cells = corridor_cells([self._street(-87.63)] * 2, self.LAT0)
+        half = self._street(-87.63, 41.88, 41.93) + self._street(-87.60, 41.93, 41.98)
+        assert 0.4 < corridor_share(half, self.LAT0, cells) < 0.6
+
+    def test_no_corridor(self):
+        assert corridor_share(self._street(-87.63), self.LAT0, corridor_cells([], self.LAT0)) == 0.0
