@@ -121,6 +121,7 @@ def _register_blueprints(app: Flask) -> None:
     from app.api.data_bp import bp as data_bp
     from app.api.stats_bp import bp as stats_bp
     from app.api.core_bp import bp as core_bp
+    from app.api.chat_bp import bp as chat_bp
 
     app.register_blueprint(maps_api.bp)
 
@@ -176,6 +177,7 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(data_bp)
     app.register_blueprint(stats_bp)
     app.register_blueprint(core_bp)
+    app.register_blueprint(chat_bp)
 
 
 def _register_error_handlers(app: Flask) -> None:
