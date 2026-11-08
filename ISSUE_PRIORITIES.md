@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-10-27 03:47:30 UTC / 2026-10-26 22:47:30 CDT
+**Last Updated:** 2026-11-08 19:30:48 UTC / 2026-11-08 13:30:48 CST
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -9,12 +9,12 @@ This file reflects the current state of GitHub issues organized by release miles
 ## 📍 Release Context
 
 - **Current Release:** none (deployed, milestone fully closed)
-- **Next Release:** 0.21.0 (in development)
+- **Next Release:** 0.22.0 (in development)
 - **Future Releases:** 
 
 ---
 
-## 🎯 0.21.0 (Next Release - IN DEVELOPMENT)
+## 🎯 0.22.0 (Next Release - IN DEVELOPMENT)
 
 **Priority within this release determines work order. Complete P0/P1 issues before moving to future releases.**
 
@@ -22,22 +22,29 @@ This file reflects the current state of GitHub issues organized by release miles
 **No P0 issues** ✅
 
 ### 🔴 P1 - HIGH
-**No P1 issues** ✅
+- #621 - Ride chat: PII sanitizer corrupts tool JSON (list_routes unparseable)
 
 ### 🟡 P2 - MEDIUM
-**No P2 issues** ✅
+- #636 - Garmin client: garth is deprecated — pin, wrap, or migrate
 
 ### 🟢 P3 - LOW
+- #634 - Data Cleanup: Strava manual workflow (link-out checklist feeding the cache)
+- #633 - Data Cleanup: review & approve page (new tab)
+- #632 - Data Cleanup: reconcile activity cache + regroup after each cleanup batch
+- #631 - Data Cleanup: resumable background runner for approved Garmin deletes/renames
+- #630 - Data Cleanup: full Garmin history + recording-device names in GarminService
+- #629 - Data Cleanup: duplicate/fragment/name-sync detection service
+- #628 - Epic: Data Cleanup tab — find duplicate/unnamed activities across Garmin & Strava, fix them in the background
 - #594 - Epic: RideWithGPS integration — import routes and suggest Explore tile-coverage optimizations
 - #593 - RideWithGPS: publish an optimized route back as a new route
 - #592 - RideWithGPS: Explore tab visualization of suggested vs. original route
 - #591 - RideWithGPS: algorithm to suggest a tile-coverage-optimizing modification to an existing route
 - #590 - RideWithGPS: import existing routes into the app's route model
 - #589 - RideWithGPS: connect an account (auth + service scaffolding)
-- #514 - Offload background analysis batch jobs to Pi Zero W cluster (ClusterHAT)
 
 ### 📋 P4 - FUTURE
-**No P4 issues** ✅
+- #635 - Spike: Strava web automation for delete/rename — go/no-go decision record
+- #514 - Offload background analysis batch jobs to Pi Zero W cluster (ClusterHAT)
 
 ---
 
@@ -52,16 +59,23 @@ None
 None
 
 ### 🟡 P2 - MEDIUM
+- #623 - Gear cache emptied by 2026-10-01 refresh; gear shows raw IDs (Reports + chat)
+- #622 - Ride chat: totals count runs/walks/swims as rides; no all-cycling filter
+- #620 - Option to check for new activities nightly and pull them into the cache (all connected sources), then regroup
+- #619 - "Backfill this month" fails when Strava isn't connected — should use whichever source is connected (e.g. Garmin)
+- #617 - Match review: let the rider confirm uncertain route matches and teach the matcher
 - #607 - Port Garmin integration from garth (unofficial SSO) to Garmin's official Personal API
 
 ### 🟢 P3 - LOW
-None
+- #625 - Ride chat: Strava activity IDs still sent to Claude via record URLs
+- #624 - Fastest-speed record picks GPS glitches and non-ride activities
+- #608 - Ride-data chat on the Reports tab (ephemeral Claude sessions, no history)
 
 ### 📋 P4 - FUTURE
 None
 
 ### ⚠️ Unprioritized (No P-label)
-- #608 - Ride-data chat on the Reports tab (ephemeral Claude sessions, no history)
+- #626 - [BUG] mobile app screen changes away from explore
 
 ---
 
