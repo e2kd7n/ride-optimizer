@@ -630,7 +630,7 @@ function initWorker() {
     }
     // Versioned so a deploy that changes the worker isn't masked by a
     // browser-cached copy of the old one.
-    explorationWorker = new Worker('/js/exploration-worker.js?v=4');
+    explorationWorker = new Worker('/js/exploration-worker.js?v=5');
 }
 
 // ── Coverage loading ────────────────────────────────────────────
@@ -2083,8 +2083,11 @@ const REFINE_TOLERANCE = 0.15;      // ±15% counts as "on target" in match mode
 const CAP_SLACK = 0.05;             // cap mode: allow 5% over the cap before trimming
 const MAX_TRIM_CALLS = 3;           // cap mode: re-routes spent dropping waypoints
 const MAX_MATCH_CALLS = 6;          // match mode: re-routes spent chasing the target
-const MAX_PICKUPS = 20;             // near-route tiles added in one pass
-const MAX_ROUTE_WAYPOINTS = 48;     // ORS/backend cap is 50
+const MAX_PICKUPS = 40;             // near-route tiles added in one pass
+// The backend splits anything over ORS's 50-waypoint limit into chunks
+// (/api/exploration/route accepts up to 250).
+const MAX_ROUTE_WAYPOINTS = 240;
+const MAX_SWEEP_ROUNDS = 4;         // cluster-sweep re-route/re-check rounds
 const RETRACE_MAX_FRACTION = 0.15;  // above this share of retraced road, try to fix
 const MAX_RETRACE_FIXES = 1;
 
@@ -2127,7 +2130,10 @@ async function refineRoute(baseWaypoints, opts) {
     // Parallel to waypoints.slice(1, -1): {tiles, padding?, pickup?}.
     let meta = baseMeta ? baseMeta.map(m => ({ ...m })) : waypoints.slice(1, -1).map(() => ({ tiles: 1 }));
     const candidates = candidateList.slice();
-    const stats = { calls: 0, trimmed: 0, pickupsAdded: 0, uselessDropped: 0, retraceFixed: false, retraceFraction: null };
+    const stats = {
+        calls: 0, trimmed: 0, pickupsAdded: 0, uselessDropped: 0, retraceFixed: false, retraceFraction: null,
+        sweepAdded: 0, sweepUnreachable: 0, sweepRemaining: 0, sweepCapped: false,
+    };
 
     // Build OSRM exclude list from road filter checkboxes (#411).
     const excludeClasses = [];
@@ -2294,6 +2300,59 @@ async function refineRoute(baseWaypoints, opts) {
                 stats.retraceFraction = retrace.fraction;
             }
         }
+
+        // ── Stage 5: cluster sweep — a hard rule, so it runs last ──
+        // Never leave an unclaimed tile that's edge-adjacent to the route
+        // and part of a cluster, unless it's at the boundary/horizon (see
+        // ExploreRefine.clusterSweepTargets). Once the route touches a
+        // cluster that means sweeping all of it. This overrides the distance
+        // cap. Each round re-routes with the targets added and re-checks the
+        // real road route; a tile still unclaimed after two attempts has no
+        // road the router can reach and is reported as unreachable.
+        if (grids.length && mode !== 'direct') {
+            const attempts = new Map();
+            const unreachable = new Set();
+            const targetsNow = () => R.clusterSweepTargets(result.coordinates, grids, { bounds: areaBounds, exclude: unreachable });
+            for (let round = 0; round < MAX_SWEEP_ROUNDS; round++) {
+                const fresh = [];
+                for (const t of targetsNow()) {
+                    const k = `${t.zoom}:${t.x},${t.y}`;
+                    const n = attempts.get(k) || 0;
+                    if (n >= 2) { unreachable.add(k); continue; }
+                    attempts.set(k, n + 1);
+                    fresh.push(t);
+                }
+                if (fresh.length === 0) break;
+                const room = MAX_ROUTE_WAYPOINTS - waypoints.length;
+                if (room <= 0) { stats.sweepCapped = true; break; }
+                const batch = fresh.slice(0, room);
+                if (batch.length < fresh.length) stats.sweepCapped = true;
+                const ins = R.insertSweepTargets(waypoints, meta, batch);
+                const trial = await routeOnce(ins.waypoints);
+                if (tilesOf(trial) < tilesOf(result)) break; // re-route lost ground — keep what we have
+                waypoints = ins.waypoints;
+                meta = ins.meta;
+                result = trial;
+                stats.sweepAdded += batch.length;
+            }
+            // Sweep stops whose road snap landed elsewhere claim nothing —
+            // drop them, as long as that doesn't reopen any cluster tile.
+            const useless = R.uselessStops(result.coordinates, waypoints, grids);
+            if (useless.length > 0) {
+                const drop = new Set(useless);
+                const trialWps = waypoints.filter((_, i) => !drop.has(i));
+                const trial = await routeOnce(trialWps);
+                const before = targetsNow().length;
+                const after = R.clusterSweepTargets(trial.coordinates, grids, { bounds: areaBounds, exclude: unreachable }).length;
+                if (trial.distance_km < result.distance_km && after <= before && tilesOf(trial) >= tilesOf(result)) {
+                    waypoints = trialWps;
+                    meta = meta.filter((_, i) => !drop.has(i + 1));
+                    result = trial;
+                }
+            }
+            stats.sweepUnreachable = unreachable.size;
+            stats.sweepRemaining = targetsNow().length;
+        }
     } catch (err) {
         if (err instanceof RouteError) {
             // A later-stage improvement call failing shouldn't throw away a
@@ -2362,15 +2421,6 @@ function formatTileBreakdown(claimed) {
     return `· ${parts.join(' · ')}`;
 }
 
-/** Whether two ORS results are (for display purposes) the same route. */
-function sameRoute(a, b) {
-    if (a.distance_km !== b.distance_km) return false;
-    const ca = a.coordinates || [], cb = b.coordinates || [];
-    if (ca.length !== cb.length) return false;
-    const mid = Math.floor(ca.length / 2);
-    return [0, mid, ca.length - 1].every(i => ca[i] && cb[i] && ca[i][0] === cb[i][0] && ca[i][1] === cb[i][1]);
-}
-
 async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
     const plotBtn = badgeEl.querySelector('.plot-road-btn');
     const infoEl = badgeEl.querySelector('.route-phase2-info');
@@ -2413,8 +2463,6 @@ async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
     ];
 
     const candidates = (_phase1Candidates[direction] || []).slice();
-    const shortTarget = targetDistanceKm * 0.85;
-    const longTarget  = targetDistanceKm * 1.15;
     // Tile value of each Phase-1 waypoint (parallel to baseWaypoints'
     // inner points), so trimming drops the least valuable one first.
     const baseMeta = route.waypoints.map(wp => ({ tiles: typeof wp.tiles === 'number' ? wp.tiles : 1 }));
@@ -2452,23 +2500,20 @@ async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
         shortOutcome = { route: null, message: null };
         longOutcome = await refineRoute(baseWaypoints, { ...commonOpts, targetKm: targetDistanceKm, mode: 'direct' });
     } else {
-        // Run both variants in parallel. Round trips treat each variant's
-        // target as a ceiling ('cap'); a wild point-to-point still aims for
-        // the requested distance ('match').
+        // One route. There used to be a short (−15%) and long (+15%) variant,
+        // but the cluster sweep (refineRoute stage 5) overrides the distance
+        // cap — both variants converged on the same swept route while
+        // doubling ORS calls. Round trips treat the target as a ceiling for
+        // the Phase-1 stops ('cap'); a wild point-to-point aims for it ('match').
         const mode = isPtp ? 'match' : 'cap';
-        infoEl.textContent = 'Computing short and long variants…';
-        [shortOutcome, longOutcome] = await Promise.all([
-            refineRoute(baseWaypoints, { ...commonOpts, targetKm: shortTarget, mode }),
-            refineRoute(baseWaypoints, { ...commonOpts, targetKm: longTarget, mode }),
-        ]);
+        infoEl.textContent = 'Routing and sweeping nearby clusters…';
+        shortOutcome = { route: null, message: null };
+        longOutcome = await refineRoute(baseWaypoints, { ...commonOpts, targetKm: targetDistanceKm, mode });
     }
-    let shortResult = shortOutcome.route;
+    const shortResult = shortOutcome.route;
     const longResult = longOutcome.route;
-    // Under a cap, both variants often come back as the same route (the
-    // efficient tour fits under the short cap already) — show it once.
-    const variantsIdentical = !!(shortResult && longResult && sameRoute(shortResult, longResult));
-    if (variantsIdentical) shortResult = null;
-    const singleRoute = skipExpansion || variantsIdentical;
+    const sweepStats = longOutcome.stats || {};
+    const singleRoute = true;
 
     if (!shortResult && !longResult) {
         // Prefer the backend's specific reason (e.g. "Road routing is not
@@ -2581,6 +2626,17 @@ async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
         const outsideBadge = (areaBounds && (outsideFrac > 0.02 || v.result.bounds_enforced === false))
             ? `<span class="badge bg-warning-subtle text-warning-emphasis" title="${fenceBounds ? 'The road router could not keep this route fully inside the drawn area.' : 'The start or end point is outside the drawn area, so the route has to leave it.'}">Leaves area</span>`
             : '';
+        // Cluster sweep outcome (refineRoute stage 5).
+        const sweepBadges = [];
+        if (sweepStats.sweepAdded > 0) {
+            sweepBadges.push(`<span class="badge bg-success-subtle text-success-emphasis" title="Unclaimed clusters the route touched were swept completely, which can take it past ${targetDistancePhrase(targetDistanceKm)}.">Clusters swept</span>`);
+        }
+        if (sweepStats.sweepUnreachable > 0) {
+            sweepBadges.push(`<span class="badge bg-secondary-subtle text-secondary-emphasis" title="No road the router can use enters these cluster tiles.">${sweepStats.sweepUnreachable} unreachable</span>`);
+        }
+        if (sweepStats.sweepRemaining > 0) {
+            sweepBadges.push(`<span class="badge bg-warning-subtle text-warning-emphasis" title="${sweepStats.sweepCapped ? 'Hit the route waypoint limit before every touched cluster could be swept.' : 'Some cluster tiles next to the route are still unclaimed after re-routing.'}">${sweepStats.sweepRemaining} cluster tiles left</span>`);
+        }
         const dataKey = `${direction}-${suffix}`;
         return `
             <div class="d-flex align-items-center gap-2 flex-wrap mt-4px">
@@ -2589,6 +2645,7 @@ async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
                 ${outAndBackBadge}
                 ${directBadge}
                 ${underTargetBadge}
+                ${sweepBadges.join('')}
                 ${outsideBadge}
                 <button class="btn btn-xs btn-outline-secondary export-gpx-btn ms-auto"
                         data-variant="${dataKey}"

@@ -510,7 +510,7 @@ class TestExplorationRouteWaypointValidation:
 
     def test_too_many_waypoints_rejected(self, client):
         response = client.post('/api/exploration/route', json={
-            'waypoints': [[40.0 + i * 0.001, -74.0] for i in range(51)],
+            'waypoints': [[40.0 + i * 0.001, -74.0] for i in range(251)],
         })
         assert response.status_code == 400
         data = response.get_json()

@@ -125,6 +125,52 @@ class TestComputeRouteWithBounds:
 
 
 @pytest.mark.unit
+class TestChunkedRoute:
+    """ORS caps a request at 50 waypoints; longer lists (Explore's cluster
+    sweep) are routed in chunks sharing boundary waypoints and stitched."""
+
+    @staticmethod
+    def _fake(coords, profile, **kwargs):
+        # One straight segment per waypoint pair; 1 km each.
+        n = len(coords)
+        return {"features": [{
+            "geometry": {"coordinates": coords},
+            "properties": {"summary": {"distance": 1000.0 * (n - 1), "duration": 60.0 * (n - 1)}, "extras": {}},
+        }]}
+
+    def test_long_list_is_chunked_and_stitched(self, service_with_key):
+        wps = [[41.9 + i * 0.001, -87.7] for i in range(120)]
+        with patch("src.ors_client.get_route", side_effect=self._fake) as mock_get:
+            result = service_with_key.compute_route(wps)
+        assert result["status"] == "success"
+        assert mock_get.call_count == 3                      # 50 + 50 + 22 (shared boundaries)
+        for call in mock_get.call_args_list:
+            assert len(call.args[0]) <= 50
+        assert len(result["coordinates"]) == 120             # boundaries not duplicated
+        assert result["coordinates"][0] == [41.9, -87.7]
+        assert result["distance_km"] == pytest.approx(119.0)
+        assert result["segments"] == 3
+
+    def test_chunk_failure_fails_whole_route_with_segment(self, service_with_key):
+        calls = {"n": 0}
+
+        def flaky(coords, profile, **kwargs):
+            calls["n"] += 1
+            return None if calls["n"] == 2 else self._fake(coords, profile)
+        wps = [[41.9 + i * 0.001, -87.7] for i in range(120)]
+        with patch("src.ors_client.get_route", side_effect=flaky):
+            result = service_with_key.compute_route(wps)
+        assert result["status"] == "error"
+        assert "segment 2 of 3" in result["message"]
+
+    def test_short_list_is_not_chunked(self, service_with_key):
+        with patch("src.ors_client.get_route", side_effect=self._fake) as mock_get:
+            result = service_with_key.compute_route([[41.9 + i * 0.001, -87.7] for i in range(50)])
+        assert mock_get.call_count == 1
+        assert "segments" not in result
+
+
+@pytest.mark.unit
 class TestValidateRouteBounds:
     def test_valid_box(self):
         from app.api.planner_bp import _validate_route_bounds

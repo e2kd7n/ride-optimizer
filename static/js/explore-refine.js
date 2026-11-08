@@ -84,11 +84,21 @@
      * ({zoom, visited: {"x,y": ...}, roadless_runs?}).
      */
     function makeGrid(coverage) {
-        return {
-            zoom: coverage.zoom || 14,
+        const zoom = coverage.zoom || 14;
+        const grid = {
+            zoom,
             visited: new Set(Object.keys(coverage.visited || {})),
             isRoadless: buildRoadlessLookup(coverage.roadless_runs),
+            tileRange: null,
         };
+        // Loaded coverage area = the horizon: tiles outside it have unknown
+        // status and are never treated as unclaimed.
+        if (coverage.bounds) {
+            const [south, west, north, east] = coverage.bounds;
+            const a = latLonToTile(north, west, zoom), b = latLonToTile(south, east, zoom);
+            grid.tileRange = { minX: a.x, maxX: b.x, minY: a.y, maxY: b.y };
+        }
+        return grid;
     }
 
     /**
@@ -291,6 +301,145 @@
             if (!dup) kept.push(c);
         }
         return kept;
+    }
+
+    // ── Cluster sweep: never leave an adjacent cluster tile behind ──
+
+    /**
+     * Unclaimed tiles a route must still claim under the cluster rule:
+     * an unclaimed tile that shares an edge with a tile the route enters,
+     * and that belongs to a cluster (it has at least one unclaimed
+     * neighbour, counting tiles the route itself claims), must be claimed —
+     * unless it's at the boundary/horizon (outside the drawn area or the
+     * loaded coverage), water, or in \`exclude\` (tried and unreachable).
+     *
+     * Applied to a final route this means: once the route touches a
+     * cluster, it sweeps the whole cluster. So each touched cluster's full
+     * 4-connected component is returned, not just the adjacent ring — except
+     * components bigger than \`maxComponent\` tiles, which are open frontier
+     * rather than a cluster to finish; for those only the adjacent ring is
+     * returned.
+     *
+     * Returns [{x, y, zoom, lat, lon, component}] (lat/lon = waypoint inside
+     * the tile, toward the route), grouped by component, nearest first.
+     */
+    function clusterSweepTargets(coords, grids, opts = {}) {
+        const { bounds = null, exclude = new Set(), maxComponent = 80, insetM = 120 } = opts;
+        if (!coords || coords.length < 2 || !grids || grids.length === 0) return [];
+        const lat0 = coords[0][0];
+        const proj = projector(lat0);
+        const line = densify(coords, 0.02).map(d => ({ p: d.p, xy: proj(d.p) }));
+        const cellM = 100;
+        const hash = buildHash(line, cellM);
+        const distToLine = (xy) => {
+            for (let r = 1; r < 200; r *= 2) {
+                let best = Infinity;
+                for (const i of neighbours(hash, xy, cellM, r)) {
+                    const d = Math.hypot(line[i].xy[0] - xy[0], line[i].xy[1] - xy[1]);
+                    if (d < best) best = d;
+                }
+                if (best < Infinity) return best;
+            }
+            return Infinity;
+        };
+
+        const out = [];
+        let componentId = 0;
+        for (const grid of grids) {
+            const z = grid.zoom;
+            const crossed = tilesTouched(coords, z);
+            const inHorizon = (x, y) => {
+                const r = grid.tileRange;
+                if (r && (x < r.minX || x > r.maxX || y < r.minY || y > r.maxY)) return false;
+                if (bounds) {
+                    const tb = tileBounds(x, y, z);
+                    const c = [(tb[0] + tb[2]) / 2, (tb[1] + tb[3]) / 2];
+                    if (!pointInBounds(c, bounds)) return false;
+                }
+                return true;
+            };
+            // Unclaimed in ride history (crossed-by-route tiles included).
+            const unclaimed = (x, y) => !grid.visited.has(`${x},${y}`) && !grid.isRoadless(x, y) && inHorizon(x, y);
+            const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+
+            const assigned = new Set();
+            for (const key of crossed) {
+                const [cx, cy] = key.split(',').map(Number);
+                for (const [dx, dy] of N4) {
+                    const x = cx + dx, y = cy + dy, k = `${x},${y}`;
+                    if (assigned.has(k) || crossed.has(k) || !unclaimed(x, y)) continue;
+                    // In a cluster? Needs an unclaimed neighbour of its own.
+                    if (!N4.some(([ax, ay]) => unclaimed(x + ax, y + ay))) continue;
+
+                    // Its component among unclaimed tiles (bounded BFS).
+                    const comp = [];
+                    const seen = new Set([k]);
+                    const queue = [[x, y]];
+                    let tooBig = false;
+                    while (queue.length) {
+                        const [qx, qy] = queue.shift();
+                        comp.push([qx, qy]);
+                        if (comp.length > maxComponent) { tooBig = true; break; }
+                        for (const [ax, ay] of N4) {
+                            const nx = qx + ax, ny = qy + ay, nk = `${nx},${ny}`;
+                            if (!seen.has(nk) && unclaimed(nx, ny)) { seen.add(nk); queue.push([nx, ny]); }
+                        }
+                    }
+                    let tiles;
+                    if (tooBig) {
+                        // Frontier: just the tiles directly adjacent to the route.
+                        tiles = [[x, y]];
+                    } else {
+                        tiles = comp.filter(([tx, ty]) => !crossed.has(`${tx},${ty}`));
+                    }
+                    componentId++;
+                    for (const [tx, ty] of tiles) {
+                        const tk = `${tx},${ty}`;
+                        if (assigned.has(tk)) continue;
+                        assigned.add(tk);
+                        if (exclude.has(`${z}:${tk}`)) continue;
+                        const tb = tileBounds(tx, ty, z);
+                        const centre = [(tb[0] + tb[2]) / 2, (tb[1] + tb[3]) / 2];
+                        const sideM = tileSideKm(z, lat0) * 1000;
+                        let wp = centre;
+                        if (sideM / 2 > insetM) {
+                            // Big tile: aim just inside its edge nearest the route.
+                            const probes = [
+                                [tb[0], centre[1]], [tb[2], centre[1]], [centre[0], tb[1]], [centre[0], tb[3]],
+                            ];
+                            let near = probes[0], nd = Infinity;
+                            for (const pr of probes) { const d = distToLine(proj(pr)); if (d < nd) { nd = d; near = pr; } }
+                            const t = insetM / (sideM / 2);
+                            wp = [near[0] + (centre[0] - near[0]) * t, near[1] + (centre[1] - near[1]) * t];
+                        }
+                        out.push({ x: tx, y: ty, zoom: z, lat: wp[0], lon: wp[1], component: componentId, dist: distToLine(proj(wp)) });
+                    }
+                }
+            }
+        }
+        // Nearest components first, and within a component nearest tiles first.
+        const compDist = new Map();
+        for (const t of out) compDist.set(t.component, Math.min(compDist.get(t.component) ?? Infinity, t.dist));
+        out.sort((a, b) => (compDist.get(a.component) - compDist.get(b.component)) || (a.component - b.component) || (a.dist - b.dist));
+        return out;
+    }
+
+    /**
+     * Insert sweep targets into a waypoint list, each at its cheapest
+     * position (straight-line). Inserting a component's tiles nearest-first
+     * grows a local detour out from where the route touches the cluster.
+     * Returns {waypoints, meta}.
+     */
+    function insertSweepTargets(waypoints, meta, targets) {
+        const wps = waypoints.map(w => [...w]);
+        const m = meta.map(x => ({ ...x }));
+        for (const t of targets) {
+            const pt = [t.lat, t.lon];
+            const { index } = cheapestInsertion(wps, pt);
+            wps.splice(index, 0, pt);
+            m.splice(index - 1, 0, { tiles: 1, sweep: true });
+        }
+        return { waypoints: wps, meta: m };
     }
 
     // ── Waypoint ↔ route alignment ─────────────────────────────────
@@ -559,7 +708,7 @@
     const api = {
         haversineKm, pathKm, latLonToTile, tileBounds, tileSideKm, buildRoadlessLookup, makeGrid,
         densify, tilesTouched, newTilesCrossed, countNewTiles,
-        findPickups, waypointRouteIndices, insertPickups, cheapestInsertion, chooseDropIndex,
+        findPickups, clusterSweepTargets, insertSweepTargets, waypointRouteIndices, insertPickups, cheapestInsertion, chooseDropIndex,
         analyzeRetrace, uselessStops, pointInBounds, fractionOutsideBounds, clampToBounds,
     };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;

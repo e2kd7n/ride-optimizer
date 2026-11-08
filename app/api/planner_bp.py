@@ -274,7 +274,9 @@ def exploration_invalidate():
     return jsonify({'status': 'success', 'message': 'Coverage caches invalidated'})
 
 
-MAX_ROUTE_WAYPOINTS = 50
+# Explore sends long stop lists for cluster sweeps; compute_route splits
+# anything over ORS's 50-waypoint limit into chunks.
+MAX_ROUTE_WAYPOINTS = 250
 
 
 def _parse_exclude(exclude_raw):

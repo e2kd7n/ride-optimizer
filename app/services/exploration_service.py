@@ -63,6 +63,8 @@ ROUTE_CACHE_FILENAME = "route_cache.json"
 # outside the edge so a road running exactly along the boundary stays usable.
 # ORS's public API caps each avoid polygon's area and extent, so long edges
 # are split into segments well under the extent cap.
+ORS_MAX_WAYPOINTS = 50
+
 FENCE_GAP_M = 40
 FENCE_WIDTH_M = 150
 FENCE_MAX_SEGMENT_M = 15000
@@ -529,6 +531,13 @@ class ExplorationService:
                 "message": "Road routing is not configured (ORS_API_KEY missing)",
             }
 
+        # ORS caps one directions request at ORS_MAX_WAYPOINTS. Longer lists
+        # (Explore's cluster sweep can need well over 50 stops) are routed as
+        # consecutive chunks sharing their boundary waypoint and stitched
+        # together; each chunk goes through the normal cached path below.
+        if len(waypoints) > ORS_MAX_WAYPOINTS:
+            return self._compute_chunked_route(waypoints, surface_preference, exclude, bounds)
+
         # Memoization key — waypoints as a tuple of pairs + profile + the
         # resolved avoid_features (#575), so a "no motorways" request never
         # returns a cached route computed without that constraint (or
@@ -593,6 +602,59 @@ class ExplorationService:
             return result
         finally:
             self._route_semaphore.release()
+
+    def _compute_chunked_route(
+        self,
+        waypoints: List[Tuple[float, float]],
+        surface_preference: str,
+        exclude: Optional[List[str]],
+        bounds: Optional[List[float]],
+    ) -> Dict[str, Any]:
+        """Route a waypoint list longer than ORS_MAX_WAYPOINTS as consecutive
+        chunks (each sharing its first waypoint with the previous chunk's
+        last) and stitch the results into one route."""
+        chunks = []
+        i = 0
+        while i < len(waypoints) - 1:
+            j = min(i + ORS_MAX_WAYPOINTS - 1, len(waypoints) - 1)
+            chunks.append(waypoints[i:j + 1])
+            i = j
+
+        coords: List[List[float]] = []
+        distance_km = 0.0
+        duration_min = 0.0
+        surface_m = {"paved_pct": 0.0, "unpaved_pct": 0.0, "unknown_pct": 0.0}
+        enforced = []
+        for n, chunk in enumerate(chunks, 1):
+            part = self.compute_route(chunk, surface_preference=surface_preference, exclude=exclude, bounds=bounds)
+            if part.get("status") != "success":
+                msg = part.get("message") or "Road routing failed"
+                return {"status": "error", "message": f"{msg} (route segment {n} of {len(chunks)})"}
+            part_coords = part.get("coordinates") or []
+            coords.extend(part_coords if not coords else part_coords[1:])
+            distance_km += part.get("distance_km") or 0
+            duration_min += part.get("duration_min") or 0
+            sb = part.get("surface_breakdown") or {}
+            for k in surface_m:
+                surface_m[k] += (sb.get(k) or 0) * (part.get("distance_km") or 0)
+            if "bounds_enforced" in part:
+                enforced.append(bool(part["bounds_enforced"]))
+
+        result: Dict[str, Any] = {
+            "status": "success",
+            "coordinates": coords,
+            "distance_km": round(distance_km, 2),
+            "duration_min": round(duration_min, 1),
+            "surface_breakdown": {
+                k: (round(v / distance_km) if distance_km > 0 else (100 if k == "unknown_pct" else 0))
+                for k, v in surface_m.items()
+            },
+            "is_out_and_back": self._is_out_and_back(coords),
+            "segments": len(chunks),
+        }
+        if enforced:
+            result["bounds_enforced"] = all(enforced)
+        return result
 
     def _compute_route_via_ors(
         self,
