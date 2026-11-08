@@ -2124,6 +2124,7 @@ async function refineRoute(baseWaypoints, opts) {
         targetKm, mode = 'cap', surfacePref, candidates: candidateList = [], dirBearing = 45,
         roadFilters = {}, fenceBounds = null, areaBounds = null, baseMeta = null, grids = [],
         allowRetrace = false,
+        sweepChains = true, turnReorder = true, reorderOpts = {},
     } = opts;
 
     let waypoints = baseWaypoints.map(w => [...w]); // deep copy
@@ -2323,17 +2324,52 @@ async function refineRoute(baseWaypoints, opts) {
                     fresh.push(t);
                 }
                 if (fresh.length === 0) break;
-                const room = MAX_ROUTE_WAYPOINTS - waypoints.length;
+                // Lawnmower chains (straight runs, stops only at run ends),
+                // each inserted as one block where it adds least distance.
+                let room = MAX_ROUTE_WAYPOINTS - waypoints.length;
                 if (room <= 0) { stats.sweepCapped = true; break; }
-                const batch = fresh.slice(0, room);
-                if (batch.length < fresh.length) stats.sweepCapped = true;
-                const ins = R.insertSweepTargets(waypoints, meta, batch);
+                let ins = { waypoints, meta };
+                let added = 0;
+                if (sweepChains) {
+                    for (const chain of R.planSweepChains(fresh)) {
+                        if (chain.points.length > room) { stats.sweepCapped = true; continue; }
+                        ins = R.insertChain(ins.waypoints, ins.meta, chain);
+                        room -= chain.points.length;
+                        added += chain.tiles;
+                    }
+                } else {
+                    const batch = fresh.slice(0, room);
+                    if (batch.length < fresh.length) stats.sweepCapped = true;
+                    ins = R.insertSweepTargets(waypoints, meta, batch);
+                    added = batch.length;
+                }
+                if (added === 0) break;
                 const trial = await routeOnce(ins.waypoints);
                 if (tilesOf(trial) < tilesOf(result)) break; // re-route lost ground — keep what we have
                 waypoints = ins.waypoints;
                 meta = ins.meta;
                 result = trial;
-                stats.sweepAdded += batch.length;
+                stats.sweepAdded += added;
+            }
+
+            // Turn-aware reordering: minimise distance plus a per-turn
+            // penalty over the stop order, then keep it only if the real road
+            // route actually turns less, without losing tiles, reopening a
+            // cluster tile, or growing more than 5%.
+            const ro = turnReorder ? R.reorderForTurns(waypoints, meta, reorderOpts) : { before: 0, after: 0 };
+            stats.reorderGain = +(ro.before - ro.after).toFixed(2);
+            if (turnReorder && ro.after < ro.before - 0.5) {
+                const trial = await routeOnce(ro.waypoints);
+                const leftNow = targetsNow().length;
+                const leftTrial = R.clusterSweepTargets(trial.coordinates, grids, { bounds: areaBounds, exclude: unreachable }).length;
+                if (R.countTurns(trial.coordinates).turns < R.countTurns(result.coordinates).turns &&
+                        tilesOf(trial) >= tilesOf(result) && leftTrial <= leftNow &&
+                        trial.distance_km <= result.distance_km * 1.05) {
+                    waypoints = ro.waypoints;
+                    meta = ro.meta;
+                    result = trial;
+                    stats.reordered = true;
+                }
             }
             // Sweep stops whose road snap landed elsewhere claim nothing —
             // drop them, as long as that doesn't reopen any cluster tile.
@@ -2353,6 +2389,7 @@ async function refineRoute(baseWaypoints, opts) {
             stats.sweepUnreachable = unreachable.size;
             stats.sweepRemaining = targetsNow().length;
         }
+        if (result) Object.assign(stats, R.countTurns(result.coordinates));
     } catch (err) {
         if (err instanceof RouteError) {
             // A later-stage improvement call failing shouldn't throw away a

@@ -204,6 +204,10 @@
             maxReachM = 350,
             insetM = 150,
             roadFactor = 1.4,
+            // A lone-tile detour is an in-and-out stub: two turns and a U-turn.
+            // Charge it in km-equivalents so marginal pigtails stop being added
+            // (clusters are handled by the sweep, which this does not affect).
+            stubTurnKm = 0.3,
             // Same fraction of the fresh-ground rate as Phase 1's tour floor
             // (MIN_YIELD_FRACTION in exploration-worker.js): at z17 a tile
             // one block off the route (~0.75 km detour) clears it.
@@ -276,7 +280,7 @@
                         if (bounds && !pointInBounds(wp, bounds)) continue;
 
                         const wpDist = distToLine(proj(wp));
-                        const detourKm = (2 * Math.min(wpDist.d, maxReachM * 2) / 1000) * roadFactor + 0.05;
+                        const detourKm = (2 * Math.min(wpDist.d, maxReachM * 2) / 1000) * roadFactor + 0.05 + stubTurnKm;
                         let bonus = 0;
                         for (const [ax, ay] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
                             const nk = `${x + ax},${y + ay}`;
@@ -440,6 +444,187 @@
             m.splice(index - 1, 0, { tiles: 1, sweep: true });
         }
         return { waypoints: wps, meta: m };
+    }
+
+    // ── Fewer turns: lawnmower sweeps + turn-aware ordering ────────
+
+    /**
+     * Turn the per-tile sweep targets into lawnmower chains: for each
+     * cluster (component), cover its tiles with straight runs along rows or
+     * columns — whichever needs fewer runs — visited in alternating
+     * (boustrophedon) direction, with waypoints only at each run's two ends.
+     * On a street grid that rides straight down a street through a row of
+     * tiles instead of zig-zagging tile centre to tile centre, which was the
+     * main source of the sweep's staircasing and pigtails.
+     *
+     * Returns [{component, points: [[lat, lon], ...], tiles}] — tiles is
+     * the number of target tiles the chain covers.
+     */
+    function planSweepChains(targets) {
+        const byComp = new Map();
+        for (const t of targets) {
+            const k = `${t.zoom}:${t.component}`;
+            if (!byComp.has(k)) byComp.set(k, []);
+            byComp.get(k).push(t);
+        }
+        const chains = [];
+        for (const tiles of byComp.values()) {
+            const runsFor = (major, minor) => {
+                // Group by `major` coordinate, split each line into contiguous runs.
+                const lines = new Map();
+                for (const t of tiles) {
+                    if (!lines.has(t[major])) lines.set(t[major], []);
+                    lines.get(t[major]).push(t);
+                }
+                const runs = [];
+                for (const m of [...lines.keys()].sort((a, b) => a - b)) {
+                    const line = lines.get(m).sort((a, b) => a[minor] - b[minor]);
+                    let run = [line[0]];
+                    for (let i = 1; i < line.length; i++) {
+                        if (line[i][minor] === line[i - 1][minor] + 1) run.push(line[i]);
+                        else { runs.push({ major: m, tiles: run }); run = [line[i]]; }
+                    }
+                    runs.push({ major: m, tiles: run });
+                }
+                return runs;
+            };
+            const rows = runsFor('y', 'x'), cols = runsFor('x', 'y');
+            const runs = cols.length < rows.length ? cols : rows;
+            // Boustrophedon: flip direction each time the line changes.
+            const points = [];
+            let flip = false, lastMajor = null;
+            for (const r of runs) {
+                if (lastMajor !== null && r.major !== lastMajor) flip = !flip;
+                lastMajor = r.major;
+                const seq = flip ? [...r.tiles].reverse() : r.tiles;
+                const ends = seq.length === 1 ? [seq[0]] : [seq[0], seq[seq.length - 1]];
+                for (const t of ends) points.push([t.lat, t.lon]);
+            }
+            chains.push({ component: tiles[0].component, points, tiles: tiles.length });
+        }
+        return chains;
+    }
+
+    /**
+     * Insert a chain of points into a waypoint list as one contiguous block,
+     * at the position and orientation that add the least straight-line
+     * distance. Returns {waypoints, meta}.
+     */
+    function insertChain(waypoints, meta, chain) {
+        const fwd = chain.points, rev = [...chain.points].reverse();
+        let best = null;
+        for (const pts of [fwd, rev]) {
+            const first = pts[0], last = pts[pts.length - 1];
+            for (let i = 1; i < waypoints.length; i++) {
+                const a = waypoints[i - 1], b = waypoints[i];
+                const cost = haversineKm(a, first) + haversineKm(last, b) - haversineKm(a, b);
+                if (!best || cost < best.cost) best = { cost, i, pts };
+            }
+        }
+        const per = chain.tiles / best.pts.length;
+        return {
+            waypoints: [...waypoints.slice(0, best.i), ...best.pts.map(p => [...p]), ...waypoints.slice(best.i)],
+            meta: [...meta.slice(0, best.i - 1), ...best.pts.map(() => ({ tiles: per, sweep: true })), ...meta.slice(best.i - 1)],
+        };
+    }
+
+    function bearingDeg(a, b) {
+        const y = Math.sin((b[1] - a[1]) * Math.PI / 180) * Math.cos(b[0] * Math.PI / 180);
+        const x = Math.cos(a[0] * Math.PI / 180) * Math.sin(b[0] * Math.PI / 180) -
+            Math.sin(a[0] * Math.PI / 180) * Math.cos(b[0] * Math.PI / 180) * Math.cos((b[1] - a[1]) * Math.PI / 180);
+        return Math.atan2(y, x) * 180 / Math.PI;
+    }
+    function headingChange(h1, h2) {
+        let d = Math.abs(h2 - h1);
+        return d > 180 ? 360 - d : d;
+    }
+
+    /**
+     * Turns in a routed polyline: resampled every ~25 m, a turn is a heading
+     * change of at least 60° between the 50 m before and after a point
+     * (U-turn: at least 150°), with nearby detections merged.
+     */
+    function countTurns(coords) {
+        if (!coords || coords.length < 3) return { turns: 0, uturns: 0 };
+        const pts = [coords[0]];
+        let acc = 0;
+        for (let i = 1; i < coords.length; i++) {
+            acc += haversineKm(coords[i - 1], coords[i]) * 1000;
+            if (acc >= 25) { pts.push(coords[i]); acc = 0; }
+        }
+        pts.push(coords[coords.length - 1]);
+        let turns = 0, uturns = 0, last = -10;
+        for (let i = 2; i < pts.length - 2; i++) {
+            const d = headingChange(bearingDeg(pts[i - 2], pts[i]), bearingDeg(pts[i], pts[i + 2]));
+            if (d >= 60 && i - last > 2) { turns++; if (d >= 150) uturns++; last = i; }
+        }
+        return { turns, uturns };
+    }
+
+    /**
+     * Reorder a waypoint list (first/last fixed) to minimise straight-line
+     * distance plus a penalty per turn at each waypoint — turnKm per 90° of
+     * heading change (ignored under 30°) and uturnKm extra for a reversal.
+     * Local search with 2-opt (segment reversal) and Or-opt (move a run of
+     * 1–3 stops) until no move helps or the time budget runs out.
+     * Returns {waypoints, meta, before, after} (costs in km-equivalents).
+     */
+    function reorderForTurns(waypoints, meta, opts = {}) {
+        const { turnKm = 0.25, uturnKm = 0.4, budgetMs = 400 } = opts;
+        const n = waypoints.length;
+        if (n < 5) return { waypoints, meta, before: 0, after: 0 };
+        const idx = waypoints.map((_, i) => i);
+        const P = waypoints;
+        // Pairwise distance/bearing tables, so each candidate order costs O(n).
+        const D = P.map(a => P.map(b => haversineKm(a, b)));
+        const B = P.map(a => P.map(b => bearingDeg(a, b)));
+        const cost = (order) => {
+            let c = 0;
+            for (let i = 1; i < order.length; i++) c += D[order[i - 1]][order[i]];
+            for (let i = 1; i < order.length - 1; i++) {
+                const a = order[i - 1], b = order[i], d = order[i + 1];
+                if (D[a][b] < 0.01 || D[b][d] < 0.01) continue;
+                const ang = headingChange(B[a][b], B[b][d]);
+                if (ang >= 30) c += turnKm * ang / 90;
+                if (ang >= 150) c += uturnKm;
+            }
+            return c;
+        };
+        let order = idx, best = cost(order);
+        const before = best;
+        const t0 = Date.now();
+        let improved = true;
+        while (improved && Date.now() - t0 < budgetMs) {
+            improved = false;
+            // 2-opt: reverse order[i..j] (inner positions only).
+            for (let i = 1; i < n - 2 && Date.now() - t0 < budgetMs; i++) {
+                for (let j = i + 1; j < n - 1; j++) {
+                    const cand = [...order.slice(0, i), ...order.slice(i, j + 1).reverse(), ...order.slice(j + 1)];
+                    const c = cost(cand);
+                    if (c < best - 1e-9) { order = cand; best = c; improved = true; }
+                }
+            }
+            // Or-opt: move a run of 1-3 stops elsewhere (optionally reversed).
+            for (let len = 1; len <= 3 && Date.now() - t0 < budgetMs; len++) {
+                for (let i = 1; i + len <= n - 1; i++) {
+                    const seg = order.slice(i, i + len);
+                    const rest = [...order.slice(0, i), ...order.slice(i + len)];
+                    for (let k = 1; k < rest.length; k++) {
+                        if (k === i) continue;
+                        for (const s of [seg, [...seg].reverse()]) {
+                            const cand = [...rest.slice(0, k), ...s, ...rest.slice(k)];
+                            const c = cost(cand);
+                            if (c < best - 1e-9) { order = cand; best = c; improved = true; break; }
+                        }
+                    }
+                }
+            }
+        }
+        return {
+            waypoints: order.map(i => [...P[i]]),
+            meta: order.slice(1, -1).map(i => ({ ...meta[i - 1] })),
+            before, after: best,
+        };
     }
 
     // ── Waypoint ↔ route alignment ─────────────────────────────────
@@ -708,7 +893,8 @@
     const api = {
         haversineKm, pathKm, latLonToTile, tileBounds, tileSideKm, buildRoadlessLookup, makeGrid,
         densify, tilesTouched, newTilesCrossed, countNewTiles,
-        findPickups, clusterSweepTargets, insertSweepTargets, waypointRouteIndices, insertPickups, cheapestInsertion, chooseDropIndex,
+        findPickups, clusterSweepTargets, insertSweepTargets, planSweepChains, insertChain,
+        countTurns, reorderForTurns, waypointRouteIndices, insertPickups, cheapestInsertion, chooseDropIndex,
         analyzeRetrace, uselessStops, pointInBounds, fractionOutsideBounds, clampToBounds,
     };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
