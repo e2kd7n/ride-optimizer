@@ -14,7 +14,11 @@
  *   - analyzeRetrace(): how much of a routed line rides the same road twice,
  *     and which waypoint's spur is responsible
  *   - insertion/drop position choices for Phase 2 waypoint edits
- *   - fractionOutsideBounds(): did the route leave the rider's drawn box
+ *   - fractionOutsideBounds(): did the route leave the rider's drawn area
+ *
+ * A drawn "area" (`bounds` below) is either a box [south, west, north, east]
+ * or a polygon [[lat, lon], [lat, lon], ...] (3+ vertices, open ring) — every
+ * bounds helper accepts both.
  */
 (function (root) {
     'use strict';
@@ -672,37 +676,169 @@
         return out;
     }
 
-    // ── Bounds ─────────────────────────────────────────────────────
+    // ── Bounds (box or polygon) ────────────────────────────────────
+
+    /** True when `area` is a polygon ([[lat, lon], ...]) rather than a box. */
+    function isPolygonArea(area) {
+        return Array.isArray(area) && Array.isArray(area[0]);
+    }
+
+    /** Box [south, west, north, east] enclosing a box or polygon area. */
+    function areaBBox(area) {
+        if (!isPolygonArea(area)) return area;
+        let s = Infinity, w = Infinity, n = -Infinity, e = -Infinity;
+        for (const [lat, lon] of area) {
+            if (lat < s) s = lat;
+            if (lat > n) n = lat;
+            if (lon < w) w = lon;
+            if (lon > e) e = lon;
+        }
+        return [s, w, n, e];
+    }
+
+    function pointInPolygon(p, poly) {
+        const [lat, lon] = p;
+        let inside = false;
+        for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+            const [yi, xi] = poly[i];
+            const [yj, xj] = poly[j];
+            if ((yi > lat) !== (yj > lat) && lon < xi + (lat - yi) * (xj - xi) / (yj - yi)) {
+                inside = !inside;
+            }
+        }
+        return inside;
+    }
 
     function pointInBounds(p, bounds) {
+        if (isPolygonArea(bounds)) return pointInPolygon(p, bounds);
         const [south, west, north, east] = bounds;
         return p[0] >= south && p[0] <= north && p[1] >= west && p[1] <= east;
     }
 
+    /** Nearest point on a polygon's boundary to `p`, and the distance in metres. */
+    function nearestOnPolygonEdge(p, poly) {
+        const mLon = M_PER_DEG_LAT * Math.cos(p[0] * Math.PI / 180);
+        let best = { d: Infinity, pt: poly[0] };
+        for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+            // Local metres relative to p.
+            const ax = (poly[j][1] - p[1]) * mLon, ay = (poly[j][0] - p[0]) * M_PER_DEG_LAT;
+            const bx = (poly[i][1] - p[1]) * mLon, by = (poly[i][0] - p[0]) * M_PER_DEG_LAT;
+            const dx = bx - ax, dy = by - ay;
+            const len2 = dx * dx + dy * dy;
+            const t = len2 > 0 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len2)) : 0;
+            const cx = ax + t * dx, cy = ay + t * dy;
+            const d = Math.hypot(cx, cy);
+            if (d < best.d) best = { d, pt: [p[0] + cy / M_PER_DEG_LAT, p[1] + cx / mLon] };
+        }
+        return best;
+    }
+
     /**
-     * Share of route length more than `toleranceM` outside `bounds`
-     * ([south, west, north, east]). The tolerance absorbs a road running
-     * along the box edge.
+     * Share of route length more than `toleranceM` outside `bounds` (box or
+     * polygon). The tolerance absorbs a road running along the area's edge.
      */
     function fractionOutsideBounds(coords, bounds, toleranceM = 60) {
         if (!coords || coords.length < 2 || !bounds) return 0;
-        const [south, west, north, east] = bounds;
-        const dLat = toleranceM / M_PER_DEG_LAT;
-        const dLon = toleranceM / (M_PER_DEG_LAT * Math.cos(((south + north) / 2) * Math.PI / 180));
-        const padded = [south - dLat, west - dLon, north + dLat, east + dLon];
+        let isOutside;
+        if (isPolygonArea(bounds)) {
+            isOutside = (p) => !pointInPolygon(p, bounds) && nearestOnPolygonEdge(p, bounds).d > toleranceM;
+        } else {
+            const [south, west, north, east] = bounds;
+            const dLat = toleranceM / M_PER_DEG_LAT;
+            const dLon = toleranceM / (M_PER_DEG_LAT * Math.cos(((south + north) / 2) * Math.PI / 180));
+            const padded = [south - dLat, west - dLon, north + dLat, east + dLon];
+            isOutside = (p) => !pointInBounds(p, padded);
+        }
         const pts = densify(coords, 0.05);
         let outside = 0;
         for (let i = 1; i < pts.length; i++) {
-            if (!pointInBounds(pts[i].p, padded)) outside += pts[i].s - pts[i - 1].s;
+            if (isOutside(pts[i].p)) outside += pts[i].s - pts[i - 1].s;
         }
         const total = pts[pts.length - 1].s;
         return total > 0 ? outside / total : 0;
     }
 
-    /** Clamp a point into bounds (used for any padding point). */
+    /** Clamp a point into bounds (used for any padding point). For a
+     *  polygon, an outside point moves to the nearest spot on its edge. */
     function clampToBounds(p, bounds) {
+        if (isPolygonArea(bounds)) {
+            return pointInPolygon(p, bounds) ? p : nearestOnPolygonEdge(p, bounds).pt;
+        }
         const [south, west, north, east] = bounds;
         return [Math.min(Math.max(p[0], south), north), Math.min(Math.max(p[1], west), east)];
+    }
+
+    /** True when any two non-adjacent edges of a polygon cross. */
+    function polygonSelfIntersects(poly) {
+        const n = poly.length;
+        const orient = (a, b, c) => Math.sign((b[1] - a[1]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[1] - a[1]));
+        for (let i = 0; i < n; i++) {
+            const a = poly[i], b = poly[(i + 1) % n];
+            for (let j = i + 1; j < n; j++) {
+                if (j === i || (j + 1) % n === i || j === (i + 1) % n) continue;
+                const c = poly[j], d = poly[(j + 1) % n];
+                if (orient(a, b, c) * orient(a, b, d) < 0 && orient(c, d, a) * orient(c, d, b) < 0) return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Squadrats "yard": the largest 4-connected group of collected tiles in
+     * which every tile has all four N/E/S/W neighbours collected (diagonals
+     * don't matter). `visited` is the coverage grid's `visited` map, keyed
+     * "x,y". Returns a Set of "x,y" keys, empty when no tile qualifies; on a
+     * tie the first group found wins. With viewport-bounded coverage, a yard
+     * running past the loaded area's edge can come out smaller than it is,
+     * because neighbours outside that area look uncollected.
+     */
+    function findYard(visited) {
+        const yard = new Set();
+        if (!visited || typeof visited !== 'object') return yard;
+        const has = (x, y) => Object.prototype.hasOwnProperty.call(visited, x + ',' + y);
+        const interior = new Set();
+        for (const key of Object.keys(visited)) {
+            const [x, y] = key.split(',').map(Number);
+            if (has(x + 1, y) && has(x - 1, y) && has(x, y + 1) && has(x, y - 1)) interior.add(x + ',' + y);
+        }
+        const seen = new Set();
+        let best = [];
+        for (const start of interior) {
+            if (seen.has(start)) continue;
+            seen.add(start);
+            const group = [start];
+            for (let i = 0; i < group.length; i++) {
+                const [x, y] = group[i].split(',').map(Number);
+                for (const k of [(x + 1) + ',' + y, (x - 1) + ',' + y, x + ',' + (y + 1), x + ',' + (y - 1)]) {
+                    if (interior.has(k) && !seen.has(k)) { seen.add(k); group.push(k); }
+                }
+            }
+            if (group.length > best.length) best = group;
+        }
+        for (const k of best) yard.add(k);
+        return yard;
+    }
+
+    /**
+     * Outline of a set of tiles: every tile edge that borders a tile outside
+     * the set, as [[lat, lon], [lat, lon]] segments (fits one multi-segment
+     * L.polyline). Drawing a yard as fill plus this outline keeps grid lines
+     * out of its interior, so it reads as one region.
+     */
+    function tileSetOutline(tileKeys, zoom) {
+        const segs = [];
+        const n = Math.pow(2, zoom);
+        const lon = x => x / n * 360 - 180;
+        const lat = y => Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * 180 / Math.PI;
+        for (const key of tileKeys) {
+            const [x, y] = key.split(',').map(Number);
+            const w = lon(x), e = lon(x + 1), no = lat(y), so = lat(y + 1);
+            if (!tileKeys.has(x + ',' + (y - 1))) segs.push([[no, w], [no, e]]);
+            if (!tileKeys.has(x + ',' + (y + 1))) segs.push([[so, w], [so, e]]);
+            if (!tileKeys.has((x - 1) + ',' + y)) segs.push([[so, w], [no, w]]);
+            if (!tileKeys.has((x + 1) + ',' + y)) segs.push([[so, e], [no, e]]);
+        }
+        return segs;
     }
 
     const api = {
@@ -710,6 +846,8 @@
         densify, tilesTouched, newTilesCrossed, countNewTiles,
         findPickups, clusterSweepTargets, insertSweepTargets, waypointRouteIndices, insertPickups, cheapestInsertion, chooseDropIndex,
         analyzeRetrace, uselessStops, pointInBounds, fractionOutsideBounds, clampToBounds,
+        isPolygonArea, areaBBox, pointInPolygon, polygonSelfIntersects,
+        findYard, tileSetOutline,
     };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else root.ExploreRefine = api;

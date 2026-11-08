@@ -398,8 +398,16 @@ class APIClient {
         // Route computation involves a live ORS call; allow generous timeout.
         const body = { waypoints, surface_preference: surfacePreference };
         if (exclude) body.exclude = exclude;
-        // Rider-drawn area [south, west, north, east] the route must stay inside.
-        if (bounds) body.bounds = bounds;
+        // Rider-drawn area the route must stay inside: a box
+        // [south, west, north, east] or a polygon [[lat, lon], ...]. A
+        // polygon is sent as `polygon` along with its enclosing box.
+        if (bounds && Array.isArray(bounds[0])) {
+            const lats = bounds.map(p => p[0]), lons = bounds.map(p => p[1]);
+            body.polygon = bounds;
+            body.bounds = [Math.min(...lats), Math.min(...lons), Math.max(...lats), Math.max(...lons)];
+        } else if (bounds) {
+            body.bounds = bounds;
+        }
         return this.fetch('/exploration/route', {
             method: 'POST',
             timeoutMs: 60000,
