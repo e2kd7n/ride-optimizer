@@ -394,10 +394,12 @@ class APIClient {
         return this.fetch('/exploration/invalidate', { method: 'POST' });
     }
 
-    async getExplorationRoute({ waypoints, surfacePreference = 'any', exclude } = {}) {
+    async getExplorationRoute({ waypoints, surfacePreference = 'any', exclude, bounds } = {}) {
         // Route computation involves a live ORS call; allow generous timeout.
         const body = { waypoints, surface_preference: surfacePreference };
         if (exclude) body.exclude = exclude;
+        // Rider-drawn area [south, west, north, east] the route must stay inside.
+        if (bounds) body.bounds = bounds;
         return this.fetch('/exploration/route', {
             method: 'POST',
             timeoutMs: 60000,

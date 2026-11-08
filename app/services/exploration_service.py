@@ -57,6 +57,16 @@ MAX_ROUTE_CACHE_ENTRIES = 200
 # free-tier quota for routes that were already computed before the restart.
 ROUTE_CACHE_FILENAME = "route_cache.json"
 
+# Rider-drawn area fence: thin avoid_polygons strips just outside each edge of
+# the drawn box, so ORS can't route out of it. A strip blocks every road that
+# crosses it, so the router has to stay inside. Strips sit a small gap
+# outside the edge so a road running exactly along the boundary stays usable.
+# ORS's public API caps each avoid polygon's area and extent, so long edges
+# are split into segments well under the extent cap.
+FENCE_GAP_M = 40
+FENCE_WIDTH_M = 150
+FENCE_MAX_SEGMENT_M = 15000
+
 
 class ExplorationService:
 
@@ -335,10 +345,12 @@ class ExplorationService:
                 # an older process, so an in-flight restart doesn't just
                 # drop them.
                 avoid_features = tuple(entry.get("avoid_features") or _DEFAULT_AVOID_FEATURES)
+                fence = entry.get("fence")
                 cache_key = (
                     tuple((round(lat, 6), round(lon, 6)) for lat, lon in entry["waypoints"]),
                     entry["profile"],
                     avoid_features,
+                    tuple(fence) if fence else None,
                 )
             except (KeyError, TypeError, ValueError):
                 continue
@@ -363,7 +375,7 @@ class ExplorationService:
             snapshot = list(self._route_cache.items())
 
         entries = []
-        for (waypoints, profile, avoid_features), (result, expires_at) in snapshot:
+        for (waypoints, profile, avoid_features, fence), (result, expires_at) in snapshot:
             remaining = expires_at - now_mono
             if remaining <= 0:
                 continue
@@ -371,6 +383,7 @@ class ExplorationService:
                 "waypoints": [list(pt) for pt in waypoints],
                 "profile": profile,
                 "avoid_features": list(avoid_features),
+                "fence": list(fence) if fence else None,
                 "result": result,
                 "expires_at": now_wall + remaining,
             })
@@ -464,6 +477,7 @@ class ExplorationService:
         waypoints: List[Tuple[float, float]],
         surface_preference: str = "any",
         exclude: Optional[List[str]] = None,
+        bounds: Optional[List[float]] = None,
     ) -> Dict[str, Any]:
         """Compute a road-following route via ORS for the given waypoints.
 
@@ -475,6 +489,11 @@ class ExplorationService:
                 (options.avoid_features: ["highways"]); anything else is
                 accepted but has no effect. ``None``/empty behaves exactly
                 as before #575.
+            bounds: Optional rider-drawn area ``[south, west, north, east]``.
+                When given, the route is fenced inside it with ORS
+                avoid_polygons (see _fence_polygons). If ORS rejects the
+                fenced request, the route is retried unfenced and the result
+                carries ``bounds_enforced: False`` so the UI can say so.
 
         Returns:
             Dict with ``status``, and on success:
@@ -514,10 +533,12 @@ class ExplorationService:
         # resolved avoid_features (#575), so a "no motorways" request never
         # returns a cached route computed without that constraint (or
         # vice versa).
+        fence = tuple(round(float(v), 5) for v in bounds) if bounds else None
         cache_key = (
             tuple((round(lat, 6), round(lon, 6)) for lat, lon in waypoints),
             profile,
             avoid_features,
+            fence,
         )
         cached_result = self._cache_get(cache_key)
         if cached_result is not None:
@@ -550,7 +571,24 @@ class ExplorationService:
             result = self._compute_route_via_ors(
                 waypoints, profile, api_key, ttl, deadline, max_wait, cache_key,
                 avoid_features=avoid_features,
+                fence=fence,
             )
+            if fence and result.get("status") != "success" and not result.get("_rate_limited") \
+                    and time.monotonic() < deadline:
+                # The fenced request failed (e.g. ORS rejected the polygons,
+                # or no route exists inside the box) — retry unfenced rather
+                # than failing outright; the UI flags bounds_enforced=False.
+                logger.info("Fenced ORS route failed (%s); retrying without area fence", result.get("message"))
+                unfenced_key = cache_key[:3] + (None,)
+                result = self._cache_get(unfenced_key) or self._compute_route_via_ors(
+                    waypoints, profile, api_key, ttl, deadline, max_wait, unfenced_key,
+                    avoid_features=avoid_features,
+                )
+                if result.get("status") == "success":
+                    result = {**result, "bounds_enforced": False}
+            elif fence and result.get("status") == "success":
+                result = {**result, "bounds_enforced": True}
+            result = {k: v for k, v in result.items() if k != "_rate_limited"}
             logger.info("ORS route computation took %.2fs (status=%s)", time.monotonic() - call_start, result.get("status"))
             return result
         finally:
@@ -566,10 +604,15 @@ class ExplorationService:
         max_wait: float,
         cache_key: tuple,
         avoid_features: tuple = _DEFAULT_AVOID_FEATURES,
+        fence: Optional[tuple] = None,
     ) -> Dict[str, Any]:
         """Run the actual ORS call(s) for compute_route, holding one of
         self._route_semaphore's slots (acquired by the caller, compute_route())."""
         from src import ors_client
+
+        # Only pass avoid_polygons when fencing, so unfenced calls are
+        # byte-identical to before (and to callers/mocks that predate it).
+        extra_kwargs = {"avoid_polygons": self._fence_polygons(fence)} if fence else {}
 
         timeout = int(self.config.get("exploration.ors_timeout_seconds", 15))
 
@@ -587,7 +630,7 @@ class ExplorationService:
         # blowing past the overall wall-clock budget compute_route() exists
         # to enforce.
         raw = ors_client.get_route(
-            ors_coords, profile, avoid_features=avoid_features, api_key=api_key, timeout=_budget_timeout(),
+            ors_coords, profile, avoid_features=avoid_features, api_key=api_key, timeout=_budget_timeout(), **extra_kwargs,
         )
 
         # Preferred profile not enabled on this account — fall back to cycling-regular.
@@ -600,7 +643,7 @@ class ExplorationService:
             logger.info("Profile %s unavailable, falling back to cycling-regular", profile)
             profile = "cycling-regular"
             raw = ors_client.get_route(
-                ors_coords, profile, avoid_features=avoid_features, api_key=api_key, timeout=_budget_timeout(),
+                ors_coords, profile, avoid_features=avoid_features, api_key=api_key, timeout=_budget_timeout(), **extra_kwargs,
             )
 
         # Unroutable waypoints: drop every interior bad waypoint and retry.
@@ -636,12 +679,13 @@ class ExplorationService:
                 tuple((round(c[1], 6), round(c[0], 6)) for c in ors_coords),
                 profile,
                 avoid_features,
+                fence,
             )
             cached_result = self._cache_get(cache_key)
             if cached_result is not None:
                 return cached_result
             raw = ors_client.get_route(
-                ors_coords, profile, avoid_features=avoid_features, api_key=api_key, timeout=_budget_timeout(),
+                ors_coords, profile, avoid_features=avoid_features, api_key=api_key, timeout=_budget_timeout(), **extra_kwargs,
             )
 
         if _timed_out:
@@ -656,6 +700,10 @@ class ExplorationService:
             return {
                 "status": "error",
                 "message": "Road routing rate limit reached — try again shortly",
+                # Internal marker (stripped by compute_route): don't burn
+                # another ORS call on an unfenced retry when the real
+                # problem is the quota.
+                "_rate_limited": True,
             }
         if raw.get("_ors_unroutable") is not None:
             return {"status": "error", "message": "Road routing failed: no routable path near waypoints"}
@@ -670,6 +718,44 @@ class ExplorationService:
         return result
 
     # ── helpers ──────────────────────────────────────────────────
+
+    @staticmethod
+    def _fence_polygons(bounds: tuple) -> dict:
+        """GeoJSON MultiPolygon of thin strips just outside each edge of
+        ``bounds`` (south, west, north, east) — an avoid_polygons "fence"
+        that keeps ORS from routing out of a rider-drawn area.
+
+        Each edge's strip is split into segments of at most
+        FENCE_MAX_SEGMENT_M so no single polygon trips ORS's per-polygon
+        extent/area limits. The north/south strips extend past the corners
+        so the fence has no gaps there.
+        """
+        south, west, north, east = bounds
+        mid_lat = (south + north) / 2
+        m_per_deg_lat = 111320.0
+        m_per_deg_lon = 111320.0 * max(math.cos(math.radians(mid_lat)), 0.01)
+        gap_lat, gap_lon = FENCE_GAP_M / m_per_deg_lat, FENCE_GAP_M / m_per_deg_lon
+        w_lat, w_lon = FENCE_WIDTH_M / m_per_deg_lat, FENCE_WIDTH_M / m_per_deg_lon
+
+        def split(lo: float, hi: float, m_per_deg: float):
+            n = max(1, math.ceil((hi - lo) * m_per_deg / FENCE_MAX_SEGMENT_M))
+            step = (hi - lo) / n
+            return [(lo + i * step, lo + (i + 1) * step) for i in range(n)]
+
+        def rect(s: float, w: float, n: float, e: float) -> list:
+            # One closed [lon, lat] ring (GeoJSON order).
+            return [[[w, s], [e, s], [e, n], [w, n], [w, s]]]
+
+        outer_w = west - gap_lon - w_lon
+        outer_e = east + gap_lon + w_lon
+        polys = []
+        for lo, hi in split(outer_w, outer_e, m_per_deg_lon):
+            polys.append(rect(north + gap_lat, lo, north + gap_lat + w_lat, hi))   # north strip
+            polys.append(rect(south - gap_lat - w_lat, lo, south - gap_lat, hi))   # south strip
+        for lo, hi in split(south - gap_lat, north + gap_lat, m_per_deg_lat):
+            polys.append(rect(lo, west - gap_lon - w_lon, hi, west - gap_lon))     # west strip
+            polys.append(rect(lo, east + gap_lon, hi, east + gap_lon + w_lon))     # east strip
+        return {"type": "MultiPolygon", "coordinates": polys}
 
     @staticmethod
     def _parse_ors_response(raw: dict) -> Dict[str, Any]:
