@@ -1,0 +1,515 @@
+/**
+ * explore-refine.js — pure geometry helpers for Explore's Phase 2 (road route)
+ * refinement. Loaded as a plain <script> before explore.js (exposes
+ * window.ExploreRefine) and require()-able from node for unit tests
+ * (tests/js/explore-refine.test.js).
+ *
+ * Coordinates are [lat, lon] arrays throughout, matching the ORS route
+ * response (`result.coordinates`) and explore.js's waypoint lists.
+ *
+ * What lives here:
+ *   - tile math + "which unclaimed tiles does this polyline cross"
+ *   - findPickups(): unclaimed tiles just off a routed line that a short
+ *     detour would claim
+ *   - analyzeRetrace(): how much of a routed line rides the same road twice,
+ *     and which waypoint's spur is responsible
+ *   - insertion/drop position choices for Phase 2 waypoint edits
+ *   - fractionOutsideBounds(): did the route leave the rider's drawn box
+ */
+(function (root) {
+    'use strict';
+
+    const EARTH_KM = 6371;
+    const M_PER_DEG_LAT = 111320;
+
+    function haversineKm(a, b) {
+        const dLat = (b[0] - a[0]) * Math.PI / 180;
+        const dLon = (b[1] - a[1]) * Math.PI / 180;
+        const h = Math.sin(dLat / 2) ** 2 +
+            Math.cos(a[0] * Math.PI / 180) * Math.cos(b[0] * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+        return 2 * EARTH_KM * Math.asin(Math.sqrt(h));
+    }
+
+    function pathKm(points) {
+        let total = 0;
+        for (let i = 1; i < points.length; i++) total += haversineKm(points[i - 1], points[i]);
+        return total;
+    }
+
+    // ── Tiles ──────────────────────────────────────────────────────
+
+    function latLonToTile(lat, lon, zoom) {
+        const n = Math.pow(2, zoom);
+        const x = Math.floor((lon + 180) / 360 * n);
+        const latRad = lat * Math.PI / 180;
+        const y = Math.floor((1 - Math.asinh(Math.tan(latRad)) / Math.PI) / 2 * n);
+        return { x, y };
+    }
+
+    /** [south, west, north, east] of tile (x, y). */
+    function tileBounds(x, y, zoom) {
+        const n = Math.pow(2, zoom);
+        const lonW = x / n * 360 - 180;
+        const lonE = (x + 1) / n * 360 - 180;
+        const latN = Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * 180 / Math.PI;
+        const latS = Math.atan(Math.sinh(Math.PI * (1 - 2 * (y + 1) / n))) * 180 / Math.PI;
+        return [latS, lonW, latN, lonE];
+    }
+
+    function tileSideKm(zoom, lat) {
+        return 40075.016686 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
+    }
+
+    /** Same row-run water lookup as exploration-worker.js (#604). */
+    function buildRoadlessLookup(runs) {
+        if (!runs || runs.length === 0) return () => false;
+        const byRow = new Map();
+        for (const [y, x0, x1] of runs) {
+            let row = byRow.get(y);
+            if (!row) { row = []; byRow.set(y, row); }
+            row.push(x0, x1);
+        }
+        return (x, y) => {
+            const row = byRow.get(y);
+            if (!row) return false;
+            for (let i = 0; i < row.length; i += 2) {
+                if (x >= row[i] && x <= row[i + 1]) return true;
+            }
+            return false;
+        };
+    }
+
+    /**
+     * Build a grid descriptor from explore.js's coverageData
+     * ({zoom, visited: {"x,y": ...}, roadless_runs?}).
+     */
+    function makeGrid(coverage) {
+        return {
+            zoom: coverage.zoom || 14,
+            visited: new Set(Object.keys(coverage.visited || {})),
+            isRoadless: buildRoadlessLookup(coverage.roadless_runs),
+        };
+    }
+
+    /**
+     * Densify a polyline so consecutive points are at most `stepKm` apart.
+     * Returns [{p: [lat, lon], s: cumulativeKm}].
+     */
+    function densify(coords, stepKm) {
+        const out = [];
+        if (!coords || coords.length === 0) return out;
+        let s = 0;
+        out.push({ p: coords[0], s: 0 });
+        for (let i = 1; i < coords.length; i++) {
+            const a = coords[i - 1], b = coords[i];
+            const d = haversineKm(a, b);
+            const n = Math.max(1, Math.ceil(d / stepKm));
+            for (let k = 1; k <= n; k++) {
+                const t = k / n;
+                out.push({ p: [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], s: s + d * t });
+            }
+            s += d;
+        }
+        return out;
+    }
+
+    /** Set of "x,y" keys of every tile (visited or not) the polyline enters. */
+    function tilesTouched(coords, zoom) {
+        const keys = new Set();
+        if (!coords || coords.length === 0) return keys;
+        const step = tileSideKm(zoom, coords[0][0]) / 6;
+        for (const { p } of densify(coords, step)) {
+            const { x, y } = latLonToTile(p[0], p[1], zoom);
+            keys.add(`${x},${y}`);
+        }
+        return keys;
+    }
+
+    /** Unclaimed (not visited, not water) tiles the polyline enters, per grid. */
+    function newTilesCrossed(coords, grid) {
+        const out = new Set();
+        for (const k of tilesTouched(coords, grid.zoom)) {
+            if (grid.visited.has(k)) continue;
+            const [x, y] = k.split(',').map(Number);
+            if (grid.isRoadless(x, y)) continue;
+            out.add(k);
+        }
+        return out;
+    }
+
+    function countNewTiles(coords, grids) {
+        return grids.reduce((sum, g) => sum + newTilesCrossed(coords, g).size, 0);
+    }
+
+    // ── Local metric projection + spatial hash ─────────────────────
+
+    function projector(lat0) {
+        const mPerDegLon = M_PER_DEG_LAT * Math.cos(lat0 * Math.PI / 180);
+        return (p) => [p[1] * mPerDegLon, p[0] * M_PER_DEG_LAT];
+    }
+
+    function buildHash(points, cellM) {
+        const hash = new Map();
+        points.forEach((pt, i) => {
+            const k = `${Math.floor(pt.xy[0] / cellM)},${Math.floor(pt.xy[1] / cellM)}`;
+            let bucket = hash.get(k);
+            if (!bucket) { bucket = []; hash.set(k, bucket); }
+            bucket.push(i);
+        });
+        return hash;
+    }
+
+    function* neighbours(hash, xy, cellM, radiusCells) {
+        const cx = Math.floor(xy[0] / cellM), cy = Math.floor(xy[1] / cellM);
+        for (let dx = -radiusCells; dx <= radiusCells; dx++) {
+            for (let dy = -radiusCells; dy <= radiusCells; dy++) {
+                const bucket = hash.get(`${cx + dx},${cy + dy}`);
+                if (bucket) yield* bucket;
+            }
+        }
+    }
+
+    // ── Pickups: unclaimed tiles just off the routed line ──────────
+
+    /**
+     * Find unclaimed tiles the route passes close to but doesn't enter.
+     *
+     * For each grid, every unclaimed, non-water tile whose nearest edge is
+     * within `maxReachM` of the routed line (and that the line doesn't
+     * already cross) becomes a candidate. Its waypoint sits inside the tile
+     * (the tile centre, or `insetM` in from the edge facing the route for
+     * big tiles) so the router has to actually enter it. Each candidate
+     * carries an estimated detour (out and back from the line, scaled for
+     * roads) and a value (1 tile, plus a little for unclaimed neighbours a
+     * detour into this block tends to clip as well).
+     *
+     * Returns candidates sorted best-first by value per detour km, already
+     * filtered by `minTilesPerKmFraction` of the fresh-ground rate and to
+     * `bounds` when given. Nearby duplicates (within one tile of a better
+     * pick on the same grid) are dropped so a row of adjacent tiles along
+     * the route doesn't become a row of separate detours.
+     */
+    function findPickups(coords, grids, opts = {}) {
+        const {
+            maxReachM = 350,
+            insetM = 150,
+            roadFactor = 1.4,
+            // Same fraction of the fresh-ground rate as Phase 1's tour floor
+            // (MIN_YIELD_FRACTION in exploration-worker.js): at z17 a tile
+            // one block off the route (~0.75 km detour) clears it.
+            minTilesPerKmFraction = 0.2,
+            bounds = null,
+        } = opts;
+        if (!coords || coords.length < 2 || !grids || grids.length === 0) return [];
+
+        const lat0 = coords[0][0];
+        const proj = projector(lat0);
+        const line = densify(coords, 0.02).map(d => ({ p: d.p, xy: proj(d.p) }));
+        const cellM = 100;
+        const hash = buildHash(line, cellM);
+        const reachCells = Math.ceil(maxReachM / cellM) + 1;
+
+        const distToLine = (xy) => {
+            let best = Infinity, bestIdx = -1;
+            for (const i of neighbours(hash, xy, cellM, reachCells)) {
+                const d = Math.hypot(line[i].xy[0] - xy[0], line[i].xy[1] - xy[1]);
+                if (d < best) { best = d; bestIdx = i; }
+            }
+            return { d: best, idx: bestIdx };
+        };
+
+        const out = [];
+        for (const grid of grids) {
+            const crossed = tilesTouched(coords, grid.zoom);
+            const sideKm = tileSideKm(grid.zoom, lat0);
+            const floor = minTilesPerKmFraction / sideKm;
+            // Candidate tiles: every tile within reach of a line sample.
+            const reachTiles = Math.ceil((maxReachM / 1000) / sideKm) + 1;
+            const seen = new Set();
+            const sampleEvery = Math.max(1, Math.floor((sideKm * 1000 / 2) / 20));
+            for (let li = 0; li < line.length; li += sampleEvery) {
+                const { x: tx, y: ty } = latLonToTile(line[li].p[0], line[li].p[1], grid.zoom);
+                for (let dx = -reachTiles; dx <= reachTiles; dx++) {
+                    for (let dy = -reachTiles; dy <= reachTiles; dy++) {
+                        const x = tx + dx, y = ty + dy, key = `${x},${y}`;
+                        if (seen.has(key)) continue;
+                        seen.add(key);
+                        if (crossed.has(key) || grid.visited.has(key) || grid.isRoadless(x, y)) continue;
+                        const tb = tileBounds(x, y, grid.zoom);
+                        // Nearest point of the tile to the line ≈ check the
+                        // tile's edge midpoints, corners and centre.
+                        const probes = [
+                            [(tb[0] + tb[2]) / 2, (tb[1] + tb[3]) / 2],
+                            [tb[0], tb[1]], [tb[0], tb[3]], [tb[2], tb[1]], [tb[2], tb[3]],
+                            [tb[0], (tb[1] + tb[3]) / 2], [tb[2], (tb[1] + tb[3]) / 2],
+                            [(tb[0] + tb[2]) / 2, tb[1]], [(tb[0] + tb[2]) / 2, tb[3]],
+                        ];
+                        let nearest = { d: Infinity, idx: -1, probe: null };
+                        for (const pr of probes) {
+                            const r = distToLine(proj(pr));
+                            if (r.d < nearest.d) nearest = { ...r, probe: pr };
+                        }
+                        if (nearest.d > maxReachM) continue;
+
+                        // Waypoint: tile centre for small tiles; for big ones,
+                        // insetM in from the nearest edge toward the centre.
+                        const centre = probes[0];
+                        let wp = centre;
+                        const halfM = sideKm * 500;
+                        if (halfM > insetM && nearest.probe !== centre) {
+                            const t = insetM / halfM;
+                            wp = [
+                                nearest.probe[0] + (centre[0] - nearest.probe[0]) * t,
+                                nearest.probe[1] + (centre[1] - nearest.probe[1]) * t,
+                            ];
+                        }
+                        if (bounds && !pointInBounds(wp, bounds)) continue;
+
+                        const wpDist = distToLine(proj(wp));
+                        const detourKm = (2 * Math.min(wpDist.d, maxReachM * 2) / 1000) * roadFactor + 0.05;
+                        let bonus = 0;
+                        for (const [ax, ay] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+                            const nk = `${x + ax},${y + ay}`;
+                            if (!crossed.has(nk) && !grid.visited.has(nk) && !grid.isRoadless(x + ax, y + ay)) bonus += 0.5;
+                        }
+                        const value = 1 + Math.min(bonus, 1);
+                        const rate = value / detourKm;
+                        if (rate < floor) continue;
+                        out.push({
+                            lat: wp[0], lon: wp[1], zoom: grid.zoom, x, y,
+                            value, detourKm, rate,
+                        });
+                    }
+                }
+            }
+        }
+
+        out.sort((a, b) => b.rate - a.rate);
+        const kept = [];
+        for (const c of out) {
+            const dup = kept.some(k => k.zoom === c.zoom && Math.abs(k.x - c.x) <= 1 && Math.abs(k.y - c.y) <= 1);
+            if (!dup) kept.push(c);
+        }
+        return kept;
+    }
+
+    // ── Waypoint ↔ route alignment ─────────────────────────────────
+
+    /**
+     * For each waypoint (in order), the index of the route coordinate it was
+     * routed through — monotonic, first waypoint → 0, last → final index.
+     * Used to place inserted waypoints on the correct leg.
+     */
+    function waypointRouteIndices(coords, waypoints) {
+        const idx = [];
+        let from = 0;
+        for (let w = 0; w < waypoints.length; w++) {
+            if (w === 0) { idx.push(0); continue; }
+            if (w === waypoints.length - 1) { idx.push(coords.length - 1); continue; }
+            let best = from, bestD = Infinity;
+            for (let i = from; i < coords.length; i++) {
+                const d = haversineKm(coords[i], waypoints[w]);
+                if (d < bestD) { bestD = d; best = i; }
+            }
+            idx.push(best);
+            from = best;
+        }
+        return idx;
+    }
+
+    /**
+     * Insert pickups into a waypoint list at the leg the route actually
+     * passes them on (by nearest route coordinate), preserving order along
+     * the route. Returns {waypoints, meta} with meta entries for inserted
+     * points marked {tiles: value, pickup: true}.
+     */
+    function insertPickups(coords, waypoints, meta, pickups) {
+        const wpIdx = waypointRouteIndices(coords, waypoints);
+        // Leg k runs from waypoint k to k+1; a pickup belongs to the last
+        // waypoint whose route index is <= the pickup's line index.
+        const proj = projector(coords[0][0]);
+        const legOf = (p) => {
+            let nearest = 0, bestD = Infinity;
+            for (let i = 0; i < coords.length; i++) {
+                const a = proj(coords[i]), b = proj([p.lat, p.lon]);
+                const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+                if (d < bestD) { bestD = d; nearest = i; }
+            }
+            let leg = 0;
+            for (let w = 0; w < wpIdx.length - 1; w++) if (wpIdx[w] <= nearest) leg = w;
+            return { leg, at: nearest };
+        };
+        const placed = pickups.map(p => ({ p, ...legOf(p) }));
+        placed.sort((a, b) => a.leg - b.leg || a.at - b.at);
+
+        const outW = [waypoints[0]];
+        const outM = [];
+        let pi = 0;
+        for (let w = 0; w < waypoints.length - 1; w++) {
+            if (w > 0) { outW.push(waypoints[w]); outM.push(meta[w - 1]); }
+            while (pi < placed.length && placed[pi].leg === w) {
+                outW.push([placed[pi].p.lat, placed[pi].p.lon]);
+                outM.push({ tiles: placed[pi].p.value, pickup: true });
+                pi++;
+            }
+        }
+        outW.push(waypoints[waypoints.length - 1]);
+        return { waypoints: outW, meta: outM };
+    }
+
+    /**
+     * Cheapest position (straight-line) to insert `pt` ([lat, lon]) into a
+     * waypoint list whose first/last entries are fixed endpoints. Returns
+     * {index, addedKm} where `index` is the splice position (1..length-1).
+     */
+    function cheapestInsertion(waypoints, pt) {
+        let best = { index: 1, addedKm: Infinity };
+        for (let i = 1; i < waypoints.length; i++) {
+            const a = waypoints[i - 1], b = waypoints[i];
+            const added = haversineKm(a, pt) + haversineKm(pt, b) - haversineKm(a, b);
+            if (added < best.addedKm) best = { index: i, addedKm: added };
+        }
+        return best;
+    }
+
+    /**
+     * Which inner waypoint to drop when a route is over its distance cap:
+     * pure padding first, otherwise the one with the fewest tiles per km of
+     * (straight-line) distance its removal saves. `meta[i]` describes
+     * waypoints[i + 1]: {tiles?: number, padding?: boolean}.
+     * Returns an index into `waypoints` (1..length-2), or -1 if none.
+     */
+    function chooseDropIndex(waypoints, meta) {
+        if (waypoints.length <= 2) return -1;
+        const pad = meta.findIndex(m => m && m.padding);
+        if (pad !== -1) return pad + 1;
+        let best = -1, bestRate = Infinity;
+        for (let i = 1; i < waypoints.length - 1; i++) {
+            const saved = haversineKm(waypoints[i - 1], waypoints[i]) + haversineKm(waypoints[i], waypoints[i + 1]) -
+                haversineKm(waypoints[i - 1], waypoints[i + 1]);
+            const tiles = (meta[i - 1] && typeof meta[i - 1].tiles === 'number') ? meta[i - 1].tiles : 1;
+            const rate = tiles / Math.max(saved, 0.01);
+            if (rate < bestRate) { bestRate = rate; best = i; }
+        }
+        return best;
+    }
+
+    // ── Retrace analysis ───────────────────────────────────────────
+
+    /**
+     * How much of a routed line rides the same road twice.
+     *
+     * The line is resampled every `stepM`; a sample counts as retraced when
+     * another sample at least `minGapM` further along the route lies within
+     * `nearM` of it (i.e. the route comes back over the same spot, not just
+     * consecutive points). `fraction` is the share of route length on
+     * retraced road — a pure out-and-back is ~1.0, a clean loop ~0.
+     *
+     * When `waypoints` are given, each retraced pair (i, j) is attributed to
+     * the inner waypoint routed through between them that sits closest to
+     * their midpoint — the tip of the spur — so the caller can try dropping
+     * the waypoint responsible. `worstWaypoint` is that waypoint's index in
+     * `waypoints` (or -1).
+     */
+    function analyzeRetrace(coords, waypoints = null, opts = {}) {
+        const { stepM = 20, nearM = 25, minGapM = 300 } = opts;
+        const result = { totalKm: 0, retracedKm: 0, fraction: 0, worstWaypoint: -1, byWaypoint: [] };
+        if (!coords || coords.length < 2) return result;
+
+        const proj = projector(coords[0][0]);
+        const pts = densify(coords, stepM / 1000).map(d => ({ ...d, xy: proj(d.p) }));
+        const total = pts[pts.length - 1].s;
+        result.totalKm = total;
+        const hash = buildHash(pts, nearM);
+        const minGapKm = minGapM / 1000;
+
+        const partner = new Array(pts.length).fill(-1);
+        for (let i = 0; i < pts.length; i++) {
+            let bestJ = -1, bestD = Infinity;
+            for (const j of neighbours(hash, pts[i].xy, nearM, 1)) {
+                if (Math.abs(pts[j].s - pts[i].s) < minGapKm) continue;
+                const d = Math.hypot(pts[j].xy[0] - pts[i].xy[0], pts[j].xy[1] - pts[i].xy[1]);
+                if (d <= nearM && d < bestD) { bestD = d; bestJ = j; }
+            }
+            partner[i] = bestJ;
+        }
+
+        let retraced = 0;
+        for (let i = 1; i < pts.length; i++) {
+            if (partner[i] !== -1) retraced += pts[i].s - pts[i - 1].s;
+        }
+        result.retracedKm = retraced;
+        result.fraction = total > 0 ? retraced / total : 0;
+
+        if (waypoints && waypoints.length > 2) {
+            // Route-distance position of each waypoint.
+            const wpIdx = waypointRouteIndices(coords, waypoints);
+            const cum = [0];
+            for (let i = 1; i < coords.length; i++) cum.push(cum[i - 1] + haversineKm(coords[i - 1], coords[i]));
+            const wpS = wpIdx.map(i => cum[i]);
+            const by = new Array(waypoints.length).fill(0);
+            for (let i = 1; i < pts.length; i++) {
+                const j = partner[i];
+                if (j === -1) continue;
+                const lo = Math.min(pts[i].s, pts[j].s), hi = Math.max(pts[i].s, pts[j].s);
+                const mid = (lo + hi) / 2;
+                let bestW = -1, bestD = Infinity;
+                for (let w = 1; w < waypoints.length - 1; w++) {
+                    if (wpS[w] <= lo || wpS[w] >= hi) continue;
+                    const d = Math.abs(wpS[w] - mid);
+                    if (d < bestD) { bestD = d; bestW = w; }
+                }
+                if (bestW !== -1) by[bestW] += pts[i].s - pts[i - 1].s;
+            }
+            result.byWaypoint = by;
+            let worst = -1, worstKm = 0;
+            for (let w = 1; w < by.length - 1; w++) {
+                if (by[w] > worstKm) { worstKm = by[w]; worst = w; }
+            }
+            result.worstWaypoint = worst;
+        }
+        return result;
+    }
+
+    // ── Bounds ─────────────────────────────────────────────────────
+
+    function pointInBounds(p, bounds) {
+        const [south, west, north, east] = bounds;
+        return p[0] >= south && p[0] <= north && p[1] >= west && p[1] <= east;
+    }
+
+    /**
+     * Share of route length more than `toleranceM` outside `bounds`
+     * ([south, west, north, east]). The tolerance absorbs a road running
+     * along the box edge.
+     */
+    function fractionOutsideBounds(coords, bounds, toleranceM = 60) {
+        if (!coords || coords.length < 2 || !bounds) return 0;
+        const [south, west, north, east] = bounds;
+        const dLat = toleranceM / M_PER_DEG_LAT;
+        const dLon = toleranceM / (M_PER_DEG_LAT * Math.cos(((south + north) / 2) * Math.PI / 180));
+        const padded = [south - dLat, west - dLon, north + dLat, east + dLon];
+        const pts = densify(coords, 0.05);
+        let outside = 0;
+        for (let i = 1; i < pts.length; i++) {
+            if (!pointInBounds(pts[i].p, padded)) outside += pts[i].s - pts[i - 1].s;
+        }
+        const total = pts[pts.length - 1].s;
+        return total > 0 ? outside / total : 0;
+    }
+
+    /** Clamp a point into bounds (used for any padding point). */
+    function clampToBounds(p, bounds) {
+        const [south, west, north, east] = bounds;
+        return [Math.min(Math.max(p[0], south), north), Math.min(Math.max(p[1], west), east)];
+    }
+
+    const api = {
+        haversineKm, pathKm, latLonToTile, tileBounds, tileSideKm, buildRoadlessLookup, makeGrid,
+        densify, tilesTouched, newTilesCrossed, countNewTiles,
+        findPickups, waypointRouteIndices, insertPickups, cheapestInsertion, chooseDropIndex,
+        analyzeRetrace, pointInBounds, fractionOutsideBounds, clampToBounds,
+    };
+    if (typeof module !== 'undefined' && module.exports) module.exports = api;
+    else root.ExploreRefine = api;
+})(typeof self !== 'undefined' ? self : this);

@@ -150,10 +150,14 @@ function optimize({ start, end, distanceKm, mode, routeType, shape, coverageData
         };
     }
 
-    // Per grid, candidate zone pool per quadrant. When merging two grids,
-    // cap each grid's contribution so the combined pool the insertion
-    // construction searches over stays a reasonable size.
-    const perGridCap = secondary ? 8 : 12;
+    // Per grid, candidate zone pool per quadrant. This used to be 8–12,
+    // which in densely-ridden areas meant the insertion tour only ever saw a
+    // dozen pockets (in 'infill' mode, the dozen most *enclosed* ones) and
+    // rode straight past unclaimed tiles a block off its path that were
+    // never candidates at all. The insertion scoring already weighs each
+    // pocket's tiles against the detour it costs, so give it the whole
+    // neighbourhood and let it pick; the cap only bounds worker CPU.
+    const perGridCap = secondary ? MAX_POOL_PER_GRID_BOTH : MAX_POOL_PER_GRID;
     // Seeds each quadrant's running claimed-tiles set (#451) with the real
     // ride history, keyed by zoom since tile coordinate spaces differ per grid.
     const visitedSetsByZoom = new Map(grids.map(g => [g.zoom, g.visitedSet]));
@@ -227,7 +231,9 @@ function optimize({ start, end, distanceKm, mode, routeType, shape, coverageData
                 windLabel = `↰ headwind out, tailwind back · ${Math.round(windSpeedKph)} km/h`;
             }
         }
-        const ordered = selected.map(z => z.point);
+        // `tiles` rides along so Phase 2 (explore.js) knows what each
+        // waypoint is worth when it has to drop one to fit the distance cap.
+        const ordered = selected.map(z => ({ ...z.point, tiles: z.tiles.length }));
 
         const byZoom = new Map();
         for (const z of selected) {
@@ -253,7 +259,7 @@ function optimize({ start, end, distanceKm, mode, routeType, shape, coverageData
         // with a straight-line displacement that may not follow any road.
         const leftoverCandidates = pool
             .filter(z => !selected.includes(z))
-            .map(z => ({ lat: z.point.lat, lon: z.point.lon }));
+            .map(z => ({ lat: z.point.lat, lon: z.point.lon, tiles: z.tiles.length }));
 
         totalRoutes++;
         self.postMessage({
@@ -269,7 +275,10 @@ function optimize({ start, end, distanceKm, mode, routeType, shape, coverageData
                     zones: selected.length,
                     unvisited: breakdown.reduce((sum, b) => sum + b.count, 0),
                     breakdown: secondary ? breakdown : null,
-                    distanceKm: routeDistance(start, ordered, end),
+                    // Straight-line tour length scaled to a road-distance
+                    // estimate, so the preview badge doesn't promise a ride
+                    // shorter than the plotted road route will be.
+                    distanceKm: routeDistance(start, ordered, end) * ROAD_DETOUR_FACTOR,
                 },
             },
             candidates: leftoverCandidates,
@@ -631,13 +640,44 @@ function floodFillZones(tiles) {
 
 // ── Reward-weighted cheapest-insertion tour construction (#450) ─
 
+// Candidate pool size per grid per quadrant (see optimize()). The tour
+// builder's cost is roughly pool × tour-length per insertion, with cheap
+// early-outs, so a few hundred stays well under a second per quadrant.
+const MAX_POOL_PER_GRID = 160;
+const MAX_POOL_PER_GRID_BOTH = 110;
+// Most stops one tour may have. ORS (and /api/exploration/route) take at
+// most 50 waypoints; this leaves room for start/end plus Phase 2's
+// near-route pickups (explore.js).
+const MAX_TOUR_STOPS = 30;
+
+// Roads are longer than straight lines. The tour is planned in straight-line
+// km, so the distance budget is scaled down by this factor to land the real
+// road route near (not 30% over) the rider's target.
+const ROAD_DETOUR_FACTOR = 1.3;
+
 // How far over the target distance the constructed tour may run before a
 // candidate insertion is rejected for blowing the budget.
 const INSERTION_DISTANCE_TOLERANCE = 1.15;
+
 // A candidate must add at least this many new tiles per km of extra travel
-// to be worth inserting at all — below this, further zones stop being added
-// even if the distance budget has room left.
-const MIN_TILES_PER_KM = 0.15;
+// to be worth inserting at all — as a fraction of the "fresh ground" rate
+// (riding straight through unexplored tiles claims ~1 tile per tile-width).
+// Scaling by tile size matters: the old fixed 0.15 tiles/km floor meant
+// accepting ~7 km of detour for a single squadratinho, which is how routes
+// ended up spending most of their distance on already-claimed roads. The
+// target distance is a ceiling, not a quota: once nothing clears this bar
+// the tour stops, even if budget remains.
+const MIN_YIELD_FRACTION = 0.2;
+
+/** Side length (km) of one tile at `zoom` and latitude `lat`. */
+function tileSideKm(zoom, lat) {
+    return 40075.016686 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
+}
+
+/** Minimum new tiles per km of insertion cost for a candidate at `zoom`. */
+function minTilesPerKm(zoom, lat) {
+    return MIN_YIELD_FRACTION / tileSideKm(zoom, lat);
+}
 
 /**
  * Build a tour by greedy cheapest insertion instead of distance-minimizing
@@ -646,11 +686,14 @@ const MIN_TILES_PER_KM = 0.15;
  * along one ray from `start`, the distance-optimal tour is "farthest zone,
  * straight back," which retraces already-claimed tiles on the return leg.
  *
- * Seeds the tour with the single farthest candidate, then repeatedly inserts
- * whichever remaining candidate scores highest — tiles gained per km of
- * extra travel the insertion costs — at whichever position in the tour is
- * cheapest, stopping once no candidate clears the minimum tiles/km floor or
- * the next insertion would exceed the distance budget.
+ * Starts from an empty tour and repeatedly inserts whichever remaining
+ * candidate scores highest — tiles gained per km of extra travel the
+ * insertion costs — at whichever position in the tour is cheapest. It used
+ * to seed the tour with the single *farthest* candidate, which locked in a
+ * long transit leg (and usually an out-and-back spur) before any value
+ * comparison happened. Candidates whose insertion would blow the budget or
+ * fall under the per-zoom yield floor are skipped (not a reason to stop
+ * considering smaller, cheaper ones); the tour ends when nothing qualifies.
  *
  * `visitedSetsByZoom` (Map<zoom, Set<tileKey>>) seeds a running "claimed
  * tiles" set per zoom (#451): after each insertion, the tiles along that
@@ -662,7 +705,7 @@ const MIN_TILES_PER_KM = 0.15;
 function constructInsertionTour(start, end, candidates, distanceKm, optimizeFor, visitedSetsByZoom) {
     if (candidates.length === 0) return [];
 
-    const budgetKm = distanceKm * INSERTION_DISTANCE_TOLERANCE;
+    const budgetKm = distanceKm * INSERTION_DISTANCE_TOLERANCE / ROAD_DETOUR_FACTOR;
     const closePoint = end || start;
 
     const claimedByZoom = new Map();
@@ -681,56 +724,64 @@ function constructInsertionTour(start, end, candidates, distanceKm, optimizeFor,
     const legOverlap = (fromPoint, toPoint, zoom) =>
         countKeysInSet(sampleCorridorTileKeys(fromPoint.lat, fromPoint.lon, toPoint.lat, toPoint.lon, zoom), claimedSetFor(zoom));
 
-    const remaining = [...candidates];
-    let seedIdx = 0;
-    for (let i = 1; i < remaining.length; i++) {
-        if (remaining[i].distanceFromStart > remaining[seedIdx].distanceFromStart) seedIdx = i;
-    }
-    const seed = remaining.splice(seedIdx, 1)[0];
-    let tour = [seed];
-    claimLeg(start, seed.point, seed.zoom);
-    claimLeg(seed.point, closePoint, seed.zoom);
-
     // 'efficiency' weighs candidates strictly by tiles gained per km of
     // insertion cost. 'tiles' (default) still needs cost to compare
     // candidates and enforce the budget, but favors raw new-tile count more
     // strongly by discounting cost's influence on the score.
     const costExponent = optimizeFor === 'efficiency' ? 1 : 0.4;
+    const floorByZoom = new Map();
+    const floorFor = (zoom) => {
+        if (!floorByZoom.has(zoom)) floorByZoom.set(zoom, minTilesPerKm(zoom, start.lat));
+        return floorByZoom.get(zoom);
+    };
 
-    while (remaining.length > 0) {
+    const remaining = [...candidates];
+    let tour = [];
+    let tourKm = haversineKm(start.lat, start.lon, closePoint.lat, closePoint.lon);
+
+    while (remaining.length > 0 && tour.length < MAX_TOUR_STOPS) {
         let best = null;
         for (let i = 0; i < remaining.length; i++) {
             const cand = remaining[i];
+            const rawTiles = cand.tiles.length;
+            const floor = floorFor(cand.zoom);
             for (let pos = 0; pos <= tour.length; pos++) {
                 const prev = pos === 0 ? start : tour[pos - 1].point;
                 const next = pos === tour.length ? closePoint : tour[pos].point;
                 const insertCost = haversineKm(prev.lat, prev.lon, cand.point.lat, cand.point.lon) +
                     haversineKm(cand.point.lat, cand.point.lon, next.lat, next.lon) -
                     haversineKm(prev.lat, prev.lon, next.lat, next.lon);
+                const cost = Math.max(insertCost, 0.01);
+
+                // Cheap early-outs before the (much costlier) corridor
+                // overlap sampling: over budget, or can't clear the floor /
+                // beat the current best even with zero overlap.
+                if (tourKm + insertCost > budgetKm) continue;
+                if (rawTiles / cost < floor) continue;
+                const costTerm = Math.pow(cost, costExponent);
+                if (best && rawTiles / costTerm <= best.score) continue;
 
                 const overlap = legOverlap(prev, cand.point, cand.zoom) + legOverlap(cand.point, next, cand.zoom);
-                const effectiveTiles = Math.max(cand.tiles.length - OVERLAP_PENALTY_WEIGHT * overlap, 0.1);
+                // Overlap only ranks candidates; the yield floor above uses
+                // raw tiles, since insertCost already charges for distance
+                // and in a densely-ridden area every approach crosses
+                // claimed tiles — penalising both would reject everything.
+                const effectiveTiles = Math.max(rawTiles - OVERLAP_PENALTY_WEIGHT * overlap, 0.1);
 
-                const tilesPerKm = effectiveTiles / Math.max(insertCost, 0.01);
-                if (tilesPerKm < MIN_TILES_PER_KM) continue;
-
-                const score = effectiveTiles / Math.pow(Math.max(insertCost, 0.01), costExponent);
+                const score = effectiveTiles / costTerm;
                 if (!best || score > best.score) {
-                    best = { i, pos, score, prev, next };
+                    best = { i, pos, score, prev, next, insertCost };
                 }
             }
         }
         if (!best) break;
 
-        const trial = [...tour];
-        trial.splice(best.pos, 0, remaining[best.i]);
-        if (routeDistance(start, trial.map(z => z.point), end) > budgetKm) break;
-
         const chosen = remaining[best.i];
         claimLeg(best.prev, chosen.point, chosen.zoom);
         claimLeg(chosen.point, best.next, chosen.zoom);
 
-        tour = trial;
+        tour.splice(best.pos, 0, chosen);
+        tourKm += best.insertCost;
         remaining.splice(best.i, 1);
     }
 

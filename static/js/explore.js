@@ -622,7 +622,9 @@ function initWorker() {
         document.getElementById('generate-route-btn').disabled = true;
         return;
     }
-    explorationWorker = new Worker('/js/exploration-worker.js');
+    // Versioned so a deploy that changes the worker isn't masked by a
+    // browser-cached copy of the old one.
+    explorationWorker = new Worker('/js/exploration-worker.js?v=2');
 }
 
 // ── Coverage loading ────────────────────────────────────────────
@@ -2068,124 +2070,211 @@ function displace(lat, lon, distKm, bearingDeg) {
     return [lat2 * 180 / Math.PI, lon2 * 180 / Math.PI];
 }
 
-/**
- * Run one refinement loop targeting `targetKm`.
- * Returns the best result object, or null on failure.
- *
- * Strategy when too short: insert a displacement point pushed out along the
- * route's main bearing so the road router must travel farther out-and-back.
- * Strategy when too long: drop a padding waypoint first if one exists,
- * falling back to the furthest tile-claiming waypoint only when no padding
- * is left to sacrifice (#493 Phase B) — a purely distance-driven drop can
- * otherwise discard the exact corner waypoint a route claimed a tile
- * through while unrelated padding sits untouched.
- */
-async function refineRoute(baseWaypoints, targetKm, surfacePref, candidateList, dirBearing, roadFilters = {}, skipExpansion = false) {
-    const TOLERANCE = 0.15;
-    const MAX_ITERATIONS = 6;
-    let waypoints = baseWaypoints.map(w => [...w]); // deep copy
-    // Parallel to waypoints.slice(1, -1) (the inner/droppable waypoints):
-    // true = tile-claiming corner from bestCornerPoint/candidates, false =
-    // padding inserted purely to hit the distance target.
-    let loadBearing = waypoints.slice(1, -1).map(() => true);
-    let result = null;
-    let candidates = candidateList.slice();
+// Phase 2 tuning. Every ORS call counts against /api/exploration/route's
+// rate limit (20/min) and the ORS daily quota, and plotRoadRoute runs two
+// variants in parallel, so each stage gets a small fixed number of calls.
+const REFINE_TOLERANCE = 0.15;      // ±15% counts as "on target" in match mode
+const CAP_SLACK = 0.05;             // cap mode: allow 5% over the cap before trimming
+const MAX_TRIM_CALLS = 3;           // cap mode: re-routes spent dropping waypoints
+const MAX_MATCH_CALLS = 6;          // match mode: re-routes spent chasing the target
+const MAX_PICKUPS = 20;             // near-route tiles added in one pass
+const MAX_ROUTE_WAYPOINTS = 48;     // ORS/backend cap is 50
+const RETRACE_MAX_FRACTION = 0.15;  // above this share of retraced road, try to fix
+const MAX_RETRACE_FIXES = 1;
 
-    // The specific reason the last attempt failed, so callers can tell "ORS
-    // isn't configured" apart from "rate limited" or "no routable path" —
-    // swallowing this into a bare null previously made every failure show
-    // as the same generic "Road routing unavailable" message even when ORS
-    // was configured and working, just hitting an unrelated error.
-    let failureMessage = null;
+/**
+ * Road-route a Phase-1 waypoint list and improve it. Returns
+ * {route, message, stats} — route is the ORS result (or null on failure,
+ * with message saying why).
+ *
+ * `opts.mode` decides what the distance target means:
+ *   - 'cap'    (round trips): targetKm is a ceiling. The route is trimmed
+ *              (lowest-value waypoint first) until it fits, but never padded
+ *              — padding used to fill the target with straight-out detours
+ *              through already-claimed roads, and ignored any drawn area.
+ *   - 'match'  (wild point-to-point): aim for targetKm ±15%, adding leftover
+ *              Phase-1 pockets at their cheapest position (and, last resort,
+ *              a padding point, clamped into the drawn area).
+ *   - 'direct' (not-wild point-to-point, #540): route as-is.
+ *
+ * Then, except in 'direct' mode:
+ *   - pickup pass: unclaimed tiles within about a block of the real road
+ *     route are added as detour waypoints when they're cheap enough, kept
+ *     only if the re-route actually claims more tiles within the cap.
+ *   - retrace check (skipped when opts.allowRetrace, i.e. out-and-back
+ *     shape): if too much of the route rides the same road twice, drop the
+ *     waypoint at the tip of the worst spur and keep the result if it's
+ *     cleaner without costing much tiles-per-km.
+ */
+async function refineRoute(baseWaypoints, opts) {
+    const R = window.ExploreRefine;
+    const {
+        targetKm, mode = 'cap', surfacePref, candidates: candidateList = [], dirBearing = 45,
+        roadFilters = {}, fenceBounds = null, areaBounds = null, baseMeta = null, grids = [],
+        allowRetrace = false,
+    } = opts;
+
+    let waypoints = baseWaypoints.map(w => [...w]); // deep copy
+    // Parallel to waypoints.slice(1, -1): {tiles, padding?, pickup?}.
+    let meta = baseMeta ? baseMeta.map(m => ({ ...m })) : waypoints.slice(1, -1).map(() => ({ tiles: 1 }));
+    const candidates = candidateList.slice();
+    const stats = { calls: 0, trimmed: 0, pickupsAdded: 0, retraceFixed: false, retraceFraction: null };
 
     // Build OSRM exclude list from road filter checkboxes (#411).
     const excludeClasses = [];
     if (roadFilters.noMotorways) excludeClasses.push('motorway', 'trunk');
     if (roadFilters.noUnpaved)   excludeClasses.push('ferry');   // OSRM doesn't natively exclude unpaved; handled via surface pref
 
-    for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
+    // The specific reason a call failed, so callers can tell "ORS isn't
+    // configured" apart from "rate limited" or "no routable path".
+    class RouteError extends Error {}
+    const routeOnce = async (wps) => {
+        stats.calls++;
+        let res;
         try {
-            result = await api.getExplorationRoute({
-                waypoints,
+            res = await api.getExplorationRoute({
+                waypoints: wps,
                 surfacePreference: roadFilters.noUnpaved ? 'paved' : surfacePref,
                 exclude: excludeClasses.length ? excludeClasses.join(',') : undefined,
+                bounds: fenceBounds || undefined,
             });
         } catch (err) {
-            failureMessage = (err && err.message) || null;
-            return { route: null, message: failureMessage };
+            throw new RouteError((err && err.message) || null);
         }
+        if (!res || res.status !== 'success') throw new RouteError((res && res.message) || null);
+        return res;
+    };
+    const tilesOf = (res) => (grids.length ? R.countNewTiles(res.coordinates, grids) : 0);
 
-        if (!result || result.status !== 'success') {
-            // Surface over-restriction message (#411), and whatever specific
-            // reason the backend gave (e.g. "Road routing is not configured
-            // (ORS_API_KEY missing)" vs. a rate limit or unroutable error).
-            failureMessage = (result && result.message) || null;
-            return { route: null, message: failureMessage };
-        }
+    let result;
+    try {
+        result = await routeOnce(waypoints);
 
-        const ratio = result.distance_km / targetKm;
-        if (Math.abs(ratio - 1) <= TOLERANCE) break; // within 15% — done
-
-        if (ratio > 1 + TOLERANCE && waypoints.length > 3) {
-            // Too long: drop a padding waypoint if one exists; only fall
-            // back to the furthest load-bearing (tile-claiming) waypoint
-            // once padding is exhausted.
-            let dropIdx = loadBearing.indexOf(false);
-            if (dropIdx === -1) dropIdx = loadBearing.length - 1; // furthest inner waypoint
-            waypoints = [
-                waypoints[0],
-                ...waypoints.slice(1, 1 + dropIdx),
-                ...waypoints.slice(2 + dropIdx, -1),
-                waypoints[waypoints.length - 1],
-            ];
-            loadBearing = [...loadBearing.slice(0, dropIdx), ...loadBearing.slice(dropIdx + 1)];
-        } else if (ratio < 1 - TOLERANCE) {
-            // #540 — not-wild point-to-point: the origin/destination gap is
-            // the real distance signal here, not the requested target. Don't
-            // chase it with padding/candidate detours; accept the route as-is.
-            if (skipExpansion) break;
-            // Too short: try adding next candidate zone first, then fall back
-            // to pushing a displacement waypoint out along the route bearing.
-            if (candidates.length > 0) {
-                const next = candidates.shift();
-                const wp = next.centroid || next;
-                waypoints = [
-                    waypoints[0],
-                    ...waypoints.slice(1, -1),
-                    [wp.lat, wp.lon],
-                    waypoints[waypoints.length - 1],
-                ];
-                loadBearing.push(true); // new candidate corner claims a tile
-            } else {
-                // No more candidates — insert a padding point pushed out by
-                // half the deficit distance along the main quadrant bearing.
-                const deficitKm = (targetKm - result.distance_km) / 2;
-                const start = waypoints[0];
-                const padPt = displace(start[0], start[1], deficitKm, dirBearing);
-                // Insert after start, before the existing inner waypoints.
-                waypoints = [
-                    waypoints[0],
-                    padPt,
-                    ...waypoints.slice(1),
-                ];
-                loadBearing.unshift(false); // pure padding, not tile-claiming
+        // ── Stage 1: fit the distance target ──
+        if (mode === 'cap') {
+            const capKm = targetKm * (1 + CAP_SLACK);
+            for (let i = 0; i < MAX_TRIM_CALLS && result.distance_km > capKm; i++) {
+                // Drop as many low-value waypoints as the measured
+                // road/straight-line ratio says it takes to fit, so one
+                // re-route can close a big overshoot instead of one
+                // waypoint per call.
+                const roadRatio = result.distance_km / Math.max(R.pathKm(waypoints), 0.1);
+                let dropped = 0;
+                do {
+                    const drop = R.chooseDropIndex(waypoints, meta);
+                    if (drop === -1) break;
+                    waypoints.splice(drop, 1);
+                    meta.splice(drop - 1, 1);
+                    dropped++;
+                } while (R.pathKm(waypoints) * roadRatio > capKm);
+                if (dropped === 0) break;
+                stats.trimmed += dropped;
+                result = await routeOnce(waypoints);
             }
-        } else {
-            break;
+        } else if (mode === 'match') {
+            for (let i = 0; i < MAX_MATCH_CALLS; i++) {
+                const ratio = result.distance_km / targetKm;
+                if (Math.abs(ratio - 1) <= REFINE_TOLERANCE) break;
+                if (ratio > 1 + REFINE_TOLERANCE) {
+                    const drop = R.chooseDropIndex(waypoints, meta);
+                    if (drop === -1) break;
+                    waypoints.splice(drop, 1);
+                    meta.splice(drop - 1, 1);
+                } else if (candidates.length > 0) {
+                    // Leftover Phase-1 pocket, at the leg where it adds the
+                    // least distance (it used to be tacked onto the end of
+                    // the list wherever it was, causing zig-zags).
+                    const next = candidates.shift();
+                    const wp = [next.lat, next.lon];
+                    const { index } = R.cheapestInsertion(waypoints, wp);
+                    waypoints.splice(index, 0, wp);
+                    meta.splice(index - 1, 0, { tiles: next.tiles || 1 });
+                } else {
+                    // Last resort: a padding point pushed out along the
+                    // quadrant bearing, kept inside any drawn area.
+                    const deficitKm = (targetKm - result.distance_km) / 2;
+                    const start = waypoints[0];
+                    let padPt = displace(start[0], start[1], deficitKm, dirBearing);
+                    if (areaBounds) padPt = R.clampToBounds(padPt, areaBounds);
+                    const { index } = R.cheapestInsertion(waypoints, padPt);
+                    waypoints.splice(index, 0, padPt);
+                    meta.splice(index - 1, 0, { tiles: 0, padding: true });
+                }
+                result = await routeOnce(waypoints);
+            }
+            // #526 — don't hand back a route that's a small fraction of the
+            // requested distance when the rider explicitly asked to go long.
+            if (result.distance_km / targetKm < 1 - REFINE_TOLERANCE) {
+                return { route: null, message: `Route came back far short of ${targetDistancePhrase(targetKm)}`, stats };
+            }
         }
+
+        if (mode === 'direct') return { route: result, message: null, stats };
+
+        const ceilingKm = targetKm * (mode === 'cap' ? 1 + CAP_SLACK : 1 + REFINE_TOLERANCE);
+
+        // ── Stage 2: pick up unclaimed tiles just off the route ──
+        if (grids.length) {
+            const pickups = R.findPickups(result.coordinates, grids, { bounds: areaBounds });
+            const room = Math.min(MAX_PICKUPS, MAX_ROUTE_WAYPOINTS - waypoints.length);
+            let budget = ceilingKm - result.distance_km;
+            const chosen = [];
+            for (const pk of pickups) {
+                if (chosen.length >= room) break;
+                if (pk.detourKm > budget) continue;
+                chosen.push(pk);
+                budget -= pk.detourKm;
+            }
+            // Try all chosen pickups; if that overshoots the cap, retry once
+            // with the better half.
+            for (const subset of [chosen, chosen.slice(0, Math.floor(chosen.length / 2))]) {
+                if (subset.length === 0) break;
+                const ins = R.insertPickups(result.coordinates, waypoints, meta, subset);
+                const trial = await routeOnce(ins.waypoints);
+                if (trial.distance_km <= ceilingKm && tilesOf(trial) > tilesOf(result)) {
+                    waypoints = ins.waypoints;
+                    meta = ins.meta;
+                    result = trial;
+                    stats.pickupsAdded = subset.length;
+                    break;
+                }
+                if (trial.distance_km <= ceilingKm) break; // fit, but didn't help — halving won't either
+            }
+        }
+
+        // ── Stage 3: retrace check ──
+        let retrace = R.analyzeRetrace(result.coordinates, waypoints);
+        stats.retraceFraction = retrace.fraction;
+        if (!allowRetrace) {
+            for (let i = 0; i < MAX_RETRACE_FIXES; i++) {
+                if (retrace.fraction <= RETRACE_MAX_FRACTION || retrace.worstWaypoint === -1) break;
+                const w = retrace.worstWaypoint;
+                const trialWps = [...waypoints.slice(0, w), ...waypoints.slice(w + 1)];
+                const trial = await routeOnce(trialWps);
+                const trialRetrace = R.analyzeRetrace(trial.coordinates, trialWps);
+                const rate = (res) => tilesOf(res) / Math.max(res.distance_km, 0.1);
+                const cleaner = trialRetrace.fraction < retrace.fraction - 0.03;
+                const keepsValue = !grids.length || rate(trial) >= rate(result) * 0.9;
+                if (!(cleaner && keepsValue)) break;
+                waypoints = trialWps;
+                meta.splice(w - 1, 1);
+                result = trial;
+                retrace = trialRetrace;
+                stats.retraceFixed = true;
+                stats.retraceFraction = retrace.fraction;
+            }
+        }
+    } catch (err) {
+        if (err instanceof RouteError) {
+            // A later-stage improvement call failing shouldn't throw away a
+            // good route we already have.
+            if (result) return { route: result, message: null, stats };
+            return { route: null, message: err.message, stats };
+        }
+        throw err;
     }
 
-    // #526 — if candidates and displacement padding were exhausted without
-    // ever getting close to the target (e.g. the padding direction runs
-    // into water or a road-network dead end), don't silently hand back a
-    // route that's a small fraction of the requested distance. Over-length
-    // stuck results are still returned above (getting a longer ride than
-    // asked isn't nearly as broken as a near-zero-length one).
-    if (!skipExpansion && result && result.distance_km / targetKm < 1 - TOLERANCE) {
-        return { route: null, message: `Route came back far short of ${targetDistancePhrase(targetKm)}` };
-    }
-
-    return { route: result, message: null };
+    return { route: result, message: null, stats };
 }
 
 /** Bearing (degrees) from the start toward the quadrant centre. */
@@ -2243,6 +2332,15 @@ function formatTileBreakdown(claimed) {
     return `· ${parts.join(' · ')}`;
 }
 
+/** Whether two ORS results are (for display purposes) the same route. */
+function sameRoute(a, b) {
+    if (a.distance_km !== b.distance_km) return false;
+    const ca = a.coordinates || [], cb = b.coordinates || [];
+    if (ca.length !== cb.length) return false;
+    const mid = Math.floor(ca.length / 2);
+    return [0, mid, ca.length - 1].every(i => ca[i] && cb[i] && ca[i][0] === cb[i][0] && ca[i][1] === cb[i][1]);
+}
+
 async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
     const plotBtn = badgeEl.querySelector('.plot-road-btn');
     const infoEl = badgeEl.querySelector('.route-phase2-info');
@@ -2278,6 +2376,29 @@ async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
     const candidates = (_phase1Candidates[direction] || []).slice();
     const shortTarget = targetDistanceKm * 0.85;
     const longTarget  = targetDistanceKm * 1.15;
+    // Tile value of each Phase-1 waypoint (parallel to baseWaypoints'
+    // inner points), so trimming drops the least valuable one first.
+    const baseMeta = route.waypoints.map(wp => ({ tiles: typeof wp.tiles === 'number' ? wp.tiles : 1 }));
+
+    // Rider-drawn area: when start (and end) are inside it, the backend
+    // fences the road route inside it; pickups and any padding stay inside
+    // it either way.
+    const R = window.ExploreRefine;
+    const areaBounds = selectedAreaBounds;
+    const fenceBounds = areaBounds &&
+        R.pointInBounds([startPos.lat, startPos.lng], areaBounds) &&
+        R.pointInBounds([endPos.lat, endPos.lng], areaBounds) ? areaBounds : null;
+
+    // Coverage grids for counting/collecting new tiles along the real route.
+    const grids = [coverageData, getCoverageMode() === 'both' ? coverageDataSecondary : null]
+        .filter(Boolean)
+        .map(c => R.makeGrid(c));
+    const commonOpts = {
+        surfacePref, candidates, dirBearing: bearing, roadFilters,
+        fenceBounds, areaBounds, baseMeta, grids,
+        // An explicit out-and-back request retraces on purpose.
+        allowRetrace: route.shape === 'out_and_back',
+    };
 
     // #540 — a not-wild point-to-point request (target close to the
     // efficient origin->destination distance) shouldn't be forced to hit
@@ -2290,17 +2411,25 @@ async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
     if (skipExpansion) {
         infoEl.textContent = 'Routing efficient point-to-point route…';
         shortOutcome = { route: null, message: null };
-        longOutcome = await refineRoute(baseWaypoints, targetDistanceKm, surfacePref, candidates, bearing, roadFilters, true);
+        longOutcome = await refineRoute(baseWaypoints, { ...commonOpts, targetKm: targetDistanceKm, mode: 'direct' });
     } else {
-        // Run both variants in parallel.
+        // Run both variants in parallel. Round trips treat each variant's
+        // target as a ceiling ('cap'); a wild point-to-point still aims for
+        // the requested distance ('match').
+        const mode = isPtp ? 'match' : 'cap';
         infoEl.textContent = 'Computing short and long variants…';
         [shortOutcome, longOutcome] = await Promise.all([
-            refineRoute(baseWaypoints, shortTarget,  surfacePref, candidates, bearing, roadFilters),
-            refineRoute(baseWaypoints, longTarget,   surfacePref, candidates, bearing, roadFilters),
+            refineRoute(baseWaypoints, { ...commonOpts, targetKm: shortTarget, mode }),
+            refineRoute(baseWaypoints, { ...commonOpts, targetKm: longTarget, mode }),
         ]);
     }
-    const shortResult = shortOutcome.route;
+    let shortResult = shortOutcome.route;
     const longResult = longOutcome.route;
+    // Under a cap, both variants often come back as the same route (the
+    // efficient tour fits under the short cap already) — show it once.
+    const variantsIdentical = !!(shortResult && longResult && sameRoute(shortResult, longResult));
+    if (variantsIdentical) shortResult = null;
+    const singleRoute = skipExpansion || variantsIdentical;
 
     if (!shortResult && !longResult) {
         // Prefer the backend's specific reason (e.g. "Road routing is not
@@ -2352,7 +2481,7 @@ async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
     const short = renderVariant(shortResult, '(−)', palette.light, 0.9);
     // #540: skipExpansion means longResult is the direct efficient route, not
     // the "long" half of a short/long pair — don't label it like one.
-    const long  = renderVariant(longResult,  skipExpansion ? 'Direct' : '(+)', palette.base,  1.0);
+    const long  = renderVariant(longResult,  skipExpansion ? 'Direct' : (singleRoute ? '' : '(+)'), palette.base,  1.0);
 
     // Track both variants so highlight/dim and cleanup affect the whole
     // direction, not just whichever was stored last.
@@ -2404,6 +2533,15 @@ async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
         const directBadge = skipExpansion
             ? `<span class="badge bg-secondary-subtle text-secondary-emphasis" title="Origin and destination are already ${v.distLabel} apart by road — showing the efficient route instead of padding to ${targetDistancePhrase(targetDistanceKm)}.">Direct route</span>`
             : '';
+        // Round trips no longer pad to the target: say so when the efficient
+        // route is well under it, rather than leaving the rider guessing.
+        const underTargetBadge = (!isPtp && v.result.distance_km < targetDistanceKm * 0.85)
+            ? `<span class="badge bg-secondary-subtle text-secondary-emphasis" title="No more unclaimed tiles in range were worth the extra distance — this is the efficient version, not padded to ${targetDistancePhrase(targetDistanceKm)}.">Under target</span>`
+            : '';
+        const outsideFrac = areaBounds ? window.ExploreRefine.fractionOutsideBounds(v.result.coordinates, areaBounds) : 0;
+        const outsideBadge = (areaBounds && (outsideFrac > 0.02 || v.result.bounds_enforced === false))
+            ? `<span class="badge bg-warning-subtle text-warning-emphasis" title="${fenceBounds ? 'The road router could not keep this route fully inside the drawn area.' : 'The start or end point is outside the drawn area, so the route has to leave it.'}">Leaves area</span>`
+            : '';
         const dataKey = `${direction}-${suffix}`;
         return `
             <div class="d-flex align-items-center gap-2 flex-wrap mt-4px">
@@ -2411,6 +2549,8 @@ async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
                     ${surfText ? `· ${surfText}` : ''} ${tilesText}</span>
                 ${outAndBackBadge}
                 ${directBadge}
+                ${underTargetBadge}
+                ${outsideBadge}
                 <button class="btn btn-xs btn-outline-secondary export-gpx-btn ms-auto"
                         data-variant="${dataKey}"
                         aria-label="Export GPX ${label}">
@@ -2423,7 +2563,7 @@ async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
     if (labelEl) {
         const parts = [];
         if (short) parts.push(`${short.distLabel} (−)`);
-        if (long)  parts.push(skipExpansion ? `${long.distLabel} (direct)` : `${long.distLabel} (+)`);
+        if (long)  parts.push(skipExpansion ? `${long.distLabel} (direct)` : (singleRoute ? long.distLabel : `${long.distLabel} (+)`));
         const tilesSuffix = verified
             ? (unionMap.size === 0 ? ' · 0 new tiles reached' : ` ${formatTileBreakdown([...unionMap.values()])}`)
             : '';
@@ -2432,7 +2572,7 @@ async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
 
     infoEl.innerHTML =
         variantRow(short, 'Short:', 'short', shortClaimed) +
-        variantRow(long,  skipExpansion ? 'Route:' : 'Long:', 'long', longClaimed);
+        variantRow(long,  singleRoute ? 'Route:' : 'Long:', 'long', longClaimed);
     infoEl.classList.remove('d-none');
 
     // Wire up GPX exports.
