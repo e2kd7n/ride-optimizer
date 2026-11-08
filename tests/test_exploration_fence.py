@@ -188,3 +188,116 @@ class TestValidateRouteBounds:
     def test_rejects_bad_boxes(self, bad):
         from app.api.planner_bp import _validate_route_bounds
         assert _validate_route_bounds(bad) is not None
+
+
+# L-shaped polygon (one reflex corner at the inside of the L), ~10 x 10 km.
+_L_POLY = [
+    [41.90, -87.80], [41.90, -87.68], [41.945, -87.68],
+    [41.945, -87.74], [41.99, -87.74], [41.99, -87.80],
+]
+
+# Square with a deep, narrow V notch cut down from the north edge: the notch
+# tip is a sharp reflex corner where untrimmed strips would cross into the
+# polygon on the far side of the notch.
+_NOTCH_POLY = [
+    [41.90, -87.80], [41.90, -87.70], [41.99, -87.70], [41.99, -87.745],
+    [41.92, -87.75], [41.99, -87.755], [41.99, -87.80],
+]
+
+
+def _point_in_poly(lat, lon, poly):
+    inside = False
+    n = len(poly)
+    for i in range(n):
+        (y1, x1), (y2, x2) = poly[i], poly[(i + 1) % n]
+        if (y1 > lat) != (y2 > lat) and lon < x1 + (lat - y1) * (x2 - x1) / (y2 - y1):
+            inside = not inside
+    return inside
+
+
+@pytest.mark.unit
+class TestPolygonFence:
+    def _fence(self, poly):
+        from app.services.exploration_service import _fence_key
+        return ExplorationService._fence_polygons(_fence_key(None, poly))
+
+    @pytest.mark.parametrize("poly", [_L_POLY, list(reversed(_L_POLY)),
+                                      _NOTCH_POLY, list(reversed(_NOTCH_POLY))])
+    def test_strips_never_enter_polygon(self, poly):
+        fence = self._fence(poly)
+        assert fence["type"] == "MultiPolygon"
+        assert len(fence["coordinates"]) >= len(poly)
+        for strip in fence["coordinates"]:
+            ring = strip[0]
+            assert ring[0] == ring[-1]
+            # Corners plus the centre of each strip stay outside.
+            pts = ring[:-1] + [[sum(p[0] for p in ring[:-1]) / 4, sum(p[1] for p in ring[:-1]) / 4]]
+            for lon, lat in pts:
+                assert not _point_in_poly(lat, lon, poly)
+
+    def test_every_edge_is_fenced(self):
+        """A probe just outside each edge's midpoint sits inside some strip."""
+        fence = self._fence(_L_POLY)
+        n = len(_L_POLY)
+        for i in range(n):
+            (lat1, lon1), (lat2, lon2) = _L_POLY[i], _L_POLY[(i + 1) % n]
+            mlat, mlon = (lat1 + lat2) / 2, (lon1 + lon2) / 2
+            # ~100 m outside: try both normals, keep the one outside the polygon.
+            for dlat, dlon in ((0.0009, 0), (-0.0009, 0), (0, 0.0012), (0, -0.0012)):
+                if (dlat and lat1 == lat2) or (dlon and lon1 == lon2):
+                    plat, plon = mlat + dlat, mlon + dlon
+                    if not _point_in_poly(plat, plon, _L_POLY):
+                        break
+            assert any(_point_in_poly(plat, plon, [[p[1], p[0]] for p in s[0][:-1]])
+                       for s in fence["coordinates"])
+
+    def test_convex_corner_is_closed(self):
+        """A probe diagonally outside a convex corner is covered."""
+        fence = self._fence(_L_POLY)
+        plat, plon = 41.90 - 0.0009, -87.80 - 0.0012   # SW corner, ~100 m out each way
+        assert any(_point_in_poly(plat, plon, [[p[1], p[0]] for p in s[0][:-1]])
+                   for s in fence["coordinates"])
+
+    def test_compute_route_with_polygon(self, service_with_key):
+        with patch("src.ors_client.get_route", return_value=_RAW) as mock_get:
+            result = service_with_key.compute_route(_WPS, bounds=_BOX, polygon=_L_POLY)
+            service_with_key.compute_route(_WPS, bounds=_BOX)
+        assert mock_get.call_count == 2   # polygon and box fences cached separately
+        sent = mock_get.call_args_list[0].kwargs["avoid_polygons"]
+        assert sent == self._fence(_L_POLY)
+        assert result["bounds_enforced"] is True
+
+    def test_polygon_fence_survives_cache_persist_roundtrip(self, service_with_key):
+        with patch("src.ors_client.get_route", return_value=_RAW):
+            service_with_key.compute_route(_WPS, polygon=_L_POLY)
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            thread = service_with_key._persist_thread
+            if thread is None or not thread.is_alive():
+                break
+            time.sleep(0.02)
+        service_with_key._route_cache.clear()
+        service_with_key._load_route_cache_from_disk()
+        (key,) = service_with_key._route_cache.keys()
+        assert len(key[3]) == 2 * len(_L_POLY)
+
+
+@pytest.mark.unit
+class TestValidateRoutePolygon:
+    def test_valid_polygon(self):
+        from app.api.planner_bp import _validate_route_polygon
+        assert _validate_route_polygon(_L_POLY) is None
+
+    @pytest.mark.parametrize("bad", [
+        [[41.9, -87.8], [42.0, -87.7]],                       # too few points
+        [[41.9, -87.8]] * 41,                                 # too many
+        "41.9,-87.8",
+        [[41.9, -87.8], [42.0, -87.7], [41.95]],              # malformed point
+        [[41.9, -87.8], [42.0, -87.7], [41.95, float("inf")]],
+        [[41.9, -87.8], [42.0, -87.7], [True, -87.6]],
+        [[41.0, -87.8], [42.5, -87.7], [41.5, -87.6]],        # too big
+        [[41.9, -87.8], [41.9, -87.7], [41.9, -87.6]],        # zero area
+    ])
+    def test_rejects_bad_polygons(self, bad):
+        from app.api.planner_bp import _validate_route_polygon
+        assert _validate_route_polygon(bad) is not None

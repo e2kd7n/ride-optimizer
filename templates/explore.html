@@ -111,10 +111,16 @@
                             <div class="mb-2">
                                 <label class="form-label small mb-0">Target area <span class="text-muted">(optional)</span></label>
                                 <div class="d-flex flex-wrap gap-2 align-items-center">
-                                    <button type="button" class="btn btn-sm btn-outline-secondary" id="draw-area-btn"
-                                            aria-label="Draw a target area on the map — click and drag">
-                                        <i class="bi bi-bounding-box" aria-hidden="true"></i> Draw area
-                                    </button>
+                                    <div class="btn-group btn-group-sm" role="group" aria-label="Draw a target area">
+                                        <button type="button" class="btn btn-outline-secondary" id="draw-area-btn"
+                                                aria-label="Draw a rectangular target area on the map — click and drag">
+                                            <i class="bi bi-bounding-box" aria-hidden="true"></i> Rectangle
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary" id="draw-polygon-btn"
+                                                aria-label="Draw a polygon target area on the map — click to add corners, click the first corner or double-click to finish">
+                                            <i class="bi bi-pentagon" aria-hidden="true"></i> Polygon
+                                        </button>
+                                    </div>
                                     <button type="button" class="btn btn-sm btn-outline-secondary d-none" id="clear-area-btn"
                                             aria-label="Clear the drawn target area">
                                         <i class="bi bi-x-lg" aria-hidden="true"></i> Clear

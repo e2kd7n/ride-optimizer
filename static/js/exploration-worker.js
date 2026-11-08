@@ -30,10 +30,10 @@
  *       'frontier' favors zones bordering mostly unexplored territory,
  *       pushing coverage outward; 'infill' favors zones tucked inside
  *       already-ridden coverage, closing gaps near home first.
- *   - areaBounds: [south, west, north, east] | null (#491) — rider-drawn
- *       target area. When present, further restricts reachable tiles to
- *       those inside the box, in addition to (not instead of) the reach
- *       radius derived from distanceKm.
+ *   - areaBounds: [south, west, north, east] | [[lat, lon], ...] | null
+ *       (#491) — rider-drawn target area, a box or a polygon. When present,
+ *       further restricts reachable tiles to those inside it, in addition to
+ *       (not instead of) the reach radius derived from distanceKm.
  *   - windDirectionDeg/windSpeedKph: number | null (#453) — current wind, if
  *       available. Used only as a tie-break between otherwise-equal-yield
  *       tour orientations (headwind out, tailwind back) for round trips with
@@ -81,6 +81,24 @@ const GRID_LABELS = { 14: 'squadrats', 17: 'squadratinhos' };
  * still splits into a distinct route per direction rather than collapsing
  * into a single zone/route.
  */
+/** Is (lat, lon) inside a drawn area — a [south, west, north, east] box or
+ *  a [[lat, lon], ...] polygon (ray casting)? */
+function pointInArea(lat, lon, area) {
+    if (!Array.isArray(area[0])) {
+        const [south, west, north, east] = area;
+        return lat >= south && lat <= north && lon >= west && lon <= east;
+    }
+    let inside = false;
+    for (let i = 0, j = area.length - 1; i < area.length; j = i++) {
+        const [yi, xi] = area[i];
+        const [yj, xj] = area[j];
+        if ((yi > lat) !== (yj > lat) && lon < xi + (lat - yi) * (xj - xi) / (yj - yi)) {
+            inside = !inside;
+        }
+    }
+    return inside;
+}
+
 function scanGrid(coverageData, start, reachRadius, areaBounds) {
     const bounds = coverageData.bounds;
     if (!bounds) throw new Error('Coverage data has no bounds');
@@ -104,10 +122,7 @@ function scanGrid(coverageData, start, reachRadius, areaBounds) {
     // reach radius — a drawn box narrows which reachable tiles count,
     // it doesn't override how far the route is allowed to travel.
     if (areaBounds) {
-        const [south, west, north, east] = areaBounds;
-        reachableTiles = reachableTiles.filter(
-            t => t.lat >= south && t.lat <= north && t.lon >= west && t.lon <= east
-        );
+        reachableTiles = reachableTiles.filter(t => pointInArea(t.lat, t.lon, areaBounds));
     }
 
     const buckets = { NE: [], SE: [], SW: [], NW: [] };

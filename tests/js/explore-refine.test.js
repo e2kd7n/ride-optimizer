@@ -150,3 +150,43 @@ test('uselessStops: flags a stub into claimed ground, keeps one that grabs a til
     assert.ok(useless.includes(1), 'claimed-ground stub flagged');
     assert.ok(!useless.includes(2), 'tile-grabbing stub kept');
 });
+
+// ── Polygon areas ────────────────────────────────────────────────
+// L-shaped area: 4 km x 4 km with the north-east 2 km x 2 km quadrant cut out.
+const L_AREA = [pt(0, 0), pt(4, 0), pt(4, 2), pt(2, 2), pt(2, 4), pt(0, 4)];
+
+test('pointInBounds handles polygons, including the notch of an L', () => {
+    assert.equal(R.isPolygonArea(L_AREA), true);
+    assert.equal(R.isPolygonArea([1, 2, 3, 4]), false);
+    assert.equal(R.pointInBounds(pt(1, 1), L_AREA), true);
+    assert.equal(R.pointInBounds(pt(3, 1), L_AREA), true);
+    assert.equal(R.pointInBounds(pt(3, 3), L_AREA), false);   // the cut-out
+    assert.equal(R.pointInBounds(pt(5, 1), L_AREA), false);
+});
+
+test('areaBBox encloses a polygon', () => {
+    const [s, w, n, e] = R.areaBBox(L_AREA);
+    assert.ok(Math.abs(s - LAT0) < 1e-9 && Math.abs(w - LON0) < 1e-9);
+    assert.ok(Math.abs(n - pt(0, 4)[0]) < 1e-9 && Math.abs(e - pt(4, 0)[1]) < 1e-9);
+});
+
+test('fractionOutsideBounds counts route length in the cut-out of a polygon', () => {
+    assert.ok(R.fractionOutsideBounds(line([0.5, 1], [3.5, 1]), L_AREA) < 0.01);
+    // West→east at y=3: the last ~half (x 2→4) runs through the cut-out.
+    const f = R.fractionOutsideBounds(line([0.5, 3], [3.5, 3]), L_AREA);
+    assert.ok(f > 0.4 && f < 0.55, `fraction ${f}`);
+    // Hugging the inner edge (30 m inside the cut-out) is within tolerance.
+    assert.ok(R.fractionOutsideBounds(line([2.03, 2.5], [2.03, 3.5]), L_AREA) < 0.01);
+});
+
+test('clampToBounds moves an outside point onto the polygon edge', () => {
+    const inside = pt(1, 1);
+    assert.deepEqual(R.clampToBounds(inside, L_AREA), inside);
+    const c = R.clampToBounds(pt(3, 2.5), L_AREA);     // in the cut-out, nearest the y=2 edge
+    assert.ok(Math.abs(c[0] - pt(3, 2)[0]) < 1e-6 && Math.abs(c[1] - pt(3, 2)[1]) < 1e-6);
+});
+
+test('polygonSelfIntersects spots a bow-tie', () => {
+    assert.equal(R.polygonSelfIntersects(L_AREA), false);
+    assert.equal(R.polygonSelfIntersects([pt(0, 0), pt(2, 2), pt(2, 0), pt(0, 2)]), true);
+});

@@ -70,6 +70,18 @@ FENCE_WIDTH_M = 150
 FENCE_MAX_SEGMENT_M = 15000
 
 
+def _fence_key(bounds: Optional[List[float]], polygon: Optional[List[List[float]]]) -> Optional[tuple]:
+    """Hashable, JSON-round-trippable fence for the route cache key: a flat
+    tuple of floats — 4 values (south, west, north, east) for a drawn box, or
+    2N values (lat1, lon1, lat2, lon2, ...) for a drawn polygon (N >= 3, so
+    always >= 6 values and never confused with a box)."""
+    if polygon:
+        return tuple(round(float(v), 5) for pt in polygon for v in pt[:2])
+    if bounds:
+        return tuple(round(float(v), 5) for v in bounds)
+    return None
+
+
 class ExplorationService:
 
     def __init__(self):
@@ -480,6 +492,7 @@ class ExplorationService:
         surface_preference: str = "any",
         exclude: Optional[List[str]] = None,
         bounds: Optional[List[float]] = None,
+        polygon: Optional[List[List[float]]] = None,
     ) -> Dict[str, Any]:
         """Compute a road-following route via ORS for the given waypoints.
 
@@ -496,6 +509,9 @@ class ExplorationService:
                 avoid_polygons (see _fence_polygons). If ORS rejects the
                 fenced request, the route is retried unfenced and the result
                 carries ``bounds_enforced: False`` so the UI can say so.
+            polygon: Optional rider-drawn polygon ``[[lat, lon], ...]`` (3+
+                vertices). Takes precedence over ``bounds``; fenced the same
+                way, with strips just outside each polygon edge.
 
         Returns:
             Dict with ``status``, and on success:
@@ -536,13 +552,13 @@ class ExplorationService:
         # consecutive chunks sharing their boundary waypoint and stitched
         # together; each chunk goes through the normal cached path below.
         if len(waypoints) > ORS_MAX_WAYPOINTS:
-            return self._compute_chunked_route(waypoints, surface_preference, exclude, bounds)
+            return self._compute_chunked_route(waypoints, surface_preference, exclude, bounds, polygon)
 
         # Memoization key — waypoints as a tuple of pairs + profile + the
         # resolved avoid_features (#575), so a "no motorways" request never
         # returns a cached route computed without that constraint (or
         # vice versa).
-        fence = tuple(round(float(v), 5) for v in bounds) if bounds else None
+        fence = _fence_key(bounds, polygon)
         cache_key = (
             tuple((round(lat, 6), round(lon, 6)) for lat, lon in waypoints),
             profile,
@@ -609,6 +625,7 @@ class ExplorationService:
         surface_preference: str,
         exclude: Optional[List[str]],
         bounds: Optional[List[float]],
+        polygon: Optional[List[List[float]]] = None,
     ) -> Dict[str, Any]:
         """Route a waypoint list longer than ORS_MAX_WAYPOINTS as consecutive
         chunks (each sharing its first waypoint with the previous chunk's
@@ -626,7 +643,7 @@ class ExplorationService:
         surface_m = {"paved_pct": 0.0, "unpaved_pct": 0.0, "unknown_pct": 0.0}
         enforced = []
         for n, chunk in enumerate(chunks, 1):
-            part = self.compute_route(chunk, surface_preference=surface_preference, exclude=exclude, bounds=bounds)
+            part = self.compute_route(chunk, surface_preference=surface_preference, exclude=exclude, bounds=bounds, polygon=polygon)
             if part.get("status") != "success":
                 msg = part.get("message") or "Road routing failed"
                 return {"status": "error", "message": f"{msg} (route segment {n} of {len(chunks)})"}
@@ -785,13 +802,17 @@ class ExplorationService:
     def _fence_polygons(bounds: tuple) -> dict:
         """GeoJSON MultiPolygon of thin strips just outside each edge of
         ``bounds`` (south, west, north, east) — an avoid_polygons "fence"
-        that keeps ORS from routing out of a rider-drawn area.
+        that keeps ORS from routing out of a rider-drawn area. A longer
+        flat tuple (see _fence_key) is a drawn polygon and is fenced by
+        _polygon_fence instead.
 
         Each edge's strip is split into segments of at most
         FENCE_MAX_SEGMENT_M so no single polygon trips ORS's per-polygon
         extent/area limits. The north/south strips extend past the corners
         so the fence has no gaps there.
         """
+        if len(bounds) != 4:
+            return ExplorationService._polygon_fence(bounds)
         south, west, north, east = bounds
         mid_lat = (south + north) / 2
         m_per_deg_lat = 111320.0
@@ -817,6 +838,83 @@ class ExplorationService:
         for lo, hi in split(south - gap_lat, north + gap_lat, m_per_deg_lat):
             polys.append(rect(lo, west - gap_lon - w_lon, hi, west - gap_lon))     # west strip
             polys.append(rect(lo, east + gap_lon, hi, east + gap_lon + w_lon))     # east strip
+        return {"type": "MultiPolygon", "coordinates": polys}
+
+    @staticmethod
+    def _polygon_fence(flat: tuple) -> dict:
+        """Fence for a rider-drawn polygon (flat lat/lon tuple, see
+        _fence_key): one strip per edge, offset FENCE_GAP_M..FENCE_GAP_M +
+        FENCE_WIDTH_M outward, split into FENCE_MAX_SEGMENT_M pieces.
+
+        At a convex vertex each strip runs on past the vertex by the full
+        strip depth so neighbouring strips overlap and the corner has no
+        gap. At a sharp reflex (inward) vertex a strip would poke across the
+        neighbouring edge into the polygon — blocking roads the rider wants
+        — so it's trimmed back to where it meets that edge.
+        """
+        pts = [(flat[i], flat[i + 1]) for i in range(0, len(flat) - 1, 2)]
+        if len(pts) > 1 and pts[0] == pts[-1]:
+            pts.pop()
+        if len(pts) < 3:
+            return {"type": "MultiPolygon", "coordinates": []}
+        lat0 = sum(p[0] for p in pts) / len(pts)
+        lon0 = sum(p[1] for p in pts) / len(pts)
+        my = 111320.0
+        mx = 111320.0 * max(math.cos(math.radians(lat0)), 0.01)
+        xy = [((lon - lon0) * mx, (lat - lat0) * my) for lat, lon in pts]
+        n = len(xy)
+        # Shoelace sign: > 0 means counter-clockwise (interior on the left).
+        orient = 1.0 if sum(xy[i][0] * xy[(i + 1) % n][1] - xy[(i + 1) % n][0] * xy[i][1]
+                            for i in range(n)) > 0 else -1.0
+        depth = FENCE_GAP_M + FENCE_WIDTH_M
+
+        def unit(a, b):
+            dx, dy = b[0] - a[0], b[1] - a[1]
+            length = math.hypot(dx, dy)
+            return (dx / length, dy / length, length) if length > 1e-6 else (0.0, 0.0, 0.0)
+
+        def corner_adjust(p, v, q):
+            """Metres to extend (+) or trim (-) an edge's strip at vertex v,
+            where the polygon turns from p->v to v->q."""
+            ux, uy, l1 = unit(p, v)
+            wx, wy, l2 = unit(v, q)
+            if l1 == 0 or l2 == 0:
+                return 0.0
+            cross = ux * wy - uy * wx
+            dot = ux * wx + uy * wy
+            if orient * cross >= 0:             # convex (or straight)
+                return depth
+            turn = math.atan2(abs(cross), dot)  # 0..pi, inward turn angle
+            if turn <= math.pi / 2:
+                return 0.0                      # strip can't reach past the next edge
+            s = math.sin(turn)
+            # Trim to where the strip's outer edge meets the next edge, plus
+            # the usual gap so a road along that edge stays usable.
+            return depth * math.cos(turn) / s - FENCE_GAP_M if s > 1e-6 else -1e9
+
+        def to_lonlat(x, y):
+            return [x / mx + lon0, y / my + lat0]
+
+        polys = []
+        for i in range(n):
+            a, b = xy[i], xy[(i + 1) % n]
+            ux, uy, length = unit(a, b)
+            if length == 0:
+                continue
+            # Outward normal: right of travel for CCW, left for CW.
+            nx, ny = orient * uy, -orient * ux
+            t_start = -corner_adjust(xy[i - 1], a, b)
+            t_end = length + corner_adjust(a, b, xy[(i + 2) % n])
+            if t_end - t_start < 1:
+                continue
+            k = max(1, math.ceil((t_end - t_start) / FENCE_MAX_SEGMENT_M))
+            step = (t_end - t_start) / k
+            for j in range(k):
+                t0, t1 = t_start + j * step, t_start + (j + 1) * step
+                ring = [to_lonlat(a[0] + ux * t + nx * off, a[1] + uy * t + ny * off)
+                        for t, off in ((t0, FENCE_GAP_M), (t1, FENCE_GAP_M), (t1, depth), (t0, depth))]
+                ring.append(ring[0])
+                polys.append([ring])
         return {"type": "MultiPolygon", "coordinates": polys}
 
     @staticmethod

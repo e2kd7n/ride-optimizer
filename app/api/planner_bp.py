@@ -342,6 +342,31 @@ def _validate_route_bounds(bounds):
     return None
 
 
+MAX_ROUTE_POLYGON_VERTICES = 40
+
+
+def _validate_route_polygon(polygon):
+    """Validate an optional rider-drawn polygon ``[[lat, lon], ...]`` for
+    /exploration/route. Returns an error message string, or None."""
+    if not isinstance(polygon, list) or not (3 <= len(polygon) <= MAX_ROUTE_POLYGON_VERTICES):
+        return f'polygon must be a list of 3 to {MAX_ROUTE_POLYGON_VERTICES} [lat, lon] points'
+    for pt in polygon:
+        if not isinstance(pt, (list, tuple)) or len(pt) != 2:
+            return 'polygon points must be [lat, lon] pairs'
+        for v in pt:
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+                return 'polygon points must be finite numbers'
+        if not (-90 <= pt[0] <= 90) or not (-180 <= pt[1] <= 180):
+            return 'polygon point out of range'
+    lats = [pt[0] for pt in polygon]
+    lons = [pt[1] for pt in polygon]
+    if max(lats) - min(lats) > 2 * MAX_BBOX_DEGREES or max(lons) - min(lons) > 2 * MAX_BBOX_DEGREES:
+        return f'polygon span too large (max {2 * MAX_BBOX_DEGREES} degrees per side)'
+    if max(lats) == min(lats) or max(lons) == min(lons):
+        return 'polygon has no area'
+    return None
+
+
 @bp.route('/exploration/route', methods=['POST'])
 @limiter.limit(_rate_limit("exploration.rate_limit_route", "20 per minute"))
 def exploration_route():
@@ -366,8 +391,17 @@ def exploration_route():
         if bounds_error:
             return jsonify({'status': 'error', 'message': bounds_error}), 400
 
+    polygon = data.get('polygon')
+    if polygon is not None:
+        polygon_error = _validate_route_polygon(polygon)
+        if polygon_error:
+            return jsonify({'status': 'error', 'message': polygon_error}), 400
+
+    # Area kwargs only when drawn, so an unfenced call looks exactly as it
+    # did before areas existed.
+    area_kwargs = {k: v for k, v in (('bounds', bounds), ('polygon', polygon)) if v is not None}
     result = svc.compute_route(
-        waypoints, surface_preference=surface_preference, exclude=exclude, bounds=bounds,
+        waypoints, surface_preference=surface_preference, exclude=exclude, **area_kwargs,
     )
     status_code = 200 if result.get('status') == 'success' else 500
     return jsonify(result), status_code

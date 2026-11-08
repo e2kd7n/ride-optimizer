@@ -21,8 +21,9 @@ let coverageData = null;
 let coverageDataSecondary = null;
 let explorationWorker = null;
 
-// #491: rider-drawn target area — [south, west, north, east] | null.
-let selectedAreaBounds = null;
+// #491: rider-drawn target area — a box [south, west, north, east], a
+// polygon [[lat, lon], ...] (3+ corners, open ring), or null.
+let selectedArea = null;
 
 // Coverage endpoints reject a bbox wider than 0.5 degrees per side
 // (app/api/planner_bp.py MAX_BBOX_DEGREES, #481) to bound Overpass/graph
@@ -74,10 +75,18 @@ function ptpEfficientKmCacheKey(startPos, endPos) {
     return `${startPos.lat.toFixed(5)},${startPos.lng.toFixed(5)}|${endPos.lat.toFixed(5)},${endPos.lng.toFixed(5)}`;
 }
 
+// Area drawing: null (off) | 'rect' (click-drag a box) | 'polygon' (click
+// corners). `isDrawingArea` mirrors `drawAreaMode !== null`.
 let isDrawingArea = false;
-let drawAreaRect = null;
-let _drawStartLatLng = null;
+let drawAreaMode = null;
+let drawAreaLayer = null;      // the finished (or in-progress) area shape
+let _drawStartLatLng = null;   // rect: where the drag started
 let _skipNextMapClick = false;
+let _polyPts = [];             // polygon: corners placed so far (L.LatLng)
+let _polyPreview = null;       // polygon: dashed line from last corner to cursor
+let _polyVertices = null;      // polygon: corner markers (first one closes)
+const MAX_POLYGON_VERTICES = 40;   // matches the API's limit
+const AREA_STYLE = { color: '#0B6FA6', weight: 2, fillOpacity: 0.08, dashArray: '4,4' };
 
 // Phase-1 candidate lists per direction, for iterative refinement.
 // { NE: [zoneList, ...], SE: [...], ... }
@@ -176,7 +185,17 @@ document.addEventListener('DOMContentLoaded', () => {
     initDistanceSlider();
     initDurationSlider();
     document.getElementById('target-type-select').addEventListener('change', onTargetTypeChange);
-    document.getElementById('draw-area-btn').addEventListener('click', toggleDrawArea);
+    document.getElementById('draw-area-btn').addEventListener('click', () => toggleDrawArea('rect'));
+    document.getElementById('draw-polygon-btn').addEventListener('click', () => toggleDrawArea('polygon'));
+    document.addEventListener('keydown', (e) => {
+        if (!isDrawingArea) return;
+        if (e.key === 'Escape') {
+            cancelAreaDrawing();
+        } else if (e.key === 'Enter' && drawAreaMode === 'polygon') {
+            e.preventDefault();
+            finishPolygon();
+        }
+    });
     document.getElementById('clear-area-btn').addEventListener('click', clearArea);
     initTooltips();
     updateWorkflowState();
@@ -325,43 +344,51 @@ function initMap() {
         new ResizeObserver(() => map.invalidateSize()).observe(document.getElementById('explore-map'));
     }
 
-    // #491: click-and-drag to draw a target-area rectangle. Only active
-    // while "Draw area" is toggled on; otherwise these are no-ops and the
-    // map behaves as before (pan/click-to-set-start).
+    // #491: target-area drawing. Only active while Rectangle or Polygon is
+    // toggled on; otherwise these are no-ops and the map behaves as before
+    // (pan/click-to-set-start).
+    //
+    // Rectangle: click and drag.
     map.on('mousedown', (e) => {
-        if (!isDrawingArea) return;
+        if (drawAreaMode !== 'rect') return;
         _drawStartLatLng = e.latlng;
-        if (drawAreaRect) { map.removeLayer(drawAreaRect); drawAreaRect = null; }
-        drawAreaRect = L.rectangle(L.latLngBounds(e.latlng, e.latlng), {
-            color: '#0B6FA6', weight: 2, fillOpacity: 0.08, dashArray: '4,4',
-        }).addTo(map);
+        removeAreaLayer();
+        drawAreaLayer = L.rectangle(L.latLngBounds(e.latlng, e.latlng), AREA_STYLE).addTo(map);
     });
     map.on('mousemove', (e) => {
-        if (!isDrawingArea || !_drawStartLatLng || !drawAreaRect) return;
-        drawAreaRect.setBounds(L.latLngBounds(_drawStartLatLng, e.latlng));
+        if (drawAreaMode === 'polygon') { updatePolygonPreview(e.latlng); return; }
+        if (drawAreaMode !== 'rect' || !_drawStartLatLng || !drawAreaLayer) return;
+        drawAreaLayer.setBounds(L.latLngBounds(_drawStartLatLng, e.latlng));
     });
     map.on('mouseup', (e) => {
-        if (!isDrawingArea || !_drawStartLatLng) return;
+        if (drawAreaMode !== 'rect' || !_drawStartLatLng) return;
         const drawnBounds = L.latLngBounds(_drawStartLatLng, e.latlng);
         _drawStartLatLng = null;
         _skipNextMapClick = true; // the browser fires 'click' right after this mouseup
 
         if (!drawnBounds.isValid() || drawnBounds.getNorthEast().equals(drawnBounds.getSouthWest())) {
             // Degenerate rectangle (no drag distance) — treat as a cancel.
-            if (drawAreaRect) { map.removeLayer(drawAreaRect); drawAreaRect = null; }
+            removeAreaLayer();
+            restoreSelectedAreaLayer();
         } else {
-            selectedAreaBounds = [
+            setSelectedArea([
                 drawnBounds.getSouth(), drawnBounds.getWest(),
                 drawnBounds.getNorth(), drawnBounds.getEast(),
-            ];
-            document.getElementById('clear-area-btn').classList.remove('d-none');
-            document.getElementById('area-status').textContent = 'Area selected — routes stay within it';
+            ]);
         }
-        setDrawAreaMode(false);
+        setDrawAreaMode(null);
+    });
+    // Polygon: each click adds a corner; clicking the first corner,
+    // double-clicking, or pressing Enter closes it.
+    map.on('dblclick', (e) => {
+        if (drawAreaMode !== 'polygon') return;
+        L.DomEvent.stop(e);
+        finishPolygon();
     });
 
     map.on('click', (e) => {
         if (_skipNextMapClick) { _skipNextMapClick = false; return; }
+        if (drawAreaMode === 'polygon') { addPolygonPoint(e.latlng); return; }
         if (isDrawingArea) return;
         clearHighlight();
         const routeType = document.getElementById('route-type-select').value;
@@ -384,27 +411,161 @@ function initMap() {
     });
 }
 
-/** Enter or exit rectangle-draw mode (#491), disabling map panning while active
- *  so a click-drag draws a box instead of moving the map. */
-function setDrawAreaMode(active) {
-    isDrawingArea = active;
-    document.getElementById('draw-area-btn').classList.toggle('active', active);
-    map.dragging[active ? 'disable' : 'enable']();
-    map.getContainer().style.cursor = active ? 'crosshair' : '';
-    if (active) {
-        document.getElementById('area-status').textContent = 'Click and drag on the map to draw an area…';
+/** Enter area-draw mode `mode` ('rect' | 'polygon'), or leave it (null) (#491).
+ *  Rectangle mode disables map panning so a click-drag draws a box instead
+ *  of moving the map; polygon mode keeps panning (corners are clicks) but
+ *  turns off double-click zoom, since double-click closes the polygon. */
+function setDrawAreaMode(mode) {
+    drawAreaMode = mode;
+    isDrawingArea = mode !== null;
+    document.getElementById('draw-area-btn').classList.toggle('active', mode === 'rect');
+    document.getElementById('draw-polygon-btn').classList.toggle('active', mode === 'polygon');
+    map.dragging[mode === 'rect' ? 'disable' : 'enable']();
+    map.doubleClickZoom[mode === 'polygon' ? 'disable' : 'enable']();
+    map.getContainer().style.cursor = mode ? 'crosshair' : '';
+    if (mode !== 'polygon') resetPolygonDraft();
+    const status = document.getElementById('area-status');
+    if (mode === 'rect') {
+        status.textContent = 'Click and drag on the map to draw an area…';
+    } else if (mode === 'polygon') {
+        status.textContent = 'Click to add corners — click the first corner or double-click to finish (Esc cancels)…';
+    } else {
+        status.textContent = selectedArea ? 'Area selected — routes stay within it' : '';
     }
 }
 
-function toggleDrawArea() {
-    setDrawAreaMode(!isDrawingArea);
+function toggleDrawArea(mode) {
+    if (drawAreaMode === mode) {
+        cancelAreaDrawing();
+        return;
+    }
+    // Switching tools mid-draw drops the half-drawn shape.
+    if (drawAreaMode) cancelAreaDrawing();
+    setDrawAreaMode(mode);
+}
+
+/** Abandon an in-progress drawing, keeping any previously selected area. */
+function cancelAreaDrawing() {
+    if (drawAreaMode === 'rect' && _drawStartLatLng) {
+        _drawStartLatLng = null;
+        removeAreaLayer();
+        restoreSelectedAreaLayer();
+    }
+    setDrawAreaMode(null);
+}
+
+function removeAreaLayer() {
+    if (drawAreaLayer) { map.removeLayer(drawAreaLayer); drawAreaLayer = null; }
+}
+
+/** Redraw the selected area's shape (after a cancelled redraw removed it). */
+function restoreSelectedAreaLayer() {
+    if (!selectedArea || drawAreaLayer) return;
+    drawAreaLayer = window.ExploreRefine.isPolygonArea(selectedArea)
+        ? L.polygon(selectedArea, AREA_STYLE).addTo(map)
+        : L.rectangle([[selectedArea[0], selectedArea[1]], [selectedArea[2], selectedArea[3]]], AREA_STYLE).addTo(map);
+}
+
+function setSelectedArea(area) {
+    selectedArea = area;
+    document.getElementById('clear-area-btn').classList.remove('d-none');
+    document.getElementById('area-status').textContent = 'Area selected — routes stay within it';
 }
 
 function clearArea() {
-    if (drawAreaRect) { map.removeLayer(drawAreaRect); drawAreaRect = null; }
-    selectedAreaBounds = null;
+    if (isDrawingArea) setDrawAreaMode(null);
+    removeAreaLayer();
+    selectedArea = null;
     document.getElementById('clear-area-btn').classList.add('d-none');
     document.getElementById('area-status').textContent = '';
+}
+
+// ── Polygon drawing ───────────────────────────────────────────────
+
+function resetPolygonDraft() {
+    _polyPts = [];
+    if (_polyPreview) { map.removeLayer(_polyPreview); _polyPreview = null; }
+    if (_polyVertices) { map.removeLayer(_polyVertices); _polyVertices = null; }
+    // An unfinished polygon outline: drop it and put back the old area.
+    if (drawAreaLayer && drawAreaLayer._isPolygonDraft) {
+        removeAreaLayer();
+        restoreSelectedAreaLayer();
+    }
+}
+
+function addPolygonPoint(latlng) {
+    if (_polyPts.length >= 3) {
+        // Clicking (near) the first corner closes the polygon.
+        const first = map.latLngToContainerPoint(_polyPts[0]);
+        if (first.distanceTo(map.latLngToContainerPoint(latlng)) <= 12) {
+            finishPolygon();
+            return;
+        }
+    }
+    // Ignore a repeat click on the last corner (the first half of a double-click).
+    const last = _polyPts[_polyPts.length - 1];
+    if (last && map.latLngToContainerPoint(last).distanceTo(map.latLngToContainerPoint(latlng)) <= 4) return;
+
+    if (_polyPts.length === 0) {
+        // First corner of a new polygon: the old area stays selected until
+        // this one is finished, but its shape steps aside.
+        removeAreaLayer();
+        drawAreaLayer = L.polyline([], AREA_STYLE).addTo(map);
+        drawAreaLayer._isPolygonDraft = true;
+        _polyVertices = L.layerGroup().addTo(map);
+    }
+    _polyPts.push(latlng);
+    drawAreaLayer.setLatLngs(_polyPts);
+    const isFirst = _polyPts.length === 1;
+    const vertex = L.circleMarker(latlng, {
+        radius: isFirst ? 6 : 4, color: '#0B6FA6', weight: 2,
+        fillColor: '#ffffff', fillOpacity: 1, bubblingMouseEvents: false,
+    }).addTo(_polyVertices);
+    if (isFirst) {
+        vertex.bindTooltip('Click to finish', { direction: 'top' });
+        vertex.on('click', (ev) => { L.DomEvent.stop(ev); finishPolygon(); });
+    }
+
+    const remaining = MAX_POLYGON_VERTICES - _polyPts.length;
+    if (remaining <= 0) {
+        finishPolygon();
+    } else if (_polyPts.length >= 3) {
+        document.getElementById('area-status').textContent =
+            `${_polyPts.length} corners — click the first corner or double-click to finish (Esc cancels)`;
+    }
+}
+
+function updatePolygonPreview(latlng) {
+    if (!_polyPts.length) return;
+    const pts = [_polyPts[_polyPts.length - 1], latlng];
+    if (_polyPts.length >= 2) pts.push(_polyPts[0]);
+    if (_polyPreview) {
+        _polyPreview.setLatLngs(pts);
+    } else {
+        _polyPreview = L.polyline(pts, { ...AREA_STYLE, weight: 1, opacity: 0.6, interactive: false }).addTo(map);
+    }
+}
+
+function finishPolygon() {
+    const status = document.getElementById('area-status');
+    if (_polyPts.length < 3) {
+        status.textContent = 'A polygon needs at least 3 corners — keep clicking, or Esc to cancel';
+        return;
+    }
+    const R = window.ExploreRefine;
+    const poly = _polyPts.map(ll => [ll.lat, ll.lng]);
+    if (R.polygonSelfIntersects(poly)) {
+        status.textContent = 'The edges cross — draw the corners in order around the area. Try again.';
+        resetPolygonDraft();
+        return;
+    }
+    if (_polyPreview) { map.removeLayer(_polyPreview); _polyPreview = null; }
+    if (_polyVertices) { map.removeLayer(_polyVertices); _polyVertices = null; }
+    _polyPts = [];
+    removeAreaLayer();
+    drawAreaLayer = L.polygon(poly, AREA_STYLE).addTo(map);
+    setSelectedArea(poly);
+    setDrawAreaMode(null);
 }
 
 function setStart(lat, lon, label = null) {
@@ -1856,7 +2017,7 @@ async function generateRoute() {
         coverageData,
         coverageDataSecondary: mode === 'both' ? coverageDataSecondary : null,
         optimizeFor,
-        areaBounds: selectedAreaBounds,
+        areaBounds: selectedArea,
         windDirectionDeg: wind ? wind.windDirectionDeg : null,
         windSpeedKph: wind ? wind.windSpeedKph : null,
         ptpEfficientKm: _ptpEfficientKm,
@@ -2476,7 +2637,7 @@ async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
     // fences the road route inside it; pickups and any padding stay inside
     // it either way.
     const R = window.ExploreRefine;
-    const areaBounds = selectedAreaBounds;
+    const areaBounds = selectedArea;
     const fenceBounds = areaBounds &&
         R.pointInBounds([startPos.lat, startPos.lng], areaBounds) &&
         R.pointInBounds([endPos.lat, endPos.lng], areaBounds) ? areaBounds : null;
