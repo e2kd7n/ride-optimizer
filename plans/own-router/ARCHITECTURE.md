@@ -79,6 +79,20 @@ A planner that holds the network itself can price turns directly, include rideab
 
 The key decision is that **planning moves entirely into the browser, on a precompiled graph.** The Pi serves static files, so its CPU and threads stay free and nothing new runs on it. The browser already does Phase 1's heavy lifting in a Web Worker.
 
+### Where the work runs
+
+| Work | Today | With the own router | Why there |
+|---|---|---|---|
+| Picking stops / planning the route | Browser (Phase 1) + Pi → ORS round trips (Phase 2) | **Browser** (Web Worker) | Per-route, interactive, CPU-heavy: the rider's device has far more spare CPU than the Pi, and planning scales with users for free |
+| Turn-by-turn road connections | ORS, via the Pi | **Browser** | No network calls per decision; turn costs become possible |
+| Which tiles a route claims | Pi (`/api/exploration/new-tiles`) after ORS returns | **Browser**, exact from the edge→tile index | Known before a route is chosen, not after |
+| Water / roadless tiles | Pi: Overpass download + polygon rasterization | **Browser**, from the graph (M2) | Removes the Pi's heaviest request-time computation and the Overpass dependency |
+| Visited-tile coverage from your activities | Pi (cached, incremental) | **Pi** (unchanged) | Needs the activity history, which lives on the Pi; computed once per page load, not per route |
+| Building the routing graph from OSM | — | **GitHub Actions runner or dev box**, monthly | Input is a large OSM extract and the output is identical for every device: build once, serve as a small cached file. Too big for the Pi's 1.8 GB RAM, and wasteful to repeat on every phone |
+| Serving the graph | — | **Pi** (static file, HTTP-cached) | Trivial load: one download per device per monthly refresh |
+
+After the migration, the Pi's per-route work drops to **zero**: no ORS proxying, no tile verification, no water lookups.
+
 ## 4. Components
 
 ### 4.1 Graph build pipeline (`tools/router/`)
