@@ -783,12 +783,71 @@
         return false;
     }
 
+    /**
+     * Squadrats "yard": the largest 4-connected group of collected tiles in
+     * which every tile has all four N/E/S/W neighbours collected (diagonals
+     * don't matter). `visited` is the coverage grid's `visited` map, keyed
+     * "x,y". Returns a Set of "x,y" keys, empty when no tile qualifies; on a
+     * tie the first group found wins. With viewport-bounded coverage, a yard
+     * running past the loaded area's edge can come out smaller than it is,
+     * because neighbours outside that area look uncollected.
+     */
+    function findYard(visited) {
+        const yard = new Set();
+        if (!visited || typeof visited !== 'object') return yard;
+        const has = (x, y) => Object.prototype.hasOwnProperty.call(visited, x + ',' + y);
+        const interior = new Set();
+        for (const key of Object.keys(visited)) {
+            const [x, y] = key.split(',').map(Number);
+            if (has(x + 1, y) && has(x - 1, y) && has(x, y + 1) && has(x, y - 1)) interior.add(x + ',' + y);
+        }
+        const seen = new Set();
+        let best = [];
+        for (const start of interior) {
+            if (seen.has(start)) continue;
+            seen.add(start);
+            const group = [start];
+            for (let i = 0; i < group.length; i++) {
+                const [x, y] = group[i].split(',').map(Number);
+                for (const k of [(x + 1) + ',' + y, (x - 1) + ',' + y, x + ',' + (y + 1), x + ',' + (y - 1)]) {
+                    if (interior.has(k) && !seen.has(k)) { seen.add(k); group.push(k); }
+                }
+            }
+            if (group.length > best.length) best = group;
+        }
+        for (const k of best) yard.add(k);
+        return yard;
+    }
+
+    /**
+     * Outline of a set of tiles: every tile edge that borders a tile outside
+     * the set, as [[lat, lon], [lat, lon]] segments (fits one multi-segment
+     * L.polyline). Drawing a yard as fill plus this outline keeps grid lines
+     * out of its interior, so it reads as one region.
+     */
+    function tileSetOutline(tileKeys, zoom) {
+        const segs = [];
+        const n = Math.pow(2, zoom);
+        const lon = x => x / n * 360 - 180;
+        const lat = y => Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * 180 / Math.PI;
+        for (const key of tileKeys) {
+            const [x, y] = key.split(',').map(Number);
+            const w = lon(x), e = lon(x + 1), no = lat(y), so = lat(y + 1);
+            if (!tileKeys.has(x + ',' + (y - 1))) segs.push([[no, w], [no, e]]);
+            if (!tileKeys.has(x + ',' + (y + 1))) segs.push([[so, w], [so, e]]);
+            if (!tileKeys.has((x - 1) + ',' + y)) segs.push([[so, w], [no, w]]);
+            if (!tileKeys.has((x + 1) + ',' + y)) segs.push([[so, e], [no, e]]);
+        }
+        return segs;
+    }
+
     const api = {
         haversineKm, pathKm, latLonToTile, tileBounds, tileSideKm, buildRoadlessLookup, makeGrid,
         densify, tilesTouched, newTilesCrossed, countNewTiles,
         findPickups, clusterSweepTargets, insertSweepTargets, waypointRouteIndices, insertPickups, cheapestInsertion, chooseDropIndex,
         analyzeRetrace, uselessStops, pointInBounds, fractionOutsideBounds, clampToBounds,
         isPolygonArea, areaBBox, pointInPolygon, polygonSelfIntersects,
+        findYard, tileSetOutline,
     };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else root.ExploreRefine = api;

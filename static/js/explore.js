@@ -1543,47 +1543,78 @@ function tileRectOptions(style, tileCount) {
         : { ...style, interactive: false };
 }
 
-// Already-visited tiles: brand cobalt accent (--accent, FAIR_WEATHER_BRAND_BOOK.md),
-// kept visually distinct from the bright Squadrats-green used for newly-claimed
-// tiles (TILE_STYLE_NEW below) so "already have this" and "this route would
-// claim it" never look alike.
-const TILE_STYLE_VISITED      = { color: '#0B6FA6', weight: 0.5, fillColor: '#0B6FA6', fillOpacity: 0.3 };
-// "Both" mode (squadrats + squadratinhos together): the coarser primary grid
-// (zoom 14) gets an outline-only treatment so the finer secondary grid (zoom
-// 17) can render with full fill on top of it without the two blending together.
-const TILE_STYLE_BOTH_PRIMARY = { color: '#0B6FA6', weight: 1,   fillColor: '#0B6FA6', fillOpacity: 0.12 };
-// Secondary (squadratinho) grid in "both" mode: lighter accent tint (--accent
-// dark-theme value, reused here as the "light" tone) so it reads as a distinct
-// layer from the primary grid underneath it.
-const TILE_STYLE_SECONDARY    = { color: '#4FB3E8', weight: 0.5, fillColor: '#4FB3E8', fillOpacity: 0.35 };
+// Visited-tile coverage styles, keyed by grid rather than primary/secondary
+// so a squadrat always looks like a squadrat whichever grid mode is selected.
+// Squadrats are brand cobalt (--accent), squadratinhos the brand's identity
+// purple (FAIR_WEATHER_BRAND_BOOK.md "Identity" set), so the two grids differ
+// in hue, not just lightness. Neither is the Squadrats green used for newly
+// claimed tiles (TILE_STYLE_NEW below), so "already have this" and "this
+// route would claim it" never look alike.
+//
+// Each grid has four styles:
+//   tile / tileBoth — ordinary visited tiles, on their own or in "both" mode.
+//                     In "both" mode the squadrat grid is mostly outline, so
+//                     the squadratinhos can show through on top of it.
+//   yard / yardBoth — tiles in the yard (largest group whose tiles all have
+//                     four collected neighbours). They get a denser fill with
+//                     no per-tile stroke, so the yard reads as one solid region.
+//   outline         — heavy, darker line around the yard's edge. Squadrat yard
+//                     is solid, yardinho dashed, so the two outlines can't be
+//                     confused where they overlap.
+const TILE_GRID_STYLES = {
+    14: {
+        tile:     { color: '#0B6FA6', weight: 0.5, fillColor: '#0B6FA6', fillOpacity: 0.28 },
+        tileBoth: { color: '#0B6FA6', weight: 1.5, fillColor: '#0B6FA6', fillOpacity: 0.08 },
+        yard:     { stroke: false, fillColor: '#0B6FA6', fillOpacity: 0.5 },
+        yardBoth: { stroke: false, fillColor: '#0B6FA6', fillOpacity: 0.2 },
+        outline:  { color: '#063F5F', weight: 4, opacity: 0.95 },
+    },
+    17: {
+        tile:     { color: '#7A4FA0', weight: 0.5, fillColor: '#7A4FA0', fillOpacity: 0.3 },
+        tileBoth: { color: '#7A4FA0', weight: 0.5, fillColor: '#7A4FA0', fillOpacity: 0.35 },
+        yard:     { stroke: false, fillColor: '#7A4FA0', fillOpacity: 0.6 },
+        yardBoth: { stroke: false, fillColor: '#7A4FA0', fillOpacity: 0.6 },
+        outline:  { color: '#43285C', weight: 2.5, opacity: 0.95, dashArray: '6,4' },
+    },
+};
 
 /**
- * Render the visited-tile coverage grid. In single-grid mode tiles get a
- * solid cobalt fill; in "both" mode the squadrat (primary) grid gets a
- * lighter outline-only style so the squadratinho (secondary) grid can show
- * on top with full fill.
+ * Render the visited-tile coverage grid(s), each with its yard highlighted.
+ * In "both" mode the squadrat (primary) grid is drawn underneath, mostly as
+ * outline, and the squadratinho (secondary) grid is drawn filled on top.
  */
 function renderTiles(primary, secondary) {
     tileLayer.clearLayers();
     tileLayerSecondary.clearLayers();
 
-    const primaryStyle = secondary ? TILE_STYLE_BOTH_PRIMARY : TILE_STYLE_VISITED;
-    drawTileGrid(tileLayer, primary.visited, primary.zoom, primaryStyle);
+    const both = !!secondary;
+    const outlines = [drawTileGrid(tileLayer, primary.visited, primary.zoom, both)];
     if (secondary) {
-        drawTileGrid(tileLayerSecondary, secondary.visited, secondary.zoom, TILE_STYLE_SECONDARY);
+        outlines.push(drawTileGrid(tileLayerSecondary, secondary.visited, secondary.zoom, both));
     }
+    // Yard outlines go on top of every fill — otherwise the squadratinho fill
+    // would cover the squadrat yard's edge. The dashed yardinho outline is
+    // added last so it stays visible where it runs along the squadrat one.
+    const top = both ? tileLayerSecondary : tileLayer;
+    outlines.forEach(o => { if (o) top.addLayer(o); });
 }
 
 /** Draw one zoom level's visited tiles as rectangles, computing each tile's
- *  lat/lon boundary from its `x,y` grid key (same math as renderNewTiles). */
-function drawTileGrid(layerGroup, visited, zoom, style) {
-    if (!visited || typeof visited !== 'object') return;
-    const n = Math.pow(2, zoom || 14);
+ *  lat/lon boundary from its `x,y` grid key (same math as renderNewTiles).
+ *  Yard tiles get the denser yard fill. Returns the yard's outline polyline
+ *  (or null when there's no yard) for the caller to add above all fills. */
+function drawTileGrid(layerGroup, visited, zoom, both) {
+    if (!visited || typeof visited !== 'object') return null;
+    zoom = zoom || 14;
+    const styles = TILE_GRID_STYLES[zoom] || TILE_GRID_STYLES[14];
+    const n = Math.pow(2, zoom);
     const keys = Object.keys(visited);
+    const yard = ExploreRefine.findYard(visited);
     // #579 — one rectOptions computation per draw call (not per tile) so a
     // large full-history grid shares one canvas renderer instead of paying
     // per-tile DOM cost.
-    const rectOptions = tileRectOptions(style, keys.length);
+    const rectOptions = tileRectOptions(both ? styles.tileBoth : styles.tile, keys.length);
+    const yardOptions = tileRectOptions(both ? styles.yardBoth : styles.yard, keys.length);
 
     for (const key of keys) {
         const [x, y] = key.split(',').map(Number);
@@ -1591,9 +1622,13 @@ function drawTileGrid(layerGroup, visited, zoom, style) {
         const east  = (x + 1) / n * 360 - 180;
         const north = Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n)))       * 180 / Math.PI;
         const south = Math.atan(Math.sinh(Math.PI * (1 - 2 * (y + 1) / n))) * 180 / Math.PI;
-        const rect = L.rectangle([[south, west], [north, east]], rectOptions);
+        const rect = L.rectangle([[south, west], [north, east]], yard.has(key) ? yardOptions : rectOptions);
         layerGroup.addLayer(rect);
     }
+    if (!yard.size) return null;
+    // One multi-segment polyline for the whole outline, not one per edge.
+    return L.polyline(ExploreRefine.tileSetOutline(yard, zoom),
+        tileRectOptions(styles.outline, keys.length));
 }
 
 // Confirmed new tiles a route will claim (Phase 2, exact road-route crossing): bright Squadrats-green
