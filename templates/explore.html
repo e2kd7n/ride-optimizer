@@ -17,20 +17,22 @@
 
     {% include "partials/nav.html" %}
 
-    <main id="main-content" class="container mt-2 mb-4" role="main">
-
-        <h1 class="fs-4 mb-2">Explore</h1>
-
-        <!-- Concept explainer (#360, #375 field note: jargon-free first use) -->
-        <p class="small text-muted mb-3">
-            Tiles are map grid squares. Covering more tiles means you've explored more unique roads.
-            <strong>Squadrats</strong> = zoom-14 tiles (~1.2&nbsp;km&sup2;);
-            <strong>Squadratinhos</strong> = zoom-17 tiles (~0.15&nbsp;km&sup2;).
-        </p>
+    <main id="main-content" class="container explore-page mt-2 mb-4" role="main">
 
         <div class="row g-3">
             <!-- Controls column (#367: side-by-side with map on lg+) -->
             <div class="col-lg-4 order-1">
+                <!-- Title + explainer live in the controls column so the map can
+                     start right under the navbar on desktop and fill the viewport -->
+                <h1 class="fs-4 mb-2">Explore</h1>
+
+                <!-- Concept explainer (#360, #375 field note: jargon-free first use) -->
+                <p class="small text-muted mb-3">
+                    Tiles are map grid squares. Covering more tiles means you've explored more unique roads.
+                    <strong>Squadrats</strong> = zoom-14 tiles (~1.2&nbsp;km&sup2;);
+                    <strong>Squadratinhos</strong> = zoom-17 tiles (~0.15&nbsp;km&sup2;).
+                </p>
+
                 <div class="card mb-3">
                     <div class="card-body py-3 px-3">
 
@@ -195,9 +197,9 @@
             </div>
 
             <!-- Map column -->
-            <div class="col-lg-8 order-2">
-                <div class="card mb-2">
-                    <div class="card-body p-2">
+            <div class="col-lg-8 order-2 explore-map-col">
+                <div class="card mb-2 explore-map-card">
+                    <div class="card-body p-2 explore-map-body">
                         <div id="explore-map" role="img" aria-label="Tile coverage map"></div>
 
                         <!-- Coverage legend (#360) -->

@@ -319,6 +319,12 @@ function initMap() {
     routeLayer = L.featureGroup().addTo(map);
     waypointMarkers = L.layerGroup().addTo(map);
 
+    // On desktop the map flexes to fill its column, so its size also changes
+    // when the route list below it grows or shrinks — not just on window resize.
+    if (typeof ResizeObserver !== 'undefined') {
+        new ResizeObserver(() => map.invalidateSize()).observe(document.getElementById('explore-map'));
+    }
+
     // #491: click-and-drag to draw a target-area rectangle. Only active
     // while "Draw area" is toggled on; otherwise these are no-ops and the
     // map behaves as before (pan/click-to-set-start).

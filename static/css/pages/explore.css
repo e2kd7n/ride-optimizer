@@ -6,6 +6,45 @@
         @media (max-width: 767px) {
             #explore-map { height: 350px; }
         }
+        /* Desktop: full-width page, map column pinned and filling the viewport
+           while the controls column scrolls beside it. Legend and route list
+           stay in the pinned column; the map flexes to the remaining height. */
+        @media (min-width: 992px) {
+            .explore-page {
+                max-width: none;
+                padding-left: 24px;
+                padding-right: 24px;
+            }
+            .explore-map-col {
+                position: sticky;
+                top: 8px;
+                align-self: flex-start;
+                display: flex;
+                flex-direction: column;
+                /* viewport minus navbar + main's top margin when unscrolled */
+                height: calc(100vh - 72px);
+                height: calc(100dvh - 72px);
+            }
+            .explore-map-card {
+                flex: 1 1 auto;
+                min-height: 0;
+            }
+            .explore-map-body {
+                display: flex;
+                flex-direction: column;
+                height: 100%;
+            }
+            #explore-map {
+                flex: 1 1 auto;
+                height: auto;
+                min-height: 400px;
+            }
+            #route-list {
+                flex: 0 0 auto;
+                max-height: 30vh;
+                overflow-y: auto;
+            }
+        }
         .route-badge {
             display: inline-flex;
             align-items: center;
