@@ -9,6 +9,16 @@ from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime, timedelta
 
 
+@pytest.fixture(autouse=True)
+def _no_background_water_downloads(monkeypatch):
+    """CoverageTracker starts background Overpass downloads when a water
+    lookup misses. A test's requests.post patch ends when the test does, so
+    a leftover thread could reach the real Overpass server — keep them off
+    everywhere; tests that exercise them turn them back on explicitly."""
+    from src.coverage_tracker import CoverageTracker
+    monkeypatch.setattr(CoverageTracker, "BACKGROUND_WATER_FETCH", False)
+
+
 @pytest.fixture
 def mock_config():
     """Mock Config with test data."""

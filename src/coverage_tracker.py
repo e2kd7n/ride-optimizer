@@ -94,6 +94,20 @@ _MAX_CONCURRENT_OVERPASS_CALLS = 2
 # Bounds the worst case to roughly this plus one request's own timeout,
 # instead of queueing behind however many callers are already waiting.
 _OVERPASS_SEMAPHORE_WAIT_S = 5
+# Background water download. A dense metro cell's water query can take far
+# longer than any request can wait — the 0.5° Chicago cell measured 48 s /
+# 10 MB on 2026-11-08 — so with the 25/30 s limits above it failed on every
+# attempt, forever, and Explore showed "Water exclusion unavailable" (with
+# Phase-1 stops landing in Lake Michigan). A request that misses or times
+# out now kicks off one background download with these much longer limits;
+# once it lands, the cache serves every later request instantly.
+_OVERPASS_BACKGROUND_QUERY_TIMEOUT_S = 240
+_OVERPASS_BACKGROUND_REQUEST_TIMEOUT_S = 260
+# After a failed background download, wait this long before trying that
+# cell again, so a struggling Overpass isn't hammered by page loads.
+_WATER_BACKGROUND_RETRY_S = 300
+# How long a background download waits for one of the shared Overpass slots.
+_WATER_BACKGROUND_SLOT_WAIT_S = 120
 
 
 #: Placeholder value for a visited tile in a TileCoverage response (#579).
@@ -434,6 +448,22 @@ def _parse_overpass_water(elements: list) -> Tuple[List[list], List[list]]:
             if rings:
                 water.append(rings)
     return water, _join_ways(coastline, directed=True)
+
+
+def _water_query_parts(bounds: Tuple[float, float, float, float], need_water: bool, need_coast: bool) -> List[str]:
+    """Overpass query statements for a snapped cell's missing water and/or
+    coastline (shared by the in-request and background paths)."""
+    south, west, north, east = bounds
+    bbox = f"({south},{west},{north},{east})"
+    parts = []
+    if need_water:
+        parts += [
+            f'way["natural"="water"]{bbox}(if: length() > {_MIN_WATER_WAY_PERIMETER_M});',
+            f'relation["natural"="water"]{bbox};',
+        ]
+    if need_coast:
+        parts.append(f'way["natural"="coastline"]{bbox};')
+    return parts
 
 
 def _water_groups_from_cache(raw) -> Optional[List[list]]:
@@ -782,6 +812,14 @@ class CoverageTracker:
         # for fast, local-only endpoints even when several new areas are
         # queried in quick succession or Overpass itself is slow.
         self._overpass_semaphore = threading.BoundedSemaphore(_MAX_CONCURRENT_OVERPASS_CALLS)
+        # Background water downloads (see _OVERPASS_BACKGROUND_*): at most
+        # one in flight; per-cell retry-after after a failure; and cells whose
+        # in-request query already timed out, so later requests go straight
+        # to the background download instead of each paying another timeout.
+        self._water_bg_lock = threading.Lock()
+        self._water_bg_running: Optional[str] = None
+        self._water_bg_retry_after: Dict[str, float] = {}
+        self._slow_water_cells: set = set()
 
     # ------------------------------------------------------------------
     # Activity loading
@@ -1222,20 +1260,23 @@ class CoverageTracker:
             coastline = _coastline_from_cache(self._read_cache_json(coast_file)) if coast_stamp else None
 
             if water is None or coastline is None:
-                south, west, north, east = bounds
-                bbox = f"({south},{west},{north},{east})"
-                parts = []
-                if water is None:
-                    parts += [
-                        f'way["natural"="water"]{bbox}(if: length() > {_MIN_WATER_WAY_PERIMETER_M});',
-                        f'relation["natural"="water"]{bbox};',
-                    ]
-                if coastline is None:
-                    parts.append(f'way["natural"="coastline"]{bbox};')
+                parts = _water_query_parts(bounds, water is None, coastline is None)
                 try:
+                    if key in self._slow_water_cells:
+                        # This cell's query already timed out in-request;
+                        # don't make another request pay for it.
+                        raise RuntimeError("this area's water query is too slow to run in a request")
                     elements = self._overpass_query("(" + "".join(parts) + ");out geom;", deadline)
                 except Exception as exc:
+                    if isinstance(exc, requests.Timeout) or "budget exhausted" in str(exc):
+                        self._slow_water_cells.add(key)
+                    started = self._schedule_background_water_fetch(key, bounds, water is None, coastline is None)
                     if water is None:
+                        if started:
+                            raise RuntimeError(
+                                "Water data for this area is downloading in the background — "
+                                f"try again in a minute or two ({exc})"
+                            ) from exc
                         raise
                     # Water is cached and only the coastline query failed.
                     # Serve the cached water with no coastline instead of
@@ -1264,6 +1305,93 @@ class CoverageTracker:
             if water_stamp and coast_stamp:
                 self._remember_water_polygons(key, (water_stamp, coast_stamp), groups)
             return groups
+
+    # Tests switch this off globally (tests/conftest.py) so a background
+    # thread can never outlive a test's requests.post patch and reach the
+    # real Overpass server.
+    BACKGROUND_WATER_FETCH = True
+
+    def _spawn_background(self, fn) -> None:
+        threading.Thread(target=fn, name="water-download", daemon=True).start()
+
+    def _schedule_background_water_fetch(
+        self, key: str, bounds: Tuple[float, float, float, float], need_water: bool, need_coast: bool,
+    ) -> bool:
+        """Start a background download of this cell's water/coastline with
+        the long _OVERPASS_BACKGROUND_* limits. Returns True if a download
+        for it is now running (started here or already in flight)."""
+        if not self.BACKGROUND_WATER_FETCH:
+            return False
+        now = time.time()
+        with self._water_bg_lock:
+            if self._water_bg_running == key:
+                return True
+            if self._water_bg_running is not None:
+                return False  # one at a time; a later request will start this one
+            if self._water_bg_retry_after.get(key, 0) > now:
+                return False
+            self._water_bg_running = key
+
+        def run():
+            try:
+                self._download_water_cell(key, bounds, need_water, need_coast)
+            finally:
+                with self._water_bg_lock:
+                    self._water_bg_running = None
+
+        self._spawn_background(run)
+        return True
+
+    def _download_water_cell(
+        self, key: str, bounds: Tuple[float, float, float, float], need_water: bool, need_coast: bool,
+    ) -> None:
+        """The background download itself: one Overpass query with long
+        limits, then the same cache writes as the in-request path."""
+        parts = _water_query_parts(bounds, need_water, need_coast)
+        query = f"[out:json][timeout:{_OVERPASS_BACKGROUND_QUERY_TIMEOUT_S}];(" + "".join(parts) + ");out geom;"
+        headers = {"User-Agent": "ride-optimizer (exploration water-tile lookup)"}
+        started = time.monotonic()
+        # Share the Overpass concurrency cap so request-path lookups plus this
+        # download never exceed what the endpoint allows per client.
+        if not self._overpass_semaphore.acquire(timeout=_WATER_BACKGROUND_SLOT_WAIT_S):
+            logger.warning("Background water download for %s: no free Overpass slot — will retry later", key)
+            self._water_bg_retry_after[key] = time.time() + 60
+            return
+        try:
+            response = requests.post(
+                _OVERPASS_URL, data={"data": query}, headers=headers,
+                timeout=_OVERPASS_BACKGROUND_REQUEST_TIMEOUT_S,
+            )
+            response.raise_for_status()
+            elements = response.json().get("elements", [])
+        except (requests.RequestException, ValueError, OSError) as exc:
+            self._water_bg_retry_after[key] = time.time() + _WATER_BACKGROUND_RETRY_S
+            logger.warning(
+                "Background water download for %s failed after %.0fs: %s — retrying in %ds",
+                key, time.monotonic() - started, exc, _WATER_BACKGROUND_RETRY_S,
+            )
+            return
+        finally:
+            self._overpass_semaphore.release()
+
+        water_file = self.cache_dir / f"water_{key}.json"
+        coast_file = self.cache_dir / f"coast_{key}.json"
+        with self._get_water_polygon_lock(key):
+            fetched_water, fetched_coast = _parse_overpass_water(elements)
+            if need_water:
+                self._write_cache_json(water_file, {"version": _WATER_CACHE_VERSION, "water": fetched_water})
+            if need_coast:
+                self._write_cache_json(coast_file, {"version": _WATER_CACHE_VERSION, "coastline": fetched_coast})
+            self._evict_old_water_polygon_caches()
+        self._water_bg_retry_after.pop(key, None)
+        # Overpass evidently works — don't keep request-path lookups for
+        # other cells blocked behind a stale negative-cache entry.
+        with self._overpass_failure_lock:
+            self._overpass_failure_until.pop(_OVERPASS_URL, None)
+        logger.info(
+            "Background water download for %s done in %.0fs (%d elements)",
+            key, time.monotonic() - started, len(elements),
+        )
 
     def _fresh_cache_stamp(self, path: Path) -> Optional[Tuple[int, int]]:
         """(mtime_ns, size) of a water/coast cache file, or None if it's

@@ -1341,7 +1341,12 @@ async function loadCoverage() {
             // real success with an empty list) or by the intentional
             // no-bounds skip on a full-history load.
             if (roadlessResults.some(roadlessLookupFailed)) {
-                showRoadlessWarning();
+                // A slow area's water now downloads in the background on the
+                // server — say so, since a reload shortly will pick it up.
+                const downloading = roadlessResults.some(r => r && /downloading/i.test(r.message || ''));
+                showRoadlessWarning(downloading
+                    ? 'Water data for this area is downloading — reload in a minute or two for water exclusion'
+                    : undefined);
             } else {
                 clearRoadlessWarning();
             }

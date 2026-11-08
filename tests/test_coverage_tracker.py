@@ -1812,18 +1812,19 @@ class TestCoastlineWater:
         assert result["roadless_count"] / _tile_total(_NE_LAKE_BOX, TILE_ZOOM) > 0.8
 
     def test_coastline_failure_is_not_cached(self, tracker):
-        """The degraded answer isn't persisted, so the coastline is retried
-        once Overpass recovers."""
+        """The degraded answer isn't persisted; the coastline is retried —
+        by the background download once a request has timed out on it, and
+        that download writes the file."""
         snapped = self._warm_lake_water_cache(tracker)
         tracker._overpass_failure_until.clear()
         with patch("requests.post", side_effect=requests.exceptions.ReadTimeout("slow")):
             tracker.get_roadless_tiles(_NE_LAKE_BOX, zoom=TILE_ZOOM)
         assert not (tracker.cache_dir / f"coast_{_bbox_cache_key(snapped)}.json").exists()
-        tracker._overpass_failure_until.clear()
+        key = _bbox_cache_key(snapped)
         with patch("requests.post", return_value=_overpass([])) as mock_post:
-            tracker.get_roadless_tiles(_NE_LAKE_BOX, zoom=TILE_ZOOM)
+            tracker._download_water_cell(key, snapped, need_water=False, need_coast=True)
         mock_post.assert_called_once()
-        assert (tracker.cache_dir / f"coast_{_bbox_cache_key(snapped)}.json").exists()
+        assert (tracker.cache_dir / f"coast_{key}.json").exists()
 
     def test_cold_cache_failure_still_fails(self, tracker):
         """With no water cached there's nothing to fall back to."""
@@ -1949,3 +1950,76 @@ class TestMultiBoxRoadless:
         with patch("requests.post", side_effect=requests.ConnectionError("boom")):
             result = tracker.get_roadless_tiles([(41.6, -87.9, 41.8, -87.7)], zoom=TILE_ZOOM)
         assert result["status"] == "error"
+
+
+class TestBackgroundWaterDownload:
+    """A dense metro cell's water query (Chicago: 48 s / 10 MB measured
+    2026-11-08) can't finish inside a request's 25/30 s Overpass limits, so it
+    failed on every attempt and water exclusion stayed unavailable. A miss
+    now starts one background download with long limits."""
+
+    @pytest.fixture
+    def tracker(self, tmp_path, monkeypatch):
+        config = MagicMock()
+        config.get = MagicMock(side_effect=lambda key, default=None: default)
+        t = CoverageTracker(config)
+        t.cache_dir = tmp_path
+        monkeypatch.setattr(CoverageTracker, "BACKGROUND_WATER_FETCH", True)
+        t.spawned = []
+        t._spawn_background = lambda fn: t.spawned.append(fn)   # run on demand
+        return t
+
+    @staticmethod
+    def _key():
+        return _bbox_cache_key(_snap_bbox_to_grid(_NE_LAKE_BOX, _WATER_POLYGON_GRID_DEGREES))
+
+    def test_timeout_starts_background_download_and_says_so(self, tracker):
+        with patch("requests.post", side_effect=requests.exceptions.ReadTimeout("slow")):
+            result = tracker.get_roadless_tiles(_NE_LAKE_BOX, zoom=TILE_ZOOM)
+        assert result["status"] == "error"
+        assert "downloading in the background" in result["message"]
+        assert len(tracker.spawned) == 1
+
+    def test_background_download_fills_cache_and_next_request_is_offline(self, tracker):
+        with patch("requests.post", side_effect=requests.exceptions.ReadTimeout("slow")):
+            tracker.get_roadless_tiles(_NE_LAKE_BOX, zoom=TILE_ZOOM)
+        with patch("requests.post", return_value=_overpass([_lake_michigan_relation()])) as mock_post:
+            tracker.spawned.pop()()
+        sent = mock_post.call_args[1]
+        assert sent["timeout"] > 60
+        assert "[timeout:240]" in sent["data"]["data"]
+        assert json.loads((tracker.cache_dir / f"water_{self._key()}.json").read_text())["version"] == 3
+        with patch("requests.post", side_effect=AssertionError("should be cached")):
+            result = tracker.get_roadless_tiles(_NE_LAKE_BOX, zoom=TILE_ZOOM)
+        assert result["status"] == "success"
+        assert result["roadless_count"] / _tile_total(_NE_LAKE_BOX, TILE_ZOOM) > 0.8
+
+    def test_legacy_cache_is_replaced_by_background_download(self, tracker):
+        """The Pi's Chicago water file was a pre-#603 bare list, rejected as
+        lossy; the background download is what finally replaces it."""
+        (tracker.cache_dir / f"water_{self._key()}.json").write_text(json.dumps([[[41.9, -87.6]]]))
+        with patch("requests.post", side_effect=requests.exceptions.ReadTimeout("slow")):
+            tracker.get_roadless_tiles(_NE_LAKE_BOX, zoom=TILE_ZOOM)
+        with patch("requests.post", return_value=_overpass([_lake_michigan_relation()])):
+            tracker.spawned.pop()()
+        raw = json.loads((tracker.cache_dir / f"water_{self._key()}.json").read_text())
+        assert isinstance(raw, dict) and raw["version"] == 3
+
+    def test_slow_cell_skips_the_in_request_query_next_time(self, tracker):
+        with patch("requests.post", side_effect=requests.exceptions.ReadTimeout("slow")):
+            tracker.get_roadless_tiles(_NE_LAKE_BOX, zoom=TILE_ZOOM)
+        tracker._overpass_failure_until.clear()
+        with patch("requests.post", return_value=_overpass([])) as mock_post:
+            tracker.get_roadless_tiles(_NE_LAKE_BOX, zoom=TILE_ZOOM)
+        mock_post.assert_not_called()
+
+    def test_only_one_download_at_a_time_and_backoff_after_failure(self, tracker):
+        key = self._key()
+        snapped = _snap_bbox_to_grid(_NE_LAKE_BOX, _WATER_POLYGON_GRID_DEGREES)
+        assert tracker._schedule_background_water_fetch(key, snapped, True, True) is True
+        assert tracker._schedule_background_water_fetch("other", (0.0, 0.0, 0.5, 0.5), True, True) is False
+        with patch("requests.post", side_effect=requests.ConnectionError("down")):
+            tracker.spawned.pop()()
+        # Failed: backs off instead of retrying on the next page load.
+        assert tracker._schedule_background_water_fetch(key, snapped, True, True) is False
+        assert not tracker.spawned
