@@ -1790,6 +1790,47 @@ class TestCoastlineWater:
         assert '"coastline"' in query and '"water"' not in query
         assert result["roadless_count"] > 0
 
+    def _warm_lake_water_cache(self, tracker):
+        """Cache Lake Michigan's water (no coastline file), as on the Pi
+        for areas cached before #603 added the coastline cache."""
+        with patch("requests.post", return_value=_overpass([_lake_michigan_relation()])):
+            tracker.get_roadless_tiles(_NE_LAKE_BOX, zoom=TILE_ZOOM)
+        snapped = _snap_bbox_to_grid(_NE_LAKE_BOX, _WATER_POLYGON_GRID_DEGREES)
+        (tracker.cache_dir / f"coast_{_bbox_cache_key(snapped)}.json").unlink()
+        tracker._water_polygon_memo.clear()
+        return snapped
+
+    def test_coastline_failure_still_serves_cached_water(self, tracker):
+        """A slow/failing Overpass on the coastline-only query must not
+        discard an already-cached lake — it used to fail the whole box and
+        show 'Water exclusion unavailable' on every Explore load."""
+        self._warm_lake_water_cache(tracker)
+        with patch("requests.post", side_effect=requests.exceptions.ReadTimeout("slow")):
+            result = tracker.get_roadless_tiles(_NE_LAKE_BOX, zoom=TILE_ZOOM)
+        assert result["status"] == "success"
+        assert result["failed_boxes"] == 0
+        assert result["roadless_count"] / _tile_total(_NE_LAKE_BOX, TILE_ZOOM) > 0.8
+
+    def test_coastline_failure_is_not_cached(self, tracker):
+        """The degraded answer isn't persisted, so the coastline is retried
+        once Overpass recovers."""
+        snapped = self._warm_lake_water_cache(tracker)
+        tracker._overpass_failure_until.clear()
+        with patch("requests.post", side_effect=requests.exceptions.ReadTimeout("slow")):
+            tracker.get_roadless_tiles(_NE_LAKE_BOX, zoom=TILE_ZOOM)
+        assert not (tracker.cache_dir / f"coast_{_bbox_cache_key(snapped)}.json").exists()
+        tracker._overpass_failure_until.clear()
+        with patch("requests.post", return_value=_overpass([])) as mock_post:
+            tracker.get_roadless_tiles(_NE_LAKE_BOX, zoom=TILE_ZOOM)
+        mock_post.assert_called_once()
+        assert (tracker.cache_dir / f"coast_{_bbox_cache_key(snapped)}.json").exists()
+
+    def test_cold_cache_failure_still_fails(self, tracker):
+        """With no water cached there's nothing to fall back to."""
+        with patch("requests.post", side_effect=requests.exceptions.ReadTimeout("slow")):
+            result = tracker.get_roadless_tiles(_NE_LAKE_BOX, zoom=TILE_ZOOM)
+        assert result["status"] == "error"
+
     def test_small_water_ways_are_filtered_by_perimeter(self, tracker):
         with patch("requests.post", return_value=_overpass([])) as mock_post:
             tracker.get_roadless_tiles(_NE_LAKE_BOX, zoom=TILE_ZOOM)

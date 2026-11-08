@@ -38,6 +38,7 @@ def get_route(
     avoid_features: tuple = ("ferries",),
     api_key: str = "",
     timeout: int = 15,
+    avoid_polygons: Optional[dict] = None,
 ) -> Optional[dict]:
     """Fetch a road-following route from ORS Directions API.
 
@@ -47,6 +48,9 @@ def get_route(
         avoid_features: ORS features to avoid (default: ferries).
         api_key:     ORS API key.  Empty string means not configured.
         timeout:     HTTP request timeout in seconds.
+        avoid_polygons: Optional GeoJSON Polygon/MultiPolygon the route must
+                     not touch (ORS ``options.avoid_polygons``). Used to fence
+                     a route inside a rider-drawn area.
 
     Returns:
         Parsed JSON response dict on success, or None on any failure.
@@ -68,6 +72,8 @@ def get_route(
         "extra_info": ["surface", "waytype"],
         "options": {"avoid_features": list(avoid_features)},
     }
+    if avoid_polygons:
+        body["options"]["avoid_polygons"] = avoid_polygons
 
     try:
         response = _session.post(url, json=body, headers=headers, timeout=timeout)

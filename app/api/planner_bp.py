@@ -322,6 +322,24 @@ def _validate_waypoints(waypoints):
     return None
 
 
+def _validate_route_bounds(bounds):
+    """Validate an optional rider-drawn area ``[south, west, north, east]``
+    for /exploration/route. Returns an error message string, or None."""
+    if not isinstance(bounds, (list, tuple)) or len(bounds) != 4:
+        return 'bounds must be [south, west, north, east]'
+    for v in bounds:
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+            return 'bounds must be four finite numbers'
+    south, west, north, east = bounds
+    if not (-90 <= south < north <= 90) or not (-180 <= west < east <= 180):
+        return 'bounds must satisfy south < north and west < east'
+    # Same order of magnitude as the area the Explore UI can draw on-screen;
+    # anything bigger isn't a real "stay inside this box" request.
+    if north - south > 2 * MAX_BBOX_DEGREES or east - west > 2 * MAX_BBOX_DEGREES:
+        return f'bounds span too large (max {2 * MAX_BBOX_DEGREES} degrees per side)'
+    return None
+
+
 @bp.route('/exploration/route', methods=['POST'])
 @limiter.limit(_rate_limit("exploration.rate_limit_route", "20 per minute"))
 def exploration_route():
@@ -340,7 +358,15 @@ def exploration_route():
     if exclude_error:
         return jsonify({'status': 'error', 'message': exclude_error}), 400
 
-    result = svc.compute_route(waypoints, surface_preference=surface_preference, exclude=exclude)
+    bounds = data.get('bounds')
+    if bounds is not None:
+        bounds_error = _validate_route_bounds(bounds)
+        if bounds_error:
+            return jsonify({'status': 'error', 'message': bounds_error}), 400
+
+    result = svc.compute_route(
+        waypoints, surface_preference=surface_preference, exclude=exclude, bounds=bounds,
+    )
     status_code = 200 if result.get('status') == 'success' else 500
     return jsonify(result), status_code
 

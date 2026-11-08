@@ -1232,7 +1232,23 @@ class CoverageTracker:
                     ]
                 if coastline is None:
                     parts.append(f'way["natural"="coastline"]{bbox};')
-                elements = self._overpass_query("(" + "".join(parts) + ");out geom;", deadline)
+                try:
+                    elements = self._overpass_query("(" + "".join(parts) + ");out geom;", deadline)
+                except Exception as exc:
+                    if water is None:
+                        raise
+                    # Water is cached and only the coastline query failed.
+                    # Serve the cached water with no coastline instead of
+                    # failing the whole box: inland areas (incl. the Great
+                    # Lakes, which are natural=water multipolygons, not
+                    # coastline) get an empty coastline answer anyway, and
+                    # a slow Overpass otherwise discarded a perfectly good
+                    # water cache on every request. Nothing is written, so
+                    # the coastline is retried on a later request.
+                    logger.warning(
+                        "Coastline lookup failed (%s) — using cached water without coastline", exc,
+                    )
+                    return _build_water_groups(water, [], bounds)
                 fetched_water, fetched_coast = _parse_overpass_water(elements)
                 if water is None:
                     water = fetched_water
