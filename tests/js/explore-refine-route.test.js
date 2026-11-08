@@ -102,6 +102,27 @@ test('pickups: an unclaimed tile beside the route gets added within the cap', as
     assert.equal(R.countNewTiles(out.route.coordinates, [grid]), 1);
 });
 
+test('per-stop check drops a stub into claimed ground, keeps a tile-grabbing one', async () => {
+    const api = makeApi();
+    const refine = loadExplore(api);
+    const z = 17;
+    const fresh = R.latLonToTile(...pt(3, 0.4), z);
+    const visited = new Set();
+    const a = R.latLonToTile(...pt(-2, 3), z), b = R.latLonToTile(...pt(6, -3), z);
+    for (let x = a.x; x <= b.x; x++) for (let y = a.y; y <= b.y; y++) visited.add(`${x},${y}`);
+    visited.delete(`${fresh.x},${fresh.y}`);
+    const grid = { zoom: z, visited, isRoadless: () => false };
+    // Fake router draws straight lines, so model the stubs as there-and-back stops.
+    const wps = [pt(0, 0), pt(1, 0), pt(1, 0.4), pt(1, 0.01), pt(3, 0), pt(3, 0.4), pt(3, 0.01), pt(4, 0), pt(4, -1), pt(0, -1), pt(0, 0)];
+    const out = await refine(wps, { targetKm: 40, mode: 'cap', surfacePref: 'any', grids: [grid], allowRetrace: true });
+    const final = api.calls[api.calls.length - 1].waypoints;
+    const has = (p) => final.some(w => w[0] === p[0] && w[1] === p[1]);
+    assert.ok(!has(pt(1, 0.4)), 'claimed-ground stub tip dropped');
+    assert.ok(has(pt(3, 0.4)), 'tile-grabbing stub tip kept');
+    assert.ok(out.stats.uselessDropped >= 1);
+    assert.equal(R.countNewTiles(out.route.coordinates, [grid]), 1);
+});
+
 test('fence bounds are sent with every routing call', async () => {
     const api = makeApi();
     const refine = loadExplore(api);

@@ -128,3 +128,25 @@ test('countNewTiles counts only unclaimed, non-water tiles the route enters', ()
     grid.isRoadless = (x, y) => x === a.x && y === a.y;
     assert.equal(R.countNewTiles(line([0, 0], [3, 0]), [grid]), 1);
 });
+
+test('analyzeRetrace: catches a short dead-end stub', () => {
+    // 2 km loop leg with a 120 m in-and-out stub in the middle.
+    const route = concat(line([0, 0], [1, 0]), line([1, 0], [1, 0.12]), line([1, 0.12], [1, 0]), line([1, 0], [2, 0]));
+    assert.ok(R.analyzeRetrace(route).retracedKm > 0.15);
+});
+
+test('uselessStops: flags a stub into claimed ground, keeps one that grabs a tile', () => {
+    const z = 17;
+    const fresh = R.latLonToTile(...pt(3, 0.4), z);
+    const grid = gridWithHoles([fresh], z);
+    // Loop with two stubs: one north at x=1 (all claimed), one north at x=3 (into the fresh tile).
+    const wps = [pt(0, 0), pt(1, 0.4), pt(3, 0.4), pt(4, 0), pt(4, -1), pt(0, -1), pt(0, 0)];
+    const coords = concat(
+        line([0, 0], [1, 0]), line([1, 0], [1, 0.4]), line([1, 0.4], [1, 0]),
+        line([1, 0], [3, 0]), line([3, 0], [3, 0.4]), line([3, 0.4], [3, 0]),
+        line([3, 0], [4, 0]), line([4, 0], [4, -1]), line([4, -1], [0, -1]), line([0, -1], [0, 0]),
+    );
+    const useless = R.uselessStops(coords, wps, [grid]);
+    assert.ok(useless.includes(1), 'claimed-ground stub flagged');
+    assert.ok(!useless.includes(2), 'tile-grabbing stub kept');
+});

@@ -412,7 +412,11 @@
      * `waypoints` (or -1).
      */
     function analyzeRetrace(coords, waypoints = null, opts = {}) {
-        const { stepM = 20, nearM = 25, minGapM = 300 } = opts;
+        // minGapM was 300, which missed any spur shorter than ~150 m each
+        // way (both passes sat within the gap) — exactly the dead-end stubs
+        // a mid-block waypoint produces. 100 still keeps ordinary corners
+        // (samples either side of a turn are >25 m apart) from counting.
+        const { stepM = 20, nearM = 25, minGapM = 100 } = opts;
         const result = { totalKm: 0, retracedKm: 0, fraction: 0, worstWaypoint: -1, byWaypoint: [] };
         if (!coords || coords.length < 2) return result;
 
@@ -471,6 +475,54 @@
         return result;
     }
 
+    // ── Per-stop value check ───────────────────────────────────────
+
+    /**
+     * Inner waypoints whose detour claims nothing on its own.
+     *
+     * For each inner waypoint w, its span is the routed line from the
+     * previous waypoint to the next one (the part that changes if w is
+     * dropped). A new tile is *exclusive* to that span if the route touches
+     * it only inside the span. Waypoints whose span has no exclusive new
+     * tiles are returned (indices into \`waypoints\`): dropping one can't
+     * lose a tile the rest of the route doesn't also claim — e.g. a stub
+     * into a dead end that ended in already-claimed ground, or a stop whose
+     * road snap missed its target tile. Stubs that do grab a fresh tile are
+     * kept; those are cheap, legitimate tile collection.
+     */
+    function uselessStops(coords, waypoints, grids) {
+        if (!coords || coords.length < 2 || !waypoints || waypoints.length < 3 || !grids || grids.length === 0) return [];
+        const wpIdx = waypointRouteIndices(coords, waypoints);
+        // Per new tile: first and last route segment that touches it.
+        const range = new Map();
+        for (const grid of grids) {
+            const step = tileSideKm(grid.zoom, coords[0][0]) / 6;
+            for (let i = 1; i < coords.length; i++) {
+                for (const { p } of densify([coords[i - 1], coords[i]], step)) {
+                    const { x, y } = latLonToTile(p[0], p[1], grid.zoom);
+                    const k = `${x},${y}`;
+                    if (grid.visited.has(k) || grid.isRoadless(x, y)) continue;
+                    const key = `${grid.zoom}:${k}`;
+                    const r = range.get(key);
+                    if (!r) range.set(key, [i, i]);
+                    else { if (i < r[0]) r[0] = i; if (i > r[1]) r[1] = i; }
+                }
+            }
+        }
+        const out = [];
+        for (let w = 1; w < waypoints.length - 1; w++) {
+            // Segment i joins coords[i-1]→coords[i]; the span covers
+            // segments (wpIdx[w-1], wpIdx[w+1]].
+            const lo = wpIdx[w - 1], hi = wpIdx[w + 1];
+            let exclusive = 0;
+            for (const [first, last] of range.values()) {
+                if (first > lo && last <= hi) { exclusive++; break; }
+            }
+            if (exclusive === 0) out.push(w);
+        }
+        return out;
+    }
+
     // ── Bounds ─────────────────────────────────────────────────────
 
     function pointInBounds(p, bounds) {
@@ -508,7 +560,7 @@
         haversineKm, pathKm, latLonToTile, tileBounds, tileSideKm, buildRoadlessLookup, makeGrid,
         densify, tilesTouched, newTilesCrossed, countNewTiles,
         findPickups, waypointRouteIndices, insertPickups, cheapestInsertion, chooseDropIndex,
-        analyzeRetrace, pointInBounds, fractionOutsideBounds, clampToBounds,
+        analyzeRetrace, uselessStops, pointInBounds, fractionOutsideBounds, clampToBounds,
     };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else root.ExploreRefine = api;

@@ -624,7 +624,7 @@ function initWorker() {
     }
     // Versioned so a deploy that changes the worker isn't masked by a
     // browser-cached copy of the old one.
-    explorationWorker = new Worker('/js/exploration-worker.js?v=2');
+    explorationWorker = new Worker('/js/exploration-worker.js?v=3');
 }
 
 // ── Coverage loading ────────────────────────────────────────────
@@ -2101,6 +2101,9 @@ const MAX_RETRACE_FIXES = 1;
  *   - pickup pass: unclaimed tiles within about a block of the real road
  *     route are added as detour waypoints when they're cheap enough, kept
  *     only if the re-route actually claims more tiles within the cap.
+ *   - per-stop check: stops whose detour claims no tile the rest of the
+ *     route doesn't (dead-end stubs into claimed ground, missed snaps) are
+ *     dropped in one re-route.
  *   - retrace check (skipped when opts.allowRetrace, i.e. out-and-back
  *     shape): if too much of the route rides the same road twice, drop the
  *     waypoint at the tip of the worst spur and keep the result if it's
@@ -2118,7 +2121,7 @@ async function refineRoute(baseWaypoints, opts) {
     // Parallel to waypoints.slice(1, -1): {tiles, padding?, pickup?}.
     let meta = baseMeta ? baseMeta.map(m => ({ ...m })) : waypoints.slice(1, -1).map(() => ({ tiles: 1 }));
     const candidates = candidateList.slice();
-    const stats = { calls: 0, trimmed: 0, pickupsAdded: 0, retraceFixed: false, retraceFraction: null };
+    const stats = { calls: 0, trimmed: 0, pickupsAdded: 0, uselessDropped: 0, retraceFixed: false, retraceFraction: null };
 
     // Build OSRM exclude list from road filter checkboxes (#411).
     const excludeClasses = [];
@@ -2242,7 +2245,28 @@ async function refineRoute(baseWaypoints, opts) {
             }
         }
 
-        // ── Stage 3: retrace check ──
+        // ── Stage 3: drop stops whose detour claims nothing ──
+        // A stop the router reaches via a dead end that ends in claimed
+        // ground (or whose snap missed its tile) is pure overhead. Drop all
+        // such stops in one re-route; keep the result only if it's shorter
+        // and loses at most one tile (span attribution is approximate).
+        if (grids.length) {
+            const useless = R.uselessStops(result.coordinates, waypoints, grids);
+            if (useless.length > 0) {
+                const drop = new Set(useless);
+                const trialWps = waypoints.filter((_, i) => !drop.has(i));
+                const trialMeta = meta.filter((_, i) => !drop.has(i + 1));
+                const trial = await routeOnce(trialWps);
+                if (trial.distance_km < result.distance_km && tilesOf(trial) >= tilesOf(result) - 1) {
+                    waypoints = trialWps;
+                    meta = trialMeta;
+                    result = trial;
+                    stats.uselessDropped = useless.length;
+                }
+            }
+        }
+
+        // ── Stage 4: retrace check ──
         let retrace = R.analyzeRetrace(result.coordinates, waypoints);
         stats.retraceFraction = retrace.fraction;
         if (!allowRetrace) {

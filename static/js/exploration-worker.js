@@ -373,7 +373,10 @@ function scoreZones(zones, optimizeFor, visitedSet) {
             return diff !== 0 ? diff : a.distanceFromStart - b.distanceFromStart;
         });
     } else {
-        scored.sort((a, b) => b.tiles.length - a.tiles.length);
+        // Zones are capped at a few tiles, so many tie on size — break ties
+        // by distance rather than flood-fill (grid scan) order, which would
+        // bias the capped pool toward one edge of the map.
+        scored.sort((a, b) => (b.tiles.length - a.tiles.length) || (a.distanceFromStart - b.distanceFromStart));
     }
     return scored;
 }
@@ -593,7 +596,15 @@ function bestCornerPoint(zone, zoom, fromLat, fromLon) {
 // plotted path — unclaimed. Chunking a big region into capped-size zones
 // gives the insertion tour multiple independent waypoints spread across it
 // instead of collapsing it to one.
-const MAX_ZONE_TILES = 40;
+//
+// The cap is stop-sized: one waypoint realistically claims the few tiles
+// around its corner plus what the approach/departure legs cross, so ~6.
+// At 40, a 30-tile unclaimed block was a single stop scored as worth 30
+// tiles; the road route tagged its corner, claimed a handful, and skirted
+// the rest. At 6 the same block is several stops the insertion tour can
+// thread together, so the route rides through it — and each zone's score
+// matches what its stop actually claims.
+const MAX_ZONE_TILES = 6;
 
 function floodFillZones(tiles) {
     const lookup = new Map();
@@ -648,7 +659,7 @@ const MAX_POOL_PER_GRID_BOTH = 110;
 // Most stops one tour may have. ORS (and /api/exploration/route) take at
 // most 50 waypoints; this leaves room for start/end plus Phase 2's
 // near-route pickups (explore.js).
-const MAX_TOUR_STOPS = 30;
+const MAX_TOUR_STOPS = 40;
 
 // Roads are longer than straight lines. The tour is planned in straight-line
 // km, so the distance budget is scaled down by this factor to land the real

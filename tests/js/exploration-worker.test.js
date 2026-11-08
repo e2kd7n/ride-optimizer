@@ -76,6 +76,36 @@ test('tour stays within the stop cap and the straight-line budget', () => {
     assert.ok(km <= 60 * 1.15 / w.ROAD_DETOUR_FACTOR + 1e-9, `tour ${km} km`);
 });
 
+test('a big unclaimed block becomes several stops, not one corner tag', () => {
+    const w = loadWorker();
+    const zoom = 17, n = 2 ** zoom;
+    const tileX = (lon) => Math.floor((lon + 180) / 360 * n);
+    const tileY = (lat) => Math.floor((1 - Math.asinh(Math.tan(lat * Math.PI / 180)) / Math.PI) / 2 * n);
+    const sw = at(-4, -4), ne = at(4, 4);
+    const visited = {};
+    for (let x = tileX(sw.lon); x <= tileX(ne.lon); x++) {
+        for (let y = tileY(ne.lat); y <= tileY(sw.lat); y++) visited[`${x},${y}`] = 1;
+    }
+    // One 6x5-tile unclaimed block ~2 km NE of start.
+    const b = at(1.5, 1.5);
+    const blockKeys = new Set();
+    for (let dx = 0; dx < 6; dx++) for (let dy = 0; dy < 5; dy++) {
+        const k = `${tileX(b.lon) + dx},${tileY(b.lat) + dy}`;
+        delete visited[k];
+        blockKeys.add(k);
+    }
+    w.optimize({
+        start, end: null, distanceKm: 30, mode: 'tiles', routeType: 'round_trip', shape: 'loop',
+        coverageData: { visited, bounds: [sw.lat, sw.lon, ne.lat, ne.lon], zoom },
+        optimizeFor: 'tiles', areaBounds: null,
+    });
+    const route = w.posted.filter(m => m.type === 'route').find(m => m.route.direction === 'NE' || m.route.direction === 'NW');
+    assert.ok(route, 'a route toward the block');
+    const inBlock = route.route.waypoints.filter(p => blockKeys.has(`${tileX(p.lon)},${tileY(p.lat)}`)
+        || blockKeys.has(`${tileX(p.lon) - 1},${tileY(p.lat)}`) || blockKeys.has(`${tileX(p.lon)},${tileY(p.lat) - 1}`));
+    assert.ok(inBlock.length >= 3, `stops in block: ${inBlock.length}`);
+});
+
 test('optimize: posts routes whose waypoints carry tile counts', () => {
     const w = loadWorker();
     const zoom = 17, n = 2 ** zoom;
