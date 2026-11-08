@@ -212,6 +212,10 @@ function optimize({ start, end, distanceKm, mode, routeType, shape, coverageData
         if (pool.length === 0) return;
 
         const selected = constructInsertionTour(start, end, pool, distanceKm, optimizeFor, visitedSetsByZoom);
+        // Nothing in this direction was worth the ride — don't post an empty
+        // tour: Phase 2 would route start→start and show a 0.0 mi "route".
+        // (A point-to-point trip still has somewhere to go, so it's kept.)
+        if (selected.length === 0 && isRoundTrip) return;
 
         // #453: once outbound/return phases exist (≥2 zones, round trip),
         // prefer whichever traversal direction faces the wind on the way out
@@ -233,7 +237,7 @@ function optimize({ start, end, distanceKm, mode, routeType, shape, coverageData
         }
         // `tiles` rides along so Phase 2 (explore.js) knows what each
         // waypoint is worth when it has to drop one to fit the distance cap.
-        const ordered = selected.map(z => ({ ...z.point, tiles: z.tiles.length }));
+        const ordered = selected.map(z => ({ lat: z.point.lat, lon: z.point.lon, tiles: z.tiles.length }));
 
         const byZoom = new Map();
         for (const z of selected) {
@@ -680,6 +684,11 @@ const INSERTION_DISTANCE_TOLERANCE = 1.15;
 // the tour stops, even if budget remains.
 const MIN_YIELD_FRACTION = 0.2;
 
+// Pockets within this distance of a candidate count toward its cluster value
+// (see constructInsertionTour). At least 3 tile-widths, so it scales up for
+// squadrats.
+const CLUSTER_RADIUS_KM = 1.0;
+
 /** Side length (km) of one tile at `zoom` and latitude `lat`. */
 function tileSideKm(zoom, lat) {
     return 40075.016686 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
@@ -719,21 +728,54 @@ function constructInsertionTour(start, end, candidates, distanceKm, optimizeFor,
     const budgetKm = distanceKm * INSERTION_DISTANCE_TOLERANCE / ROAD_DETOUR_FACTOR;
     const closePoint = end || start;
 
-    const claimedByZoom = new Map();
-    const claimedSetFor = (zoom) => {
-        if (!claimedByZoom.has(zoom)) {
-            claimedByZoom.set(zoom, new Set(visitedSetsByZoom?.get(zoom) || []));
-        }
-        return claimedByZoom.get(zoom);
+    // "Claimed" = ride history OR legs already in this tour. Checked as two
+    // sets instead of copying the (often several-hundred-thousand-entry)
+    // history set into a fresh Set per tour.
+    const EMPTY = new Set();
+    const tourClaimedByZoom = new Map();
+    const tourClaimedFor = (zoom) => {
+        if (!tourClaimedByZoom.has(zoom)) tourClaimedByZoom.set(zoom, new Set());
+        return tourClaimedByZoom.get(zoom);
     };
+    const historyFor = (zoom) => visitedSetsByZoom?.get(zoom) || EMPTY;
     const claimLeg = (fromPoint, toPoint, zoom) => {
-        const claimed = claimedSetFor(zoom);
-        for (const k of sampleCorridorTileKeys(fromPoint.lat, fromPoint.lon, toPoint.lat, toPoint.lon, zoom)) {
-            claimed.add(k);
-        }
+        const claimed = tourClaimedFor(zoom);
+        for (const k of legKeys(fromPoint, toPoint, zoom)) claimed.add(k);
     };
-    const legOverlap = (fromPoint, toPoint, zoom) =>
-        countKeysInSet(sampleCorridorTileKeys(fromPoint.lat, fromPoint.lon, toPoint.lat, toPoint.lon, zoom), claimedSetFor(zoom));
+
+    // Flat km coordinates around the start: at these distances (tens of km)
+    // the equirectangular error is negligible, and it replaces the spherical
+    // trig of haversineKm in the hot insertion loop.
+    const kmPerDegLat = 111.32;
+    const kmPerDegLon = 111.32 * Math.cos(start.lat * Math.PI / 180);
+    const xyOf = (p) => {
+        if (p._x === undefined) { p._x = p.lon * kmPerDegLon; p._y = p.lat * kmPerDegLat; }
+        return p;
+    };
+    const fastKm = (a, b) => Math.hypot(xyOf(a)._x - xyOf(b)._x, a._y - b._y);
+    // A leg's sampled tile keys depend only on its two endpoints, which are
+    // stable objects (start/end/candidate points) — cache them, since the
+    // same legs are re-scored on every insertion round and the trig-heavy
+    // sampling dominated the worker's runtime.
+    const legKeyCache = new Map();
+    const legKeys = (fromPoint, toPoint, zoom) => {
+        let byTo = legKeyCache.get(fromPoint);
+        if (!byTo) { byTo = new Map(); legKeyCache.set(fromPoint, byTo); }
+        const cacheKey = toPoint;
+        let keys = byTo.get(cacheKey);
+        if (!keys || keys.zoom !== zoom) {
+            keys = sampleCorridorTileKeys(fromPoint.lat, fromPoint.lon, toPoint.lat, toPoint.lon, zoom);
+            keys.zoom = zoom;
+            byTo.set(cacheKey, keys);
+        }
+        return keys;
+    };
+    const legOverlap = (fromPoint, toPoint, zoom) => {
+        const history = historyFor(zoom), tourClaimed = tourClaimedFor(zoom);
+        let count = 0;
+        for (const k of legKeys(fromPoint, toPoint, zoom)) if (history.has(k) || tourClaimed.has(k)) count++;
+        return count;
+    };
 
     // 'efficiency' weighs candidates strictly by tiles gained per km of
     // insertion cost. 'tiles' (default) still needs cost to compare
@@ -748,27 +790,50 @@ function constructInsertionTour(start, end, candidates, distanceKm, optimizeFor,
 
     const remaining = [...candidates];
     let tour = [];
-    let tourKm = haversineKm(start.lat, start.lon, closePoint.lat, closePoint.lon);
+    let tourKm = fastKm(start, closePoint);
+
+    // Cluster value. Pockets are stop-sized (a few tiles), so on its own a
+    // pocket several km out almost never pays for the ride there — and the
+    // first stop of any tour pays for the whole trip out and back. Judged
+    // one at a time, a well-ridden home area produced *empty* tours (0.0 mi
+    // routes) even with 40-tile clusters of pockets 5–9 km away. So each
+    // candidate is also credited with the not-yet-inserted pockets near it:
+    // the floor asks whether reaching it pays off once its neighbours (which
+    // then become cheap insertions) are counted, and the ranking gives
+    // neighbours half weight so rich clusters are preferred to lone pockets.
+    const neighboursOf = new Map();
+    for (const c of remaining) {
+        const radiusKm = Math.max(CLUSTER_RADIUS_KM, 3 * tileSideKm(c.zoom, start.lat));
+        neighboursOf.set(c, remaining.filter(o => o !== c && o.zoom === c.zoom &&
+            fastKm(c.point, o.point) <= radiusKm));
+    }
+    const inTour = new Set();
+    const neighbourTiles = (c) => {
+        let sum = 0;
+        for (const o of neighboursOf.get(c)) if (!inTour.has(o)) sum += o.tiles.length;
+        return sum;
+    };
 
     while (remaining.length > 0 && tour.length < MAX_TOUR_STOPS) {
         let best = null;
         for (let i = 0; i < remaining.length; i++) {
             const cand = remaining[i];
-            const rawTiles = cand.tiles.length;
+            const ownTiles = cand.tiles.length;
+            const nbrTiles = neighbourTiles(cand);
+            const potential = ownTiles + nbrTiles;            // for the floor
+            const rawTiles = ownTiles + 0.5 * nbrTiles;        // for ranking
             const floor = floorFor(cand.zoom);
             for (let pos = 0; pos <= tour.length; pos++) {
                 const prev = pos === 0 ? start : tour[pos - 1].point;
                 const next = pos === tour.length ? closePoint : tour[pos].point;
-                const insertCost = haversineKm(prev.lat, prev.lon, cand.point.lat, cand.point.lon) +
-                    haversineKm(cand.point.lat, cand.point.lon, next.lat, next.lon) -
-                    haversineKm(prev.lat, prev.lon, next.lat, next.lon);
+                const insertCost = fastKm(prev, cand.point) + fastKm(cand.point, next) - fastKm(prev, next);
                 const cost = Math.max(insertCost, 0.01);
 
                 // Cheap early-outs before the (much costlier) corridor
                 // overlap sampling: over budget, or can't clear the floor /
                 // beat the current best even with zero overlap.
                 if (tourKm + insertCost > budgetKm) continue;
-                if (rawTiles / cost < floor) continue;
+                if (potential / cost < floor) continue;
                 const costTerm = Math.pow(cost, costExponent);
                 if (best && rawTiles / costTerm <= best.score) continue;
 
@@ -794,6 +859,7 @@ function constructInsertionTour(start, end, candidates, distanceKm, optimizeFor,
         tour.splice(best.pos, 0, chosen);
         tourKm += best.insertCost;
         remaining.splice(best.i, 1);
+        inTour.add(chosen);
     }
 
     return tour;

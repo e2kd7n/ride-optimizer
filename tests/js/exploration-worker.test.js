@@ -106,6 +106,48 @@ test('a big unclaimed block becomes several stops, not one corner tag', () => {
     assert.ok(inBlock.length >= 3, `stops in block: ${inBlock.length}`);
 });
 
+test('dense home area: distant clusters of small pockets still yield real tours, never empty ones', () => {
+    // Regression: with stop-sized pockets judged one at a time, everything
+    // within ~4 km claimed + clusters 5-9 km out produced 0-stop "routes"
+    // (0.0 mi after road routing).
+    const zoom = 17, n = 2 ** zoom;
+    const tileX = (lon) => Math.floor((lon + 180) / 360 * n);
+    const tileY = (lat) => Math.floor((1 - Math.asinh(Math.tan(lat * Math.PI / 180)) / Math.PI) / 2 * n);
+    const sw = at(-12, -12), ne = at(12, 12);
+    const build = (clusters) => {
+        const visited = {};
+        for (let x = tileX(sw.lon); x <= tileX(ne.lon); x++) {
+            for (let y = tileY(ne.lat); y <= tileY(sw.lat); y++) visited[`${x},${y}`] = 1;
+        }
+        let s = 3; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+        for (const [cx, cy, holes] of clusters) {
+            for (let i = 0; i < holes; i++) {
+                const p = at(cx + rnd() - 0.5, cy + rnd() - 0.5);
+                delete visited[`${tileX(p.lon)},${tileY(p.lat)}`];
+            }
+        }
+        return visited;
+    };
+    const run = (visited) => {
+        const w = loadWorker();
+        w.optimize({
+            start, end: null, distanceKm: 64, mode: 'tiles', routeType: 'round_trip', shape: 'loop',
+            coverageData: { visited, bounds: [sw.lat, sw.lon, ne.lat, ne.lon], zoom },
+            optimizeFor: 'infill', areaBounds: null,
+        });
+        return w.posted.filter(m => m.type === 'route');
+    };
+
+    const withClusters = run(build([[6, 6, 25], [-7, 5, 25], [6, -7, 25], [-6, -6, 25]]));
+    assert.ok(withClusters.length >= 1, 'found tours');
+    for (const m of withClusters) assert.ok(m.route.waypoints.length >= 3, `${m.route.direction}: ${m.route.waypoints.length} stops`);
+
+    // Only a couple of lone holes far out: nothing worth the ride — no routes,
+    // rather than empty ones.
+    const lone = run(build([[8, 8, 1], [-9, -8, 1]]));
+    for (const m of lone) assert.ok(m.route.waypoints.length >= 1, 'no empty routes');
+});
+
 test('optimize: posts routes whose waypoints carry tile counts', () => {
     const w = loadWorker();
     const zoom = 17, n = 2 ** zoom;

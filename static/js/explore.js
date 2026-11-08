@@ -630,7 +630,7 @@ function initWorker() {
     }
     // Versioned so a deploy that changes the worker isn't masked by a
     // browser-cached copy of the old one.
-    explorationWorker = new Worker('/js/exploration-worker.js?v=3');
+    explorationWorker = new Worker('/js/exploration-worker.js?v=4');
 }
 
 // ── Coverage loading ────────────────────────────────────────────
@@ -1789,7 +1789,7 @@ async function generateRoute() {
                     plotRoadRoute(bestRoute.direction, bestRoute, distanceKm, bestBadge);
                 }
             } else {
-                statusEl.textContent = 'No reachable unvisited tiles found — try increasing distance or moving the start point';
+                statusEl.textContent = 'No unclaimed tiles within reach were worth the ride — try a longer distance, a different start point, or the Squadrats grid';
                 offerCachedRoutesFallback(statusEl);
             }
             return;
@@ -2397,6 +2397,15 @@ async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
 
     const isPtp = route.shape === 'point_to_point' && !!endMarker;
     const endPos = isPtp ? endMarker.getLatLng() : startPos;
+
+    // A round trip with no stops would route start→start: a 0.0 mi "route".
+    // The worker no longer emits these, but a cached older result can.
+    if (!isPtp && (!route.waypoints || route.waypoints.length === 0)) {
+        infoEl.textContent = 'No unclaimed tiles in this direction were worth the ride — regenerate, or try a longer distance.';
+        plotBtn.disabled = false;
+        plotBtn.innerHTML = '<i class="bi bi-map" aria-hidden="true"></i> Plot road route';
+        return;
+    }
     const baseWaypoints = [
         [startPos.lat, startPos.lng],
         ...route.waypoints.map(wp => [wp.lat, wp.lon]),
