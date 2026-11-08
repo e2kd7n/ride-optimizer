@@ -1,6 +1,6 @@
 # Own Router: Architecture for Explore's Next Generation
 
-**Status:** Proposed. Unscheduled; it's a multi-release epic.
+**Status:** Proposed. Unscheduled; it's a multi-release epic: [#643](https://github.com/e2kd7n/ride-optimizer/issues/643) (children #644–#653).
 **Scope:** Replace ORS-driven route construction on the Explore page with a planner that runs on our own copy of the street-and-path network.
 **Written:** 2026-11-08, after the Explore routing overhaul (#627 → 90a6974 → 9ab942a).
 
@@ -21,7 +21,7 @@ That design has hit a ceiling we can measure. On the reference scenario (Edgewat
 
 Three limits can't be fixed from inside the current design:
 
-- **Turns are out of our hands.** ORS has no turn cost. It picks the fastest road between consecutive stops. Lawnmower sweeps, turn-aware stop reordering, and turn penalties on optional detours were all tried on real data, and none reduced turns on the routed result. (They are kept unmerged on branch `worktree-explore-fewer-turns`.) The router decides how a block is threaded, and we only decide where the stops go.
+- **Turns are out of our hands.** ORS has no turn cost. It picks the fastest road between consecutive stops. Lawnmower sweeps, turn-aware stop reordering, and turn penalties on optional detours were all tried on real data, and none reduced turns on the routed result. (They are kept unmerged on branch [`experiments/explore-fewer-turns`](https://github.com/e2kd7n/ride-optimizer/tree/experiments/explore-fewer-turns).) The router decides how a block is threaded, and we only decide where the stops go.
 - **Paths and cut-throughs are invisible to the planner.** Neighbourhoods joined only by a footpath, like the dead-end streets along the Lake–Cook county line, are reachable only if ORS chooses to use the path. ORS's bike profile treats walking-only paths conservatively, and the planner can't tell which tiles a path would unlock.
 - **Every decision costs a network call.** Each refinement stage is an ORS request: our own limit is 20 a minute, ORS's free tier allows 2,000 a day and 40 a minute, and Pi threads are scarce. The cluster rule (below) needs a verify-and-retry loop because we only learn which tiles a route crosses *after* ORS returns it.
 
@@ -185,7 +185,7 @@ turnCost = 0 for < 30°;  T · angle/90° otherwise;  + U for > 150° (U-turns)
 
 ## 6. Evaluation
 
-Reuse and promote the end-to-end harness built during the turn experiments (a scratch script today). It runs the real coverage and the real scenario and reports:
+Reuse and promote the end-to-end harness built during the turn experiments (#644; today at `scripts/explore_benchmark/e2e.js` on branch `experiments/explore-fewer-turns`). It runs the real coverage and the real scenario and reports:
 
 > km · new tiles · tiles/km · turns · U-turns · walk metres · cluster tiles left (independent R1 check) · plan time
 
@@ -197,14 +197,14 @@ Reuse and promote the end-to-end harness built during the turn experiments (a sc
 
 | # | Milestone | Deliverable | Exit criteria |
 |---|---|---|---|
-| M0 | **Spike** | A build script for one region, plus a debug map layer drawing the graph (ride/walk colours) | Package size measured; the Lake–Cook footpath connections are present as walk edges; roadless tiles match the lake and rail yards by eye |
-| M1 | **Data pipeline** | `tools/router/`, `router_regions.yaml`, GitHub Action, Pi pull cron, `router_bp` | A monthly package is published and installed on the Pi; access-model unit tests pass |
-| M2 | **Roadless from graph** | Explore uses graph roadless tiles where a region exists | No Overpass call for the Chicago area; water warnings gone |
-| M3 | **Turn-aware A→B** | GraphStore + TurnAwarePath in a worker | Point-to-point routes plausible against ORS; turn counts drop with the slider; plan time under 200 ms for 20 km |
-| M4 | **Cluster cover** | Stages 1, 3 and 6 replace `refineRoute` stage 5 | R1 holds by construction (0 cluster tiles left); a measured turn reduction on cluster sweeps |
-| M5 | **Full planner** | Stages 2–7 replace Phase 1 and 2 in local regions | §2 goals met on all benchmark scenarios; ORS fallback is automatic outside regions |
-| M6 | **UI and options** | Slider, walking toggle, busy-road toggle, card metrics, dashed walk sections | Design-principles review; mobile performance under 5 s |
-| M7 | **Retire** | Remove superseded Phase 1/2 code paths in local regions | Benchmark parity kept for two releases |
+| M0 · #645 | **Spike** | A build script for one region, plus a debug map layer drawing the graph (ride/walk colours) | Package size measured; the Lake–Cook footpath connections are present as walk edges; roadless tiles match the lake and rail yards by eye |
+| M1 · #646 | **Data pipeline** | `tools/router/`, `router_regions.yaml`, GitHub Action, Pi pull cron, `router_bp` | A monthly package is published and installed on the Pi; access-model unit tests pass |
+| M2 · #647 | **Roadless from graph** | Explore uses graph roadless tiles where a region exists | No Overpass call for the Chicago area; water warnings gone |
+| M3 · #648 | **Turn-aware A→B** | GraphStore + TurnAwarePath in a worker | Point-to-point routes plausible against ORS; turn counts drop with the slider; plan time under 200 ms for 20 km |
+| M4 · #649 | **Cluster cover** | Stages 1, 3 and 6 replace `refineRoute` stage 5 | R1 holds by construction (0 cluster tiles left); a measured turn reduction on cluster sweeps |
+| M5 · #650 | **Full planner** | Stages 2–7 replace Phase 1 and 2 in local regions | §2 goals met on all benchmark scenarios; ORS fallback is automatic outside regions |
+| M6 · #651 | **UI and options** | Slider, walking toggle, busy-road toggle, card metrics, dashed walk sections | Design-principles review; mobile performance under 5 s |
+| M7 · #652 | **Retire** | Remove superseded Phase 1/2 code paths in local regions | Benchmark parity kept for two releases |
 
 M2 is worth shipping even if the rest stalls: it removes the Overpass dependency that caused the water outage.
 
@@ -220,7 +220,7 @@ M2 is worth shipping even if the rest stalls: it removes the Overpass dependency
 | **Maintenance**: a second routing stack | Keep it small and typed-array based; one access-model table; the benchmark guards regressions |
 | **ODbL** if ever deployed publicly | Decide on share-alike for the derived graph before a public launch |
 
-## 9. Open questions for the rider
+## 9. Open questions for the rider (#653)
 
 1. **Regions:** just the north Chicago and North Shore area, or more? This sets package size and build cost.
 2. **Walking:** on by default, and is any length acceptable, or should individual walk sections be capped (for example 300 m)?
@@ -233,4 +233,4 @@ M2 is worth shipping even if the rest stalls: it removes the Overpass dependency
 - 4f326e2, 6ddcacb, 90a6974: stop-sized pockets, cluster value, cluster sweep and chunked ORS routing.
 - 9ab942a: the background water download (the Overpass dependency that M2 removes).
 - #581: the earlier osmnx-based road-segment feature, removed. That was graph work on the server; this design deliberately keeps graph work off the Pi.
-- Branch `worktree-explore-fewer-turns` (unmerged): turn experiments and their measurements.
+- Branch [`experiments/explore-fewer-turns`](https://github.com/e2kd7n/ride-optimizer/tree/experiments/explore-fewer-turns) (unmerged): turn experiments and their measurements.
