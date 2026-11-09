@@ -430,6 +430,32 @@ class TestCacheCleanupJob:
                 # Geocoding cache should be preserved
                 assert geo_cache.exists()
 
+    def test_cache_cleanup_preserves_route_group_ids(self, temp_project_dir):
+        """The route-groups and similarity caches must survive any age: group
+        IDs that favourites and saved plans refer to come only from them."""
+        import os
+        import time
+        old_time = time.time() - (400 * 24 * 60 * 60)
+        kept = []
+        for name in ('route_groups_cache.json', 'route_similarity_cache.json',
+                     'long_ride_similarity_cache.json'):
+            path = temp_project_dir / 'cache' / name
+            path.write_text('{}')
+            os.utime(path, (old_time, old_time))
+            kept.append(path)
+
+        with patch('cron.cache_cleanup.project_root', temp_project_dir):
+            with patch('cron.cache_cleanup.JSONStorage') as mock_storage_class:
+                mock_storage = Mock()
+                mock_storage.read.return_value = {'jobs': []}
+                mock_storage_class.return_value = mock_storage
+
+                from cron import cache_cleanup
+                assert cache_cleanup.main() == 0
+
+        for path in kept:
+            assert path.exists(), path.name
+
 
 class TestSystemHealthJob:
     """Tests for system_health.py cron job."""

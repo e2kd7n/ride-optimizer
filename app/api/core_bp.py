@@ -12,6 +12,7 @@ Routes:
   GET    /api/csrf-token
 """
 
+import os
 import secrets
 from datetime import datetime
 from pathlib import Path
@@ -137,15 +138,33 @@ def reset_settings():
 # User data
 # ---------------------------------------------------------------------------
 
+DELETE_ALL_CONFIRMATION = 'DELETE ALL MY DATA'
+
+
 @bp.route('/user/data', methods=['DELETE'])
 @limiter.limit("10 per minute")
 def delete_user_data():
-    """GDPR-compliant endpoint to delete all user data."""
-    data = request.get_json(silent=True) or {}
-    if data.get('confirm') is not True:
+    """GDPR-compliant endpoint to delete all user data.
+
+    The app has no login and hands a CSRF token to any LAN client, and
+    data/cache/activities.json can no longer be rebuilt from Strava. So this
+    is off unless the operator sets ALLOW_USER_DATA_DELETION=true in the
+    server environment, and the request must carry the exact phrase
+    {"confirm": "DELETE ALL MY DATA"} rather than a bare boolean.
+    """
+    if os.environ.get('ALLOW_USER_DATA_DELETION', '').strip().lower() not in ('1', 'true', 'yes'):
         return jsonify({
             'status': 'error',
-            'message': 'Confirmation required. Send {"confirm": true} to delete all data.'
+            'message': 'Data deletion is disabled on this server. '
+                       'Set ALLOW_USER_DATA_DELETION=true in the server environment to enable it.'
+        }), 403
+
+    data = request.get_json(silent=True) or {}
+    if data.get('confirm') != DELETE_ALL_CONFIRMATION:
+        return jsonify({
+            'status': 'error',
+            'message': f'Confirmation required. Send {{"confirm": "{DELETE_ALL_CONFIRMATION}"}} '
+                       'to delete all data.'
         }), 400
 
     deleted = []

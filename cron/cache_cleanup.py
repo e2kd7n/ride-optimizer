@@ -66,18 +66,28 @@ def main():
         retention_days = {
             'activities_cache': 30,
             'weather_cache': 7,
-            'route_similarity_cache': 90,
-            'route_groups_cache': 30,
             'job_history': 90
         }
+        # Never age these out. The route-groups cache is the only source of
+        # the stable group IDs that favourites and saved plans refer to (#614),
+        # and a cache-hit analysis doesn't rewrite it, so its mtime stops
+        # moving once no new rides arrive. Deleting it renumbers every route.
+        # The similarity caches are expensive O(n^2) results that stay valid.
+        keep_forever = (
+            'geocoding',
+            'route_groups_cache',
+            'route_similarity_cache',
+            'long_ride_similarity_cache',
+            'long_ride_groups_cache',
+        )
         
         cleaned_files = []
         total_size_freed = 0
         
         for cache_file in cache_dir.glob('*.json'):
-            # Skip geocoding cache (keep indefinitely)
-            if 'geocoding' in cache_file.name:
-                logger.info(f"Skipping geocoding cache: {cache_file.name}")
+            # Skip caches that must be kept indefinitely
+            if any(key in cache_file.name for key in keep_forever):
+                logger.info(f"Skipping persistent cache: {cache_file.name}")
                 continue
             
             # Check file age

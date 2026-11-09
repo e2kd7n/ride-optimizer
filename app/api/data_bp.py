@@ -454,7 +454,7 @@ def get_activities():
 
     # Load gear metadata
     analysis_service = current_app.container.analysis_service
-    gear_cache = analysis_service.data_fetcher.load_cached_gear() if analysis_service else None
+    gear_cache = analysis_service.cache_fetcher.load_cached_gear() if analysis_service else None
     gear_names: Dict[str, str] = {}
     gear_types: Dict[str, str] = {}
     if gear_cache:

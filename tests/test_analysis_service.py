@@ -122,6 +122,25 @@ class TestAnalysisServiceInitialization:
             assert service._last_analysis_time is None
 
 
+    def test_cache_fetcher_never_authenticates(self):
+        """Local cache reads (gear, Garmin merge) must work when Strava auth
+        fails — Strava API access is inactive."""
+        with patch('src.auth_secure.get_authenticated_client',
+                   side_effect=ValueError('ApplicationInactive')) as mock_auth:
+            service = AnalysisService()
+            fetcher = service.cache_fetcher
+            assert fetcher is not None
+            assert fetcher.client is None
+            assert service.cache_fetcher is fetcher
+            mock_auth.assert_not_called()
+
+    def test_cache_fetcher_reuses_authenticated_fetcher(self):
+        with patch('src.auth_secure.get_authenticated_client', return_value=Mock()):
+            service = AnalysisService()
+            authed = service.data_fetcher
+            assert service.cache_fetcher is authed
+
+
 @pytest.mark.unit
 class TestRunFullAnalysis:
     """Test full analysis workflow."""

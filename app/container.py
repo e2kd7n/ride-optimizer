@@ -329,7 +329,7 @@ class ServiceContainer:
 
                     def _gear():
                         analysis = self.analysis_service
-                        return analysis.data_fetcher.load_cached_gear() if analysis else None
+                        return analysis.cache_fetcher.load_cached_gear() if analysis else None
 
                     service = ChatService(ChatTools(
                         activities_source=load_cached_activities,

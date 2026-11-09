@@ -411,7 +411,7 @@ def get_gear_stats():
 
     all_activities = _load_activities_for_stats()
 
-    gear_cache = analysis_service.data_fetcher.load_cached_gear() if analysis_service else None
+    gear_cache = analysis_service.cache_fetcher.load_cached_gear() if analysis_service else None
     gear_meta: Dict[str, dict] = {}
     if gear_cache:
         for g in gear_cache.get('bikes', []) + gear_cache.get('shoes', []):

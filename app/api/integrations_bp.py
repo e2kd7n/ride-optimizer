@@ -294,31 +294,45 @@ def garmin_sync():
     whole app, a single sync could tie one up for a long time. Poll
     /api/garmin/sync/status for progress.
     """
+    # Validate input before claiming the job: a bad value used to raise
+    # after try_start() and leave the job stuck at "running" (409 forever).
+    data = request.get_json(silent=True) or {}
+    try:
+        days = int(data.get('days', 90))
+    except (TypeError, ValueError):
+        return jsonify({'status': 'error', 'message': 'days must be an integer'}), 400
+    days = max(1, min(days, 365))
+
     jobs = current_app.container.jobs
     if not jobs.garmin_sync.try_start({'status': 'running', 'label': 'Connecting to Garmin…'}):
         return jsonify({'status': 'already_running'}), 409
 
     container = current_app.container
-    container.initialise()
-
-    svc = container.get_garmin_service()
-    if not svc.is_connected():
+    try:
+        container.initialise()
+        svc = container.get_garmin_service()
+        connected = svc.is_connected()
+    except Exception:
+        jobs.garmin_sync.reset({'status': 'idle'})
+        raise
+    if not connected:
         jobs.garmin_sync.reset({'status': 'idle'})
         return jsonify({'status': 'error', 'message': 'Garmin not connected'}), 400
-
-    data = request.get_json(silent=True) or {}
-    days = min(int(data.get('days', 90)), 365)
 
     def _run():
         try:
             activities = svc.fetch_activities(days=days)
-            if container.analysis_service and container.analysis_service.data_fetcher:
-                existing = container.analysis_service.data_fetcher.load_cached_activities() or []
+            if container.analysis_service:
+                fetcher = container.analysis_service.cache_fetcher
+                existing = fetcher.load_cached_activities() or []
                 existing_ids = {a.id for a in existing}
                 new_acts = [a for a in activities if a.id not in existing_ids]
                 if new_acts:
-                    merged = existing + new_acts
-                    container.analysis_service.data_fetcher.cache_activities(merged)
+                    # Pass only the new rides: cache_activities merges them
+                    # against what's on disk inside its lock. Passing the
+                    # stale `existing` snapshot too re-wrote every cached
+                    # ride and could undo a concurrent gear-ID backfill.
+                    fetcher.cache_activities(new_acts)
                 jobs.garmin_sync.update(
                     status='done',
                     label=f'Synced {len(activities)} activities ({len(new_acts)} new)',

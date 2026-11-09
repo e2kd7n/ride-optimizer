@@ -66,6 +66,7 @@ class AnalysisService:
 
         self._strava_client = None
         self._data_fetcher = None
+        self._cache_fetcher = None
 
         self._activities: Optional[List[Activity]] = None
         self._route_groups: Optional[List[RouteGroup]] = None
@@ -103,6 +104,22 @@ class AnalysisService:
         if self._data_fetcher is None:
             self._ensure_authenticated()
         return self._data_fetcher
+
+    @property
+    def cache_fetcher(self):
+        """Data fetcher for local cache reads/writes only — never touches Strava.
+
+        load_cached_activities/load_cached_gear/cache_activities only use the
+        local files, so they must keep working when the Strava token can't be
+        refreshed (Strava API access is inactive). Going through
+        ``data_fetcher`` made every gear read and every Garmin sync do a
+        blocking Strava token refresh first, and fail when it failed.
+        """
+        if self._data_fetcher is not None:
+            return self._data_fetcher
+        if self._cache_fetcher is None:
+            self._cache_fetcher = StravaDataFetcher(None, self.config)
+        return self._cache_fetcher
     
     def _load_from_cache(self):
         """
@@ -443,7 +460,7 @@ class AnalysisService:
                     # analyze what's already cached rather than failing the
                     # whole run (the daily cron job would otherwise error out
                     # every night once the 365-day cache window lapses).
-                    cached = self.data_fetcher.load_cached_activities()
+                    cached = self.cache_fetcher.load_cached_activities()
                     if not cached:
                         raise
                     logger.warning(

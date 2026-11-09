@@ -727,17 +727,30 @@ class TestHourlyForecastAPI:
 class TestDeleteUserData:
     """Tests for GDPR-compliant data deletion endpoint."""
 
-    def test_delete_requires_confirmation(self, client):
+    @pytest.fixture
+    def deletion_enabled(self, monkeypatch):
+        monkeypatch.setenv('ALLOW_USER_DATA_DELETION', 'true')
+
+    def test_delete_disabled_by_default(self, client, monkeypatch):
+        monkeypatch.delenv('ALLOW_USER_DATA_DELETION', raising=False)
+        response = client.delete('/api/user/data', json={'confirm': 'DELETE ALL MY DATA'})
+        assert response.status_code == 403
+
+    def test_delete_requires_confirmation(self, client, deletion_enabled):
         response = client.delete('/api/user/data', json={})
         assert response.status_code == 400
         data = response.get_json()
         assert 'confirm' in data['message'].lower()
 
-    def test_delete_rejects_false_confirmation(self, client):
+    def test_delete_rejects_false_confirmation(self, client, deletion_enabled):
         response = client.delete('/api/user/data', json={'confirm': False})
         assert response.status_code == 400
 
-    def test_delete_succeeds_with_confirmation(self, client, tmp_path, monkeypatch):
+    def test_delete_rejects_bare_true(self, client, deletion_enabled):
+        response = client.delete('/api/user/data', json={'confirm': True})
+        assert response.status_code == 400
+
+    def test_delete_succeeds_with_confirmation(self, client, tmp_path, monkeypatch, deletion_enabled):
         from pathlib import Path
         from src.json_storage import JSONStorage
         from launch import app
@@ -758,7 +771,7 @@ class TestDeleteUserData:
         real_creds = Path('config/credentials.json')
         real_creds_existed_before = real_creds.exists()
 
-        response = client.delete('/api/user/data', json={'confirm': True})
+        response = client.delete('/api/user/data', json={'confirm': 'DELETE ALL MY DATA'})
         assert response.status_code == 200
         data = response.get_json()
         assert data['status'] == 'success'
@@ -768,7 +781,7 @@ class TestDeleteUserData:
         assert real_creds.exists() == real_creds_existed_before
         assert not fake_creds.exists()
 
-    def test_delete_no_body_returns_400(self, client):
+    def test_delete_no_body_returns_400(self, client, deletion_enabled):
         response = client.delete('/api/user/data')
         assert response.status_code == 400
 
