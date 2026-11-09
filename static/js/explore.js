@@ -2304,6 +2304,7 @@ const MAX_ROUTE_WAYPOINTS = 240;
 const MAX_SWEEP_ROUNDS = 4;         // cluster-sweep re-route/re-check rounds
 const RETRACE_MAX_FRACTION = 0.15;  // above this share of retraced road, try to fix
 const MAX_RETRACE_FIXES = 1;
+const MAX_PRUNE_ROUNDS = 3;         // wasted-spur prune re-route rounds
 
 /**
  * Road-route a Phase-1 waypoint list and improve it. Returns
@@ -2346,7 +2347,7 @@ async function refineRoute(baseWaypoints, opts) {
     const candidates = candidateList.slice();
     const stats = {
         calls: 0, trimmed: 0, pickupsAdded: 0, uselessDropped: 0, retraceFixed: false, retraceFraction: null,
-        sweepAdded: 0, sweepUnreachable: 0, sweepRemaining: 0, sweepCapped: false,
+        sweepAdded: 0, sweepUnreachable: 0, sweepRemaining: 0, sweepCapped: false, spursPruned: 0,
     };
 
     // Build OSRM exclude list from road filter checkboxes (#411).
@@ -2549,20 +2550,42 @@ async function refineRoute(baseWaypoints, opts) {
                 result = trial;
                 stats.sweepAdded += batch.length;
             }
-            // Sweep stops whose road snap landed elsewhere claim nothing —
-            // drop them, as long as that doesn't reopen any cluster tile.
+            // A re-route is kept only if it's shorter, loses no tile and
+            // reopens no cluster tile.
+            const keeps = (trial) => {
+                const before = targetsNow().length;
+                const after = R.clusterSweepTargets(trial.coordinates, grids, { bounds: areaBounds, exclude: unreachable }).length;
+                return trial.distance_km < result.distance_km && after <= before && tilesOf(trial) >= tilesOf(result);
+            };
+            // Sweep stops whose road snap landed elsewhere claim nothing.
+            // Drop them.
             const useless = R.uselessStops(result.coordinates, waypoints, grids);
             if (useless.length > 0) {
                 const drop = new Set(useless);
                 const trialWps = waypoints.filter((_, i) => !drop.has(i));
                 const trial = await routeOnce(trialWps);
-                const before = targetsNow().length;
-                const after = R.clusterSweepTargets(trial.coordinates, grids, { bounds: areaBounds, exclude: unreachable }).length;
-                if (trial.distance_km < result.distance_km && after <= before && tilesOf(trial) >= tilesOf(result)) {
+                if (keeps(trial)) {
                     waypoints = trialWps;
                     meta = meta.filter((_, i) => !drop.has(i + 1));
                     result = trial;
                 }
+            }
+            // ── Stage 6: cut off pigtails ──
+            // A spur is a stub or lollipop ridden out and straight back. One
+            // that claims no tile the rest of the route doesn't is pure
+            // overhead. Replace its stops with an anchor where it leaves the
+            // route, so only the excursion disappears. Cutting can expose
+            // more wasted spurs, so this repeats for a few rounds.
+            for (let round = 0; round < MAX_PRUNE_ROUNDS; round++) {
+                const plan = R.planSpurPrune(result.coordinates, waypoints, grids);
+                if (plan.length === 0) break;
+                const cut = R.applySpurPrune(waypoints, meta, plan);
+                const trial = await routeOnce(cut.waypoints);
+                if (!keeps(trial)) break;
+                waypoints = cut.waypoints;
+                meta = cut.meta;
+                result = trial;
+                stats.spursPruned += plan.length;
             }
             stats.sweepUnreachable = unreachable.size;
             stats.sweepRemaining = targetsNow().length;

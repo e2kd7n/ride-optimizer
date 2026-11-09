@@ -151,6 +151,66 @@ test('uselessStops: flags a stub into claimed ground, keeps one that grabs a til
     assert.ok(!useless.includes(2), 'tile-grabbing stub kept');
 });
 
+test('findSpurs: finds both stubs, and only the claimed-ground one is wasted', () => {
+    const z = 17;
+    const fresh = R.latLonToTile(...pt(3, 0.4), z);
+    const grid = gridWithHoles([fresh], z);
+    const wps = [pt(0, 0), pt(1, 0.4), pt(3, 0.4), pt(4, 0), pt(4, -1), pt(0, -1), pt(0, 0)];
+    const coords = concat(
+        line([0, 0], [1, 0]), line([1, 0], [1, 0.4]), line([1, 0.4], [1, 0]),
+        line([1, 0], [3, 0]), line([3, 0], [3, 0.4]), line([3, 0.4], [3, 0]),
+        line([3, 0], [4, 0]), line([4, 0], [4, -1]), line([4, -1], [0, -1]), line([0, -1], [0, 0]),
+    );
+    const spurs = R.findSpurs(coords, wps, [grid]);
+    const claimed = spurs.find(s => s.waypoints.includes(1));
+    const grab = spurs.find(s => s.waypoints.includes(2));
+    assert.ok(claimed && grab, 'both stubs found');
+    assert.equal(claimed.exclusiveTiles, 0);
+    assert.ok(grab.exclusiveTiles >= 1);
+    assert.ok(claimed.stemKm > 0.3 && claimed.stemKm < 0.45, `stem ${claimed.stemKm}`);
+    assert.ok(R.haversineKm(claimed.base, pt(1, 0)) < 0.04, 'base at the junction');
+    // A loop ridden once has no spurs.
+    const loop = concat(line([0, 0], [2, 0]), line([2, 0], [2, 2]), line([2, 2], [0, 2]), line([0, 2], [0, 0]));
+    assert.equal(R.findSpurs(loop, null, [grid]).length, 0);
+});
+
+test('planSpurPrune: two stubs into the same tile — cuts one, never both', () => {
+    const z = 17;
+    // One fresh tile; stubs at its west and east thirds both reach into it.
+    const t = R.latLonToTile(...pt(2, 0.5), z);
+    const [s, w, n, e] = R.tileBounds(t.x, t.y, z);
+    const midLat = (s + n) / 2;
+    const toE = lon => (lon - LON0) / KM_LON, toN = lat => (lat - LAT0) / KM_LAT;
+    const xa = toE(w + (e - w) / 3), xb = toE(w + 2 * (e - w) / 3), yTip = toN(midLat);
+    const grid = gridWithHoles([t], z);
+    const wps = [pt(0, 0), pt(xa, yTip), pt(xb, yTip), pt(4, 0), pt(4, -1), pt(0, -1), pt(0, 0)];
+    const coords = concat(
+        line([0, 0], [xa, 0]), line([xa, 0], [xa, yTip]), line([xa, yTip], [xa, 0]),
+        line([xa, 0], [xb, 0]), line([xb, 0], [xb, yTip]), line([xb, yTip], [xb, 0]),
+        line([xb, 0], [4, 0]), line([4, 0], [4, -1]), line([4, -1], [0, -1]), line([0, -1], [0, 0]),
+    );
+    const spurs = R.findSpurs(coords, wps, [grid]);
+    assert.equal(spurs.filter(sp => sp.exclusiveTiles === 0 && sp.waypoints.length).length, 2, 'each looks wasted alone');
+    const plan = R.planSpurPrune(coords, wps, [grid]);
+    assert.equal(plan.length, 1, 'only one is safe to cut');
+
+    const meta = [{ tiles: 1 }, { tiles: 1 }, { tiles: 2 }, { tiles: 3 }, { tiles: 4 }];
+    const cut = R.applySpurPrune(wps, meta, plan);
+    assert.equal(cut.waypoints.length, wps.length);
+    assert.equal(cut.meta.length, meta.length);
+    const w0 = plan[0].waypoints[0];
+    assert.deepEqual(cut.waypoints[w0], plan[0].base);
+    assert.equal(cut.meta[w0 - 1].anchor, true);
+});
+
+test('applySpurPrune: a multi-stop lollipop collapses to one anchor', () => {
+    const wps = [pt(0, 0), pt(1, 1), pt(1.2, 1), pt(1.2, 0.8), pt(3, 0), pt(0, 0)];
+    const meta = [{ tiles: 1 }, { tiles: 1 }, { tiles: 1 }, { tiles: 5 }];
+    const cut = R.applySpurPrune(wps, meta, [{ waypoints: [1, 2, 3], base: pt(1, 0) }]);
+    assert.deepEqual(cut.waypoints, [pt(0, 0), pt(1, 0), pt(3, 0), pt(0, 0)]);
+    assert.deepEqual(cut.meta, [{ tiles: 0, anchor: true }, { tiles: 5 }]);
+});
+
 // ── Polygon areas ────────────────────────────────────────────────
 // L-shaped area: 4 km x 4 km with the north-east 2 km x 2 km quadrant cut out.
 const L_AREA = [pt(0, 0), pt(4, 0), pt(4, 2), pt(2, 2), pt(2, 4), pt(0, 4)];

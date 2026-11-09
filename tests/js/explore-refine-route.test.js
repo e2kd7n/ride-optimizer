@@ -123,6 +123,51 @@ test('per-stop check drops a stub into claimed ground, keeps a tile-grabbing one
     assert.equal(R.countNewTiles(out.route.coordinates, [grid]), 1);
 });
 
+test('pigtail cut: a dead-end stub that claims nothing is replaced by an anchor at its base', async () => {
+    // Fake router with one dead end: reaching TIP means riding up from the
+    // junction J and straight back down. That's the spur a real router makes
+    // for a stop snapped to a dead-end street.
+    const J = pt(1, 0), TIP = pt(1, 0.4);
+    const isTip = (w) => w[0] === TIP[0] && w[1] === TIP[1];
+    const calls = [];
+    const api = {
+        async getExplorationRoute({ waypoints }) {
+            calls.push(waypoints.map(w => [...w]));
+            const path = [];
+            waypoints.forEach((w, i) => { if (isTip(w) && i > 0) path.push(J, w, J); else path.push(w); });
+            const coords = [];
+            for (let i = 1; i < path.length; i++) {
+                const a = path[i - 1], b = path[i];
+                const n = Math.max(1, Math.round(R.haversineKm(a, b) / 0.05));
+                for (let k = i === 1 ? 0 : 1; k <= n; k++) coords.push([a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n]);
+            }
+            return { status: 'success', coordinates: coords, distance_km: R.pathKm(coords) * ROAD, duration_min: 1 };
+        },
+    };
+    const refine = loadExplore(api);
+    const z = 17;
+    // Fresh tiles on the main road either side of the junction, so the stop's
+    // leg (start to pt(3,0)) claims something and the leg-based per-stop
+    // check keeps it. Only the excursion itself claims nothing.
+    const freshA = R.latLonToTile(...pt(0.5, 0), z), freshB = R.latLonToTile(...pt(2, 0), z);
+    const freshC = R.latLonToTile(...pt(1.5, -1), z);   // keeps the loop's return leg worth riding
+    const visited = new Set();
+    const a = R.latLonToTile(...pt(-2, 3), z), b = R.latLonToTile(...pt(6, -3), z);
+    for (let x = a.x; x <= b.x; x++) for (let y = a.y; y <= b.y; y++) visited.add(`${x},${y}`);
+    visited.delete(`${freshA.x},${freshA.y}`);
+    visited.delete(`${freshB.x},${freshB.y}`);
+    visited.delete(`${freshC.x},${freshC.y}`);
+    const grid = { zoom: z, visited, isRoadless: () => false };
+    const wps = [pt(0, 0), TIP, pt(3, 0), pt(3, -1), pt(0, -1), pt(0, 0)];
+    const out = await refine(wps, { targetKm: 40, mode: 'cap', surfacePref: 'any', grids: [grid] });
+    const final = calls[calls.length - 1];
+    assert.ok(!final.some(isTip), 'stub tip dropped');
+    assert.ok(R.haversineKm(final[1], J) < 0.05, 'anchored at the junction');
+    assert.equal(out.stats.spursPruned, 1);
+    assert.equal(R.countNewTiles(out.route.coordinates, [grid]), 3);
+    assert.ok(out.route.distance_km < (R.pathKm([pt(0, 0), J, TIP, J, pt(3, 0), pt(3, -1), pt(0, -1), pt(0, 0)]) * ROAD) - 0.9);
+});
+
 test('fence bounds are sent with every routing call', async () => {
     const api = makeApi();
     const refine = loadExplore(api);

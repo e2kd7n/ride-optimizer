@@ -676,6 +676,163 @@
         return out;
     }
 
+    // ── Spurs: out-and-back excursions ─────────────────────────────
+
+    /**
+     * Find the route's spurs: stretches where it rides out along a road and
+     * comes straight back along it (a dead-end stub, or a "lollipop": out a
+     * stem, around a loop, back down the stem). The router only does this to
+     * reach a waypoint, so every spur has one or more waypoints inside it.
+     *
+     * Each spur is {fromKm, toKm, stemKm, waypoints, exclusiveTiles}. It
+     * covers route distance [fromKm, toKm]. stemKm is the length of road ridden
+     * both ways. waypoints holds indices into `waypoints` of the inner stops
+     * routed through inside it. exclusiveTiles counts new tiles the route
+     * touches only inside the spur (0 means the excursion claims nothing the
+     * rest of the route doesn't, so it's pure overhead). Unlike uselessStops,
+     * this judges the excursion itself, not the whole leg between the stop's
+     * neighbours, which usually claims something legitimately.
+     *
+     * Nested spurs are all reported: a lollipop can contain a stub of its own.
+     */
+    function findSpurs(coords, waypoints, grids, opts = {}) {
+        return spurAnalysis(coords, waypoints, grids, opts).spurs;
+    }
+
+    function spurAnalysis(coords, waypoints, grids, opts = {}) {
+        const { stepM = 20, nearM = 25, minGapM = 60, minStemM = 30, maxLoopM = 1200 } = opts;
+        if (!coords || coords.length < 2) return { spurs: [], hits: new Map() };
+        const proj = projector(coords[0][0]);
+        const pts = densify(coords, stepM / 1000).map(d => ({ ...d, xy: proj(d.p) }));
+        const hash = buildHash(pts, nearM);
+        const minGapKm = minGapM / 1000;
+
+        // Forward partner: the closest later sample on the same road, far
+        // enough along the route that it isn't just the next sample.
+        const partner = new Array(pts.length).fill(-1);
+        for (let i = 0; i < pts.length; i++) {
+            let bestJ = -1, bestD = Infinity;
+            for (const j of neighbours(hash, pts[i].xy, nearM, 1)) {
+                if (j <= i || pts[j].s - pts[i].s < minGapKm) continue;
+                const d = Math.hypot(pts[j].xy[0] - pts[i].xy[0], pts[j].xy[1] - pts[i].xy[1]);
+                if (d <= nearM && d < bestD) { bestD = d; bestJ = j; }
+            }
+            partner[i] = bestJ;
+        }
+
+        // Antiparallel runs: as i walks out the stem, its partner walks back
+        // down it (j decreasing). The run's first pair bounds the spur.
+        const runs = [];
+        let run = null;
+        for (let i = 0; i < pts.length; i++) {
+            const j = partner[i];
+            if (j === -1) continue;
+            if (run && i - run.i1 <= 2 && j <= run.j1 + 2 && j >= run.j1 - 6) {
+                run.i1 = i; run.j1 = j;
+            } else {
+                if (run) runs.push(run);
+                run = { i0: i, j0: j, i1: i, j1: j };
+            }
+        }
+        if (run) runs.push(run);
+
+        // Route distance of each waypoint, for attribution.
+        let wpS = [];
+        if (waypoints && waypoints.length > 2) {
+            const wpIdx = waypointRouteIndices(coords, waypoints);
+            const cum = [0];
+            for (let i = 1; i < coords.length; i++) cum.push(cum[i - 1] + haversineKm(coords[i - 1], coords[i]));
+            wpS = wpIdx.map(i => cum[i]);
+        }
+
+        // Samples touching each new tile, in route order.
+        const hits = new Map();
+        for (const grid of grids || []) {
+            pts.forEach(({ p }, i) => {
+                const { x, y } = latLonToTile(p[0], p[1], grid.zoom);
+                const k = `${x},${y}`;
+                if (grid.visited.has(k) || grid.isRoadless(x, y)) return;
+                const key = `${grid.zoom}:${k}`;
+                const h = hits.get(key);
+                if (!h) hits.set(key, [i]);
+                else h.push(i);
+            });
+        }
+
+        const spurs = [];
+        for (const r of runs) {
+            if (r.j1 < r.i1) continue;
+            const stemKm = pts[r.i1].s - pts[r.i0].s;
+            if (stemKm * 1000 < minStemM) continue;
+            // A road the route happens to reuse much later is not a spur.
+            if ((pts[r.j1].s - pts[r.i1].s) * 1000 > maxLoopM) continue;
+            const a = r.i0, b = r.j0;
+            const fromKm = pts[a].s, toKm = pts[b].s;
+            const wps = [];
+            for (let w = 1; w < wpS.length - 1; w++) {
+                if (wpS[w] > fromKm && wpS[w] < toKm) wps.push(w);
+            }
+            let exclusiveTiles = 0;
+            for (const h of hits.values()) {
+                if (h[0] >= a && h[h.length - 1] <= b) exclusiveTiles++;
+            }
+            spurs.push({ fromKm, toKm, stemKm, waypoints: wps, exclusiveTiles, a, b, base: pts[a].p });
+        }
+        return { spurs, hits };
+    }
+
+    /**
+     * Which spurs to cut off, and where to anchor the route instead.
+     *
+     * Picks wasted spurs (they claim no tile exclusively and contain stops),
+     * longest first, but only while every new tile they touch is still
+     * touched somewhere outside all the spurs picked so far. Two spurs that
+     * share a tile can each look non-exclusive, and cutting both would lose
+     * it. Returns [{waypoints, base}]: replace the spur's stops with one
+     * waypoint at `base` (where the spur leaves the route) so the rest of
+     * the leg is routed as before and only the excursion disappears.
+     */
+    function planSpurPrune(coords, waypoints, grids, opts = {}) {
+        const { spurs, hits } = spurAnalysis(coords, waypoints, grids, opts);
+        const cands = spurs
+            .filter(sp => sp.exclusiveTiles === 0 && sp.waypoints.length > 0)
+            .sort((p, q) => (q.b - q.a) - (p.b - p.a));
+        const chosen = [];
+        const covered = (i, extra) => (i >= extra.a && i <= extra.b) || chosen.some(c => i >= c.a && i <= c.b);
+        for (const c of cands) {
+            if (chosen.some(o => c.a <= o.b && c.b >= o.a)) continue; // overlaps (or nests in) a pick
+            let safe = true;
+            for (const h of hits.values()) {
+                if (!h.some(i => i >= c.a && i <= c.b)) continue;
+                if (h.every(i => covered(i, c))) { safe = false; break; }
+            }
+            if (safe) chosen.push(c);
+        }
+        return chosen.map(c => ({ waypoints: c.waypoints, base: c.base }));
+    }
+
+    /** Apply planSpurPrune's result: each spur's stops become one anchor at its base. */
+    function applySpurPrune(waypoints, meta, plan) {
+        const replace = new Map(), remove = new Set();
+        for (const { waypoints: ws, base } of plan) {
+            replace.set(ws[0], base);
+            ws.slice(1).forEach(w => remove.add(w));
+        }
+        const outW = [], outM = [];
+        waypoints.forEach((wp, i) => {
+            if (remove.has(i)) return;
+            const inner = i > 0 && i < waypoints.length - 1;
+            if (replace.has(i)) {
+                outW.push([...replace.get(i)]);
+                if (inner) outM.push({ tiles: 0, anchor: true });
+                return;
+            }
+            outW.push(wp);
+            if (inner) outM.push(meta[i - 1]);
+        });
+        return { waypoints: outW, meta: outM };
+    }
+
     // ── Bounds (box or polygon) ────────────────────────────────────
 
     /** True when `area` is a polygon ([[lat, lon], ...]) rather than a box. */
@@ -847,7 +1004,7 @@
         haversineKm, pathKm, latLonToTile, tileBounds, tileSideKm, buildRoadlessLookup, makeGrid,
         densify, tilesTouched, newTilesCrossed, countNewTiles,
         findPickups, clusterSweepTargets, insertSweepTargets, waypointRouteIndices, insertPickups, cheapestInsertion, chooseDropIndex,
-        analyzeRetrace, uselessStops, pointInBounds, fractionOutsideBounds, clampToBounds,
+        analyzeRetrace, uselessStops, findSpurs, planSpurPrune, applySpurPrune, pointInBounds, fractionOutsideBounds, clampToBounds,
         isPolygonArea, areaBBox, pointInPolygon, polygonSelfIntersects,
         findYard, tileSetOutline,
     };
