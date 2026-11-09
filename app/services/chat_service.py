@@ -18,6 +18,7 @@ response's full content unchanged.
 """
 
 import os
+import time
 from datetime import date
 from typing import Any, Dict, List, Optional
 
@@ -66,6 +67,8 @@ class ChatService:
         self.max_tool_iterations = None
         self.max_history_messages = None
         self.use_fallbacks = True
+        self.timeout = 60.0
+        self.total_timeout = 150.0
 
     def initialize(self) -> None:
         config = ConfigManager.get_instance()
@@ -76,6 +79,11 @@ class ChatService:
         self.max_history_messages = int(config.get('chat.max_history_messages', 20))
         self.use_fallbacks = bool(config.get('chat.fallbacks', True))
         timeout = float(config.get('chat.timeout_seconds', 60))
+        self.timeout = timeout
+        # Overall wall-clock budget for one question across every tool-loop
+        # pass. Without it, 7 passes x 60 s x 2 attempts could hold one of
+        # gunicorn's four threads for about 14 minutes.
+        self.total_timeout = float(config.get('chat.total_timeout_seconds', 150))
 
         api_key = os.getenv('ANTHROPIC_API_KEY')
         if not api_key:
@@ -112,11 +120,16 @@ class ChatService:
 
         tool_calls = 0
         response = None
+        deadline = time.monotonic() + self.total_timeout
         for iteration in range(self.max_tool_iterations + 1):
             # Last pass: no more tools, so Claude has to answer with what it has.
             final_pass = iteration == self.max_tool_iterations
+            remaining = deadline - time.monotonic()
+            if remaining < 5:
+                raise ChatUpstreamError("Claude took too long to answer. Try again or ask a narrower question.")
             try:
-                response = self._create(history, allow_tools=not final_pass)
+                response = self._create(history, allow_tools=not final_pass,
+                                        timeout=min(self.timeout, remaining))
             except anthropic.APITimeoutError:
                 raise ChatUpstreamError("Claude took too long to answer. Try again or ask a narrower question.")
             except anthropic.RateLimitError:
@@ -190,7 +203,8 @@ class ChatService:
             clean.pop(0)
         return clean
 
-    def _create(self, history: List[Dict[str, Any]], allow_tools: bool):
+    def _create(self, history: List[Dict[str, Any]], allow_tools: bool,
+                timeout: Optional[float] = None):
         kwargs: Dict[str, Any] = {
             'model': self.model,
             'max_tokens': self.max_tokens,
@@ -208,6 +222,8 @@ class ChatService:
             # Keep `tools` identical (it's part of the cached prefix) and
             # forbid calls instead of dropping the list.
             kwargs['tool_choice'] = {'type': 'none'}
+        if timeout is not None:
+            kwargs['timeout'] = timeout
         if self.use_fallbacks:
             # On a safety-classifier decline, the API re-runs the request on
             # Anthropic's recommended fallback model instead of refusing.

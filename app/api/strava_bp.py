@@ -12,6 +12,7 @@ Routes:
 
 import os
 import time
+from urllib.parse import quote
 
 from flask import Blueprint, current_app, jsonify, redirect, request, session, url_for
 
@@ -92,7 +93,8 @@ def strava_callback():
     error = request.args.get('error')
     if error:
         logger.error(f"Strava OAuth error: {error}")
-        return redirect('/settings.html?strava_error=' + error)
+        # URL-encode: the raw value could inject extra query parameters.
+        return redirect('/settings.html?strava_error=' + quote(error[:100], safe=''))
 
     state = request.args.get('state')
     if not state or state != session.pop('strava_oauth_state', None):
@@ -232,6 +234,8 @@ def setup_verify():
             return jsonify({'valid': True, 'message': 'Credentials accepted by Strava'})
         if resp.status_code == 401:
             return jsonify({'valid': False, 'error': 'Strava rejected the credentials — check your Client ID and Secret'})
+        if resp.status_code >= 500:
+            return jsonify({'valid': False, 'error': 'Strava is having problems — try verifying again later'}), 503
         return jsonify({'valid': True, 'message': 'Credentials appear valid'})
     except Exception as exc:
         logger.warning("Setup verify error: %s", exc)

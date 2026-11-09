@@ -34,8 +34,11 @@ def _load_or_create_secret_key() -> str:
         return key_file.read_text().strip()
     key = secrets.token_hex(32)
     key_file.parent.mkdir(exist_ok=True)
-    key_file.write_text(key)
-    key_file.chmod(0o600)
+    # Create with 0600 from the start: write_text()+chmod() left the key
+    # readable under the default umask for a moment.
+    fd = os.open(key_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, 'w') as fh:
+        fh.write(key)
     return key
 
 
@@ -56,6 +59,21 @@ def create_app(config_overrides: dict | None = None) -> Flask:
         set to a :class:`~app.container.ServiceContainer`.
     """
     app = Flask(__name__, static_folder='../static', static_url_path='', template_folder='../templates')
+
+    # --- reverse proxy ---
+    # In production the app is only reachable through the pi4 Caddy front door
+    # (the container publishes on 127.0.0.1 only). Without ProxyFix every
+    # client looked like 127.0.0.1, so each per-IP rate limit was one bucket
+    # shared by everyone, request.is_secure was always False (no HSTS) and
+    # external URLs were built as http://. Trust exactly that one hop; set
+    # PROXY_FIX_HOPS=0 when running without a proxy in front.
+    try:
+        proxy_hops = int(os.getenv('PROXY_FIX_HOPS', '1'))
+    except ValueError:
+        proxy_hops = 1
+    if proxy_hops > 0:
+        from werkzeug.middleware.proxy_fix import ProxyFix
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=proxy_hops, x_proto=proxy_hops)
 
     # --- core config ---
     app.config['JSON_SORT_KEYS'] = False

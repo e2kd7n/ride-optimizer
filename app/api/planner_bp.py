@@ -51,6 +51,12 @@ def _rate_limit(config_key: str, default: str):
 
 def _validate_bbox(south, west, north, east):
     """Return an error message string if the bbox is malformed or too large, else None."""
+    # NaN compares False with everything, so without this check a NaN bbox
+    # sailed through every test below (and could trigger an Overpass fetch).
+    if not all(isinstance(v, (int, float)) and math.isfinite(v) for v in (south, west, north, east)):
+        return 'bounding box values must be finite numbers'
+    if not (-90 <= south <= 90 and -90 <= north <= 90 and -180 <= west <= 180 and -180 <= east <= 180):
+        return 'bounding box is out of range'
     if south >= north:
         return 'south must be less than north'
     if west >= east:
@@ -58,6 +64,19 @@ def _validate_bbox(south, west, north, east):
     if (north - south) > MAX_BBOX_DEGREES or (east - west) > MAX_BBOX_DEGREES:
         return f'bounding box too large (max {MAX_BBOX_DEGREES} degrees per side)'
     return None
+
+
+def _parse_lat_lon_pairs(raw):
+    """[[lat, lon], ...] -> [(lat, lon), ...], or None if any pair is invalid,
+    non-finite or out of range."""
+    try:
+        pairs = [(float(c[0]), float(c[1])) for c in raw]
+    except (TypeError, ValueError, IndexError, KeyError):
+        return None
+    for lat, lon in pairs:
+        if not (math.isfinite(lat) and math.isfinite(lon) and -90 <= lat <= 90 and -180 <= lon <= 180):
+            return None
+    return pairs
 
 
 # ---------------------------------------------------------------------------
@@ -428,10 +447,9 @@ def exploration_verify_tiles():
         return jsonify({'status': 'error', 'message': 'coordinates must be a non-empty list of [lat, lon] pairs'}), 400
     if len(coordinates) > 5000:
         return jsonify({'status': 'error', 'message': 'coordinates list too large (max 5000)'}), 400
-    try:
-        coordinates = [(float(c[0]), float(c[1])) for c in coordinates]
-    except (TypeError, ValueError, IndexError):
-        return jsonify({'status': 'error', 'message': 'coordinates must be [lat, lon] number pairs'}), 400
+    coordinates = _parse_lat_lon_pairs(coordinates)
+    if coordinates is None:
+        return jsonify({'status': 'error', 'message': 'coordinates must be finite [lat, lon] number pairs'}), 400
 
     tiles = data.get('tiles')
     if not isinstance(tiles, list) or len(tiles) < 1:
@@ -446,6 +464,8 @@ def exploration_verify_tiles():
         return jsonify({'status': 'error', 'message': 'each tile must have integer x, y, zoom'}), 400
     if any(t['zoom'] not in allowed_zooms for t in tiles):
         return jsonify({'status': 'error', 'message': f'zoom must be one of {allowed_zooms}'}), 400
+    if any(not (0 <= t['x'] < 2 ** t['zoom'] and 0 <= t['y'] < 2 ** t['zoom']) for t in tiles):
+        return jsonify({'status': 'error', 'message': 'tile x/y out of range for its zoom'}), 400
 
     result = svc.verify_tile_claims(coordinates, tiles)
     return jsonify(result), 200
@@ -471,10 +491,9 @@ def exploration_new_tiles():
         return jsonify({'status': 'error', 'message': 'coordinates must be a non-empty list of [lat, lon] pairs'}), 400
     if len(coordinates) > 5000:
         return jsonify({'status': 'error', 'message': 'coordinates list too large (max 5000)'}), 400
-    try:
-        coordinates = [(float(c[0]), float(c[1])) for c in coordinates]
-    except (TypeError, ValueError, IndexError):
-        return jsonify({'status': 'error', 'message': 'coordinates must be [lat, lon] number pairs'}), 400
+    coordinates = _parse_lat_lon_pairs(coordinates)
+    if coordinates is None:
+        return jsonify({'status': 'error', 'message': 'coordinates must be finite [lat, lon] number pairs'}), 400
 
     result = svc.find_new_tiles(coordinates)
     return jsonify(result), 200

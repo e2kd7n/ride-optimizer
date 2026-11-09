@@ -242,6 +242,22 @@ def _create(svc):
 
 
 @pytest.mark.unit
+class TestChatDeadline:
+    def test_gives_up_when_overall_budget_is_spent(self, service, monkeypatch):
+        from app.services import chat_service as cs
+        _create(service).return_value = _resp('tool_use', _tool_use('t1', 'get_totals', {}))
+        clock = iter([0.0, 0.0, 100.0, 200.0, 300.0])
+        monkeypatch.setattr(cs.time, 'monotonic', lambda: next(clock))
+        service.total_timeout = 150
+        with pytest.raises(cs.ChatUpstreamError):
+            service.chat([{'role': 'user', 'content': 'hi'}])
+        # Stopped on the budget, well before max_tool_iterations + 1 calls.
+        assert _create(service).call_count < service.max_tool_iterations + 1
+        # Each call's timeout is capped by what's left of the budget.
+        assert _create(service).call_args_list[-1].kwargs['timeout'] <= 50
+
+
+@pytest.mark.unit
 class TestChatService:
     def test_not_configured_without_key(self, tools, monkeypatch):
         monkeypatch.delenv('ANTHROPIC_API_KEY', raising=False)

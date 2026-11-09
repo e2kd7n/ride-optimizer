@@ -16,7 +16,14 @@ bind-mounted and already carries the correct container-writable ownership
 precedence, so callers don't need to know which file a given key lives in.
 """
 
+import os
+import tempfile
+import threading
 from pathlib import Path
+
+# Serialises read-modify-write of the runtime overrides file across request
+# threads (ORS connect, location save and Strava setup can race).
+_write_lock = threading.Lock()
 
 RUNTIME_OVERRIDES_FILENAME = 'runtime_overrides.env'
 
@@ -52,7 +59,17 @@ def read_env() -> dict:
 
 
 def write_env(data: dict) -> None:
-    """Write *data* key=value pairs to the runtime overrides file under config/."""
+    """Write *data* key=value pairs to the runtime overrides file under config/.
+
+    Locked and atomic: two concurrent writers used to lose one write, and a
+    truncating write_text() could be read half-written or left truncated by a
+    crash, dropping keys such as HOME_LATITUDE/HOME_LONGITUDE.
+    """
+    with _write_lock:
+        _write_env_locked(data)
+
+
+def _write_env_locked(data: dict) -> None:
     ef = runtime_env_path()
     existing: dict = {}
     lines_out: list = []
@@ -74,5 +91,18 @@ def write_env(data: dict) -> None:
         else:
             lines_out.append(f'{key}={safe_value}')
 
-    ef.write_text('\n'.join(lines_out) + '\n', encoding='utf-8')
-    ef.chmod(0o600)
+    ef.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=ef.parent, prefix='.runtime_overrides.', suffix='.tmp')
+    try:
+        # mkstemp creates the file 0600, so the secrets are never world-readable.
+        with os.fdopen(fd, 'w', encoding='utf-8', newline='\n') as fh:
+            fh.write('\n'.join(lines_out) + '\n')
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, ef)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise

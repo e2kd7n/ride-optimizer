@@ -6,6 +6,8 @@ into the same Activity format the rest of the pipeline uses.
 """
 
 from src.secure_logger import SecureLogger
+import os
+import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -15,6 +17,51 @@ from src.data_fetcher import Activity
 logger = SecureLogger(__name__)
 
 GARMIN_TOKEN_DIR = Path(__file__).resolve().parent.parent.parent / 'config' / '.garmin_tokens'
+
+# Seconds per Garmin HTTP call. garth's default has no overall bound, and an
+# expired-token refresh was seen hanging forever, permanently taking one of
+# gunicorn's four threads out of service.
+GARTH_TIMEOUT_SECONDS = 30
+
+# garth keeps one process-global client. Serialise the calls that swap its
+# credentials (login/resume) so a connect can't change tokens under another
+# thread mid-call. Full per-instance client isolation is tracked in #636.
+_garth_lock = threading.RLock()
+_garth_configured = False
+
+
+def _garth():
+    """Import garth, applying our timeout and telemetry settings once."""
+    global _garth_configured
+    import garth
+    configure = getattr(garth, 'configure', None)
+    if not _garth_configured and configure is not None:
+        with _garth_lock:
+            if not _garth_configured:
+                try:
+                    configure(timeout=GARTH_TIMEOUT_SECONDS, telemetry_enabled=False)
+                except TypeError:
+                    # Older garth without telemetry support.
+                    configure(timeout=GARTH_TIMEOUT_SECONDS)
+                _garth_configured = True
+    return garth
+
+
+def _secure_token_dir(token_dir: Path) -> None:
+    """Restrict Garmin OAuth tokens to the owner (dir 0700, files 0600).
+
+    garth.save() writes with the default umask, unlike every other credential
+    store in the app.
+    """
+    try:
+        if not token_dir.exists():
+            return
+        os.chmod(token_dir, 0o700)
+        for path in token_dir.iterdir():
+            if path.is_file():
+                os.chmod(path, 0o600)
+    except OSError as e:
+        logger.warning(f"Could not restrict Garmin token permissions: {e}")
 
 
 class GarminService:
@@ -36,12 +83,14 @@ class GarminService:
         if not self.token_dir.exists():
             return False
         try:
-            import garth
-            garth.resume(str(self.token_dir))
-            # Just check that both token files loaded — don't touch .username,
-            # .profile, or .user_profile; all three hit connectapi over the
-            # network and can trigger an SSO refresh.
-            assert garth.client.oauth1_token is not None
+            garth = _garth()
+            with _garth_lock:
+                garth.resume(str(self.token_dir))
+                # Just check that both token files loaded — don't touch .username,
+                # .profile, or .user_profile; all three hit connectapi over the
+                # network and can trigger an SSO refresh.
+                assert garth.client.oauth1_token is not None
+            _secure_token_dir(self.token_dir)
             self._client = garth
             return True
         except Exception as e:
@@ -51,10 +100,12 @@ class GarminService:
 
     def connect(self, email: str, password: str) -> Dict[str, Any]:
         try:
-            import garth
-            garth.login(email, password)
-            self.token_dir.mkdir(parents=True, exist_ok=True)
-            garth.save(str(self.token_dir))
+            garth = _garth()
+            with _garth_lock:
+                garth.login(email, password)
+                self.token_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+                garth.save(str(self.token_dir))
+            _secure_token_dir(self.token_dir)
             self._client = garth
             try:
                 display_name = garth.client.username or email.split('@')[0]
@@ -92,7 +143,7 @@ class GarminService:
         if not self.is_connected():
             raise RuntimeError('Garmin not connected')
 
-        import garth
+        garth = _garth()
         start = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
         raw = garth.connectapi(
             f'/activitylist-service/activities/search/activities',
@@ -127,7 +178,7 @@ class GarminService:
         should not block the rest of the sync.
         """
         try:
-            import garth
+            garth = _garth()
             details = garth.connectapi(
                 f'/activity-service/activity/{activity_id}/details',
                 params={'maxPolylineSize': 4000},

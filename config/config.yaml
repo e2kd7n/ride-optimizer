@@ -14,6 +14,7 @@ chat:
   max_tool_iterations: 6     # tool-call rounds per question before forcing an answer
   max_history_messages: 20   # older turns are dropped before sending, to bound cost
   timeout_seconds: 60        # per API attempt; bounds how long one gunicorn thread is held
+  total_timeout_seconds: 150 # whole question, across every tool-loop pass
   fallbacks: true            # re-run safety-classifier declines on Anthropic's recommended fallback model
 
 exploration:
