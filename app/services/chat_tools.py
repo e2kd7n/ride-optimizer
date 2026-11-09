@@ -160,6 +160,24 @@ def sanitize_outbound(text: str) -> str:
     return text
 
 
+def _sanitize_values(value: Any) -> Any:
+    """Apply sanitize_outbound to every string inside a JSON-able structure.
+
+    Sanitizing the *serialized* JSON instead (as before #621) let the regexes
+    match inside escape sequences such as ``\\u2192`` and across value
+    boundaries, which corrupted the JSON so Claude couldn't parse it.
+    """
+    if isinstance(value, str):
+        return sanitize_outbound(value)
+    if isinstance(value, dict):
+        return {k: _sanitize_values(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_sanitize_values(v) for v in value]
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    return sanitize_outbound(str(value))
+
+
 def _parse_date(value: Optional[str], field: str) -> Optional[date]:
     if value in (None, ''):
         return None
@@ -230,7 +248,7 @@ class ChatTools:
         if handler is None:
             raise ToolInputError(f"Unknown tool {name!r}")
         result = handler(dict(args or {}))
-        return sanitize_outbound(json.dumps(result, separators=(',', ':'), default=str))
+        return json.dumps(_sanitize_values(result), separators=(',', ':'), ensure_ascii=False)
 
     # ------------------------------------------------------------------
     # Filtering

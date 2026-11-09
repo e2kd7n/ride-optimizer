@@ -188,6 +188,20 @@ class TestChatTools:
                               'latlng', 'polyline', 'coordinates'):
                 assert forbidden not in text, f"{name} leaked {forbidden!r}"
 
+    def test_tool_output_is_valid_json_with_tricky_names(self):
+        """#621: sanitizing the serialized JSON corrupted it (escape digits and
+        street-type prefixes like 'St' in 'Strava'). Every result must round-trip."""
+        names = ['100 Mile Strava → Lakefront', '2 Laps Plus “quoted”', 'Café 5 Ct\\Rd "x"',
+                 '123 Main Street loop']
+        acts = [_act(20 + i, '2026-09-01T08:00:00', 10.0, name=n) for i, n in enumerate(names)]
+        t = ChatTools(lambda: acts, lambda: None, lambda: None)
+        out = json.loads(t.execute('search_activities', {'limit': 50}))
+        got = {a['name'] for a in out['activities']}
+        assert '100 Mile Strava → Lakefront' in got
+        assert '2 Laps Plus “quoted”' in got
+        assert 'Café 5 Ct\\Rd "x"' in got
+        assert not any('123 Main Street' in n for n in got)
+
     def test_outbound_text_is_pii_sanitized(self):
         acts = [_act(9, '2026-09-01T08:00:00', 10.0, name='Ride from 123 Main Street at 41.8781136, -87.6297982')]
         t = ChatTools(lambda: acts, lambda: None, lambda: None)

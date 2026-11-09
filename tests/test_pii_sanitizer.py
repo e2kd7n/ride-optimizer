@@ -103,6 +103,18 @@ class TestAddressSanitization:
         assert "[STREET]" in result
         assert "Springfield" in result
     
+    @pytest.mark.parametrize('text', [
+        '100 Mile Strava',          # 'St' prefix of 'Strava' (#621)
+        '2 Laps Plus',              # 'Pl' prefix of 'Plus'
+        '3 Hills Drivetrain test',  # 'Dr' prefix
+        '5 Big Wayfarers',          # 'Way' prefix
+    ])
+    def test_street_type_must_be_a_whole_word(self, text):
+        assert sanitize_address(text) == text
+
+    def test_number_must_start_a_word(self):
+        assert sanitize_address('u2192 Main St') == 'u2192 Main St'
+
     def test_preserve_city_state(self):
         """Test that city and state are preserved."""
         text = "100 Park Blvd, San Francisco, CA 94102"

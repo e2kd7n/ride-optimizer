@@ -69,10 +69,14 @@ def sanitize_address(text: str) -> str:
     Returns:
         Text with street addresses redacted
     """
-    # Match street addresses (number + street name + type)
+    # Match street addresses (number + street name + type). Word boundaries on
+    # both ends matter: without the trailing \b the street type matched word
+    # *prefixes*, so "100 Mile Strava" became "[STREET]rava" and "2 Laps Plus"
+    # became "[STREET]us" (#621).
+    street_types = r'(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Drive|Dr|Lane|Ln|Way|Court|Ct|Place|Pl|Circle|Cir)'
     street_patterns = [
-        r'\d+\s+[A-Z][a-z]+\s+(Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Drive|Dr|Lane|Ln|Way|Court|Ct|Place|Pl|Circle|Cir)',
-        r'\d+\s+[A-Z][a-z]+\s+[A-Z][a-z]+\s+(Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Drive|Dr|Lane|Ln|Way|Court|Ct|Place|Pl|Circle|Cir)',
+        rf'\b\d+\s+[A-Z][a-z]+\s+[A-Z][a-z]+\s+{street_types}\b\.?',
+        rf'\b\d+\s+[A-Z][a-z]+\s+{street_types}\b\.?',
     ]
     
     result = text
