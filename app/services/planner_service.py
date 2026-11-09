@@ -9,7 +9,7 @@ This service provides intelligent long ride recommendations based on:
 """
 
 from src.secure_logger import SecureLogger
-from html import escape
+from src.folium_text import folium_escape
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
 
@@ -1037,7 +1037,7 @@ class PlannerService:
                 
                 popup_html = f"""
                 <div style="font-family: Arial, sans-serif; min-width: 250px;">
-                    <h4 style="margin: 0 0 10px 0; color: #2c3e50;">{escape(ride.get('name', 'Unknown Ride'))}</h4>
+                    <h4 style="margin: 0 0 10px 0; color: #2c3e50;">{folium_escape(ride.get('name', 'Unknown Ride'))}</h4>
                     <div style="margin-bottom: 8px;">
                         <strong>📏 Distance:</strong> {ride.get('distance', 0):.1f} km<br>
                         <strong>⏱️ Duration:</strong> {ride.get('duration', 0):.1f} hr<br>
@@ -1048,7 +1048,7 @@ class PlannerService:
                         <strong>Weather Status:</strong> <span style="color: {route_color}; font-weight: bold;">{route_status}</span><br>
                         <strong>Weather Score:</strong> {weather_score * 100:.0f}%<br>
                         <strong>Variety Score:</strong> {ride.get('variety_score', 0) * 100:.0f}%<br>
-                        <strong>Forecast:</strong> {escape(self._get_weather_summary(weather))}
+                        <strong>Forecast:</strong> {folium_escape(self._get_weather_summary(weather))}
                     </div>
                     {'<div style="margin-top: 8px;"><span style="background: #7A4FA0; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.85em;">🔄 Loop</span></div>' if ride.get('is_loop') else ''}
                 </div>
@@ -1076,7 +1076,7 @@ class PlannerService:
                     fillColor='white',
                     fillOpacity=1,
                     weight=2,
-                    popup=f"<b>Start:</b> {escape(ride.get('name', 'Unknown'))}",
+                    popup=f"<b>Start:</b> {folium_escape(ride.get('name', 'Unknown'))}",
                     tooltip="Start"
                 ).add_to(feature_group)
                 
@@ -1089,7 +1089,7 @@ class PlannerService:
                         fillColor='black',
                         fillOpacity=1,
                         weight=2,
-                        popup=f"<b>End:</b> {escape(ride.get('name', 'Unknown'))}",
+                        popup=f"<b>End:</b> {folium_escape(ride.get('name', 'Unknown'))}",
                         tooltip="End"
                     ).add_to(feature_group)
                 
@@ -1162,7 +1162,7 @@ class PlannerService:
                 weight=6,
                 opacity=0.9,
                 popup=folium.Popup(popup_html, max_width=320),
-                tooltip=f"{ride_name} • {ride_distance:.1f} km • {self._get_weather_status(adjusted_score)}"
+                tooltip=f"{folium_escape(str(ride_name))} • {ride_distance:.1f} km • {self._get_weather_status(adjusted_score)}"
             ).add_to(feature_group)
     
     def _add_weather_forecast_markers(self,
@@ -1182,9 +1182,9 @@ class PlannerService:
         for label, point in points:
             popup_html = f"""
             <div style="font-family: Arial, sans-serif; min-width: 220px;">
-                <h4 style="margin: 0 0 10px 0;">{escape(ride.get('name', 'Unknown Ride'))} {label}</h4>
+                <h4 style="margin: 0 0 10px 0;">{folium_escape(ride.get('name', 'Unknown Ride'))} {label}</h4>
                 <table style="width: 100%; font-size: 12px; border-collapse: collapse;">
-                    <tr><td><b>Forecast</b></td><td>{escape(self._get_weather_summary(weather))}</td></tr>
+                    <tr><td><b>Forecast</b></td><td>{folium_escape(self._get_weather_summary(weather))}</td></tr>
                     <tr><td><b>Weather Score</b></td><td>{ride.get('weather_score', 0) * 100:.0f}%</td></tr>
                     <tr><td><b>Status</b></td><td>{self._get_weather_status(ride.get('weather_score', 0.5))}</td></tr>
                 </table>
@@ -1199,6 +1199,6 @@ class PlannerService:
                 fillOpacity=0.65,
                 weight=2,
                 popup=folium.Popup(popup_html, max_width=300),
-                tooltip=f"{label} forecast"
+                tooltip=f"{folium_escape(str(label))} forecast"
             ).add_to(weather_overlay)
 

@@ -28,9 +28,16 @@
      */
     function setupMessageListener() {
         window.addEventListener('message', (event) => {
+            // Only trust our own map iframe, and only known directions: the
+            // value goes into a CSS selector below.
+            const mapIframe = document.getElementById('commute-map-container');
+            if (!mapIframe || event.source !== mapIframe.contentWindow) return;
             if (event.data && event.data.type === 'routeClicked') {
                 // Update card selection when polyline is clicked in map
-                const direction = event.data.direction;
+                // The frame sends the polyline's class suffix (to_work/to_home);
+                // cards use to-work/to-home.
+                const direction = { to_work: 'to-work', to_home: 'to-home' }[event.data.direction];
+                if (!direction) return;
                 const card = document.querySelector(`.commute-card.${direction}`);
                 if (card) {
                     handleCardClick(card, direction);

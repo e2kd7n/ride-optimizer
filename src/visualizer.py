@@ -10,6 +10,7 @@ Licensed under the MIT License - see LICENSE file for details.
 from .secure_logger import SecureLogger
 from typing import List, Dict, Optional, Tuple
 import math
+from .folium_text import folium_escape
 
 import folium
 
@@ -251,7 +252,7 @@ class RouteVisualizer:
             weight=weight,
             opacity=opacity,
             popup=folium.Popup(popup_html, max_width=300),
-            tooltip=f"{route_name} ({route_group.frequency} uses)",
+            tooltip=f"{folium_escape(str(route_name))} ({route_group.frequency} uses)",
             className=class_names,
             # Store bounds as data attribute for JavaScript access
             name=f"route-{route_group.id}"
@@ -404,7 +405,7 @@ class RouteVisualizer:
         
         html = f"""
         <div style="font-family: Arial, sans-serif;">
-            <h4 style="margin: 0 0 10px 0;">{route_name}</h4>
+            <h4 style="margin: 0 0 10px 0;">{folium_escape(str(route_name))}</h4>
             <table style="width: 100%; font-size: 12px;">
                 <tr>
                     <td><b>Direction:</b></td>
@@ -552,7 +553,7 @@ class RouteVisualizer:
                 color=optimal_color,
                 weight=optimal_weight,
                 opacity=0.8,
-                popup=f"<b>Optimal Route</b><br>{self.route_names.get(optimal_route.id, optimal_route.id)}"
+                popup=f"<b>Optimal Route</b><br>{folium_escape(str(self.route_names.get(optimal_route.id, optimal_route.id)))}"
             ).add_to(preview_map)
             
             # Fit bounds to route

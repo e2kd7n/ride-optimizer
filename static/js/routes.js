@@ -292,7 +292,8 @@
             polyline.bindPopup(`<strong>${escapeHtml(route.name)}</strong><br>${window.formatDistance(route.distance)}`);
             
             // Bind tooltip with custom class for z-index control
-            polyline.bindTooltip(route.name, {
+            // Leaflet sets string tooltip content via innerHTML.
+            polyline.bindTooltip(escapeHtml(route.name || ''), {
                 permanent: false,
                 direction: 'top',
                 className: 'route-tooltip',

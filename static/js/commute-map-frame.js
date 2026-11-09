@@ -8,8 +8,13 @@
 (function() {
     // Listen for messages from parent window to highlight routes
     window.addEventListener('message', function(event) {
+        if (event.source !== window.parent) return;
         if (event.data && event.data.type === 'highlightRoute') {
-            highlightRoute(event.data.direction);
+            // Cards use to-work/to-home; polyline classes use direction-to_work.
+            const direction = String(event.data.direction || '').replace('-', '_');
+            if (direction === 'to_work' || direction === 'to_home') {
+                highlightRoute(direction);
+            }
         }
     });
 

@@ -8,7 +8,7 @@ This service provides intelligent commute route recommendations based on:
 - Workout fit (TrainerRoad integration)
 """
 
-from html import escape
+from src.folium_text import folium_escape
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, date
 
@@ -313,7 +313,9 @@ class CommuteService:
                     weight=7,
                     opacity=0.85,
                     popup=folium.Popup(popup_html, max_width=320),
-                    tooltip=f"{route_name} • {self._score_fraction(route_option.get('score', 0)) * 100:.0f}%",
+                    # Folium drops tooltip text raw into a JS template literal, so
+                    # an unescaped Strava name could close the <script> block.
+                    tooltip=f"{folium_escape(str(route_name))} • {self._score_fraction(route_option.get('score', 0)) * 100:.0f}%",
                     className=f"commute-route route-{route_id} direction-{direction}",
                 ).add_to(map_obj)
                 
@@ -324,14 +326,14 @@ class CommuteService:
             
             folium.Marker(
                 [home_location.lat, home_location.lon],
-                popup=f"<b>Home</b><br>{escape(home_location.name or 'Home')}",
+                popup=f"<b>Home</b><br>{folium_escape(home_location.name or 'Home')}",
                 tooltip="Home",
                 icon=folium.Icon(color='green', icon='home', prefix='fa')
             ).add_to(map_obj)
             
             folium.Marker(
                 [work_location.lat, work_location.lon],
-                popup=f"<b>Work</b><br>{escape(work_location.name or 'Work')}",
+                popup=f"<b>Work</b><br>{folium_escape(work_location.name or 'Work')}",
                 tooltip="Work",
                 icon=folium.Icon(color='blue', icon='briefcase', prefix='fa')
             ).add_to(map_obj)
@@ -401,17 +403,17 @@ class CommuteService:
         """Create commute-specific popup HTML for comparison map routes."""
         route = route_option.get('route', {})
         weather = route_option.get('weather') or {}
-        route_name = escape(route.get('name', 'Unknown Route'))
+        route_name = folium_escape(route.get('name', 'Unknown Route'))
         distance_km = route.get('distance', 0)
         duration_min = route.get('duration', 0)
         elevation_m = route.get('elevation', 0)
         score_pct = self._score_fraction(route_option.get('score', 0)) * 100
         
-        conditions = escape(str(weather.get('conditions', 'Unavailable')))
+        conditions = folium_escape(str(weather.get('conditions', 'Unavailable')))
         temperature = weather.get('temperature')
         wind_speed = weather.get('wind_speed')
         precipitation = weather.get('precipitation')
-        favorability = escape(str(weather.get('cycling_favorability', 'unknown')).replace('_', ' ').title())
+        favorability = folium_escape(str(weather.get('cycling_favorability', 'unknown')).replace('_', ' ').title())
         
         weather_rows = []
         if temperature is not None:
@@ -484,7 +486,7 @@ class CommuteService:
             folium.Marker(
                 [lat, lon],
                 popup=folium.Popup(popup_html, max_width=320),
-                tooltip=f"{label}: {weather.get('conditions', 'Weather')}",
+                tooltip=f"{folium_escape(str(label))}: {folium_escape(str(weather.get('conditions', 'Weather')))}",
                 icon=folium.Icon(color=marker_color, icon=icon_name, prefix=icon_prefix)
             ).add_to(weather_layer)
         
@@ -534,7 +536,7 @@ class CommuteService:
             or weather.get('precipitation_prob_max')
         )
         precipitation_amount = weather.get('precipitation_mm', weather.get('precipitation'))
-        description = escape(str(weather.get('conditions', 'Unavailable')))
+        description = folium_escape(str(weather.get('conditions', 'Unavailable')))
         stale_note = '<div style="margin-top: 6px; color: #856404;">Using cached/stale weather data</div>' if weather.get('is_stale') else ''
         
         precip_html = ''
@@ -545,11 +547,11 @@ class CommuteService:
         
         return f"""
         <div style="font-family: Arial, sans-serif; min-width: 220px;">
-            <h4 style="margin: 0 0 10px 0;">{escape(label)}</h4>
+            <h4 style="margin: 0 0 10px 0;">{folium_escape(label)}</h4>
             <table style="width: 100%; font-size: 12px; border-collapse: collapse;">
                 <tr><td><b>Conditions</b></td><td>{description}</td></tr>
                 <tr><td><b>Temperature</b></td><td>{f'{float(temperature):.0f}°F' if temperature is not None else 'N/A'}</td></tr>
-                <tr><td><b>Wind</b></td><td>{f'{float(wind_speed):.0f} mph' if wind_speed is not None else 'N/A'} {escape(str(wind_direction))}</td></tr>
+                <tr><td><b>Wind</b></td><td>{f'{float(wind_speed):.0f} mph' if wind_speed is not None else 'N/A'} {folium_escape(str(wind_direction))}</td></tr>
                 {precip_html}
             </table>
             {stale_note}

@@ -578,7 +578,7 @@
             try {
                 const s = await window.apiClient.fetch('/intervals/status');
                 if (s.connected) {
-                    statusEl.innerHTML = `<span class="badge bg-success"><i class="bi bi-check-circle"></i> intervals.icu connected</span> <span class="text-muted small">${s.athlete_name || s.athlete_id}</span>`;
+                    statusEl.innerHTML = `<span class="badge bg-success"><i class="bi bi-check-circle"></i> intervals.icu connected</span> <span class="text-muted small">${window.escapeHtml(s.athlete_name || s.athlete_id)}</span>`;
                     athleteInput.value = s.athlete_id || '';
                     athleteInput.placeholder = s.athlete_id || 'e.g. i12345';
                     disconnectBtn.classList.toggle('d-none', false);
@@ -642,17 +642,17 @@
                 });
                 if (res.success) {
                     feedback.style.display = '';
-                    feedback.innerHTML = `<span class="text-success small"><i class="bi bi-check-circle"></i> Connected as <strong>${res.athlete_name || athleteId}</strong>.</span>`;
+                    feedback.innerHTML = `<span class="text-success small"><i class="bi bi-check-circle"></i> Connected as <strong>${window.escapeHtml(res.athlete_name || athleteId)}</strong>.</span>`;
                     keyInput.value = '';
                     await loadIcuStatus();
                     if (typeof showToast === 'function') showToast('intervals.icu connected!', 'success');
                 } else {
                     feedback.style.display = '';
-                    feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${res.error || 'Connection failed'}</span>`;
+                    feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(res.error || 'Connection failed')}</span>`;
                 }
             } catch (e) {
                 feedback.style.display = '';
-                feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${e.message || 'Connection failed'}</span>`;
+                feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(e.message || 'Connection failed')}</span>`;
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = '<i class="bi bi-link-45deg"></i> Connect';
@@ -727,11 +727,11 @@
                     if (typeof showToast === 'function') showToast('ORS API key saved!', 'success');
                 } else {
                     feedback.style.display = '';
-                    feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${res.error || 'Save failed'}</span>`;
+                    feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(res.error || 'Save failed')}</span>`;
                 }
             } catch (e) {
                 feedback.style.display = '';
-                feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${e.message || 'Save failed'}</span>`;
+                feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(e.message || 'Save failed')}</span>`;
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = '<i class="bi bi-floppy"></i> Save';
@@ -967,11 +967,11 @@
                     await loadTrainerRoadStatus();
                 } else {
                     feedback.style.display = '';
-                    feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${res.error || 'Connection failed'}</span>`;
+                    feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(res.error || 'Connection failed')}</span>`;
                 }
             } catch (e) {
                 feedback.style.display = '';
-                feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${e.message || 'Connection failed'}</span>`;
+                feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(e.message || 'Connection failed')}</span>`;
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = '<i class="bi bi-link-45deg"></i> Connect';
@@ -997,7 +997,7 @@
                 }
             } catch (e) {
                 feedback.style.display = '';
-                feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${e.message || 'Sync failed'}</span>`;
+                feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(e.message || 'Sync failed')}</span>`;
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Sync Now';
@@ -1748,7 +1748,7 @@
                 if (res.success) {
                     feedback.style.display = '';
                     if (res.warning) {
-                        feedback.innerHTML = `<span class="text-warning small"><i class="bi bi-exclamation-triangle"></i> ${res.warning}</span>`;
+                        feedback.innerHTML = `<span class="text-warning small"><i class="bi bi-exclamation-triangle"></i> ${window.escapeHtml(res.warning)}</span>`;
                         if (typeof showToast === 'function') showToast(res.warning, 'warning');
                     } else {
                         feedback.innerHTML = '<span class="text-success small"><i class="bi bi-check-circle"></i> Locations saved.</span>';
@@ -1757,11 +1757,11 @@
                     await loadLocationStatus();
                 } else {
                     feedback.style.display = '';
-                    feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${res.error || 'Save failed'}</span>`;
+                    feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(res.error || 'Save failed')}</span>`;
                 }
             } catch (e) {
                 feedback.style.display = '';
-                feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${e.message || 'Save failed'}</span>`;
+                feedback.innerHTML = `<span class="text-danger small"><i class="bi bi-x-circle"></i> ${window.escapeHtml(e.message || 'Save failed')}</span>`;
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = '<i class="bi bi-floppy"></i> Save Locations';
