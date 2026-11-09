@@ -788,9 +788,11 @@
      * which every tile has all four N/E/S/W neighbours collected (diagonals
      * don't matter). `visited` is the coverage grid's `visited` map, keyed
      * "x,y". Returns a Set of "x,y" keys, empty when no tile qualifies; on a
-     * tie the first group found wins. With viewport-bounded coverage, a yard
-     * running past the loaded area's edge can come out smaller than it is,
-     * because neighbours outside that area look uncollected.
+     * tie the first group found wins. Only a fallback now: the server sends
+     * the full-history yard as `coverage.yard` (find_yard in
+     * src/coverage_tracker.py). Run on bbox-bounded coverage, a yard running
+     * past the loaded area's edge comes out smaller than it is, because
+     * neighbours outside that area look uncollected.
      */
     function findYard(visited) {
         const yard = new Set();

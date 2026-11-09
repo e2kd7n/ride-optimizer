@@ -988,6 +988,9 @@ function mergeCoverageResults(results, bounds) {
         // the exact field name the backend agent landed wasn't available
         // when this was written.
         stale: successes.some(r => isStale(r)),
+        // The yard is computed server-side over the full ride history, so
+        // every box carries the same one. Pass the first through unchanged.
+        yard: (successes.find(r => Array.isArray(r.yard)) || {}).yard,
     };
 }
 
@@ -1588,9 +1591,9 @@ function renderTiles(primary, secondary) {
     tileLayerSecondary.clearLayers();
 
     const both = !!secondary;
-    const outlines = [drawTileGrid(tileLayer, primary.visited, primary.zoom, both)];
+    const outlines = [drawTileGrid(tileLayer, primary, both)];
     if (secondary) {
-        outlines.push(drawTileGrid(tileLayerSecondary, secondary.visited, secondary.zoom, both));
+        outlines.push(drawTileGrid(tileLayerSecondary, secondary, both));
     }
     // Yard outlines go on top of every fill — otherwise the squadratinho fill
     // would cover the squadrat yard's edge. The dashed yardinho outline is
@@ -1602,14 +1605,24 @@ function renderTiles(primary, secondary) {
 /** Draw one zoom level's visited tiles as rectangles, computing each tile's
  *  lat/lon boundary from its `x,y` grid key (same math as renderNewTiles).
  *  Yard tiles get the denser yard fill. Returns the yard's outline polyline
- *  (or null when there's no yard) for the caller to add above all fills. */
-function drawTileGrid(layerGroup, visited, zoom, both) {
+ *  (or null when there's no yard) for the caller to add above all fills.
+ *
+ *  The yard comes from the server (`coverage.yard`), computed over the full
+ *  ride history. Recomputing it from `visited` here would make it depend on
+ *  the map view, because `visited` only holds the loaded area's tiles and a
+ *  neighbour outside that area looks uncollected. The outline is drawn for
+ *  the whole yard, even where it runs past the loaded area. */
+function drawTileGrid(layerGroup, coverage, both) {
+    const visited = coverage && coverage.visited;
     if (!visited || typeof visited !== 'object') return null;
-    zoom = zoom || 14;
+    const zoom = coverage.zoom || 14;
     const styles = TILE_GRID_STYLES[zoom] || TILE_GRID_STYLES[14];
     const n = Math.pow(2, zoom);
     const keys = Object.keys(visited);
-    const yard = ExploreRefine.findYard(visited);
+    // Fallback for a response without the field (e.g. an older server).
+    const yard = Array.isArray(coverage.yard)
+        ? new Set(coverage.yard)
+        : ExploreRefine.findYard(visited);
     // #579 — one rectOptions computation per draw call (not per tile) so a
     // large full-history grid shares one canvas renderer instead of paying
     // per-tile DOM cost.

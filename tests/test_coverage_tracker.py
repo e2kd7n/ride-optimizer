@@ -31,6 +31,7 @@ from src.coverage_tracker import (
     _segment_tiles,
     _activity_tiles,
     _robust_tile_range,
+    find_yard,
     TILE_ZOOM,
     SQUADRATINHO_ZOOM,
 )
@@ -403,6 +404,92 @@ class TestTrimmedTileCoverageResponse:
         for meta in index["tiles"].values():
             assert "first_ridden" in meta
             assert "activity_ids" in meta
+
+
+# ── Yard ─────────────────────────────────────────────────────────
+
+def _block(x0, y0, w, h):
+    """Keys of a w x h block of tiles with top-left corner (x0, y0)."""
+    return {f"{x},{y}" for x in range(x0, x0 + w) for y in range(y0, y0 + h)}
+
+
+class TestFindYard:
+    def test_three_by_three_has_one_interior_tile(self):
+        assert find_yard(_block(0, 0, 3, 3)) == ["1,1"]
+
+    def test_plus_shape_counts_only_orthogonal_neighbours(self):
+        assert find_yard({"1,0", "0,1", "1,1", "2,1", "1,2"}) == ["1,1"]
+
+    def test_no_interior_tile_means_no_yard(self):
+        assert find_yard(_block(0, 0, 2, 2)) == []
+        assert find_yard(set()) == []
+
+    def test_largest_group_wins(self):
+        tiles = _block(0, 0, 3, 3) | _block(10, 10, 5, 5)
+        assert find_yard(tiles) == sorted(_block(11, 11, 3, 3))
+
+    def test_tie_is_deterministic(self):
+        tiles = _block(10, 0, 3, 3) | _block(0, 0, 3, 3)
+        assert find_yard(tiles) == ["1,1"]
+        assert find_yard(sorted(tiles, reverse=True)) == ["1,1"]
+
+
+class TestYardIndependentOfViewport:
+    """The yard is a property of the whole ride history. Before this was
+    computed server-side, explore.js derived it from the bbox-clipped
+    `visited` map, so tiles just outside the viewport looked uncollected
+    and the yard shrank, moved or vanished as the map was panned/zoomed."""
+
+    X0, Y0 = 4800, 6100  # top-left of a 7x7 ridden block at zoom 14
+
+    @pytest.fixture
+    def tracker(self, tmp_path):
+        config = MagicMock()
+        config.get = MagicMock(side_effect=lambda key, default=None: default)
+        t = CoverageTracker(config)
+        t.cache_dir = tmp_path
+        t._activities_cache = []
+        tiles = {k: {"first_ridden": "", "activity_ids": [1]} for k in _block(self.X0, self.Y0, 7, 7)}
+        t._tile_index_cache[TILE_ZOOM] = {"indexed_activity_ids": set(), "tiles": tiles}
+        return t
+
+    def _bbox(self, x0, y0, x1, y1):
+        """A bbox strictly inside tiles x0..x1, y0..y1 at zoom 14."""
+        s, w, n, e = tile_to_bounds(x0, y0, TILE_ZOOM)
+        s2, w2, n2, e2 = tile_to_bounds(x1, y1, TILE_ZOOM)
+        eps = 1e-6
+        return (s2 + eps, w + eps, n - eps, e2 - eps)
+
+    def test_bbox_over_part_of_yard_returns_whole_yard(self, tracker):
+        full_yard = sorted(_block(self.X0 + 1, self.Y0 + 1, 5, 5))
+        # Only the top-left 3x3 corner is loaded: on its own it has a
+        # single interior tile, which is what the old client computed.
+        corner = tracker.get_tile_coverage(self._bbox(self.X0, self.Y0, self.X0 + 2, self.Y0 + 2))
+        assert len(corner.visited) == 9
+        assert corner.yard == full_yard
+        assert tracker.get_tile_coverage_all().yard == full_yard
+
+    def test_bbox_away_from_yard_still_returns_it(self, tracker):
+        far = tracker.get_tile_coverage(self._bbox(self.X0 + 50, self.Y0 + 50, self.X0 + 52, self.Y0 + 52))
+        assert far.visited == {}
+        assert far.to_dict()["yard"] == sorted(_block(self.X0 + 1, self.Y0 + 1, 5, 5))
+
+    def test_yard_cached_until_index_replaced(self, tracker):
+        bbox = self._bbox(self.X0, self.Y0, self.X0 + 6, self.Y0 + 6)
+        with patch("src.coverage_tracker.find_yard", wraps=find_yard) as spy:
+            tracker.get_tile_coverage(bbox)
+            tracker.get_tile_coverage(bbox)
+            assert spy.call_count == 1
+            # Copy-on-write update: a new tiles dict means a new yard.
+            index = tracker._tile_index_cache[TILE_ZOOM]
+            tracker._tile_index_cache[TILE_ZOOM] = {
+                "indexed_activity_ids": set(),
+                "tiles": {k: v for k, v in index["tiles"].items() if k != f"{self.X0 + 3},{self.Y0 + 3}"},
+            }
+            result = tracker.get_tile_coverage(bbox)
+            assert spy.call_count == 2
+        assert f"{self.X0 + 3},{self.Y0 + 3}" not in result.yard
+        assert len(result.yard) < 25
 
 
 # ── CoverageTracker ─────────────────────────────────────────────

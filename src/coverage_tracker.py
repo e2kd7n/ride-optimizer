@@ -124,6 +124,48 @@ _WATER_BACKGROUND_SLOT_WAIT_S = 120
 _TRIMMED_TILE_VALUE = 1
 
 
+def find_yard(tile_keys) -> List[str]:
+    """Squadrats "yard": the largest 4-connected group of collected tiles in
+    which every tile has all four N/E/S/W neighbours collected (diagonals
+    don't matter). `tile_keys` is any container of "x,y" keys. Returns the
+    yard's keys sorted, or [] when no tile qualifies.
+
+    Must run over the *full* ridden-tile set, not a bbox slice of it: a
+    neighbour outside the bbox would look uncollected, so the yard would
+    shrink or vanish depending on the map view. Mirrors
+    ExploreRefine.findYard in static/js/explore-refine.js, which stays as
+    the client fallback for responses without this field.
+    """
+    tiles = set()
+    for key in tile_keys:
+        x, y = key.split(",")
+        tiles.add((int(x), int(y)))
+    interior = {
+        (x, y) for (x, y) in tiles
+        if (x + 1, y) in tiles and (x - 1, y) in tiles
+        and (x, y + 1) in tiles and (x, y - 1) in tiles
+    }
+    seen: Set[Tuple[int, int]] = set()
+    best: List[Tuple[int, int]] = []
+    # Sorted so a tie between equal-sized groups always picks the same one.
+    for start in sorted(interior):
+        if start in seen:
+            continue
+        seen.add(start)
+        group = [start]
+        i = 0
+        while i < len(group):
+            x, y = group[i]
+            i += 1
+            for nb in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                if nb in interior and nb not in seen:
+                    seen.add(nb)
+                    group.append(nb)
+        if len(group) > len(best):
+            best = group
+    return sorted(f"{x},{y}" for x, y in best)
+
+
 @dataclass
 class TileCoverage:
     """Result of tile coverage computation.
@@ -143,6 +185,9 @@ class TileCoverage:
     # immediate, possibly-slightly-stale answer than block for the full
     # rebuild. False for every normal (fresh-or-freshly-built) response.
     stale: bool = False
+    # The full-history yard's tile keys (see find_yard), never clipped to
+    # `bounds`, so the yard the map shows doesn't depend on the viewport.
+    yard: List[str] = field(default_factory=list)
 
     @property
     def visited_count(self) -> int:
@@ -171,6 +216,7 @@ class TileCoverage:
             "computed_at": self.computed_at,
             "zoom": self.zoom,
             "stale": self.stale,
+            "yard": self.yard,
         }
 
 
@@ -782,6 +828,10 @@ class CoverageTracker:
         # keyed by zoom. Avoids re-reading/re-parsing the on-disk index on every
         # request once a worker thread has built it once.
         self._tile_index_cache: Dict[int, dict] = {}
+        # zoom -> (tiles dict the yard was computed from, yard keys). The
+        # index is copy-on-write (see _build_or_update_tile_index), so an
+        # identity check on its tiles dict says whether the yard is current.
+        self._yard_cache: Dict[int, Tuple[dict, List[str]]] = {}
         # Per-zoom locks (#558) rather than one lock shared across every
         # zoom — a cold rebuild at one zoom (e.g. squadratinho, zoom 17)
         # would otherwise serialize reads/writes at an already-warm zoom
@@ -1095,6 +1145,22 @@ class CoverageTracker:
         )
         return self._build_or_update_tile_index(zoom), False
 
+    def _yard_for_index(self, zoom: int, index: dict) -> List[str]:
+        """The full-history yard for `index`, recomputed only when the
+        index's tiles dict has been replaced since the last call."""
+        tiles = index["tiles"]
+        cached = self._yard_cache.get(zoom)
+        if cached is not None and cached[0] is tiles:
+            return cached[1]
+        start = time.monotonic()
+        yard = find_yard(tiles)
+        self._yard_cache[zoom] = (tiles, yard)
+        logger.info(
+            "Yard (zoom=%d) computed in %.3fs: %d tiles from %d indexed",
+            zoom, time.monotonic() - start, len(yard), len(tiles),
+        )
+        return yard
+
     def get_tile_coverage(
         self,
         bounds: Optional[Tuple[float, float, float, float]],
@@ -1153,6 +1219,7 @@ class CoverageTracker:
             computed_at=datetime.now(timezone.utc).isoformat(),
             zoom=zoom,
             stale=stale,
+            yard=self._yard_for_index(zoom, index),
         )
 
     def get_tile_coverage_all(self, zoom: Optional[int] = None) -> TileCoverage:
@@ -1184,6 +1251,7 @@ class CoverageTracker:
             bounds=bounds,
             computed_at=datetime.now(timezone.utc).isoformat(),
             zoom=zoom,
+            yard=self._yard_for_index(zoom, index),
         )
 
     # ------------------------------------------------------------------
@@ -1686,6 +1754,7 @@ class CoverageTracker:
         for zoom in set(self._tile_index_cache) | set(self._tile_index_locks):
             with self._get_zoom_lock(zoom):
                 self._tile_index_cache.pop(zoom, None)
+                self._yard_cache.pop(zoom, None)
 
     def hard_invalidate_caches(self) -> None:
         """Fully wipe all coverage caches, including the on-disk tile index.
@@ -1713,6 +1782,7 @@ class CoverageTracker:
         for zoom in zooms:
             with self._get_zoom_lock(zoom):
                 self._tile_index_cache.pop(zoom, None)
+                self._yard_cache.pop(zoom, None)
                 try:
                     self._tile_index_path(zoom).unlink()
                 except OSError:
