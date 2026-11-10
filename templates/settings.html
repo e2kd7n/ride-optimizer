@@ -121,6 +121,27 @@
                             <fieldset>
                                 <legend class="visually-hidden">Data management options</legend>
 
+                                <!-- Activity sync from every connected source (#619, #620) -->
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold d-block mb-2">Activity Sync</label>
+                                    <div class="form-check form-switch mb-2">
+                                        <input class="form-check-input" type="checkbox" role="switch" id="nightly-sync" checked aria-describedby="nightly-sync-help">
+                                        <label class="form-check-label" for="nightly-sync">
+                                            Check for new activities nightly
+                                        </label>
+                                    </div>
+                                    <div id="nightly-sync-help" class="form-text mb-2">
+                                        <i class="bi bi-info-circle"></i> Pulls new rides from every connected source (Strava, Garmin) before the nightly analysis.
+                                    </div>
+                                    <ul class="list-unstyled small text-muted mb-2" id="sync-summary" aria-live="polite">
+                                        <li>Checking connected sources…</li>
+                                    </ul>
+                                    <button type="button" class="btn btn-outline-primary btn-sm" id="sync-now-btn">
+                                        <i class="bi bi-arrow-repeat" aria-hidden="true"></i> Sync last 7 days now
+                                    </button>
+                                    <div id="sync-now-status" class="small mt-2 d-none" aria-live="polite"></div>
+                                </div>
+
                                 <div class="mb-3">
                                     <label class="form-label fw-bold d-block mb-2">Export Data</label>
                                     <div class="d-grid gap-2">

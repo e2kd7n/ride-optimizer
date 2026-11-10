@@ -56,6 +56,7 @@
             loadOrsStatus();
             initLocationCard();
             loadGarminStatus();
+            initActivitySync();
             loadTrainerRoadStatus();
             loadCacheInfo();
             setupFetchModeControls();
@@ -173,6 +174,87 @@
 
         // Appearance select mirrors the current data-theme (set on every page load via the
         // inline head script) and applies changes immediately — it's not gated on auto-save.
+        // ── Activity sync from every connected source (#619, #620) ──────
+        const SYNC_SOURCE_LABELS = { strava: 'Strava', garmin: 'Garmin' };
+
+        function syncAgo(iso) {
+            if (!iso) return 'never';
+            const d = new Date(iso);
+            if (isNaN(d)) return 'never';
+            return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+        }
+
+        async function loadSyncSummary() {
+            const list = document.getElementById('sync-summary');
+            if (!list) return;
+            try {
+                const res = await window.apiClient.fetch('/sync/sources');
+                const connected = res.connected || [];
+                const perSource = (res.last && res.last.sources) || {};
+                const names = new Set([...connected, ...Object.keys(perSource)]);
+                if (!names.size) {
+                    list.innerHTML = '<li>No activity source connected yet. Connect Strava or Garmin below.</li>';
+                    return;
+                }
+                list.innerHTML = [...names].map(name => {
+                    const label = SYNC_SOURCE_LABELS[name] || name;
+                    const s = perSource[name] || {};
+                    const state = connected.includes(name) ? '' : ' (not connected)';
+                    let line = `${escapeHtml(label)}${state}: last synced ${escapeHtml(syncAgo(s.last_success))}`;
+                    if (s.last_status === 'error' && s.last_error) {
+                        line += ` · <span class="text-danger">last attempt failed: ${escapeHtml(s.last_error)}</span>`;
+                    } else if (typeof s.last_new === 'number' && s.last_success) {
+                        line += ` · ${s.last_new} new`;
+                    }
+                    return `<li>${line}</li>`;
+                }).join('');
+            } catch (e) {
+                list.innerHTML = `<li>Could not load sync status: ${escapeHtml(e.message || 'error')}</li>`;
+            }
+        }
+
+        function initActivitySync() {
+            loadSyncSummary();
+            const btn = document.getElementById('sync-now-btn');
+            const statusEl = document.getElementById('sync-now-status');
+            if (!btn || !statusEl) return;
+            const idleHtml = btn.innerHTML;
+            const reset = () => { btn.disabled = false; btn.innerHTML = idleHtml; };
+
+            btn.addEventListener('click', async () => {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Syncing…';
+                statusEl.classList.remove('d-none', 'text-danger');
+                statusEl.textContent = 'Checking connected sources…';
+                try {
+                    await window.apiClient.fetch('/sync', { method: 'POST', body: JSON.stringify({}) });
+                } catch (e) {
+                    reset();
+                    statusEl.classList.add('text-danger');
+                    statusEl.textContent = e && e.status === 409
+                        ? 'Another fetch is already running — try again shortly.'
+                        : ((e && e.message) || 'Could not start sync');
+                    return;
+                }
+                window.pollJob({
+                    intervalMs: 3000,
+                    fetchStatus: () => window.apiClient.fetch('/sync/status'),
+                    onGiveUp: () => { reset(); statusEl.textContent = 'Lost track of the sync — check back shortly.'; },
+                    onStatus: (job) => {
+                        statusEl.textContent = job.label || 'Syncing…';
+                        if (job.status === 'done' || job.status === 'error') {
+                            reset();
+                            statusEl.classList.toggle('text-danger', job.status === 'error');
+                            loadSyncSummary();
+                            if (typeof loadCacheInfo === 'function') loadCacheInfo();
+                            return job.status;
+                        }
+                        return 'running';
+                    },
+                });
+            });
+        }
+
         function initThemeControl() {
             const select = document.getElementById('theme-preference');
             if (!select || !window.getFairWeatherTheme) return;
@@ -212,6 +294,10 @@
             }
             if (settings.outdoor_allow_rain !== undefined) {
                 document.getElementById('outdoor-allow-rain').checked = settings.outdoor_allow_rain;
+            }
+            if (settings.nightly_sync !== undefined) {
+                const nightly = document.getElementById('nightly-sync');
+                if (nightly) nightly.checked = settings.nightly_sync;
             }
             if (settings.outdoor_max_aqi !== undefined) {
                 const aqiSlider = document.getElementById('outdoor-max-aqi');
@@ -335,6 +421,7 @@
                 outdoor_max_temp_f: _outdoorMaxTempF,
                 outdoor_allow_rain: document.getElementById('outdoor-allow-rain').checked,
                 outdoor_max_aqi: Number(document.getElementById('outdoor-max-aqi').value),
+                nightly_sync: !!(document.getElementById('nightly-sync') || {}).checked,
             };
 
             // Always update localStorage as offline fallback

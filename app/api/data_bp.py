@@ -287,6 +287,114 @@ def get_fetch_status():
     return jsonify(current_app.container.jobs.fetch.snapshot())
 
 
+def _parse_day(value, field):
+    from datetime import date as _date
+    if value in (None, ''):
+        return None
+    try:
+        return _date.fromisoformat(str(value)[:10])
+    except ValueError:
+        raise ValueError(f'{field} must be YYYY-MM-DD')
+
+
+@bp.route('/sync', methods=['POST'])
+@limiter.limit("6 per minute")
+def trigger_sync():
+    """Pull activities for a date range from every connected source (#619).
+
+    Body: ``{"after_date": "YYYY-MM-DD", "before_date": "YYYY-MM-DD",
+    "limit": 1000}`` (both dates inclusive, local calendar days; default the
+    last 7 days). Runs in the background on the same job slot as /api/fetch,
+    so the two never write the cache at once. Poll /api/sync/status.
+    """
+    from datetime import date as _date, timedelta as _td
+    from app.services import activity_sync
+
+    data = request.get_json(silent=True) or {}
+    try:
+        if data.get('window') == 'incremental':
+            # Nightly job (#620): since the last good sync, with overlap.
+            start, end = activity_sync.nightly_window(current_app.container)
+        else:
+            end = _parse_day(data.get('before_date'), 'before_date') or _date.today()
+            start = _parse_day(data.get('after_date'), 'after_date') or (end - _td(days=7))
+        limit = int(data.get('limit', 1000))
+    except (TypeError, ValueError) as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 400
+    if start > end:
+        return jsonify({'status': 'error', 'message': 'after_date must be on or before before_date'}), 400
+    if (end - start).days > 366:
+        return jsonify({'status': 'error', 'message': 'date range is limited to one year'}), 400
+    limit = max(1, min(limit, 2000))
+
+    container = current_app.container
+    jobs = container.jobs
+    if not jobs.fetch.try_start({
+        'status': 'running', 'kind': 'sync', 'fetched': 0,
+        'label': 'Checking connected sources…',
+        'started_at': datetime.now().isoformat(), 'result': None,
+    }):
+        return jsonify({'status': 'already_running'}), 409
+
+    try:
+        container.initialise()
+        sources = activity_sync.connected_sources(container)
+    except Exception:
+        jobs.fetch.reset({'status': 'idle', 'fetched': 0, 'label': '', 'started_at': None})
+        raise
+    if not sources:
+        jobs.fetch.reset({'status': 'idle', 'fetched': 0, 'label': '', 'started_at': None})
+        return jsonify({
+            'status': 'no_sources',
+            'message': 'No activity source is connected. Connect Strava or Garmin in Settings → Connections.',
+        }), 400
+
+    def _run():
+        try:
+            result = activity_sync.run_sync(
+                container, start, end, limit=limit, sources=sources,
+                on_progress=lambda msg: jobs.fetch.update(label=msg),
+            )
+            names = ', '.join(activity_sync.SOURCE_LABELS.get(s, s) for s in sources)
+            failed = {s: r['error'] for s, r in result['sources'].items() if r['status'] == 'error'}
+            if result['status'] == 'error':
+                label = 'Sync failed — ' + '; '.join(
+                    f"{activity_sync.SOURCE_LABELS.get(s, s)}: {err}" for s, err in failed.items())
+            else:
+                label = f"Done — {result['new']:,} new from {names}"
+                if result['analysed']:
+                    label += ' (analysis updated)'
+                if failed:
+                    label += ' · ' + '; '.join(
+                        f"{activity_sync.SOURCE_LABELS.get(s, s)} failed: {err}" for s, err in failed.items())
+            jobs.fetch.update(status='error' if result['status'] == 'error' else 'done',
+                              label=label, result=result, total_in_cache=result['total'])
+        except Exception as e:
+            logger.error(f"Sync failed: {e}", exc_info=True)
+            jobs.fetch.update(status='error', label=f'Error: {e}')
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({'status': 'started', 'sources': sources,
+                    'start': start.isoformat(), 'end': end.isoformat()})
+
+
+@bp.route('/sync/status')
+def get_sync_status():
+    return jsonify(current_app.container.jobs.fetch.snapshot())
+
+
+@bp.route('/sync/sources')
+def get_sync_sources():
+    """Connected sources and the last sync result per source (Settings)."""
+    from app.services import activity_sync
+    container = current_app.container
+    return jsonify({
+        'status': 'success',
+        'connected': activity_sync.connected_sources(container),
+        'last': activity_sync.read_status(container),
+    })
+
+
 @bp.route('/fetch/backfill-history', methods=['POST'])
 @limiter.limit("2 per minute")
 def trigger_history_backfill():

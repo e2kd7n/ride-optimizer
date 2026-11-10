@@ -57,6 +57,13 @@ def _http_response(status_code=200, json_data=None):
 class TestDailyAnalysisJob:
     """Tests for daily_analysis.py cron job (thin HTTP client)."""
 
+    @pytest.fixture(autouse=True)
+    def _no_nightly_sync(self):
+        # The multi-source sync step (#620) has its own tests below; these
+        # cover the analysis trigger/poll loop.
+        with patch('cron.daily_analysis._nightly_sync', return_value={'status': 'disabled'}):
+            yield
+
     @patch('cron.daily_analysis.time.sleep')
     @patch('cron.daily_analysis.requests.Session')
     @patch('cron.daily_analysis.JSONStorage')
@@ -88,6 +95,8 @@ class TestDailyAnalysisJob:
         assert result == 0
         session.post.assert_called_once()
         assert '/api/analyze' in session.post.call_args[0][0]
+        # Ingest is the nightly sync's job now; analysis reads the cache.
+        assert session.post.call_args.kwargs['json']['fetch_new'] is False
         # CSRF token forwarded on the POST
         assert session.post.call_args.kwargs['headers']['X-CSRFToken'] == 'tok'
         mock_storage.write.assert_called()
@@ -322,6 +331,93 @@ class TestDailyAnalysisJob:
         from cron import daily_analysis
         assert daily_analysis.main() == 1
         assert session.post.call_count == 2
+
+
+class TestNightlySync:
+    """#620: the nightly multi-source sync step of daily_analysis.py."""
+
+    @patch('cron.daily_analysis.time.sleep')
+    @patch('cron.daily_analysis.requests.Session')
+    def test_runs_incremental_sync_and_summarises(self, mock_session_class, mock_sleep):
+        session = Mock()
+        session.get.side_effect = [
+            _http_response(json_data={'csrf_token': 'tok'}),
+            _http_response(json_data={'settings': {'nightly_sync': True}}),
+            _http_response(json_data={'status': 'running'}),
+            _http_response(json_data={'status': 'done', 'label': 'Done — 2 new', 'result': {
+                'new': 2, 'sources': {'garmin': {'status': 'ok', 'new': 2, 'error': None},
+                                      'strava': {'status': 'error', 'new': 0, 'error': 'inactive'}}}}),
+        ]
+        session.post.return_value = _http_response(json_data={'status': 'started'})
+        mock_session_class.return_value = session
+
+        from cron import daily_analysis
+        summary = daily_analysis._nightly_sync()
+
+        assert '/api/sync' in session.post.call_args[0][0]
+        assert session.post.call_args.kwargs['json'] == {'window': 'incremental'}
+        assert summary['status'] == 'done'
+        assert summary['new'] == 2
+        assert summary['sources']['strava']['error'] == 'inactive'
+
+    @patch('cron.daily_analysis.requests.Session')
+    def test_respects_settings_toggle(self, mock_session_class):
+        session = Mock()
+        session.get.side_effect = [
+            _http_response(json_data={'csrf_token': 'tok'}),
+            _http_response(json_data={'settings': {'nightly_sync': False}}),
+        ]
+        mock_session_class.return_value = session
+
+        from cron import daily_analysis
+        assert daily_analysis._nightly_sync() == {'status': 'disabled'}
+        session.post.assert_not_called()
+
+    @patch('cron.daily_analysis.requests.Session')
+    def test_no_sources_is_a_quiet_no_op(self, mock_session_class):
+        session = Mock()
+        session.get.side_effect = [
+            _http_response(json_data={'csrf_token': 'tok'}),
+            _http_response(json_data={'settings': {}}),
+        ]
+        session.post.return_value = _http_response(status_code=400, json_data={'status': 'no_sources'})
+        mock_session_class.return_value = session
+
+        from cron import daily_analysis
+        assert daily_analysis._nightly_sync() == {'status': 'no_sources'}
+
+    @patch('cron.daily_analysis.requests.Session')
+    def test_never_raises(self, mock_session_class):
+        mock_session_class.return_value.get.side_effect = Exception('connection refused')
+        from cron import daily_analysis
+        summary = daily_analysis._nightly_sync()
+        assert summary['status'] == 'error'
+
+    @patch('cron.daily_analysis.time.sleep')
+    @patch('cron.daily_analysis.requests.Session')
+    @patch('cron.daily_analysis.JSONStorage')
+    @patch('cron.daily_analysis.ConfigManager.get_instance')
+    def test_sync_failure_still_runs_analysis_and_is_recorded(self, mock_config, mock_storage_class,
+                                                              mock_session_class, mock_sleep):
+        storage = Mock()
+        storage.read.return_value = {'jobs': []}
+        mock_storage_class.return_value = storage
+        session = Mock()
+        session.get.side_effect = [
+            _http_response(json_data={'csrf_token': 'tok'}),
+            _http_response(json_data={'status': 'done', 'result': {'activities_count': 5}}),
+        ]
+        session.post.return_value = _http_response(json_data={'status': 'started'})
+        mock_session_class.return_value = session
+
+        from cron import daily_analysis
+        with patch('cron.daily_analysis._nightly_sync', return_value={'status': 'error', 'error': 'x'}):
+            assert daily_analysis.main() == 0
+
+        history = [c.args[1] for c in storage.write.call_args_list if c.args[0] == 'job_history.json'][0]
+        record = history['jobs'][-1]
+        assert record['status'] == 'degraded'
+        assert record['sync'] == {'status': 'error', 'error': 'x'}
 
 
 class TestWeatherRefreshJob:

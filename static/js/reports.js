@@ -494,10 +494,14 @@ async function backfillCurrentMonth() {
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Requesting…';
     statusEl.classList.remove('d-none');
-    statusEl.textContent = 'Connecting to Strava…';
+    statusEl.textContent = 'Checking connected sources…';
 
     try {
-        await api.post('/fetch', { after_date: afterDate, before_date: beforeDate, limit: 1000 });
+        // #619: /sync pulls from whichever sources are connected (Strava,
+        // Garmin, …), not just Strava.
+        const res = await api.post('/sync', { after_date: afterDate, before_date: beforeDate, limit: 1000 });
+        const names = (res.sources || []).map(s => ({ strava: 'Strava', garmin: 'Garmin' }[s] || s));
+        if (names.length) statusEl.textContent = `Fetching from ${names.join(' and ')}…`;
         pollCalendarBackfillStatus();
     } catch (e) {
         btn.disabled = false;
@@ -506,7 +510,7 @@ async function backfillCurrentMonth() {
             ? 'Another fetch is already running — try again shortly.'
             : ((e && e.message) || 'Failed to start backfill');
         statusEl.textContent = msg;
-        if (typeof showToast === 'function') showToast(msg, 'error');
+        if (typeof showToast === 'function') showToast(msg, e && e.status === 400 ? 'warning' : 'error');
     }
 }
 
@@ -521,7 +525,7 @@ function pollCalendarBackfillStatus() {
 
     window.pollJob({
         intervalMs: 3000,
-        fetchStatus: () => api.get('/fetch/status'),
+        fetchStatus: () => api.get('/sync/status'),
         onGiveUp: (reason) => {
             resetBtn();
             if (typeof showToast === 'function') {
