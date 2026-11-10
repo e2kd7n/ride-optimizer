@@ -9,6 +9,7 @@ Routes:
   GET  /api/stats/backfill-gear-ids/status
 """
 
+import re
 import threading
 from datetime import datetime, timedelta
 from typing import Dict
@@ -445,6 +446,53 @@ def get_gear_stats():
     })
 
 
+_GEAR_ID_RE = re.compile(r'^[A-Za-z0-9_-]{1,40}$')
+
+
+@bp.route('/gear/names', methods=['GET'])
+def get_gear_names():
+    """Local gear names (#623), keyed by gear ID."""
+    container = current_app.container
+    container.initialise()
+    if container.analysis_service is None:
+        return jsonify({'status': 'error', 'message': 'Analysis is currently unavailable'}), 503
+    return jsonify({'status': 'success',
+                    'names': container.analysis_service.cache_fetcher.load_gear_names()})
+
+
+@bp.route('/gear/names', methods=['PUT'])
+@limiter.limit("30 per minute")
+def put_gear_names():
+    """Set local gear names: ``{"names": {gear_id: {"name": str, "type": "bike"|"shoe"}}}``.
+
+    An empty name removes that gear's local name. Strava's athlete profile
+    can't be re-fetched any more, so this is how gear stays readable (#623).
+    """
+    container = current_app.container
+    container.initialise()
+    if container.analysis_service is None:
+        return jsonify({'status': 'error', 'message': 'Analysis is currently unavailable'}), 503
+    data = request.get_json(silent=True) or {}
+    names = data.get('names')
+    if not isinstance(names, dict) or len(names) > 200:
+        return jsonify({'status': 'error', 'message': 'names must be an object of at most 200 entries'}), 400
+    updates = {}
+    for gear_id, entry in names.items():
+        if not isinstance(gear_id, str) or not _GEAR_ID_RE.match(gear_id):
+            return jsonify({'status': 'error', 'message': f'invalid gear id {gear_id!r}'}), 400
+        if not isinstance(entry, dict):
+            return jsonify({'status': 'error', 'message': 'each entry must be an object'}), 400
+        name = entry.get('name', '')
+        kind = entry.get('type', 'bike')
+        if not isinstance(name, str) or len(name.strip()) > 60:
+            return jsonify({'status': 'error', 'message': 'name must be a string of at most 60 characters'}), 400
+        if kind not in ('bike', 'shoe'):
+            return jsonify({'status': 'error', 'message': "type must be 'bike' or 'shoe'"}), 400
+        updates[gear_id] = {'name': name.strip(), 'type': kind}
+    saved = container.analysis_service.cache_fetcher.save_gear_names(updates)
+    return jsonify({'status': 'success', 'names': saved})
+
+
 @bp.route('/stats/refresh-gear', methods=['POST'])
 @limiter.limit("10 per minute")
 def refresh_gear():
@@ -479,9 +527,13 @@ def refresh_gear():
             data = analysis_service.data_fetcher.fetch_athlete_gear()
             bikes = len(data.get('bikes', []))
             shoes = len(data.get('shoes', []))
+            label = f'Refreshed {bikes} bikes and {shoes} shoes'
+            if data.get('kept_previous'):
+                label = (f'Strava returned no gear — kept the existing {bikes} bikes and '
+                         f'{shoes} shoes')
             jobs.refresh_gear.update(
                 status='done',
-                label=f'Refreshed {bikes} bikes and {shoes} shoes',
+                label=label,
                 bikes=bikes,
                 shoes=shoes,
             )

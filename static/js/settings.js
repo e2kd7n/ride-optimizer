@@ -1454,7 +1454,86 @@
 
         // ── Gear admin (moved from Reports — #369b) ──────────────
 
+        // ── Local gear names (#623) ─────────────────────────────────────
+        async function loadGearNamesEditor() {
+            const list = document.getElementById('gear-names-list');
+            const saveBtn = document.getElementById('gear-names-save');
+            if (!list || !saveBtn) return;
+            try {
+                const [stats, names] = await Promise.all([
+                    window.apiClient.fetch('/stats/gear'),
+                    window.apiClient.fetch('/gear/names'),
+                ]);
+                const local = (names && names.names) || {};
+                const gear = ((stats && stats.data && stats.data.gear) || []).slice();
+                // Locally named IDs with no rides yet still get a row.
+                Object.keys(local).forEach(id => {
+                    if (!gear.some(g => g.id === id)) gear.push({ id, name: local[id].name, type: local[id].type });
+                });
+                if (!gear.length) {
+                    list.innerHTML = '<span class="text-muted small">No gear found on your activities.</span>';
+                    return;
+                }
+                list.innerHTML = gear.map((g, i) => {
+                    const mine = local[g.id] || {};
+                    const strava = g.name_source === 'local' ? '' : (g.name && g.name !== g.id ? g.name : '');
+                    const type = mine.type || (g.type === 'shoe' ? 'shoe' : 'bike');
+                    const rides = typeof g.total_rides === 'number' ? ` · ${g.total_rides} rides` : '';
+                    return `<div class="row g-2 align-items-center mb-2" data-gear-id="${escapeHtml(g.id)}">
+                        <div class="col-12 col-sm-5">
+                            <label class="form-label small mb-0" for="gear-name-${i}">${escapeHtml(g.id)}${escapeHtml(rides)}</label>
+                            <input type="text" class="form-control form-control-sm gear-name-input" id="gear-name-${i}" maxlength="60"
+                                   value="${escapeHtml(mine.name || '')}" placeholder="${escapeHtml(strava || 'e.g. Road bike')}">
+                        </div>
+                        <div class="col-6 col-sm-3">
+                            <label class="form-label small mb-0" for="gear-type-${i}">Type</label>
+                            <select class="form-select form-select-sm gear-type-input" id="gear-type-${i}">
+                                <option value="bike"${type === 'bike' ? ' selected' : ''}>Bike</option>
+                                <option value="shoe"${type === 'shoe' ? ' selected' : ''}>Shoes</option>
+                            </select>
+                        </div>
+                    </div>`;
+                }).join('');
+                saveBtn.disabled = false;
+            } catch (e) {
+                list.innerHTML = `<span class="text-danger small">Could not load gear: ${escapeHtml(e.message || 'error')}</span>`;
+            }
+        }
+
+        async function saveGearNames() {
+            const saveBtn = document.getElementById('gear-names-save');
+            const feedback = document.getElementById('gear-names-feedback');
+            const names = {};
+            document.querySelectorAll('#gear-names-list [data-gear-id]').forEach(row => {
+                names[row.dataset.gearId] = {
+                    name: row.querySelector('.gear-name-input').value.trim(),
+                    type: row.querySelector('.gear-type-input').value,
+                };
+            });
+            saveBtn.disabled = true;
+            feedback.className = 'small ms-2';
+            feedback.textContent = 'Saving…';
+            try {
+                await window.apiClient.fetch('/gear/names', { method: 'PUT', body: JSON.stringify({ names }) });
+                feedback.classList.add('text-success');
+                feedback.textContent = 'Saved.';
+            } catch (e) {
+                feedback.classList.add('text-danger');
+                feedback.textContent = e.message || 'Save failed';
+            } finally {
+                saveBtn.disabled = false;
+            }
+        }
+
         function bindGearAdminControls() {
+            const namesDetails = document.getElementById('gear-names-details');
+            if (namesDetails) {
+                let loaded = false;
+                namesDetails.addEventListener('toggle', () => {
+                    if (namesDetails.open && !loaded) { loaded = true; loadGearNamesEditor(); }
+                });
+                document.getElementById('gear-names-save').addEventListener('click', saveGearNames);
+            }
             const syncBtn = document.getElementById('sync-gear-btn');
             const repairBtn = document.getElementById('repair-gear-btn');
             if (!syncBtn || !repairBtn) return;

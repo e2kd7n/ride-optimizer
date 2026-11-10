@@ -224,7 +224,10 @@ function gearDisplayName(g) {
 function renderGearCards(data) {
     const container = document.getElementById('gear-cards');
     const statusEl = document.getElementById('gear-cache-status');
-    statusEl.textContent = data.gear_cache_available ? '' : 'No gear names — sync gear from Settings → Strava';
+    const unnamed = data.gear.some(g => !g.name || g.name === g.id);
+    statusEl.textContent = (!data.gear_cache_available || unnamed)
+        ? 'Some gear has no name — name it in Settings → Strava → Name your gear'
+        : '';
 
     if (!data.gear.length && !data.unassigned.total_rides) {
         container.innerHTML = '<div class="text-muted small">No gear data. Re-fetch activities from Strava after syncing gear.</div>';

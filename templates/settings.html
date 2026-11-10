@@ -315,6 +315,20 @@
                                 </div>
                                 <div id="gear-admin-feedback" class="mb-2 d-none"></div>
 
+                                <!-- Local gear names (#623): Strava gear can't be re-fetched -->
+                                <details class="mb-3" id="gear-names-details">
+                                    <summary class="small fw-semibold text-body-secondary">Name your gear</summary>
+                                    <p class="form-text mb-2">
+                                        Names here replace the raw IDs on Reports, in the activity list and in the ride chat.
+                                        Leave a name blank to fall back to Strava's.
+                                    </p>
+                                    <div id="gear-names-list" class="mb-2"><span class="text-muted small">Loading gear…</span></div>
+                                    <button type="button" class="btn btn-outline-primary btn-sm" id="gear-names-save" disabled>
+                                        <i class="bi bi-check2" aria-hidden="true"></i> Save gear names
+                                    </button>
+                                    <span id="gear-names-feedback" class="small ms-2" aria-live="polite"></span>
+                                </details>
+
                                 <!-- Strava Sync section -->
                                 <div class="mb-3">
                                     <label class="form-label fw-bold d-block mb-1">Sync from Strava</label>
