@@ -137,12 +137,20 @@ def trigger_analysis():
                 on_progress=jobs.analysis.update,
                 stop_check=jobs.analysis_stop.is_set,
             )
-            if jobs.analysis_stop.is_set():
-                jobs.analysis.update(status='stopped', phase='stopped',
-                                     label='Analysis stopped by user')
-            else:
-                jobs.analysis.update(status='done', phase='done', result=result,
-                                     label=f"Done — {result.get('activities_count', 0):,} activities")
+            outcome = result.get('status') if isinstance(result, dict) else 'error'
+            if jobs.analysis_stop.is_set() or outcome == 'stopped':
+                # #663: the previous results are still in place; nothing to
+                # republish.
+                jobs.analysis.update(status='stopped', phase='stopped', result=result,
+                                     label='Analysis stopped — previous results kept')
+                return
+            if outcome == 'error':
+                message = (result or {}).get('message') or 'Analysis failed'
+                jobs.analysis.update(status='error', phase='error', result=result,
+                                     label=f'Error: {message} — previous results kept')
+                return
+            jobs.analysis.update(status='done', phase='done', result=result,
+                                 label=f"Done — {result.get('activities_count', 0):,} activities")
             # analysis_service itself already reflects the fresh results (same
             # instance, mutated in place by run_full_analysis) — only the
             # services that derive their state from it need rebuilding (#461).
@@ -252,17 +260,27 @@ def trigger_fetch():
                     total_in_cache=total,
                 )
                 logger.info(f"Fetch added {new_count} new activities, triggering incremental analysis")
-                analysis_service.run_full_analysis(
+                outcome = analysis_service.run_full_analysis(
                     force_refresh=False,
                     skip_strava_fetch=True,
                 )
+                if container.exploration_service is not None:
+                    container.exploration_service.invalidate_caches()
+                if isinstance(outcome, dict) and outcome.get('status') == 'error':
+                    # #663: the new rides are cached, but the analysis failed;
+                    # previous results stay published.
+                    jobs.fetch.update(
+                        status='error',
+                        label=(f"Fetched {new_count:,} new activities, but the analysis failed: "
+                               f"{outcome.get('message', 'unknown error')}"),
+                        total_in_cache=total,
+                    )
+                    return
                 # Only CommuteService/PlannerService derive their state from
                 # analysis_service's route groups / long rides — no need to
                 # tear down WeatherService/TrainerRoadService/RouteLibraryService
                 # or reconstruct AnalysisService itself (#461).
                 container.refresh_services('commute', 'planner')
-                if container.exploration_service is not None:
-                    container.exploration_service.invalidate_caches()
                 jobs.fetch.update(
                     status='done',
                     label=f'Done — {total:,} activities, {new_count:,} new (analysis updated)',
@@ -445,13 +463,20 @@ def trigger_history_backfill():
                     new_total=new_total,
                     pages=result['pages'],
                 )
-                analysis_service.run_full_analysis(force_refresh=False, skip_strava_fetch=True)
+                outcome = analysis_service.run_full_analysis(force_refresh=False, skip_strava_fetch=True)
+                if container.exploration_service is not None:
+                    container.exploration_service.invalidate_caches()
+                if isinstance(outcome, dict) and outcome.get('status') == 'error':
+                    jobs.history_backfill.update(
+                        status='error',
+                        label=(f"Backfilled {new_total:,} new activities, but the analysis failed: "
+                               f"{outcome.get('message', 'unknown error')}"),
+                    )
+                    return
                 # Same reasoning as trigger_fetch above — only Commute/Planner
                 # derive state from analysis_service's route groups / long
                 # rides (#461).
                 container.refresh_services('commute', 'planner')
-                if container.exploration_service is not None:
-                    container.exploration_service.invalidate_caches()
                 jobs.history_backfill.update(
                     status='done',
                     label=f'Done — {new_total:,} new activities backfilled (analysis updated)',

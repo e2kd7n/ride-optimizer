@@ -189,6 +189,37 @@ class TestJobEndpoints:
         _, kwargs = mock_analysis_service.run_full_analysis.call_args
         assert kwargs['force_refresh'] is False
 
+    @pytest.mark.parametrize('outcome,job_status', [
+        ({'status': 'error', 'message': 'boom', 'activities_count': 0}, 'error'),
+        ({'status': 'stopped', 'activities_count': 3}, 'stopped'),
+    ])
+    def test_failed_or_stopped_analysis_is_not_published(self, job_client, monkeypatch,
+                                                         outcome, job_status):
+        """#663: an error used to show as "Done — 0 activities", and both a
+        failed and a stopped run rebuilt Commute/Planner from partial data."""
+        client, app = job_client
+        app.container._initialised = True
+        mock_analysis_service = Mock()
+        mock_analysis_service.run_full_analysis.return_value = outcome
+        monkeypatch.setattr(app.container, 'analysis_service', mock_analysis_service)
+        refresh = Mock()
+        monkeypatch.setattr(app.container, 'refresh_services', refresh)
+
+        class SyncThread:
+            def __init__(self, target=None, daemon=None):
+                self._target = target
+
+            def start(self):
+                self._target()
+
+        monkeypatch.setattr('app.api.data_bp.threading', types.SimpleNamespace(Thread=SyncThread))
+
+        assert client.post('/api/analyze', json={}).status_code == 200
+        status = client.get('/api/analyze/status').get_json()
+        assert status['status'] == job_status
+        assert 'previous results kept' in status['label']
+        refresh.assert_not_called()
+
     def test_analyze_honors_explicit_force_refresh_true(self, job_client, monkeypatch):
         client, app = job_client
         app.container._initialised = True
