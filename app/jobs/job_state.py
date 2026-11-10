@@ -8,7 +8,7 @@ Owned by ServiceContainer and accessed from blueprints via
 
 import threading
 from dataclasses import dataclass, field
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 
 @dataclass
@@ -41,11 +41,59 @@ class JobState:
     def try_start(self, initial: dict) -> bool:
         """Atomically claim the job: replace state with *initial* and return
         True, unless the job is already running (return False, no change)."""
+        return self.try_claim(initial) is not None
+
+    def try_claim(self, initial: dict) -> Optional[dict]:
+        """Like try_start, but return the state it replaced (None if the job
+        was already running), so an aborted claim can be put back."""
         with self._lock:
             if self._data.get('status') == 'running':
-                return False
+                return None
+            previous = dict(self._data)
             self._data = dict(initial)
-            return True
+            return previous
+
+    def restore_if_running(self, previous: dict) -> None:
+        """Put back *previous* if the job is still in a claimed 'running' state."""
+        with self._lock:
+            if self._data.get('status') == 'running':
+                self._data = dict(previous)
+
+
+# ---------------------------------------------------------------------------
+# Request-scoped claims (#664)
+#
+# An endpoint claims its job (status 'running') before validating input,
+# initialising the container or starting its background thread. If anything
+# in between raised, the job stayed 'running' and every retry got 409
+# "already running" until the process restarted. claim_job() records the
+# claim on the request; job_started() marks it as handed to the thread; a
+# teardown_request hook (app/factory.py) restores any claim that wasn't.
+# ---------------------------------------------------------------------------
+
+def claim_job(job: JobState, initial: dict) -> bool:
+    from flask import g
+    previous = job.try_claim(initial)
+    if previous is None:
+        return False
+    claims = getattr(g, '_pending_job_claims', None)
+    if claims is None:
+        claims = g._pending_job_claims = []
+    claims.append((job, previous))
+    return True
+
+
+def job_started() -> None:
+    """Call right after the job's background thread has started."""
+    from flask import g
+    g._pending_job_claims = []
+
+
+def release_unstarted_claims(exc=None) -> None:
+    from flask import g
+    for job, previous in getattr(g, '_pending_job_claims', None) or []:
+        job.restore_if_running(previous)
+    g._pending_job_claims = []
 
 
 class JobRegistry:

@@ -17,6 +17,7 @@ from typing import Dict
 from flask import Blueprint, current_app, jsonify, request
 
 from app.extensions import limiter
+from app.jobs.job_state import claim_job, job_started
 from src.secure_logger import SecureLogger
 
 logger = SecureLogger(__name__)
@@ -511,7 +512,7 @@ def refresh_gear():
     /api/stats/refresh-gear/status for progress.
     """
     jobs = current_app.container.jobs
-    if not jobs.refresh_gear.try_start({'status': 'running', 'label': 'Connecting to Strava…'}):
+    if not claim_job(jobs.refresh_gear, {'status': 'running', 'label': 'Connecting to Strava…'}):
         return jsonify({'status': 'already_running'}), 409
 
     container = current_app.container
@@ -542,6 +543,7 @@ def refresh_gear():
             jobs.refresh_gear.update(status='error', label=str(e))
 
     threading.Thread(target=_run, daemon=True).start()
+    job_started()
     return jsonify({'status': 'started'})
 
 
@@ -557,7 +559,7 @@ def backfill_gear_ids():
     Runs as a background job; poll /api/stats/backfill-gear-ids/status for progress.
     """
     jobs = current_app.container.jobs
-    if not jobs.backfill.try_start({'status': 'running', 'fetched': 0, 'updated': 0,
+    if not claim_job(jobs.backfill, {'status': 'running', 'fetched': 0, 'updated': 0,
                                     'label': 'Connecting to Strava…'}):
         return jsonify({'status': 'already_running'}), 409
 
@@ -587,6 +589,7 @@ def backfill_gear_ids():
             jobs.backfill.update(status='error', label=f'Error: {e}')
 
     threading.Thread(target=_run, daemon=True).start()
+    job_started()
     return jsonify({'status': 'started'})
 
 

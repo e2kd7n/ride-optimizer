@@ -229,6 +229,12 @@ def _register_error_handlers(app: Flask) -> None:
 def _register_after_request(app: Flask) -> None:
     """Add security headers to all responses."""
     from flask import request as _request
+    from app.jobs.job_state import release_unstarted_claims
+
+    # #664: a job claimed by this request but never handed to its background
+    # thread (an exception, or an early return) goes back to its previous
+    # state instead of staying "running" until restart.
+    app.teardown_request(release_unstarted_claims)
 
     @app.after_request
     def set_security_headers(response):

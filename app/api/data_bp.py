@@ -21,6 +21,7 @@ from typing import Dict
 from flask import Blueprint, current_app, jsonify, request
 
 from app.extensions import limiter
+from app.jobs.job_state import claim_job, job_started
 from src.secure_logger import SecureLogger
 
 logger = SecureLogger(__name__)
@@ -96,7 +97,7 @@ def _parse_date_range(data: dict):
 @limiter.limit("10 per minute")
 def trigger_analysis():
     jobs = current_app.container.jobs
-    if not jobs.analysis.try_start({
+    if not claim_job(jobs.analysis, {
         'status': 'running',
         'phase': 'starting',
         'fetched': 0,
@@ -174,6 +175,7 @@ def trigger_analysis():
             jobs.analysis_stop.clear()
 
     threading.Thread(target=_run, daemon=True).start()
+    job_started()
     return jsonify({'status': 'started', 'fetch_new': fetch_new})
 
 
@@ -196,7 +198,7 @@ def stop_analysis():
 @limiter.limit("10 per minute")
 def trigger_fetch():
     jobs = current_app.container.jobs
-    if not jobs.fetch.try_start({
+    if not claim_job(jobs.fetch, {
         'status': 'running',
         'fetched': 0,
         'label': 'Connecting to Strava…',
@@ -217,7 +219,12 @@ def trigger_fetch():
 
     after_date, before_date = _parse_date_range(data)
 
-    limit = int(data.get('limit', 1000))
+    try:
+        limit = int(data.get('limit', 1000))
+    except (TypeError, ValueError):
+        # The teardown hook (#664) puts the job back to its previous state.
+        return jsonify({'status': 'error', 'message': 'limit must be an integer'}), 400
+    limit = max(1, min(limit, 5000))
 
     def _run():
         try:
@@ -297,6 +304,7 @@ def trigger_fetch():
             jobs.fetch.update(status='error', label=f'Error: {e}')
 
     threading.Thread(target=_run, daemon=True).start()
+    job_started()
     return jsonify({'status': 'started'})
 
 
@@ -347,7 +355,7 @@ def trigger_sync():
 
     container = current_app.container
     jobs = container.jobs
-    if not jobs.fetch.try_start({
+    if not claim_job(jobs.fetch, {
         'status': 'running', 'kind': 'sync', 'fetched': 0,
         'label': 'Checking connected sources…',
         'started_at': datetime.now().isoformat(), 'result': None,
@@ -392,6 +400,7 @@ def trigger_sync():
             jobs.fetch.update(status='error', label=f'Error: {e}')
 
     threading.Thread(target=_run, daemon=True).start()
+    job_started()
     return jsonify({'status': 'started', 'sources': sources,
                     'start': start.isoformat(), 'end': end.isoformat()})
 
@@ -425,7 +434,7 @@ def trigger_history_backfill():
     user-triggered action — not run as part of the normal fetch/analyze flow.
     """
     jobs = current_app.container.jobs
-    if not jobs.history_backfill.try_start({
+    if not claim_job(jobs.history_backfill, {
         'status': 'running',
         'new_total': 0,
         'pages': 0,
@@ -493,6 +502,7 @@ def trigger_history_backfill():
             jobs.history_backfill_stop.clear()
 
     threading.Thread(target=_run, daemon=True).start()
+    job_started()
     return jsonify({'status': 'started'})
 
 
