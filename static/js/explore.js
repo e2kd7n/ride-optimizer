@@ -132,6 +132,21 @@ const ROADLESS_MAX_BOXES_PER_REQUEST = 16;
 // state set by a newer call (e.g. the user repositioned a pin again before
 // the first request returned).
 let _coverageRequestId = 0;
+// Bumped on every loadCoverage() call, before its async target-distance
+// lookup, so an older call that finishes that lookup late gives up.
+let _coverageCallSeq = 0;
+// Inputs (mode, start/end, route type, box set) of the coverage currently
+// rendered. A map pan/zoom (e.g. our own fitBounds after Generate) used to
+// re-fetch and re-render it — wiping the candidate/claimed tile highlights —
+// even in loop/corridor mode, where coverage doesn't depend on the viewport.
+let _renderedCoverageKey = null;
+let _coverageLoading = false;
+
+// Route generation runs. Every worker request carries a runId and the worker
+// echoes it back, so messages from an abandoned run are dropped instead of
+// being mixed into the current one. Phase-2 road plotting checks it too.
+let _runSeq = 0;
+let _generating = false;
 
 /**
  * Fetch current wind conditions once per session for the worker's
@@ -646,14 +661,16 @@ function updateWorkflowState() {
     if (!explorationWorker) return; // unsupported-worker state already disables the button with its own message
 
     const btn = document.getElementById('generate-route-btn');
-    btn.disabled = !ready;
+    // A coverage reload mid-run used to re-enable Generate, letting a second
+    // run start while the first was still streaming results.
+    btn.disabled = !ready || _generating;
     // Coral (.btn-cta) is reserved for this one enabled CTA on the page (#361).
     btn.classList.toggle('btn-cta', ready);
     btn.classList.toggle('btn-outline-primary', !ready);
 
     // Workout combo button requires coverage loaded (start not required — uses workout start).
     const comboBtn = document.getElementById('workout-combo-btn');
-    if (comboBtn) comboBtn.disabled = !coverageReady || !explorationWorker;
+    if (comboBtn) comboBtn.disabled = !coverageReady || !explorationWorker || _generating;
 
     const statusEl = document.getElementById('worker-status');
     if (!ready) {
@@ -791,7 +808,7 @@ function initWorker() {
     }
     // Versioned so a deploy that changes the worker isn't masked by a
     // browser-cached copy of the old one.
-    explorationWorker = new Worker('/js/exploration-worker.js?v=5');
+    explorationWorker = new Worker('/js/exploration-worker.js?v=6');
 }
 
 // ── Coverage loading ────────────────────────────────────────────
@@ -1308,40 +1325,10 @@ async function awaitRoadlessData(statusEl) {
 }
 
 async function loadCoverage() {
-    const requestId = ++_coverageRequestId;
-    _roadlessPending = null;
+    const callSeq = ++_coverageCallSeq;
     const statusEl = document.getElementById('coverage-status');
+    const prevStatusText = statusEl.textContent;
     statusEl.textContent = 'Loading coverage…';
-    clearRoadlessWarning();
-
-    // #566 — once a retry is underway, "Retrying coverage load… (n/3)" is a
-    // more specific, more useful signal than the generic slow-load hint
-    // below, so the hint must not clobber it if it fires afterward (a
-    // request that's already on its 2nd/3rd attempt by 5s is exactly the
-    // case the hint is least helpful for). The reverse direction needs no
-    // guard: onCoverageRetry always overwrites unconditionally, which is
-    // correct — a retry starting after the hint has shown should replace it.
-    let retryInProgress = false;
-
-    const slowHintTimer = setTimeout(() => {
-        if (requestId !== _coverageRequestId) return; // superseded by a newer request
-        if (retryInProgress) return; // don't stomp the more specific retry counter (#566)
-        statusEl.textContent = 'Still loading — first coverage load over your full ride history can take up to a minute…';
-    }, 5000);
-
-    // #563 — getTileCoverage()'s per-attempt timeout was cut from 45s to
-    // ~12s now that the backend has a stale-serving fast path, but a
-    // request can still time out and retry (e.g. a cold, never-before-built
-    // tile index). Surface each retry attempt here instead of leaving
-    // "Loading coverage…" as one static string for the whole stacked
-    // duration. Deliberately generic — this only counts attempts via
-    // api-client.js's onRetry hook, it doesn't depend on any particular
-    // response field.
-    const onCoverageRetry = (attemptNum, maxAttempts) => {
-        if (requestId !== _coverageRequestId) return; // superseded by a newer request
-        retryInProgress = true;
-        statusEl.textContent = `Retrying coverage load… (${attemptNum}/${maxAttempts})`;
-    };
 
     const mode = getCoverageMode();
     const zooms = mode === 'both' ? [14, 17] : [parseInt(mode, 10)];
@@ -1377,6 +1364,7 @@ async function loadCoverage() {
         // get coverage data, and the viewport is an arbitrary basis for what
         // the route generator will actually search anyway.
         const distanceKm = await resolveTargetDistanceKm();
+        if (callSeq !== _coverageCallSeq) return; // a newer call has taken over
         // Matches exploration-worker.js's own round-trip reachRadius formula
         // (reachBasisKm / 4) exactly, so the fetched area always matches what
         // the route generator will search.
@@ -1388,6 +1376,54 @@ async function loadCoverage() {
         corridorBounds = bounds;
         radiusClamped = clamped;
     }
+
+    // What this coverage depends on. The viewport only matters when there are
+    // no corridor boxes; a pure pan/zoom in that case still re-fetches, but
+    // keeps the route highlights since start/end/mode didn't change.
+    const coverageKey = JSON.stringify([
+        zooms, isPtp,
+        startMarker ? [startMarker.getLatLng().lat, startMarker.getLatLng().lng] : null,
+        endMarker ? [endMarker.getLatLng().lat, endMarker.getLatLng().lng] : null,
+        corridorBoxes || 'viewport',
+    ]);
+    if (corridorBoxes && coverageKey === _renderedCoverageKey && !_coverageLoading && isCoverageReady()) {
+        statusEl.textContent = prevStatusText; // nothing changed: keep what's rendered
+        return;
+    }
+
+    const requestId = ++_coverageRequestId;
+    _coverageLoading = true;
+    _roadlessPending = null;
+    clearRoadlessWarning();
+
+    // #566 — once a retry is underway, "Retrying coverage load… (n/3)" is a
+    // more specific, more useful signal than the generic slow-load hint
+    // below, so the hint must not clobber it if it fires afterward (a
+    // request that's already on its 2nd/3rd attempt by 5s is exactly the
+    // case the hint is least helpful for). The reverse direction needs no
+    // guard: onCoverageRetry always overwrites unconditionally, which is
+    // correct — a retry starting after the hint has shown should replace it.
+    let retryInProgress = false;
+
+    const slowHintTimer = setTimeout(() => {
+        if (requestId !== _coverageRequestId) return; // superseded by a newer request
+        if (retryInProgress) return; // don't stomp the more specific retry counter (#566)
+        statusEl.textContent = 'Still loading — first coverage load over your full ride history can take up to a minute…';
+    }, 5000);
+
+    // #563 — getTileCoverage()'s per-attempt timeout was cut from 45s to
+    // ~12s now that the backend has a stale-serving fast path, but a
+    // request can still time out and retry (e.g. a cold, never-before-built
+    // tile index). Surface each retry attempt here instead of leaving
+    // "Loading coverage…" as one static string for the whole stacked
+    // duration. Deliberately generic — this only counts attempts via
+    // api-client.js's onRetry hook, it doesn't depend on any particular
+    // response field.
+    const onCoverageRetry = (attemptNum, maxAttempts) => {
+        if (requestId !== _coverageRequestId) return; // superseded by a newer request
+        retryInProgress = true;
+        statusEl.textContent = `Retrying coverage load… (${attemptNum}/${maxAttempts})`;
+    };
 
     let fetchOne, fetchRoadless;
     if (corridorBoxes) {
@@ -1457,9 +1493,11 @@ async function loadCoverage() {
         // rider shouldn't wait on that just to see coverage that was
         // already sitting there ready. Clear any stale "new tile" highlight
         // from a previous start point/grid first (#488 had dropped this
-        // rendering step entirely).
-        newTilesLayer.clearLayers();
+        // rendering step entirely) — but only when the inputs changed, not
+        // on a pan/zoom, or the current routes' highlights would vanish.
+        if (coverageKey !== _renderedCoverageKey) newTilesLayer.clearLayers();
         renderTiles(coverageData, coverageDataSecondary);
+        _renderedCoverageKey = coverageKey;
         // #582: the backend now always emits an explicit UTC offset
         // (datetime.now(timezone.utc).isoformat() -> "...+00:00", since the
         // deprecated datetime.utcnow() calls were replaced), and the
@@ -1520,7 +1558,10 @@ async function loadCoverage() {
         if (requestId === _coverageRequestId) showCoverageError(e.message);
     } finally {
         clearTimeout(slowHintTimer);
-        if (requestId === _coverageRequestId) updateWorkflowState();
+        if (requestId === _coverageRequestId) {
+            _coverageLoading = false;
+            updateWorkflowState();
+        }
     }
 }
 
@@ -1902,9 +1943,27 @@ async function generateRoute() {
     const btn = document.getElementById('generate-route-btn');
     const statusEl = document.getElementById('worker-status');
     const spinnerEl = document.getElementById('worker-spinner');
+    const runId = ++_runSeq;
+    _generating = true;
     btn.disabled = true;
     spinnerEl.classList.remove('d-none');
+    try {
+        await generateRouteRun(runId, mode, btn, statusEl, spinnerEl);
+    } catch (e) {
+        // Anything unexpected before the worker takes over must not leave
+        // the button disabled and the spinner running.
+        if (runId === _runSeq) {
+            _generating = false;
+            spinnerEl.classList.add('d-none');
+            statusEl.textContent = `Route generation failed: ${e.message || e}`;
+            updateWorkflowState();
+        }
+    }
+}
+
+async function generateRouteRun(runId, mode, btn, statusEl, spinnerEl) {
     await awaitRoadlessData(statusEl);
+    if (runId !== _runSeq) return;
     statusEl.textContent = 'Computing exploration routes…';
 
     clearHighlight();
@@ -1942,13 +2001,17 @@ async function generateRoute() {
     }, 8000);
 
     const stopWorking = () => {
-        spinnerEl.classList.add('d-none');
         clearTimeout(slowHintTimer);
+        if (runId !== _runSeq) return;
+        _generating = false;
+        spinnerEl.classList.add('d-none');
         updateWorkflowState();
     };
 
     explorationWorker.onmessage = (e) => {
         const msg = e.data;
+        // Drop anything from an earlier, abandoned run.
+        if (msg.runId !== runId || runId !== _runSeq) return;
 
         if (msg.type === 'progress') {
             statusEl.textContent = msg.message;
@@ -2022,6 +2085,7 @@ async function generateRoute() {
         offerCachedRoutesFallback(statusEl);
     };
 
+    if (runId !== _runSeq) { stopWorking(); return; }
     const shape = document.getElementById('route-type-select').value; // 'loop' | 'out_and_back' | 'point_to_point'
     const routeType = shape === 'point_to_point' ? 'point_to_point' : 'round_trip';
     const endPos = (routeType === 'point_to_point' && endMarker) ? endMarker.getLatLng() : null;
@@ -2054,8 +2118,10 @@ async function generateRoute() {
         }
     }
     const ptpWild = !endPos || _ptpEfficientKm == null || distanceKm > _ptpEfficientKm * PTP_WILD_MULTIPLIER;
+    if (runId !== _runSeq) { stopWorking(); return; }
 
     explorationWorker.postMessage({
+        runId,
         start: { lat: startPos.lat, lon: startPos.lng },
         end: endPos ? { lat: endPos.lat, lon: endPos.lng } : null,
         distanceKm,
@@ -2084,41 +2150,70 @@ async function generateWorkoutCombo() {
     const statusEl = document.getElementById('worker-status');
     const spinnerEl = document.getElementById('worker-spinner');
     const comboBtn = document.getElementById('workout-combo-btn');
+    const runId = ++_runSeq;
+    _generating = true;
     comboBtn.disabled = true;
     spinnerEl.classList.remove('d-none');
     statusEl.textContent = 'Fetching today\'s workout recommendation…';
 
+    const finish = (message) => {
+        if (runId !== _runSeq) return;
+        _generating = false;
+        spinnerEl.classList.add('d-none');
+        if (message != null) statusEl.textContent = message;
+        updateWorkflowState();
+    };
+
+    try {
+        await generateWorkoutComboRun(runId, statusEl, finish);
+    } catch (e) {
+        finish(`Workout combo failed: ${e.message || e}`);
+    }
+}
+
+async function generateWorkoutComboRun(runId, statusEl, finish) {
     let rec;
     try {
         rec = await api.getRecommendation();
     } catch (e) {
-        statusEl.textContent = 'No workout recommendation available for today.';
-        spinnerEl.classList.add('d-none');
-        comboBtn.disabled = false;
+        finish('No workout recommendation available for today.');
         return;
     }
+    if (runId !== _runSeq) return;
 
     if (!rec || rec.status !== 'success' || !rec.recommended_route) {
-        statusEl.textContent = 'No workout recommendation available for today.';
-        spinnerEl.classList.add('d-none');
-        comboBtn.disabled = false;
+        finish('No workout recommendation available for today.');
         return;
     }
 
     const workoutRoute = rec.recommended_route;
     const coords = workoutRoute.coordinates || [];
     if (coords.length === 0) {
-        statusEl.textContent = 'Workout recommendation has no route coordinates.';
-        spinnerEl.classList.add('d-none');
-        comboBtn.disabled = false;
+        finish('Workout recommendation has no route coordinates.');
         return;
     }
 
-    // Derive start from first coordinate; set it on the map if not already set.
+    // The combo always starts where the workout starts. Previously an existing
+    // start pin elsewhere was kept, so the worker generated from the workout
+    // start but previews and road routes were drawn from the pin.
     const [startLat, startLon] = coords[0];
-    if (!startMarker) setStart(startLat, startLon, `Workout start: ${workoutRoute.name || 'Route'}`);
+    const pinPos = startMarker && startMarker.getLatLng();
+    if (!pinPos || Math.abs(pinPos.lat - startLat) > 1e-6 || Math.abs(pinPos.lng - startLon) > 1e-6) {
+        setStart(startLat, startLon, `Workout start: ${workoutRoute.name || 'Route'}`);
+        // Coverage has to cover the new start before generating.
+        statusEl.textContent = 'Loading coverage around the workout start…';
+        await loadCoverage();
+        if (runId !== _runSeq) return;
+        if (!isCoverageReady()) {
+            finish('Coverage for the workout start could not be loaded.');
+            return;
+        }
+    }
 
-    const distanceKm = workoutRoute.distance ? workoutRoute.distance / 1000 : parseFloat(document.getElementById('distance-slider').value);
+    // /api/recommendation already reports distance in km
+    // (commute_service: rep.distance / 1000); dividing again turned a 15 km
+    // commute into a 15 m target, so the combo never found anything.
+    const distanceKm = workoutRoute.distance ? Number(workoutRoute.distance) : parseFloat(document.getElementById('distance-slider').value);
     const optimizeFor = document.getElementById('optimize-for-select').value;
     const mode = getCoverageMode();
 
@@ -2135,6 +2230,7 @@ async function generateWorkoutCombo() {
     let routeCount = 0;
     explorationWorker.onmessage = (e) => {
         const msg = e.data;
+        if (msg.runId !== runId || runId !== _runSeq) return; // abandoned run
         if (msg.type === 'progress') { statusEl.textContent = msg.message; return; }
         if (msg.type === 'route') {
             renderRoute(msg.route, routeCount);
@@ -2147,35 +2243,29 @@ async function generateWorkoutCombo() {
             return;
         }
         if (msg.type === 'done') {
-            spinnerEl.classList.add('d-none');
-            statusEl.textContent = routeCount > 0
+            finish(routeCount > 0
                 ? `${routeCount} workout-combo route${routeCount > 1 ? 's' : ''} generated`
-                : 'No nearby unvisited tiles found along the workout corridor — try a different day or move the start point';
+                : 'No nearby unvisited tiles found along the workout corridor — try a different day or move the start point');
             if (routeCount > 0 && routeLayer.getBounds().isValid()) {
                 map.fitBounds(routeLayer.getBounds(), { padding: [40, 40] });
             }
-            comboBtn.disabled = false;
-            updateWorkflowState();
             return;
         }
         if (msg.type === 'error') {
-            spinnerEl.classList.add('d-none');
-            statusEl.textContent = msg.message || 'Workout combo failed';
-            comboBtn.disabled = false;
-            updateWorkflowState();
+            finish(msg.message || 'Workout combo failed');
         }
     };
     explorationWorker.onerror = (err) => {
-        spinnerEl.classList.add('d-none');
-        statusEl.textContent = 'Worker error: ' + err.message;
-        comboBtn.disabled = false;
-        updateWorkflowState();
+        finish('Worker error: ' + err.message);
     };
 
     await awaitRoadlessData(statusEl);
+    if (runId !== _runSeq) return;
     statusEl.textContent = 'Generating workout-combo routes…';
     const wind = await getSessionWind();
+    if (runId !== _runSeq) return;
     explorationWorker.postMessage({
+        runId,
         start: { lat: startLat, lon: startLon },
         end: null,
         distanceKm,
@@ -2659,8 +2749,29 @@ function formatTileBreakdown(claimed) {
 }
 
 async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
+    // Phase 2 can take a dozen ORS calls. If the rider regenerates meanwhile,
+    // this run's result must not be drawn into the new run's layers, and an
+    // unexpected error must not leave the button stuck on "Routing…".
+    const runId = _runSeq;
+    try {
+        await plotRoadRouteRun(direction, route, targetDistanceKm, badgeEl, runId);
+    } catch (e) {
+        console.error('Road routing failed:', e);
+        if (runId !== _runSeq) return;
+        const plotBtn = badgeEl.querySelector('.plot-road-btn');
+        const infoEl = badgeEl.querySelector('.route-phase2-info');
+        if (infoEl) infoEl.textContent = `Road routing failed: ${e.message || e}`;
+        if (plotBtn) {
+            plotBtn.disabled = false;
+            plotBtn.innerHTML = '<i class="bi bi-map" aria-hidden="true"></i> Plot road route';
+        }
+    }
+}
+
+async function plotRoadRouteRun(direction, route, targetDistanceKm, badgeEl, runId) {
     const plotBtn = badgeEl.querySelector('.plot-road-btn');
     const infoEl = badgeEl.querySelector('.route-phase2-info');
+    if (!startMarker) throw new Error('Set a start point first');
 
     plotBtn.disabled = true;
     plotBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Routing…';
@@ -2747,6 +2858,7 @@ async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
         shortOutcome = { route: null, message: null };
         longOutcome = await refineRoute(baseWaypoints, { ...commonOpts, targetKm: targetDistanceKm, mode });
     }
+    if (runId !== _runSeq) return; // regenerated meanwhile: don't draw into the new run
     const shortResult = shortOutcome.route;
     const longResult = longOutcome.route;
     const sweepStats = longOutcome.stats || {};
@@ -2818,6 +2930,7 @@ async function plotRoadRoute(direction, route, targetDistanceKm, badgeEl) {
         short ? findNewTilesForRoute(shortResult.coordinates) : Promise.resolve(null),
         long  ? findNewTilesForRoute(longResult.coordinates)  : Promise.resolve(null),
     ]);
+    if (runId !== _runSeq) return;
     const verified = shortClaimed !== null || longClaimed !== null;
 
     // Union of tiles either exportable variant genuinely reaches — replaces
@@ -2968,6 +3081,7 @@ async function clearCache() {
         await api.invalidateCoverageCache();
         _corridorCoverageCache.clear();
         _corridorRoadlessCache.clear();
+        _renderedCoverageKey = null; // force a real re-fetch below
         if (typeof showToast === 'function') showToast('Coverage cache cleared', 'info');
         loadCoverage();
     } catch (e) {

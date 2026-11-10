@@ -58,17 +58,26 @@
  *   {type: 'error', message}                                — fatal error
  */
 
+// Echoed on every message so the page can drop results from a run it has
+// since abandoned (a regenerate while this run was still queued/streaming).
+let _currentRunId = null;
+
+function post(msg) {
+    self.postMessage(_currentRunId == null ? msg : { ...msg, runId: _currentRunId });
+}
+
 self.onmessage = function (e) {
+    _currentRunId = (e.data && e.data.runId != null) ? e.data.runId : null;
     try {
         const summary = optimize(e.data);
-        self.postMessage({ type: 'done', ...summary });
+        post({ type: 'done', ...summary });
     } catch (err) {
-        self.postMessage({ type: 'error', message: err.message });
+        post({ type: 'error', message: err.message });
     }
 };
 
 function reportProgress(message) {
-    self.postMessage({ type: 'progress', message });
+    post({ type: 'progress', message });
 }
 
 const QUADRANTS = ['NE', 'SE', 'SW', 'NW'];
@@ -99,7 +108,31 @@ function pointInArea(lat, lon, area) {
     return inside;
 }
 
-function scanGrid(coverageData, start, reachRadius, areaBounds) {
+/** Shortest distance in km from (lat, lon) to a [[lat, lon], ...] polyline,
+ *  using a local equirectangular projection (fine at corridor scale). */
+function distanceToPolylineKm(lat, lon, coords) {
+    const kmPerDegLat = 111.32;
+    const kmPerDegLon = 111.32 * Math.cos(lat * Math.PI / 180);
+    let best = Infinity;
+    for (let i = 0; i < coords.length; i++) {
+        const ax = (coords[i][1] - lon) * kmPerDegLon;
+        const ay = (coords[i][0] - lat) * kmPerDegLat;
+        if (i === coords.length - 1) {
+            best = Math.min(best, Math.hypot(ax, ay));
+            break;
+        }
+        const bx = (coords[i + 1][1] - lon) * kmPerDegLon;
+        const by = (coords[i + 1][0] - lat) * kmPerDegLat;
+        const dx = bx - ax;
+        const dy = by - ay;
+        const len2 = dx * dx + dy * dy;
+        const t = len2 > 0 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len2)) : 0;
+        best = Math.min(best, Math.hypot(ax + t * dx, ay + t * dy));
+    }
+    return best;
+}
+
+function scanGrid(coverageData, start, reachRadius, areaBounds, corridorConstraint) {
     const bounds = coverageData.bounds;
     if (!bounds) throw new Error('Coverage data has no bounds');
     const zoom = coverageData.zoom || 14;
@@ -124,6 +157,16 @@ function scanGrid(coverageData, start, reachRadius, areaBounds) {
     if (areaBounds) {
         reachableTiles = reachableTiles.filter(t => pointInArea(t.lat, t.lon, areaBounds));
     }
+    // #405 workout combo: only tiles within maxDetourKm of the workout's
+    // route count, so the result stays a detour off that ride. This was
+    // accepted but silently ignored, making the combo a plain loop.
+    if (corridorConstraint && Array.isArray(corridorConstraint.coordinates)
+            && corridorConstraint.coordinates.length > 0) {
+        const maxKm = corridorConstraint.maxDetourKm || 1.5;
+        reachableTiles = reachableTiles.filter(
+            t => distanceToPolylineKm(t.lat, t.lon, corridorConstraint.coordinates) <= maxKm
+        );
+    }
 
     const buckets = { NE: [], SE: [], SW: [], NW: [] };
     for (const t of reachableTiles) {
@@ -147,8 +190,8 @@ function optimize({ start, end, distanceKm, mode, routeType, shape, coverageData
     const reachRadius = reachBasisKm / (isRoundTrip ? 4 : 3);
 
     reportProgress('Scanning tile grid…');
-    const primary = scanGrid(coverageData, start, reachRadius, areaBounds);
-    const secondary = coverageDataSecondary ? scanGrid(coverageDataSecondary, start, reachRadius, areaBounds) : null;
+    const primary = scanGrid(coverageData, start, reachRadius, areaBounds, corridorConstraint);
+    const secondary = coverageDataSecondary ? scanGrid(coverageDataSecondary, start, reachRadius, areaBounds, corridorConstraint) : null;
     const grids = secondary ? [primary, secondary] : [primary];
 
     const totalUnvisited = grids.reduce((sum, g) => sum + g.unvisited.length, 0);
@@ -281,7 +324,7 @@ function optimize({ start, end, distanceKm, mode, routeType, shape, coverageData
             .map(z => ({ lat: z.point.lat, lon: z.point.lon, tiles: z.tiles.length }));
 
         totalRoutes++;
-        self.postMessage({
+        post({
             type: 'route',
             route: {
                 direction: dir,

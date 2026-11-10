@@ -190,16 +190,39 @@ function initializeSwipeGestures() {
     
     const minSwipeDistance = 50; // Minimum distance for swipe
     const maxVerticalDistance = 100; // Maximum vertical movement for horizontal swipe
-    
+    let swipeEligible = false;
+
+    // Gestures that start on these belong to the element, not to page
+    // navigation: panning a map sideways used to navigate away from Explore
+    // and throw away the generated routes.
+    const NO_SWIPE_SELECTOR = '.leaflet-container, .hourly-strip, .table-responsive, ' +
+        '[data-no-swipe], input, textarea, select, canvas, iframe, .modal, .offcanvas';
+
+    function startsInNoSwipeZone(target) {
+        if (!(target instanceof Element)) return false;
+        if (target.closest(NO_SWIPE_SELECTOR)) return true;
+        // Any horizontally scrollable ancestor owns horizontal gestures.
+        for (let el = target; el && el !== document.body; el = el.parentElement) {
+            if (el.scrollWidth > el.clientWidth + 1) {
+                const overflowX = getComputedStyle(el).overflowX;
+                if (overflowX === 'auto' || overflowX === 'scroll') return true;
+            }
+        }
+        return false;
+    }
+
     // Swipeable container (main content area)
     const swipeContainer = document.querySelector('.container-fluid') || document.body;
-    
+
     swipeContainer.addEventListener('touchstart', function(e) {
+        swipeEligible = e.touches.length === 1 && !startsInNoSwipeZone(e.target);
         touchStartX = e.changedTouches[0].screenX;
         touchStartY = e.changedTouches[0].screenY;
     }, { passive: true });
-    
+
     swipeContainer.addEventListener('touchend', function(e) {
+        if (!swipeEligible) return;
+        swipeEligible = false;
         touchEndX = e.changedTouches[0].screenX;
         touchEndY = e.changedTouches[0].screenY;
         
