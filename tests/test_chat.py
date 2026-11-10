@@ -168,6 +168,8 @@ class TestChatTools:
         ('search_activities', {'weekdays': ['Funday']}),
         ('search_activities', {'sort_by': 'random'}),
         ('search_activities', {'min_distance_mi': 'far'}),
+        ('get_totals', {'activity_class': 'flying'}),
+        ('get_totals', {'sport_type': [1, 2]}),
         ('list_routes', {'route_type': 'secret'}),
         ('no_such_tool', {}),
     ])
@@ -187,6 +189,31 @@ class TestChatTools:
             for forbidden in ('41.87', '-87.62', '41.8781136', '-87.6297982', POLYLINE,
                               'latlng', 'polyline', 'coordinates'):
                 assert forbidden not in text, f"{name} leaked {forbidden!r}"
+
+    def test_defaults_to_cycling_only(self):
+        """#622: runs/walks/swims used to be counted as rides."""
+        acts = ACTIVITIES + [_act(30, '2026-09-02T07:00:00', 5.0, sport='Run'),
+                             _act(31, '2026-09-03T07:00:00', 2.0, sport='Swim')]
+        t = ChatTools(lambda: acts, lambda: None, lambda: None)
+        out = _run(t, 'get_totals')
+        assert out['summary']['total_rides'] == len(ACTIVITIES)
+        assert out['scope'] == {'activity_class': 'cycling'}
+
+    def test_activity_class_all_and_running(self):
+        acts = ACTIVITIES + [_act(30, '2026-09-02T07:00:00', 5.0, sport='Run'),
+                             _act(32, '2026-09-04T07:00:00', 6.0, sport='TrailRun')]
+        t = ChatTools(lambda: acts, lambda: None, lambda: None)
+        assert _run(t, 'get_totals', {'activity_class': 'all'})['summary']['total_rides'] == len(acts)
+        assert _run(t, 'get_totals', {'activity_class': 'running'})['summary']['total_rides'] == 2
+
+    def test_sport_type_list_implies_all_classes(self):
+        acts = ACTIVITIES + [_act(30, '2026-09-02T07:00:00', 5.0, sport='Run')]
+        t = ChatTools(lambda: acts, lambda: None, lambda: None)
+        out = _run(t, 'search_activities', {'sport_type': ['Run', 'GravelRide']})
+        assert out['total_matches'] == 2
+        assert out['scope'] == {'activity_class': 'all', 'sport_type': ['GravelRide', 'Run']}
+        # A bare string still works for older transcripts.
+        assert _run(t, 'search_activities', {'sport_type': 'Run'})['total_matches'] == 1
 
     def test_tool_output_is_valid_json_with_tricky_names(self):
         """#621: sanitizing the serialized JSON corrupted it (escape digits and

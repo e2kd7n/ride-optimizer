@@ -131,25 +131,19 @@ class Activity:
         end_lat = ga.get('endLatitude')
         end_lon = ga.get('endLongitude')
 
-        sport_map = {
-            'cycling': 'Ride',
-            'road_biking': 'Ride',
-            'gravel_cycling': 'GravelRide',
-            'mountain_biking': 'Ride',
-            'virtual_ride': 'VirtualRide',
-            'indoor_cycling': 'VirtualRide',
-            'running': 'Run',
-            'trail_running': 'Run',
-            'walking': 'Walk',
-            'hiking': 'Hike',
-        }
+        from src.sport_types import garmin_sport_type
+
         raw_type = (ga.get('activityType', {}).get('typeKey', '') or '').lower()
-        sport_type = sport_map.get(raw_type, 'Ride')
+        sport_type = garmin_sport_type(raw_type)
+        # `type` stays the broad Strava type the analysis code filters on
+        # (e.g. mountain biking was, and still is, type 'Ride').
+        broad_type = {'MountainBikeRide': 'Ride', 'EMountainBikeRide': 'EBikeRide',
+                      'TrailRun': 'Run', 'VirtualRun': 'Run'}.get(sport_type, sport_type)
 
         return cls(
             id=ga.get('activityId', 0),
             name=ga.get('activityName', 'Garmin Activity'),
-            type=sport_type,
+            type=broad_type,
             sport_type=sport_type,
             start_date=ga.get('startTimeLocal'),
             start_date_local=ga.get('startTimeLocal'),

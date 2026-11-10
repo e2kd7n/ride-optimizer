@@ -28,6 +28,7 @@ from app.api.stats_bp import (
     _ms_to_mph,
     _seconds_to_hours,
 )
+from src.sport_types import ACTIVITY_CLASSES, activity_class, sport_of
 from src.pii_sanitizer import (
     sanitize_address,
     sanitize_coordinates,
@@ -51,9 +52,19 @@ _SORT_KEYS = {
 _FILTER_PROPERTIES = {
     'start_date': {'type': 'string', 'description': 'Inclusive start date, YYYY-MM-DD (ride-local calendar date).'},
     'end_date': {'type': 'string', 'description': 'Inclusive end date, YYYY-MM-DD (ride-local calendar date).'},
-    'sport_type': {
+    'activity_class': {
         'type': 'string',
-        'description': "Exact Strava sport type, e.g. 'Ride', 'GravelRide', 'EBikeRide', 'VirtualRide', 'Run'.",
+        'enum': list(ACTIVITY_CLASSES),
+        'description': (
+            "Which activities count. Defaults to 'cycling' (every bike sport type: Ride, GravelRide, "
+            "MountainBikeRide, EBikeRide, VirtualRide, …) unless sport_type is given, in which case it "
+            "defaults to 'all'. Use 'all' to include runs, walks, swims and other sports."
+        ),
+    },
+    'sport_type': {
+        'type': 'array',
+        'items': {'type': 'string'},
+        'description': "Exact Strava sport types to include, e.g. ['GravelRide'] or ['Run', 'TrailRun'].",
     },
     'gear_id': {'type': 'string', 'description': 'Only activities recorded with this gear id (see list_gear).'},
     'weekdays': {
@@ -71,8 +82,9 @@ TOOL_DEFINITIONS: List[Dict[str, Any]] = [
     {
         'name': 'get_totals',
         'description': (
-            "Aggregate totals (ride count, distance, moving time, elevation, averages, kudos, kilojoules) "
-            "over the rider's cached activities, optionally filtered and grouped. Use group_by='none' for a "
+            "Aggregate totals (activity count as total_rides, distance, moving time, elevation, averages, "
+            "kudos, kilojoules) over the rider's cached activities — cycling only unless activity_class or "
+            "sport_type says otherwise; the result's 'scope' states what was counted. Use group_by='none' for a "
             "single summary, which also includes personal records and the first/last date matched. Group by "
             "week, month or year for trends and period comparisons; by weekday, sport_type or gear for "
             "breakdowns. Distances are miles, elevation feet, time hours, speed mph."
@@ -178,6 +190,16 @@ def _sanitize_values(value: Any) -> Any:
     return sanitize_outbound(str(value))
 
 
+def _scope(args: Dict[str, Any]) -> Dict[str, Any]:
+    sport_types = args.get('sport_type') or None
+    if isinstance(sport_types, str):
+        sport_types = [sport_types]
+    scope = {'activity_class': args.get('activity_class') or ('all' if sport_types else 'cycling')}
+    if sport_types:
+        scope['sport_type'] = sorted(sport_types)
+    return scope
+
+
 def _parse_date(value: Optional[str], field: str) -> Optional[date]:
     if value in (None, ''):
         return None
@@ -247,7 +269,11 @@ class ChatTools:
         handler = self._handlers.get(name)
         if handler is None:
             raise ToolInputError(f"Unknown tool {name!r}")
-        result = handler(dict(args or {}))
+        args = dict(args or {})
+        result = handler(args)
+        if name in ('get_totals', 'search_activities'):
+            # Echo what was counted so Claude can say "cycling only" (#622).
+            result = {'scope': _scope(args), **result}
         return json.dumps(_sanitize_values(result), separators=(',', ':'), ensure_ascii=False)
 
     # ------------------------------------------------------------------
@@ -258,7 +284,16 @@ class ChatTools:
         """Activities passing the shared filters, each paired with its local start."""
         start_date = _parse_date(args.get('start_date'), 'start_date')
         end_date = _parse_date(args.get('end_date'), 'end_date')
-        sport_type = args.get('sport_type') or None
+        sport_types = args.get('sport_type') or None
+        if isinstance(sport_types, str):
+            sport_types = [sport_types]
+        if sport_types is not None and (not isinstance(sport_types, list)
+                                        or not all(isinstance(s, str) for s in sport_types)):
+            raise ToolInputError("sport_type must be a list of sport type names")
+        sport_types = set(sport_types) if sport_types else None
+        activity_cls = args.get('activity_class') or ('all' if sport_types else 'cycling')
+        if activity_cls not in ACTIVITY_CLASSES:
+            raise ToolInputError(f"activity_class must be one of {list(ACTIVITY_CLASSES)}")
         gear_id = args.get('gear_id') or None
         weekdays = args.get('weekdays') or None
         if weekdays is not None:
@@ -288,7 +323,9 @@ class ChatTools:
                 continue
             if end_date and d > end_date:
                 continue
-            if sport_type and (a.sport_type or a.type) != sport_type:
+            if sport_types and sport_of(a) not in sport_types:
+                continue
+            if activity_cls != 'all' and activity_class(a) != activity_cls:
                 continue
             if gear_id and a.gear_id != gear_id:
                 continue
