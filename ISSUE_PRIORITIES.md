@@ -1,6 +1,6 @@
 # Issue Prioritization
 
-**Last Updated:** 2026-11-08 19:30:48 UTC / 2026-11-08 13:30:48 CST
+**Last Updated:** 2026-11-10 01:49:38 UTC / 2026-11-09 19:49:38 CST
 
 This file reflects the current state of GitHub issues organized by release milestone and priority within each release.
 
@@ -10,7 +10,7 @@ This file reflects the current state of GitHub issues organized by release miles
 
 - **Current Release:** none (deployed, milestone fully closed)
 - **Next Release:** 0.22.0 (in development)
-- **Future Releases:** 
+- **Future Releases:** 0.23.0
 
 ---
 
@@ -22,29 +22,69 @@ This file reflects the current state of GitHub issues organized by release miles
 **No P0 issues** ✅
 
 ### 🔴 P1 - HIGH
-- #621 - Ride chat: PII sanitizer corrupts tool JSON (list_routes unparseable)
+- #636 - Garmin client: garth is deprecated — pin, wrap, or migrate
+- #619 - "Backfill this month" fails when Strava isn't connected — should use whichever source is connected (e.g. Garmin)
 
 ### 🟡 P2 - MEDIUM
-- #636 - Garmin client: garth is deprecated — pin, wrap, or migrate
+- #677 - CI: fix the pytest --ignore list, stale tests, and lock-file builds
+- #664 - Job endpoints can stick at "running" until restart on bad input or init errors
+- #663 - Stopped or failed analysis publishes partial route groups and shows "Done"
+- #658 - Cold boot: cheap /healthz and background warm-up instead of blocking init
+- #655 - Keep one parsed copy of activities.json and load it single-flight
+- #637 - Explore: compute and display current yard(inho) and übersquadrat(inho)
+- #623 - Gear cache emptied by 2026-10-01 refresh; gear shows raw IDs (Reports + chat)
+- #622 - Ride chat: totals count runs/walks/swims as rides; no all-cycling filter
+- #620 - Option to check for new activities nightly and pull them into the cache (all connected sources), then regroup
 
 ### 🟢 P3 - LOW
-- #634 - Data Cleanup: Strava manual workflow (link-out checklist feeding the cache)
-- #633 - Data Cleanup: review & approve page (new tab)
-- #632 - Data Cleanup: reconcile activity cache + regroup after each cleanup batch
-- #631 - Data Cleanup: resumable background runner for approved Garmin deletes/renames
+- #641 - Epic: Explore — optimize for yard(inho) and übersquadrat(inho) expansion
+- #640 - Explore: show yard/übersquadrat deltas on every generated route card
 - #630 - Data Cleanup: full Garmin history + recording-device names in GarminService
 - #629 - Data Cleanup: duplicate/fragment/name-sync detection service
 - #628 - Epic: Data Cleanup tab — find duplicate/unnamed activities across Garmin & Strava, fix them in the background
-- #594 - Epic: RideWithGPS integration — import routes and suggest Explore tile-coverage optimizations
-- #593 - RideWithGPS: publish an optimized route back as a new route
-- #592 - RideWithGPS: Explore tab visualization of suggested vs. original route
-- #591 - RideWithGPS: algorithm to suggest a tile-coverage-optimizing modification to an existing route
-- #590 - RideWithGPS: import existing routes into the app's route model
-- #589 - RideWithGPS: connect an account (auth + service scaffolding)
 
 ### 📋 P4 - FUTURE
-- #635 - Spike: Strava web automation for delete/rename — go/no-go decision record
-- #514 - Offload background analysis batch jobs to Pi Zero W cluster (ClusterHAT)
+**No P4 issues** ✅
+
+---
+
+## 📅 0.23.0 (Future Release)
+
+### 🟡 P2 - MEDIUM
+- #679 - Activity data model: mixed start_date formats and shared Garmin/Strava ID space
+- #671 - api-client retries non-idempotent POSTs; one CSRF fetch per client instance
+- #670 - Stale responses overwrite newer ones (Reports periods/calendar, Routes map and uses modal)
+- #666 - WeatherFetcher caches: thread-unsafe mutation and non-atomic file writes
+- #665 - Container refresh is unlocked and publishes half-initialised services
+- #662 - Epic: Background jobs, analysis state and thread safety (2026-11 review)
+- #659 - Tile index: integer keys, spatial buckets, drop unused fields, remove deleted activities
+- #657 - Run the nightly analysis in its own process, not a thread in the gunicorn worker
+- #656 - Store route geometry compactly in route_groups/long_rides caches
+- #654 - Epic: Pi memory & compute efficiency (2026-11 review)
+- #653 - Own router: decisions needed from the rider (regions, walking, turn control, ORS, devices)
+- #647 - Own router M2: roadless (water) tiles from the graph instead of Overpass
+
+### 🟢 P3 - LOW
+- #681 - Commute map: stamp CSP nonces server-side instead of regex-rewriting Folium HTML
+- #680 - Strava status endpoint does a network token refresh on every poll
+- #678 - Remove CLI-era and dead code (main.py, optimizer, Folium visualizer, osascript geocoding)
+- #676 - Epic: Dead code, CI hygiene and build reproducibility (2026-11 review)
+- #675 - Frontend low-priority fixes bundle (2026-11 review)
+- #674 - Explore rectangle drawing is mouse-only and freezes the map on touch
+- #673 - Settings: intervals.icu and ORS disconnect buttons stack duplicate listeners
+- #672 - Units ignore the metric/imperial setting on most pages
+- #669 - Epic: Frontend correctness, units and mobile polish (2026-11 review)
+- #668 - JSON read-modify-write gaps: corrupt-file default, settings and job history
+- #667 - Chunked ORS routes get a fresh time budget per chunk
+- #661 - Explore: bound client-side coverage caches and per-render cost
+- #660 - Static assets: content-hash versioning and long-lived caching
+- #650 - Own router M5: full local planner replaces Phase 1 + Phase 2 in covered regions
+- #649 - Own router M4: cluster cover on the graph (cluster rule by construction)
+- #648 - Own router M3: turn-aware A→B routing in a browser Web Worker
+
+### 📋 P4 - FUTURE
+- #652 - Own router M7: retire superseded Phase 1/2 + ORS-only paths inside covered regions
+- #651 - Own router M6: route options UI — straighter↔more tiles, walking connections, busy roads
 
 ---
 
@@ -52,30 +92,7 @@ This file reflects the current state of GitHub issues organized by release miles
 
 These issues need to be assigned to a release milestone and prioritized.
 
-### 🔴 P0 - CRITICAL
-None
-
-### 🔴 P1 - HIGH
-None
-
-### 🟡 P2 - MEDIUM
-- #623 - Gear cache emptied by 2026-10-01 refresh; gear shows raw IDs (Reports + chat)
-- #622 - Ride chat: totals count runs/walks/swims as rides; no all-cycling filter
-- #620 - Option to check for new activities nightly and pull them into the cache (all connected sources), then regroup
-- #619 - "Backfill this month" fails when Strava isn't connected — should use whichever source is connected (e.g. Garmin)
-- #617 - Match review: let the rider confirm uncertain route matches and teach the matcher
-- #607 - Port Garmin integration from garth (unofficial SSO) to Garmin's official Personal API
-
-### 🟢 P3 - LOW
-- #625 - Ride chat: Strava activity IDs still sent to Claude via record URLs
-- #624 - Fastest-speed record picks GPS glitches and non-ride activities
-- #608 - Ride-data chat on the Reports tab (ephemeral Claude sessions, no history)
-
-### 📋 P4 - FUTURE
-None
-
-### ⚠️ Unprioritized (No P-label)
-- #626 - [BUG] mobile app screen changes away from explore
+**All issues are assigned to releases** ✅
 
 ---
 
