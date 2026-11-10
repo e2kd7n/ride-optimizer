@@ -2392,9 +2392,11 @@ const MAX_PICKUPS = 40;             // near-route tiles added in one pass
 // (/api/exploration/route accepts up to 250).
 const MAX_ROUTE_WAYPOINTS = 240;
 const MAX_SWEEP_ROUNDS = 4;         // cluster-sweep re-route/re-check rounds
+const SWEEP_BUDGET = 1.25;          // cluster sweep may grow the route to this × the target, no further
 const RETRACE_MAX_FRACTION = 0.15;  // above this share of retraced road, try to fix
 const MAX_RETRACE_FIXES = 1;
 const MAX_PRUNE_ROUNDS = 3;         // wasted-spur prune re-route rounds
+const PRUNE_TROUBLE_KM = 0.4;       // a failed cut batch retries without cuts this close to a lost tile
 
 /**
  * Road-route a Phase-1 waypoint list and improve it. Returns
@@ -2437,7 +2439,7 @@ async function refineRoute(baseWaypoints, opts) {
     const candidates = candidateList.slice();
     const stats = {
         calls: 0, trimmed: 0, pickupsAdded: 0, uselessDropped: 0, retraceFixed: false, retraceFraction: null,
-        sweepAdded: 0, sweepUnreachable: 0, sweepRemaining: 0, sweepCapped: false, spursPruned: 0,
+        sweepAdded: 0, sweepUnreachable: 0, sweepRemaining: 0, sweepCapped: false, sweepOverBudget: false, spursPruned: 0,
     };
 
     // Build OSRM exclude list from road filter checkboxes (#411).
@@ -2610,35 +2612,54 @@ async function refineRoute(baseWaypoints, opts) {
         // Never leave an unclaimed tile that's edge-adjacent to the route
         // and part of a cluster, unless it's at the boundary/horizon (see
         // ExploreRefine.clusterSweepTargets). Once the route touches a
-        // cluster that means sweeping all of it. This overrides the distance
-        // cap. Each round re-routes with the targets added and re-checks the
-        // real road route; a tile still unclaimed after two attempts has no
-        // road the router can reach and is reported as unreachable.
+        // cluster that means sweeping all of it. The sweep may run past the
+        // distance target, but only up to SWEEP_BUDGET × target: clusters are
+        // taken whole, best tiles-per-km first, until the budget is spent.
+        // Without a budget a dense patchwork cascades (each sweep detour
+        // touches new clusters) — a 24.9 mi request came back at 102 mi.
+        // Clusters left out are reported as "cluster tiles left". Each round
+        // re-routes with the targets added and re-checks the real road route;
+        // a tile still unclaimed after two attempts has no road the router
+        // can reach and is reported as unreachable.
         if (grids.length && mode !== 'direct') {
             const attempts = new Map();
             const unreachable = new Set();
             const targetsNow = () => R.clusterSweepTargets(result.coordinates, grids, { bounds: areaBounds, exclude: unreachable });
+            const budgetKm = targetKm * SWEEP_BUDGET;
             for (let round = 0; round < MAX_SWEEP_ROUNDS; round++) {
                 const fresh = [];
                 for (const t of targetsNow()) {
                     const k = `${t.zoom}:${t.x},${t.y}`;
-                    const n = attempts.get(k) || 0;
-                    if (n >= 2) { unreachable.add(k); continue; }
-                    attempts.set(k, n + 1);
+                    if ((attempts.get(k) || 0) >= 2) { unreachable.add(k); continue; }
                     fresh.push(t);
                 }
                 if (fresh.length === 0) break;
                 const room = MAX_ROUTE_WAYPOINTS - waypoints.length;
                 if (room <= 0) { stats.sweepCapped = true; break; }
-                const batch = fresh.slice(0, room);
-                if (batch.length < fresh.length) stats.sweepCapped = true;
-                const ins = R.insertSweepTargets(waypoints, meta, batch);
-                const trial = await routeOnce(ins.waypoints);
-                if (tilesOf(trial) < tilesOf(result)) break; // re-route lost ground — keep what we have
-                waypoints = ins.waypoints;
-                meta = ins.meta;
-                result = trial;
-                stats.sweepAdded += batch.length;
+                const roadRatio = result.distance_km / Math.max(R.pathKm(waypoints), 0.1);
+                const { batch, skippedTiles } = R.budgetSweepBatch(waypoints, fresh, { budgetKm, roadRatio, room });
+                if (skippedTiles > 0) stats.sweepOverBudget = true;
+                if (batch.length === 0) break;
+                // The estimate is straight-line; if the real route overshoots
+                // the budget, retry once with the better half of the clusters.
+                let accepted = false;
+                for (const sub of [batch, batch.slice(0, Math.ceil(batch.length / 2))]) {
+                    const ins = R.insertSweepTargets(waypoints, meta, sub);
+                    const trial = await routeOnce(ins.waypoints);
+                    if (tilesOf(trial) < tilesOf(result)) break; // re-route lost ground — keep what we have
+                    if (trial.distance_km > budgetKm * (1 + CAP_SLACK)) { stats.sweepOverBudget = true; continue; }
+                    for (const t of sub) {
+                        const k = `${t.zoom}:${t.x},${t.y}`;
+                        attempts.set(k, (attempts.get(k) || 0) + 1);
+                    }
+                    waypoints = ins.waypoints;
+                    meta = ins.meta;
+                    result = trial;
+                    stats.sweepAdded += sub.length;
+                    accepted = true;
+                    break;
+                }
+                if (!accepted) break;
             }
             // A re-route is kept only if it's shorter, loses no tile and
             // reopens no cluster tile.
@@ -2646,6 +2667,23 @@ async function refineRoute(baseWaypoints, opts) {
                 const before = targetsNow().length;
                 const after = R.clusterSweepTargets(trial.coordinates, grids, { bounds: areaBounds, exclude: unreachable }).length;
                 return trial.distance_km < result.distance_km && after <= before && tilesOf(trial) >= tilesOf(result);
+            };
+            // Centres of tiles a trial lost, or of cluster tiles it newly
+            // left open — where a cut went wrong.
+            const troubleSpots = (trial) => {
+                const spots = [];
+                const centre = (x, y, z) => { const b = R.tileBounds(x, y, z); return [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2]; };
+                for (const g of grids) {
+                    const kept = R.newTilesCrossed(trial.coordinates, g);
+                    for (const k of R.newTilesCrossed(result.coordinates, g)) {
+                        if (!kept.has(k)) { const [x, y] = k.split(',').map(Number); spots.push(centre(x, y, g.zoom)); }
+                    }
+                }
+                const open = new Set(targetsNow().map(t => `${t.zoom}:${t.x},${t.y}`));
+                for (const t of R.clusterSweepTargets(trial.coordinates, grids, { bounds: areaBounds, exclude: unreachable })) {
+                    if (!open.has(`${t.zoom}:${t.x},${t.y}`)) spots.push(centre(t.x, t.y, t.zoom));
+                }
+                return spots;
             };
             // Sweep stops whose road snap landed elsewhere claim nothing.
             // Drop them.
@@ -2665,17 +2703,29 @@ async function refineRoute(baseWaypoints, opts) {
             // that claims no tile the rest of the route doesn't is pure
             // overhead. Replace its stops with an anchor where it leaves the
             // route, so only the excursion disappears. Cutting can expose
-            // more wasted spurs, so this repeats for a few rounds.
+            // more wasted spurs, so this repeats for a few rounds. Re-routing
+            // can shift roads near a cut, so one bad cut can lose a tile. When
+            // that happens, retry without the cuts near the trouble instead of
+            // throwing the whole batch away.
             for (let round = 0; round < MAX_PRUNE_ROUNDS; round++) {
-                const plan = R.planSpurPrune(result.coordinates, waypoints, grids);
-                if (plan.length === 0) break;
-                const cut = R.applySpurPrune(waypoints, meta, plan);
-                const trial = await routeOnce(cut.waypoints);
-                if (!keeps(trial)) break;
-                waypoints = cut.waypoints;
-                meta = cut.meta;
-                result = trial;
-                stats.spursPruned += plan.length;
+                let plan = R.planSpurPrune(result.coordinates, waypoints, grids);
+                let done = false;
+                for (let attempt = 0; attempt < 2 && plan.length > 0; attempt++) {
+                    const cut = R.applySpurPrune(waypoints, meta, plan);
+                    const trial = await routeOnce(cut.waypoints);
+                    if (keeps(trial)) {
+                        waypoints = cut.waypoints;
+                        meta = cut.meta;
+                        result = trial;
+                        stats.spursPruned += plan.length;
+                        done = true;
+                        break;
+                    }
+                    const spots = troubleSpots(trial);
+                    const near = (p) => spots.some(s => R.haversineKm(p, s) < PRUNE_TROUBLE_KM);
+                    plan = plan.filter(e => !near(e.base) && !e.waypoints.some(w => near(waypoints[w])));
+                }
+                if (!done) break;
             }
             stats.sweepUnreachable = unreachable.size;
             stats.sweepRemaining = targetsNow().length;
@@ -2979,13 +3029,18 @@ async function plotRoadRouteRun(direction, route, targetDistanceKm, badgeEl, run
         // Cluster sweep outcome (refineRoute stage 5).
         const sweepBadges = [];
         if (sweepStats.sweepAdded > 0) {
-            sweepBadges.push(`<span class="badge bg-success-subtle text-success-emphasis" title="Unclaimed clusters the route touched were swept completely, which can take it past ${targetDistancePhrase(targetDistanceKm)}.">Clusters swept</span>`);
+            sweepBadges.push(`<span class="badge bg-success-subtle text-success-emphasis" title="Unclaimed clusters the route touched were swept completely, which can take it up to 25% past ${targetDistancePhrase(targetDistanceKm)}.">Clusters swept</span>`);
         }
         if (sweepStats.sweepUnreachable > 0) {
             sweepBadges.push(`<span class="badge bg-secondary-subtle text-secondary-emphasis" title="No road the router can use enters these cluster tiles.">${sweepStats.sweepUnreachable} unreachable</span>`);
         }
         if (sweepStats.sweepRemaining > 0) {
-            sweepBadges.push(`<span class="badge bg-warning-subtle text-warning-emphasis" title="${sweepStats.sweepCapped ? 'Hit the route waypoint limit before every touched cluster could be swept.' : 'Some cluster tiles next to the route are still unclaimed after re-routing.'}">${sweepStats.sweepRemaining} cluster tiles left</span>`);
+            const why = sweepStats.sweepOverBudget
+                ? `Sweeping the rest would take the route more than 25% past ${targetDistancePhrase(targetDistanceKm)}. Raise the distance to sweep them.`
+                : sweepStats.sweepCapped
+                    ? 'Hit the route waypoint limit before every touched cluster could be swept.'
+                    : 'Some cluster tiles next to the route are still unclaimed after re-routing.';
+            sweepBadges.push(`<span class="badge bg-warning-subtle text-warning-emphasis" title="${why}">${sweepStats.sweepRemaining} cluster tiles left</span>`);
         }
         const dataKey = `${direction}-${suffix}`;
         return `

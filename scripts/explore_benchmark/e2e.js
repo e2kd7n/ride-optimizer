@@ -32,10 +32,14 @@ const BASE = 'http://localhost:18083/api';
 const SCENARIOS = {
     loop: { start: { lat: 41.9880, lon: -87.6630 }, end: null, area: [41.983, -87.765, 42.062, -87.655], km: 40 * 1.609344 },
     ptp: { start: { lat: 41.9985, lon: -87.6930 }, end: { lat: 41.9875, lon: -87.6925 }, area: [41.975, -87.775, 42.050, -87.665], km: 35 * 1.609344 },
+    // 2026-11-09 screenshot: no drawn area, coverage = the map viewport, 24.9 mi
+    // loop. Came back 102 mi because the cluster sweep cascaded.
+    short: { start: { lat: 41.9905, lon: -87.6640 }, end: null, area: null, view: [41.92, -87.93, 42.08, -87.62], km: 24.9 * 1.609344 },
 };
 const SC = SCENARIOS[process.env.SCENARIO || 'loop'];
 const START = SC.start, END = SC.end;
-const AREA = SC.area;                                      // [S, W, N, E]
+const AREA = SC.area;                                      // [S, W, N, E] or null
+const HORIZON = AREA || SC.view;                           // what coverage is loaded for
 const TARGET_KM = SC.km;
 const ZOOM = 17;
 
@@ -54,14 +58,22 @@ async function api(pathname, opts = {}) {
     const body = await r.json().catch(() => ({}));
     return body;
 }
-let routeCalls = 0;
+let routeCalls = 0, routeFailures = 0;
 const client = {
     async getExplorationRoute({ waypoints, surfacePreference = 'any', exclude, bounds }) {
         routeCalls++;
         const body = { waypoints, surface_preference: surfacePreference };
         if (exclude) body.exclude = exclude;
         if (bounds) body.bounds = bounds;
-        return api('/exploration/route', { method: 'POST', body: JSON.stringify(body) });
+        const res = await api('/exploration/route', { method: 'POST', body: JSON.stringify(body) });
+        // refineRoute keeps its last good route when a later call fails, so a
+        // rate-limited run (20 routes/min) looks like a worse route instead of
+        // an error. Count failures so those runs can be thrown out.
+        if (!res || res.status !== 'success') {
+            routeFailures++;
+            console.error(`route call ${routeCalls} failed: ${(res && (res.message || res.error)) || 'no response'}`);
+        }
+        return res;
     },
 };
 
@@ -101,7 +113,7 @@ function sweepLeft(coords, grid) {
     const unclaimed = (x, y) => {
         if (grid.visited.has(`${x},${y}`) || grid.isRoadless(x, y)) return false;
         const tb = R0.tileBounds(x, y, ZOOM), c = [(tb[0] + tb[2]) / 2, (tb[1] + tb[3]) / 2];
-        return c[0] >= AREA[0] && c[0] <= AREA[2] && c[1] >= AREA[1] && c[1] <= AREA[3];
+        return c[0] >= HORIZON[0] && c[0] <= HORIZON[2] && c[1] >= HORIZON[1] && c[1] <= HORIZON[3];
     };
     const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
     const left = new Set();
@@ -118,8 +130,8 @@ function sweepLeft(coords, grid) {
 
 (async () => {
     // Coverage + water for a box padded around the area.
-    const pad = 0.03;
-    const cb = { south: AREA[0] - pad, west: AREA[1] - pad, north: AREA[2] + pad, east: AREA[3] + pad };
+    const pad = AREA ? 0.03 : 0;
+    const cb = { south: HORIZON[0] - pad, west: HORIZON[1] - pad, north: HORIZON[2] + pad, east: HORIZON[3] + pad };
     const cov = await api(`/exploration/tiles?south=${cb.south}&west=${cb.west}&north=${cb.north}&east=${cb.east}&zoom=${ZOOM}`);
     if (cov.status !== 'success') { console.error('coverage failed', cov); process.exit(1); }
     // The Pi's water lookup for this cell is currently broken (legacy-format
@@ -195,5 +207,5 @@ function sweepLeft(coords, grid) {
     console.log(`${label} [${pick.route.direction}] km=${km.toFixed(1)} newTiles=${tiles} tiles/km=${(tiles / km).toFixed(2)} ` +
         `turns=${turns} (${(turns / km).toFixed(2)}/km) uturns=${uturns} clusterTilesLeft=${sweepLeft(coords, grid)} ` +
         `spurs=${outer.length} wastedSpurs=${wasted.length} (${wastedKm.toFixed(1)} km) ` +
-        `orsRequests=${routeCalls} ${((Date.now() - t0) / 1000).toFixed(0)}s stats=${JSON.stringify(out.stats)}`);
+        `orsRequests=${routeCalls}${routeFailures ? ` FAILED=${routeFailures} (result invalid)` : ""} ${((Date.now() - t0) / 1000).toFixed(0)}s stats=${JSON.stringify(out.stats)}`);
 })();

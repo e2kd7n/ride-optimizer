@@ -446,6 +446,57 @@
         return { waypoints: wps, meta: m };
     }
 
+    /**
+     * Pick which clusters to sweep within a distance budget.
+     *
+     * `targets` come from clusterSweepTargets (tagged with `component`).
+     * Clusters are taken whole, since sweeping half of one doesn't satisfy
+     * the rule. They're taken best value first (tiles per estimated extra km)
+     * while the estimated route stays within `budgetKm`. The estimate is the
+     * straight-line insertion cost scaled by `roadRatio` (the route's measured
+     * road km per straight-line km). Without a budget, a dense patchwork
+     * cascades: each sweep detour touches new clusters, and the next round
+     * sweeps those too.
+     *
+     * Returns {batch, skippedTiles}: batch is the chosen targets (still in
+     * nearest-first order), skippedTiles the targets left out for budget or
+     * waypoint room.
+     */
+    function budgetSweepBatch(waypoints, targets, { budgetKm = Infinity, roadRatio = 1.3, room = Infinity } = {}) {
+        const comps = new Map();
+        for (const t of targets) {
+            if (!comps.has(t.component)) comps.set(t.component, []);
+            comps.get(t.component).push(t);
+        }
+        const insertAll = (wps, ts) => {
+            const out = wps.map(w => [...w]);
+            for (const t of ts) {
+                const { index } = cheapestInsertion(out, [t.lat, t.lon]);
+                out.splice(index, 0, [t.lat, t.lon]);
+            }
+            return out;
+        };
+        const baseKm = pathKm(waypoints);
+        const ranked = [...comps.entries()].map(([id, ts]) => {
+            const cost = Math.max(0.05, pathKm(insertAll(waypoints, ts)) - baseKm);
+            return { id, ts, value: ts.length / cost };
+        }).sort((a, b) => b.value - a.value);
+
+        let running = waypoints.map(w => [...w]);
+        let used = 0;
+        const chosen = new Set();
+        for (const c of ranked) {
+            if (used + c.ts.length > room) continue;
+            const trial = insertAll(running, c.ts);
+            if (pathKm(trial) * roadRatio > budgetKm) continue;
+            running = trial;
+            used += c.ts.length;
+            chosen.add(c.id);
+        }
+        const batch = targets.filter(t => chosen.has(t.component));
+        return { batch, skippedTiles: targets.length - batch.length };
+    }
+
     // ── Waypoint ↔ route alignment ─────────────────────────────────
 
     /**
@@ -1003,7 +1054,7 @@
     const api = {
         haversineKm, pathKm, latLonToTile, tileBounds, tileSideKm, buildRoadlessLookup, makeGrid,
         densify, tilesTouched, newTilesCrossed, countNewTiles,
-        findPickups, clusterSweepTargets, insertSweepTargets, waypointRouteIndices, insertPickups, cheapestInsertion, chooseDropIndex,
+        findPickups, clusterSweepTargets, budgetSweepBatch, insertSweepTargets, waypointRouteIndices, insertPickups, cheapestInsertion, chooseDropIndex,
         analyzeRetrace, uselessStops, findSpurs, planSpurPrune, applySpurPrune, pointInBounds, fractionOutsideBounds, clampToBounds,
         isPolygonArea, areaBBox, pointInPolygon, polygonSelfIntersects,
         findYard, tileSetOutline,

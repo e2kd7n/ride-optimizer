@@ -124,3 +124,37 @@ test('refineRoute reports tiles the router cannot reach instead of looping', asy
     assert.equal(out.stats.sweepUnreachable, 1);
     assert.ok(api.calls.length < 15, `calls ${api.calls.length}`);
 });
+
+test('refineRoute sweep stays within the distance budget instead of cascading', async () => {
+    // A small cluster (2 tiles) and a big one (8x8 = 64 tiles, under the
+    // frontier limit) both touch the route. Sweeping the big one would more
+    // than double the route, so it's skipped and reported; the small one is
+    // still swept.
+    const small = [[ON.x, ON.y - 1], [ON.x, ON.y - 2]];
+    const far = R.latLonToTile(...pt(3, 0), Z);
+    const big = [];
+    for (let dx = 0; dx < 8; dx++) for (let dy = 1; dy <= 8; dy++) big.push([far.x - 4 + dx, far.y + dy]);
+    const g = grid([...small, ...big]);
+    const api = makeApi();
+    const targetKm = 11;
+    const out = await loadRefine(api)(LOOP, { targetKm, mode: 'cap', surfacePref: 'any', grids: [g] });
+    assert.ok(out.route.distance_km <= targetKm * 1.25 * 1.05, `km ${out.route.distance_km}`);
+    assert.equal(out.stats.sweepOverBudget, true);
+    const claimed = R.newTilesCrossed(out.route.coordinates, g);
+    assert.ok(small.every(([x, y]) => claimed.has(`${x},${y}`)), 'small cluster swept');
+    assert.ok(out.stats.sweepRemaining > 0, 'big cluster reported as left');
+});
+
+test('budgetSweepBatch takes whole clusters, best value first, within budget', () => {
+    const wps = [pt(0, 0), pt(4, 0), pt(0, 0)];
+    const mk = (comp, e, n) => ({ component: comp, lat: pt(e, n)[0], lon: pt(e, n)[1] });
+    const near = [mk(1, 1, 0.2), mk(1, 1.2, 0.2)];            // cheap
+    const farC = [mk(2, 2, 3), mk(2, 2.2, 3), mk(2, 2.4, 3)]; // ~6 km detour
+    const { batch, skippedTiles } = R.budgetSweepBatch(wps, [...near, ...farC], { budgetKm: 8 * 1.3 + 1, roadRatio: 1.3 });
+    assert.deepEqual(batch, near);
+    assert.equal(skippedTiles, 3);
+    const all = R.budgetSweepBatch(wps, [...near, ...farC], { budgetKm: 100, roadRatio: 1.3 });
+    assert.equal(all.batch.length, 5);
+    const roomed = R.budgetSweepBatch(wps, [...near, ...farC], { budgetKm: 100, roadRatio: 1.3, room: 2 });
+    assert.deepEqual(roomed.batch, near, 'a cluster that does not fit the waypoint room is skipped whole');
+});
