@@ -129,6 +129,30 @@ test('countNewTiles counts only unclaimed, non-water tiles the route enters', ()
     assert.equal(R.countNewTiles(line([0, 0], [3, 0]), [grid]), 1);
 });
 
+test('findRowPickups: a run of tiles one street over is one cheap shift, not a detour per tile', () => {
+    const z = 17;
+    // Route rides east along y=0. One tile north of it, four unclaimed tiles
+    // in a row; elsewhere a lone unclaimed tile (not a run).
+    const route = line([0, 0], [4, 0]);
+    const crossed = [...R.tilesTouched(route, z)].map(k => k.split(',').map(Number));
+    const ys = new Set(crossed.map(([, y]) => y));
+    assert.equal(ys.size, 1, 'route stays in one tile row');
+    const ry = [...ys][0];
+    const xs = crossed.map(([x]) => x).sort((a, b) => a - b);
+    const mid = xs[Math.floor(xs.length / 2)];
+    const run = [0, 1, 2, 3].map(i => ({ x: mid - 2 + i, y: ry - 1 }));
+    const lone = { x: xs[1], y: ry + 1 };
+    const grid = gridWithHoles([...run, lone], z);
+    const rows = R.findRowPickups(route, [grid]);
+    assert.equal(rows.length, 1);
+    assert.deepEqual(rows[0].tiles, run.map(t => [t.x, t.y]));
+    assert.ok(rows[0].points.length >= 2 && rows[0].points.length <= 4);
+    const side = R.tileSideKm(z, LAT0);
+    assert.ok(rows[0].detourKm < 2 * side * 1.4 + 0.1, 'priced as one jog out and back');
+    // A drawn area that excludes the run drops it.
+    assert.equal(R.findRowPickups(route, [grid], { bounds: [LAT0 - 0.01, LON0 - 0.01, R.tileBounds(run[0].x, ry, z)[2], LON0 + 0.1] }).length, 0);
+});
+
 test('analyzeRetrace: catches a short dead-end stub', () => {
     // 2 km loop leg with a 120 m in-and-out stub in the middle.
     const route = concat(line([0, 0], [1, 0]), line([1, 0], [1, 0.12]), line([1, 0.12], [1, 0]), line([1, 0], [2, 0]));

@@ -203,6 +203,65 @@
      * pick on the same grid) are dropped so a row of adjacent tiles along
      * the route doesn't become a row of separate detours.
      */
+    /**
+     * "Ride the next street over": runs of unclaimed tiles that lie in a
+     * straight line right beside a stretch the route already rides.
+     *
+     * A run is 2+ consecutive unclaimed tiles in one row (or column) whose
+     * neighbours one tile toward the route are all crossed by the route, so
+     * the route runs parallel to them. Shifting that stretch over one street
+     * costs about one jog out and one jog back (2 × a tile side × road
+     * factor), however long the run. findPickups prices every tile as its
+     * own out-and-back detour and keeps one tile per run, so it badly
+     * undervalues these.
+     *
+     * Returns runs sorted by tiles per detour km:
+     * [{zoom, tiles: [[x, y], ...], points: [[lat, lon], ...], detourKm, rate}].
+     * Points are tile centres along the run (both ends, plus every other
+     * tile between) so the router stays on the parallel street.
+     */
+    function findRowPickups(coords, grids, opts = {}) {
+        const { roadFactor = 1.4, bounds = null, minRun = 2 } = opts;
+        if (!coords || coords.length < 2 || !grids || grids.length === 0) return [];
+        const out = [];
+        for (const grid of grids) {
+            const z = grid.zoom;
+            const crossed = tilesTouched(coords, z);
+            const sideKm = tileSideKm(z, coords[0][0]);
+            const free = (x, y) => {
+                const k = `${x},${y}`;
+                return !crossed.has(k) && !grid.visited.has(k) && !grid.isRoadless(x, y);
+            };
+            const centre = (x, y) => { const b = tileBounds(x, y, z); return [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2]; };
+            const used = new Set();
+            // Direction of the run (dx, dy) and the side the route is on (sx, sy).
+            const dirs = [[1, 0, 0, 1], [1, 0, 0, -1], [0, 1, 1, 0], [0, 1, -1, 0]];
+            for (const key of crossed) {
+                const [cx, cy] = key.split(',').map(Number);
+                for (const [dx, dy, sx, sy] of dirs) {
+                    // Start of a run: the tile beside this crossed tile, with
+                    // no run tile just before it.
+                    const x0 = cx - sx, y0 = cy - sy;
+                    if (!free(x0, y0) || used.has(`${z}:${x0},${y0}`)) continue;
+                    if (free(x0 - dx, y0 - dy) && crossed.has(`${x0 - dx + sx},${y0 - dy + sy}`)) continue;
+                    const tiles = [];
+                    let x = x0, y = y0;
+                    while (free(x, y) && crossed.has(`${x + sx},${y + sy}`)) {
+                        tiles.push([x, y]);
+                        x += dx; y += dy;
+                    }
+                    if (tiles.length < minRun) continue;
+                    const points = tiles.filter((_, i) => i === 0 || i === tiles.length - 1 || i % 2 === 0).map(([tx, ty]) => centre(tx, ty));
+                    if (bounds && !points.every(p => pointInBounds(p, bounds))) continue;
+                    tiles.forEach(([tx, ty]) => used.add(`${z}:${tx},${ty}`));
+                    const detourKm = 2 * sideKm * roadFactor + 0.05;
+                    out.push({ zoom: z, tiles, points, detourKm, rate: tiles.length / detourKm });
+                }
+            }
+        }
+        return out.sort((a, b) => b.rate - a.rate);
+    }
+
     function findPickups(coords, grids, opts = {}) {
         const {
             maxReachM = 350,
@@ -1054,7 +1113,7 @@
     const api = {
         haversineKm, pathKm, latLonToTile, tileBounds, tileSideKm, buildRoadlessLookup, makeGrid,
         densify, tilesTouched, newTilesCrossed, countNewTiles,
-        findPickups, clusterSweepTargets, budgetSweepBatch, insertSweepTargets, waypointRouteIndices, insertPickups, cheapestInsertion, chooseDropIndex,
+        findPickups, findRowPickups, clusterSweepTargets, budgetSweepBatch, insertSweepTargets, waypointRouteIndices, insertPickups, cheapestInsertion, chooseDropIndex,
         analyzeRetrace, uselessStops, findSpurs, planSpurPrune, applySpurPrune, pointInBounds, fractionOutsideBounds, clampToBounds,
         isPolygonArea, areaBBox, pointInPolygon, polygonSelfIntersects,
         findYard, tileSetOutline,

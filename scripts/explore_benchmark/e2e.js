@@ -203,7 +203,8 @@ function sweepLeft(coords, grid) {
     const wasted = outer.filter(s => s.exclusiveTiles === 0);
     const wastedKm = wasted.reduce((t, s) => t + s.toKm - s.fromKm, 0);
     const outDir = process.env.E2E_OUT || __dirname;
-    fs.writeFileSync(path.join(outDir, `e2e-${label}.json`), JSON.stringify({ coords, stats: out.stats, spurs: outer }));
+    const leftTargets = R0.clusterSweepTargets(coords, [grid], { bounds: AREA });
+    fs.writeFileSync(path.join(outDir, `e2e-${label}.json`), JSON.stringify({ coords, stats: out.stats, spurs: outer, leftTargets }));
     console.log(`${label} [${pick.route.direction}] km=${km.toFixed(1)} newTiles=${tiles} tiles/km=${(tiles / km).toFixed(2)} ` +
         `turns=${turns} (${(turns / km).toFixed(2)}/km) uturns=${uturns} clusterTilesLeft=${sweepLeft(coords, grid)} ` +
         `spurs=${outer.length} wastedSpurs=${wasted.length} (${wastedKm.toFixed(1)} km) ` +
