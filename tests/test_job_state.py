@@ -290,7 +290,7 @@ class TestJobEndpoints:
         app.container.garmin_service = mock_garmin_service
 
         mock_analysis_service = Mock()
-        mock_analysis_service.data_fetcher.load_cached_activities.return_value = []
+        mock_analysis_service.cache_fetcher.load_cached_activities.return_value = []
         monkeypatch.setattr(app.container, 'analysis_service', mock_analysis_service)
 
         class SyncThread:
@@ -307,7 +307,9 @@ class TestJobEndpoints:
         assert resp.status_code == 200
         assert resp.get_json()['status'] == 'started'
         mock_garmin_service.fetch_activities.assert_called_once()
-        mock_analysis_service.data_fetcher.cache_activities.assert_called_once()
+        # Local cache only (no Strava auth), and only the new rides are passed:
+        # cache_activities merges them against what's on disk under its lock.
+        mock_analysis_service.cache_fetcher.cache_activities.assert_called_once_with([mock_activity])
 
         status = client.get('/api/garmin/sync/status').get_json()
         assert status['status'] == 'done'

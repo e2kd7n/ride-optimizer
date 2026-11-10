@@ -40,23 +40,30 @@ class TestWriteEnv:
 
 @pytest.mark.unit
 class TestProxyFix:
-    def test_client_ip_comes_from_the_proxy_header(self, client):
+    def test_client_ip_comes_from_the_proxy_header(self, monkeypatch):
         """Behind Caddy every client was 127.0.0.1, so per-IP limits were global."""
-        from flask import request
+        from werkzeug.middleware.proxy_fix import ProxyFix
+        from werkzeug.test import EnvironBuilder
         from launch import app
+
+        proxy = app.wsgi_app
+        assert isinstance(proxy, ProxyFix)
 
         seen = {}
 
-        @app.route('/__test_remote_addr')
-        def _remote_addr():  # pragma: no cover - trivial
-            seen['addr'] = request.remote_addr
-            seen['secure'] = request.is_secure
-            return 'ok'
+        def capture(environ, start_response):
+            seen['addr'] = environ['REMOTE_ADDR']
+            seen['scheme'] = environ['wsgi.url_scheme']
+            start_response('200 OK', [])
+            return [b'ok']
 
-        resp = client.get('/__test_remote_addr', headers={
-            'X-Forwarded-For': '192.168.4.23', 'X-Forwarded-Proto': 'https'})
-        assert resp.status_code == 200
-        assert seen == {'addr': '192.168.4.23', 'secure': True}
+        # Exercise the app's configured middleware around a capturing app.
+        monkeypatch.setattr(proxy, 'app', capture)
+        environ = EnvironBuilder(path='/', headers={
+            'X-Forwarded-For': '192.168.4.23', 'X-Forwarded-Proto': 'https'},
+            environ_base={'REMOTE_ADDR': '127.0.0.1'}).get_environ()
+        list(proxy(environ, lambda *a, **k: None))
+        assert seen == {'addr': '192.168.4.23', 'scheme': 'https'}
 
 
 @pytest.mark.unit
