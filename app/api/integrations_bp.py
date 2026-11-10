@@ -29,6 +29,7 @@ from flask import Blueprint, current_app, jsonify, request
 
 from app.credentials.env_helpers import read_env, write_env
 from app.extensions import limiter
+from app.jobs.job_state import claim_job, job_started
 from src.config_manager import ConfigManager
 from src.secure_logger import SecureLogger
 
@@ -304,7 +305,7 @@ def garmin_sync():
     days = max(1, min(days, 365))
 
     jobs = current_app.container.jobs
-    if not jobs.garmin_sync.try_start({'status': 'running', 'label': 'Connecting to Garmin…'}):
+    if not claim_job(jobs.garmin_sync, {'status': 'running', 'label': 'Connecting to Garmin…'}):
         return jsonify({'status': 'already_running'}), 409
 
     container = current_app.container
@@ -352,6 +353,7 @@ def garmin_sync():
             jobs.garmin_sync.update(status='error', label=str(e))
 
     threading.Thread(target=_run, daemon=True).start()
+    job_started()
     return jsonify({'status': 'started'})
 
 

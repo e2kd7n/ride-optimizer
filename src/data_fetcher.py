@@ -131,25 +131,19 @@ class Activity:
         end_lat = ga.get('endLatitude')
         end_lon = ga.get('endLongitude')
 
-        sport_map = {
-            'cycling': 'Ride',
-            'road_biking': 'Ride',
-            'gravel_cycling': 'GravelRide',
-            'mountain_biking': 'Ride',
-            'virtual_ride': 'VirtualRide',
-            'indoor_cycling': 'VirtualRide',
-            'running': 'Run',
-            'trail_running': 'Run',
-            'walking': 'Walk',
-            'hiking': 'Hike',
-        }
+        from src.sport_types import garmin_sport_type
+
         raw_type = (ga.get('activityType', {}).get('typeKey', '') or '').lower()
-        sport_type = sport_map.get(raw_type, 'Ride')
+        sport_type = garmin_sport_type(raw_type)
+        # `type` stays the broad Strava type the analysis code filters on
+        # (e.g. mountain biking was, and still is, type 'Ride').
+        broad_type = {'MountainBikeRide': 'Ride', 'EMountainBikeRide': 'EBikeRide',
+                      'TrailRun': 'Run', 'VirtualRun': 'Run'}.get(sport_type, sport_type)
 
         return cls(
             id=ga.get('activityId', 0),
             name=ga.get('activityName', 'Garmin Activity'),
-            type=sport_type,
+            type=broad_type,
             sport_type=sport_type,
             start_date=ga.get('startTimeLocal'),
             start_date_local=ga.get('startTimeLocal'),
@@ -695,6 +689,31 @@ class StravaDataFetcher:
     def _gear_cache_path(self) -> Path:
         return self.cache_path.parent / 'gear.json'
 
+    # Local, user-edited gear names (#623). Strava's athlete profile can no
+    # longer be fetched, so these keep gear readable; they're merged into
+    # every load_cached_gear() result, so Reports, activities and chat all
+    # pick them up.
+    GEAR_NAMES_FILE = 'gear_names.json'
+    GEAR_TYPES = ('bike', 'shoe')
+
+    def load_gear_names(self) -> Dict[str, Dict[str, str]]:
+        names = self._storage.read(self.GEAR_NAMES_FILE, default={})
+        return names if isinstance(names, dict) else {}
+
+    def save_gear_names(self, updates: Dict[str, Dict[str, str]]) -> Dict[str, Dict[str, str]]:
+        """Merge ``{gear_id: {'name', 'type'}}``; an empty name removes the entry."""
+        def mutate(current):
+            names = current if isinstance(current, dict) else {}
+            for gear_id, entry in updates.items():
+                name = (entry or {}).get('name', '').strip()
+                if not name:
+                    names.pop(gear_id, None)
+                    continue
+                names[gear_id] = {'name': name, 'type': entry.get('type') or 'bike'}
+            return names
+        _, names = self._storage.update(self.GEAR_NAMES_FILE, mutate, default={})
+        return names if isinstance(names, dict) else {}
+
     def fetch_athlete_gear(self) -> Dict[str, Any]:
         """
         Fetch the authenticated athlete's bikes and shoes from Strava and cache.
@@ -731,6 +750,15 @@ class StravaDataFetcher:
                 'bikes': bikes,
                 'shoes': shoes,
             }
+            if not bikes and not shoes:
+                # #623: an empty profile response (Strava API changes, a
+                # token without profile:read_all) wiped a populated cache on
+                # 2026-10-01 and every bike fell back to its raw ID. Keep
+                # what we had instead.
+                previous = self._read_gear_file()
+                if previous and (previous.get('bikes') or previous.get('shoes')):
+                    logger.warning("Strava returned no gear; keeping the existing gear cache")
+                    return {**previous, 'kept_previous': True}
             self._gear_cache_path.parent.mkdir(parents=True, exist_ok=True)
             with open(self._gear_cache_path, 'w') as f:
                 json.dump(data, f, indent=2)
@@ -741,8 +769,7 @@ class StravaDataFetcher:
             logger.error(f"Failed to fetch athlete gear: {e}")
             raise
 
-    def load_cached_gear(self) -> Optional[Dict[str, Any]]:
-        """Load gear from cache. Returns None if cache doesn't exist."""
+    def _read_gear_file(self) -> Optional[Dict[str, Any]]:
         if not self._gear_cache_path.exists():
             return None
         try:
@@ -751,6 +778,44 @@ class StravaDataFetcher:
         except Exception as e:
             logger.warning(f"Failed to load gear cache: {e}")
             return None
+
+    def load_cached_gear(self) -> Optional[Dict[str, Any]]:
+        """Gear from the Strava cache with local names merged in (#623).
+
+        Returns None only when there is neither a gear cache nor any local
+        names. A local name replaces the cached one; a locally named gear ID
+        the cache doesn't know is added as its own entry.
+        """
+        data = self._read_gear_file()
+        try:
+            local = self.load_gear_names()
+        except Exception as e:
+            logger.warning(f"Failed to load local gear names: {e}")
+            local = {}
+        if data is None and not local:
+            return None
+
+        data = dict(data or {})
+        bikes = [dict(g) for g in data.get('bikes', [])]
+        shoes = [dict(g) for g in data.get('shoes', [])]
+        seen = set()
+        for g in bikes + shoes:
+            seen.add(g.get('id'))
+            override = local.get(g.get('id'))
+            if override and override.get('name'):
+                g['name'] = override['name']
+                g['name_source'] = 'local'
+        for gear_id, override in local.items():
+            if gear_id in seen or not override.get('name'):
+                continue
+            kind = override.get('type') if override.get('type') in self.GEAR_TYPES else 'bike'
+            entry = {'id': gear_id, 'name': override['name'], 'type': kind,
+                     'brand_name': '', 'model_name': '', 'primary': False,
+                     'strava_distance_m': 0.0, 'name_source': 'local'}
+            (bikes if kind == 'bike' else shoes).append(entry)
+        data['bikes'] = bikes
+        data['shoes'] = shoes
+        return data
 
     def backfill_gear_ids(self, progress_callback=None) -> Dict[str, Any]:
         """

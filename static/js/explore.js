@@ -2439,7 +2439,7 @@ async function refineRoute(baseWaypoints, opts) {
     const candidates = candidateList.slice();
     const stats = {
         calls: 0, trimmed: 0, pickupsAdded: 0, uselessDropped: 0, retraceFixed: false, retraceFraction: null,
-        sweepAdded: 0, sweepUnreachable: 0, sweepRemaining: 0, sweepCapped: false, sweepOverBudget: false, spursPruned: 0,
+        sweepAdded: 0, sweepUnreachable: 0, sweepRemaining: 0, sweepCapped: false, sweepOverBudget: false, spursPruned: 0, finalPickupsAdded: 0, rowPickups: 0,
     };
 
     // Build OSRM exclude list from road filter checkboxes (#411).
@@ -2707,26 +2707,71 @@ async function refineRoute(baseWaypoints, opts) {
             // can shift roads near a cut, so one bad cut can lose a tile. When
             // that happens, retry without the cuts near the trouble instead of
             // throwing the whole batch away.
-            for (let round = 0; round < MAX_PRUNE_ROUNDS; round++) {
-                let plan = R.planSpurPrune(result.coordinates, waypoints, grids);
-                let done = false;
-                for (let attempt = 0; attempt < 2 && plan.length > 0; attempt++) {
-                    const cut = R.applySpurPrune(waypoints, meta, plan);
-                    const trial = await routeOnce(cut.waypoints);
-                    if (keeps(trial)) {
-                        waypoints = cut.waypoints;
-                        meta = cut.meta;
-                        result = trial;
-                        stats.spursPruned += plan.length;
-                        done = true;
-                        break;
+            const prunePigtails = async (rounds) => {
+                for (let round = 0; round < rounds; round++) {
+                    let plan = R.planSpurPrune(result.coordinates, waypoints, grids);
+                    let done = false;
+                    for (let attempt = 0; attempt < 2 && plan.length > 0; attempt++) {
+                        const cut = R.applySpurPrune(waypoints, meta, plan);
+                        const trial = await routeOnce(cut.waypoints);
+                        if (keeps(trial)) {
+                            waypoints = cut.waypoints;
+                            meta = cut.meta;
+                            result = trial;
+                            stats.spursPruned += plan.length;
+                            done = true;
+                            break;
+                        }
+                        const spots = troubleSpots(trial);
+                        const near = (p) => spots.some(s => R.haversineKm(p, s) < PRUNE_TROUBLE_KM);
+                        plan = plan.filter(e => !near(e.base) && !e.waypoints.some(w => near(waypoints[w])));
                     }
-                    const spots = troubleSpots(trial);
-                    const near = (p) => spots.some(s => R.haversineKm(p, s) < PRUNE_TROUBLE_KM);
-                    plan = plan.filter(e => !near(e.base) && !e.waypoints.some(w => near(waypoints[w])));
+                    if (!done) break;
                 }
-                if (!done) break;
+            };
+            await prunePigtails(MAX_PRUNE_ROUNDS);
+            // ── Stage 7: spend what's left of the budget on nearby tiles ──
+            // Stage 2's pickups ran against the tight pre-sweep route. The
+            // sweep and the pigtail cut reshape it and usually free some
+            // distance, so look again for unclaimed tiles about a block off
+            // the final route (a tile on the next street over) and add the
+            // cheapest ones that fit the sweep budget. Keep the re-route only
+            // if it claims more tiles and still fits.
+            // Runs of tiles along the next street over come first: shifting a
+            // stretch over one street costs one jog out and back for the
+            // whole run. Then single tiles, as in stage 2.
+            let spare = budgetKm - result.distance_km;
+            const room = () => Math.min(MAX_PICKUPS, MAX_ROUTE_WAYPOINTS - waypoints.length);
+            const chosen = [];
+            const taken = new Set();
+            for (const run of R.findRowPickups(result.coordinates, grids, { bounds: areaBounds })) {
+                if (chosen.length + run.points.length > room() || run.detourKm > spare) continue;
+                run.points.forEach(([lat, lon]) => chosen.push({ lat, lon, value: run.tiles.length / run.points.length }));
+                run.tiles.forEach(([x, y]) => taken.add(`${run.zoom}:${x},${y}`));
+                spare -= run.detourKm;
+                stats.rowPickups++;
             }
+            for (const pk of R.findPickups(result.coordinates, grids, { bounds: areaBounds })) {
+                if (chosen.length >= room()) break;
+                if (taken.has(`${pk.zoom}:${pk.x},${pk.y}`) || pk.detourKm > spare) continue;
+                chosen.push(pk);
+                spare -= pk.detourKm;
+            }
+            for (const subset of [chosen, chosen.slice(0, Math.floor(chosen.length / 2))]) {
+                if (subset.length === 0) break;
+                const ins = R.insertPickups(result.coordinates, waypoints, meta, subset);
+                const trial = await routeOnce(ins.waypoints);
+                if (trial.distance_km <= budgetKm * (1 + CAP_SLACK) && tilesOf(trial) > tilesOf(result)) {
+                    waypoints = ins.waypoints;
+                    meta = ins.meta;
+                    result = trial;
+                    stats.finalPickupsAdded = subset.length;
+                    break;
+                }
+            }
+            // A pickup whose snap lands on a dead end outside its tile is a
+            // fresh pigtail; one more cut pass cleans those up.
+            if (stats.finalPickupsAdded > 0) await prunePigtails(1);
             stats.sweepUnreachable = unreachable.size;
             stats.sweepRemaining = targetsNow().length;
         }

@@ -386,9 +386,30 @@ class AnalysisService:
                                enable_geocoding=False, cache_dir=tmp)
             ra.group_similar_routes()
 
+    _PUBLISHED_FIELDS = ('_activities', '_route_groups', '_long_rides',
+                         '_home_location', '_work_location', '_last_analysis_time')
+
     def run_full_analysis(self, force_refresh: bool = False, skip_strava_fetch: bool = False,
                           after: Optional[datetime] = None, before: Optional[datetime] = None,
                           on_progress=None, stop_check=None) -> Dict[str, Any]:
+        """Run the analysis; on stop or error, keep the previous results (#663).
+
+        The steps assign route groups, locations and long rides to ``self`` as
+        they go (and the preview step writes partial groups), so a run that is
+        stopped mid-grouping or fails used to leave partial results in memory,
+        which the caller then published to CommuteService/PlannerService.
+        """
+        previous = {name: getattr(self, name) for name in self._PUBLISHED_FIELDS}
+        result = self._run_full_analysis(force_refresh, skip_strava_fetch, after, before,
+                                         on_progress, stop_check)
+        if not isinstance(result, dict) or result.get('status') in ('stopped', 'error'):
+            for name, value in previous.items():
+                setattr(self, name, value)
+        return result
+
+    def _run_full_analysis(self, force_refresh: bool = False, skip_strava_fetch: bool = False,
+                           after: Optional[datetime] = None, before: Optional[datetime] = None,
+                           on_progress=None, stop_check=None) -> Dict[str, Any]:
         """
         Run complete analysis workflow.
 

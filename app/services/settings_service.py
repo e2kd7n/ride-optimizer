@@ -31,6 +31,9 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     # the EPA's "Unhealthy for Sensitive Groups" threshold — a conservative
     # default given sustained aerobic exertion increases inhalation (#518).
     'outdoor_max_aqi': 100,
+    # #620: the nightly cron pulls new activities from every connected source
+    # (Strava, Garmin, …) before its analysis run.
+    'nightly_sync': True,
 }
 
 

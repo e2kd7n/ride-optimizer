@@ -189,6 +189,47 @@ class TestRunFullAnalysis:
         assert len(result['errors']) == 0
         assert 'analysis_time' in result
     
+    @patch('app.services.analysis_service.LocationFinder')
+    @patch('app.services.analysis_service.RouteAnalyzer')
+    def test_stopped_run_keeps_previous_results(self, mock_route_analyzer_class,
+                                                mock_location_finder_class,
+                                                analysis_service, mock_activity,
+                                                mock_route_group, mock_location):
+        """#663: groups assigned mid-run must not survive a stop."""
+        home, work = mock_location
+        previous_groups = [mock_route_group]
+        analysis_service._route_groups = previous_groups
+        analysis_service._activities = ['old']
+        analysis_service._home_location = 'old-home'
+
+        fetcher = Mock()
+        fetcher.fetch_activities = Mock(return_value=[mock_activity, mock_activity])
+        analysis_service._data_fetcher = fetcher
+        mock_location_finder_class.return_value.identify_home_work.return_value = (home, work)
+        mock_route_analyzer_class.return_value.group_similar_routes.return_value = ['partial']
+
+        result = analysis_service.run_full_analysis(stop_check=lambda: True)
+
+        assert result['status'] == 'stopped'
+        assert analysis_service._route_groups is previous_groups
+        assert analysis_service._activities == ['old']
+        assert analysis_service._home_location == 'old-home'
+
+    @patch('app.services.analysis_service.LocationFinder')
+    def test_failed_run_keeps_previous_results(self, mock_location_finder_class,
+                                               analysis_service, mock_activity, mock_route_group):
+        previous_groups = [mock_route_group]
+        analysis_service._route_groups = previous_groups
+        fetcher = Mock()
+        fetcher.fetch_activities = Mock(return_value=[mock_activity])
+        analysis_service._data_fetcher = fetcher
+        mock_location_finder_class.return_value.identify_home_work.side_effect = RuntimeError('boom')
+
+        result = analysis_service.run_full_analysis()
+
+        assert result['status'] == 'error'
+        assert analysis_service._route_groups is previous_groups
+
     def test_run_full_analysis_no_activities(self, analysis_service):
         """Test analysis with no activities."""
         # Mock data fetcher directly to avoid authentication

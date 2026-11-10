@@ -60,9 +60,12 @@ MAX_POLL_ERRORS = int(os.getenv('ANALYSIS_MAX_POLL_ERRORS', '10'))
 # 'idle' after we started it means the gunicorn worker was replaced (worker
 # timeout or OOM kill) and took the in-process analysis thread with it.
 MAX_RESTARTS = int(os.getenv('ANALYSIS_MAX_RESTARTS', '1'))
+# Upper bound on the nightly multi-source sync (Garmin fetches one GPS track
+# per activity, sequentially).
+SYNC_TIMEOUT_SECONDS = int(os.getenv('SYNC_TIMEOUT', str(60 * 60)))
 
 
-def _record_job(storage, status, start_time, result=None, error=None):
+def _record_job(storage, status, start_time, result=None, error=None, sync=None):
     """Append a job record to job_history.json (same format as before)."""
     job_record = {
         'job_type': 'daily_analysis',
@@ -80,6 +83,8 @@ def _record_job(storage, status, start_time, result=None, error=None):
         }
     if error is not None:
         job_record['error'] = error
+    if sync is not None:
+        job_record['sync'] = sync
 
     try:
         history = storage.read('job_history.json', default={'jobs': []})
@@ -91,6 +96,79 @@ def _record_job(storage, status, start_time, result=None, error=None):
     return job_record
 
 
+def _csrf_session():
+    """A fresh session plus a CSRF token bound to it."""
+    session = requests.Session()
+    resp = session.get(f"{BASE_URL}/api/csrf-token", timeout=30)
+    resp.raise_for_status()
+    return session, resp.json()['csrf_token']
+
+
+def _nightly_sync():
+    """Pull new activities from every connected source before analysing (#620).
+
+    Controlled by the Settings toggle "Check for new activities nightly"
+    (`nightly_sync`). Never raises: a sync problem is logged and recorded,
+    and the analysis still runs on what's cached. Returns a small summary
+    dict for job_history, e.g. {'status': 'done', 'new': 3, 'sources': {...}}.
+    """
+    try:
+        session, csrf_token = _csrf_session()
+        settings = session.get(f"{BASE_URL}/api/settings", timeout=30)
+        settings.raise_for_status()
+        if not (settings.json().get('settings') or {}).get('nightly_sync', True):
+            logger.info("Nightly sync is turned off in Settings — skipping")
+            return {'status': 'disabled'}
+
+        resp = session.post(
+            f"{BASE_URL}/api/sync",
+            json={'window': 'incremental'},
+            headers={'X-CSRFToken': csrf_token},
+            timeout=60,
+        )
+        if resp.status_code == 400 and resp.json().get('status') == 'no_sources':
+            logger.info("Nightly sync: no activity source connected — nothing to pull")
+            return {'status': 'no_sources'}
+        if resp.status_code == 409:
+            logger.info("Nightly sync: a fetch is already running — skipping")
+            return {'status': 'already_running'}
+        resp.raise_for_status()
+        logger.info(f"Nightly sync started: {resp.json()}")
+
+        deadline = time.monotonic() + SYNC_TIMEOUT_SECONDS
+        poll_errors = 0
+        while time.monotonic() < deadline:
+            time.sleep(POLL_INTERVAL_SECONDS)
+            try:
+                status = session.get(f"{BASE_URL}/api/sync/status", timeout=30)
+                status.raise_for_status()
+            except requests.RequestException as poll_error:
+                poll_errors += 1
+                if poll_errors > MAX_POLL_ERRORS:
+                    raise
+                logger.warning(f"Sync status poll failed ({poll_errors}), retrying: {poll_error}")
+                continue
+            poll_errors = 0
+            snapshot = status.json()
+            if snapshot.get('status') == 'running':
+                continue
+            result = snapshot.get('result') or {}
+            summary = {
+                'status': snapshot.get('status'),
+                'new': result.get('new', 0),
+                'sources': {name: {'status': r.get('status'), 'new': r.get('new'),
+                                   'error': r.get('error')}
+                            for name, r in (result.get('sources') or {}).items()},
+            }
+            logger.info(f"Nightly sync finished: {snapshot.get('label')}")
+            return summary
+        logger.warning("Nightly sync still running at its time limit — continuing")
+        return {'status': 'timeout'}
+    except Exception as e:
+        logger.warning(f"Nightly sync failed: {e}")
+        return {'status': 'error', 'error': str(e)[:300]}
+
+
 def _trigger_analysis():
     """Start an analysis job over HTTP. Returns (session, started).
 
@@ -98,18 +176,13 @@ def _trigger_analysis():
     uses a fresh session so a re-trigger after a worker restart fetches a new
     CSRF token instead of reusing one bound to the old worker's session.
     """
-    session = requests.Session()
+    session, csrf_token = _csrf_session()
 
-    # CSRF: fetch a token (sets the session cookie the token is bound to)
-    resp = session.get(f"{BASE_URL}/api/csrf-token", timeout=30)
-    resp.raise_for_status()
-    csrf_token = resp.json()['csrf_token']
-
-    # Trigger the analysis job. fetch_new=True matches the old in-process
-    # behavior (run_full_analysis with skip_strava_fetch=False).
+    # The nightly sync (#620) already pulled from every connected source,
+    # Strava included, so the analysis only reads the cache.
     resp = session.post(
         f"{BASE_URL}/api/analyze",
-        json={'fetch_new': True, 'force_refresh': False},
+        json={'fetch_new': False, 'force_refresh': False},
         headers={'X-CSRFToken': csrf_token},
         timeout=60,
     )
@@ -134,6 +207,8 @@ def main():
     except Exception as e:
         logger.warning(f"Failed to initialize notifier: {e}")
         notifier = None
+
+    sync_summary = _nightly_sync()
 
     try:
         session, started = _trigger_analysis()
@@ -192,10 +267,11 @@ def main():
                 f"Analysis reported an error: {result.get('message', result)}")
 
         errors = result.get('errors') or []
+        sync_failed = sync_summary.get('status') in ('error', 'timeout')
         job_record = _record_job(
             storage,
-            'degraded' if errors else 'completed',
-            start_time, result=result)
+            'degraded' if (errors or sync_failed) else 'completed',
+            start_time, result=result, sync=sync_summary)
 
         status = storage.read('status.json', default={})
         status['last_analysis'] = datetime.now().isoformat()
@@ -212,7 +288,7 @@ def main():
         logger.error(f"Daily analysis failed: {e}", exc_info=True)
         if notifier:
             notifier.send_cron_failure_alert('daily_analysis', str(e))
-        _record_job(storage, 'failed', start_time, error=str(e))
+        _record_job(storage, 'failed', start_time, error=str(e), sync=sync_summary)
         return 1
 
 

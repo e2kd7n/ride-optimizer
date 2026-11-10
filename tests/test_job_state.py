@@ -189,6 +189,70 @@ class TestJobEndpoints:
         _, kwargs = mock_analysis_service.run_full_analysis.call_args
         assert kwargs['force_refresh'] is False
 
+    def test_bad_input_after_claim_does_not_wedge_the_job(self, job_client, monkeypatch):
+        """#664: `int('abc')` after try_start left fetch 'running' -> 409 forever."""
+        client, app = job_client
+        app.container._initialised = True
+        monkeypatch.setattr(app.container, 'analysis_service', Mock())
+        resp = client.post('/api/fetch', json={'limit': 'abc'})
+        assert resp.status_code == 400
+        assert client.get('/api/fetch/status').get_json()['status'] == 'idle'
+
+    def test_exception_after_claim_releases_the_job(self, job_client, monkeypatch):
+        client, app = job_client
+        app.config['PROPAGATE_EXCEPTIONS'] = False
+
+        def boom():
+            raise RuntimeError('init failed')
+        monkeypatch.setattr(app.container, 'initialise', boom)
+        for path, status_path in (('/api/fetch', '/api/fetch/status'),
+                                  ('/api/analyze', '/api/analyze/status'),
+                                  ('/api/stats/refresh-gear', '/api/stats/refresh-gear/status'),
+                                  ('/api/stats/backfill-gear-ids', '/api/stats/backfill-gear-ids/status')):
+            assert client.post(path, json={}).status_code == 500, path
+            assert client.get(status_path).get_json()['status'] != 'running', path
+
+    def test_released_claim_restores_previous_state(self):
+        from app.jobs.job_state import JobState
+        job = JobState()
+        job.reset({'status': 'done', 'label': 'last run'})
+        previous = job.try_claim({'status': 'running'})
+        assert previous == {'status': 'done', 'label': 'last run'}
+        assert job.try_claim({'status': 'running'}) is None
+        job.restore_if_running(previous)
+        assert job.snapshot() == {'status': 'done', 'label': 'last run'}
+
+    @pytest.mark.parametrize('outcome,job_status', [
+        ({'status': 'error', 'message': 'boom', 'activities_count': 0}, 'error'),
+        ({'status': 'stopped', 'activities_count': 3}, 'stopped'),
+    ])
+    def test_failed_or_stopped_analysis_is_not_published(self, job_client, monkeypatch,
+                                                         outcome, job_status):
+        """#663: an error used to show as "Done — 0 activities", and both a
+        failed and a stopped run rebuilt Commute/Planner from partial data."""
+        client, app = job_client
+        app.container._initialised = True
+        mock_analysis_service = Mock()
+        mock_analysis_service.run_full_analysis.return_value = outcome
+        monkeypatch.setattr(app.container, 'analysis_service', mock_analysis_service)
+        refresh = Mock()
+        monkeypatch.setattr(app.container, 'refresh_services', refresh)
+
+        class SyncThread:
+            def __init__(self, target=None, daemon=None):
+                self._target = target
+
+            def start(self):
+                self._target()
+
+        monkeypatch.setattr('app.api.data_bp.threading', types.SimpleNamespace(Thread=SyncThread))
+
+        assert client.post('/api/analyze', json={}).status_code == 200
+        status = client.get('/api/analyze/status').get_json()
+        assert status['status'] == job_status
+        assert 'previous results kept' in status['label']
+        refresh.assert_not_called()
+
     def test_analyze_honors_explicit_force_refresh_true(self, job_client, monkeypatch):
         client, app = job_client
         app.container._initialised = True

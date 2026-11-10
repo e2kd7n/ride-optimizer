@@ -21,6 +21,7 @@ from typing import Dict
 from flask import Blueprint, current_app, jsonify, request
 
 from app.extensions import limiter
+from app.jobs.job_state import claim_job, job_started
 from src.secure_logger import SecureLogger
 
 logger = SecureLogger(__name__)
@@ -96,7 +97,7 @@ def _parse_date_range(data: dict):
 @limiter.limit("10 per minute")
 def trigger_analysis():
     jobs = current_app.container.jobs
-    if not jobs.analysis.try_start({
+    if not claim_job(jobs.analysis, {
         'status': 'running',
         'phase': 'starting',
         'fetched': 0,
@@ -137,12 +138,20 @@ def trigger_analysis():
                 on_progress=jobs.analysis.update,
                 stop_check=jobs.analysis_stop.is_set,
             )
-            if jobs.analysis_stop.is_set():
-                jobs.analysis.update(status='stopped', phase='stopped',
-                                     label='Analysis stopped by user')
-            else:
-                jobs.analysis.update(status='done', phase='done', result=result,
-                                     label=f"Done — {result.get('activities_count', 0):,} activities")
+            outcome = result.get('status') if isinstance(result, dict) else 'error'
+            if jobs.analysis_stop.is_set() or outcome == 'stopped':
+                # #663: the previous results are still in place; nothing to
+                # republish.
+                jobs.analysis.update(status='stopped', phase='stopped', result=result,
+                                     label='Analysis stopped — previous results kept')
+                return
+            if outcome == 'error':
+                message = (result or {}).get('message') or 'Analysis failed'
+                jobs.analysis.update(status='error', phase='error', result=result,
+                                     label=f'Error: {message} — previous results kept')
+                return
+            jobs.analysis.update(status='done', phase='done', result=result,
+                                 label=f"Done — {result.get('activities_count', 0):,} activities")
             # analysis_service itself already reflects the fresh results (same
             # instance, mutated in place by run_full_analysis) — only the
             # services that derive their state from it need rebuilding (#461).
@@ -166,6 +175,7 @@ def trigger_analysis():
             jobs.analysis_stop.clear()
 
     threading.Thread(target=_run, daemon=True).start()
+    job_started()
     return jsonify({'status': 'started', 'fetch_new': fetch_new})
 
 
@@ -188,7 +198,7 @@ def stop_analysis():
 @limiter.limit("10 per minute")
 def trigger_fetch():
     jobs = current_app.container.jobs
-    if not jobs.fetch.try_start({
+    if not claim_job(jobs.fetch, {
         'status': 'running',
         'fetched': 0,
         'label': 'Connecting to Strava…',
@@ -209,7 +219,12 @@ def trigger_fetch():
 
     after_date, before_date = _parse_date_range(data)
 
-    limit = int(data.get('limit', 1000))
+    try:
+        limit = int(data.get('limit', 1000))
+    except (TypeError, ValueError):
+        # The teardown hook (#664) puts the job back to its previous state.
+        return jsonify({'status': 'error', 'message': 'limit must be an integer'}), 400
+    limit = max(1, min(limit, 5000))
 
     def _run():
         try:
@@ -252,17 +267,27 @@ def trigger_fetch():
                     total_in_cache=total,
                 )
                 logger.info(f"Fetch added {new_count} new activities, triggering incremental analysis")
-                analysis_service.run_full_analysis(
+                outcome = analysis_service.run_full_analysis(
                     force_refresh=False,
                     skip_strava_fetch=True,
                 )
+                if container.exploration_service is not None:
+                    container.exploration_service.invalidate_caches()
+                if isinstance(outcome, dict) and outcome.get('status') == 'error':
+                    # #663: the new rides are cached, but the analysis failed;
+                    # previous results stay published.
+                    jobs.fetch.update(
+                        status='error',
+                        label=(f"Fetched {new_count:,} new activities, but the analysis failed: "
+                               f"{outcome.get('message', 'unknown error')}"),
+                        total_in_cache=total,
+                    )
+                    return
                 # Only CommuteService/PlannerService derive their state from
                 # analysis_service's route groups / long rides — no need to
                 # tear down WeatherService/TrainerRoadService/RouteLibraryService
                 # or reconstruct AnalysisService itself (#461).
                 container.refresh_services('commute', 'planner')
-                if container.exploration_service is not None:
-                    container.exploration_service.invalidate_caches()
                 jobs.fetch.update(
                     status='done',
                     label=f'Done — {total:,} activities, {new_count:,} new (analysis updated)',
@@ -279,12 +304,122 @@ def trigger_fetch():
             jobs.fetch.update(status='error', label=f'Error: {e}')
 
     threading.Thread(target=_run, daemon=True).start()
+    job_started()
     return jsonify({'status': 'started'})
 
 
 @bp.route('/fetch/status')
 def get_fetch_status():
     return jsonify(current_app.container.jobs.fetch.snapshot())
+
+
+def _parse_day(value, field):
+    from datetime import date as _date
+    if value in (None, ''):
+        return None
+    try:
+        return _date.fromisoformat(str(value)[:10])
+    except ValueError:
+        raise ValueError(f'{field} must be YYYY-MM-DD')
+
+
+@bp.route('/sync', methods=['POST'])
+@limiter.limit("6 per minute")
+def trigger_sync():
+    """Pull activities for a date range from every connected source (#619).
+
+    Body: ``{"after_date": "YYYY-MM-DD", "before_date": "YYYY-MM-DD",
+    "limit": 1000}`` (both dates inclusive, local calendar days; default the
+    last 7 days). Runs in the background on the same job slot as /api/fetch,
+    so the two never write the cache at once. Poll /api/sync/status.
+    """
+    from datetime import date as _date, timedelta as _td
+    from app.services import activity_sync
+
+    data = request.get_json(silent=True) or {}
+    try:
+        if data.get('window') == 'incremental':
+            # Nightly job (#620): since the last good sync, with overlap.
+            start, end = activity_sync.nightly_window(current_app.container)
+        else:
+            end = _parse_day(data.get('before_date'), 'before_date') or _date.today()
+            start = _parse_day(data.get('after_date'), 'after_date') or (end - _td(days=7))
+        limit = int(data.get('limit', 1000))
+    except (TypeError, ValueError) as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 400
+    if start > end:
+        return jsonify({'status': 'error', 'message': 'after_date must be on or before before_date'}), 400
+    if (end - start).days > 366:
+        return jsonify({'status': 'error', 'message': 'date range is limited to one year'}), 400
+    limit = max(1, min(limit, 2000))
+
+    container = current_app.container
+    jobs = container.jobs
+    if not claim_job(jobs.fetch, {
+        'status': 'running', 'kind': 'sync', 'fetched': 0,
+        'label': 'Checking connected sources…',
+        'started_at': datetime.now().isoformat(), 'result': None,
+    }):
+        return jsonify({'status': 'already_running'}), 409
+
+    try:
+        container.initialise()
+        sources = activity_sync.connected_sources(container)
+    except Exception:
+        jobs.fetch.reset({'status': 'idle', 'fetched': 0, 'label': '', 'started_at': None})
+        raise
+    if not sources:
+        jobs.fetch.reset({'status': 'idle', 'fetched': 0, 'label': '', 'started_at': None})
+        return jsonify({
+            'status': 'no_sources',
+            'message': 'No activity source is connected. Connect Strava or Garmin in Settings → Connections.',
+        }), 400
+
+    def _run():
+        try:
+            result = activity_sync.run_sync(
+                container, start, end, limit=limit, sources=sources,
+                on_progress=lambda msg: jobs.fetch.update(label=msg),
+            )
+            names = ', '.join(activity_sync.SOURCE_LABELS.get(s, s) for s in sources)
+            failed = {s: r['error'] for s, r in result['sources'].items() if r['status'] == 'error'}
+            if result['status'] == 'error':
+                label = 'Sync failed — ' + '; '.join(
+                    f"{activity_sync.SOURCE_LABELS.get(s, s)}: {err}" for s, err in failed.items())
+            else:
+                label = f"Done — {result['new']:,} new from {names}"
+                if result['analysed']:
+                    label += ' (analysis updated)'
+                if failed:
+                    label += ' · ' + '; '.join(
+                        f"{activity_sync.SOURCE_LABELS.get(s, s)} failed: {err}" for s, err in failed.items())
+            jobs.fetch.update(status='error' if result['status'] == 'error' else 'done',
+                              label=label, result=result, total_in_cache=result['total'])
+        except Exception as e:
+            logger.error(f"Sync failed: {e}", exc_info=True)
+            jobs.fetch.update(status='error', label=f'Error: {e}')
+
+    threading.Thread(target=_run, daemon=True).start()
+    job_started()
+    return jsonify({'status': 'started', 'sources': sources,
+                    'start': start.isoformat(), 'end': end.isoformat()})
+
+
+@bp.route('/sync/status')
+def get_sync_status():
+    return jsonify(current_app.container.jobs.fetch.snapshot())
+
+
+@bp.route('/sync/sources')
+def get_sync_sources():
+    """Connected sources and the last sync result per source (Settings)."""
+    from app.services import activity_sync
+    container = current_app.container
+    return jsonify({
+        'status': 'success',
+        'connected': activity_sync.connected_sources(container),
+        'last': activity_sync.read_status(container),
+    })
 
 
 @bp.route('/fetch/backfill-history', methods=['POST'])
@@ -299,7 +434,7 @@ def trigger_history_backfill():
     user-triggered action — not run as part of the normal fetch/analyze flow.
     """
     jobs = current_app.container.jobs
-    if not jobs.history_backfill.try_start({
+    if not claim_job(jobs.history_backfill, {
         'status': 'running',
         'new_total': 0,
         'pages': 0,
@@ -337,13 +472,20 @@ def trigger_history_backfill():
                     new_total=new_total,
                     pages=result['pages'],
                 )
-                analysis_service.run_full_analysis(force_refresh=False, skip_strava_fetch=True)
+                outcome = analysis_service.run_full_analysis(force_refresh=False, skip_strava_fetch=True)
+                if container.exploration_service is not None:
+                    container.exploration_service.invalidate_caches()
+                if isinstance(outcome, dict) and outcome.get('status') == 'error':
+                    jobs.history_backfill.update(
+                        status='error',
+                        label=(f"Backfilled {new_total:,} new activities, but the analysis failed: "
+                               f"{outcome.get('message', 'unknown error')}"),
+                    )
+                    return
                 # Same reasoning as trigger_fetch above — only Commute/Planner
                 # derive state from analysis_service's route groups / long
                 # rides (#461).
                 container.refresh_services('commute', 'planner')
-                if container.exploration_service is not None:
-                    container.exploration_service.invalidate_caches()
                 jobs.history_backfill.update(
                     status='done',
                     label=f'Done — {new_total:,} new activities backfilled (analysis updated)',
@@ -360,6 +502,7 @@ def trigger_history_backfill():
             jobs.history_backfill_stop.clear()
 
     threading.Thread(target=_run, daemon=True).start()
+    job_started()
     return jsonify({'status': 'started'})
 
 
