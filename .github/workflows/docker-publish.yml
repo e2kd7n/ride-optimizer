@@ -62,24 +62,10 @@ jobs:
         env:
           STRAVA_CLIENT_ID: ci-placeholder
           STRAVA_CLIENT_SECRET: ci-placeholder
-        run: |
-          python -m pytest tests/ -q --tb=short \
-            --ignore=tests/test_api.py \
-            --ignore=tests/test_api_integration.py \
-            --ignore=tests/test_e2e_workflow.py \
-            --ignore=tests/test_routes_api.py \
-            --ignore=tests/test_routes_commute.py \
-            --ignore=tests/test_routes_dashboard.py \
-            --ignore=tests/test_routes_route_library.py \
-            --ignore=tests/test_routes_planner.py \
-            --ignore=tests/test_map_advanced_features.py \
-            --ignore=tests/test_analysis_service.py \
-            --ignore=tests/test_integration.py \
-            --ignore=tests/test_route_library_service.py \
-            --ignore=tests/test_commute_service.py \
-            --ignore=tests/uat \
-            --ignore=tests/qa \
-            --ignore=tests/e2e
+        # The whole suite runs; no --ignore list (#677). If a test genuinely
+        # can't run in CI, skip it in the test itself with a reason rather
+        # than excluding its file here, so the rest of that file keeps running.
+        run: python -m pytest tests/ -q --tb=short
 
   build-and-push:
     runs-on: ubuntu-latest
