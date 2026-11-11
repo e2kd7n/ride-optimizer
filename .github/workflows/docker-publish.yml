@@ -15,6 +15,8 @@ on:
       - 'gunicorn.conf.py'
       - 'requirements.txt'
       - 'requirements-dev.txt'
+      - 'requirements.lock.txt'
+      - 'requirements-dev.lock.txt'
       - 'tests/**'
       - 'Dockerfile'
       - '.env.example'
@@ -41,8 +43,20 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
+      # The image installs requirements.lock.txt, so a dependency added to
+      # requirements.txt without regenerating the lock would be missing on the
+      # Pi. Re-compile both locks in place (existing pins are kept) and fail
+      # on any difference. Fix locally with the command in each lock's header.
+      - name: Check lock files match requirements
+        run: |
+          pip install uv==0.13.7
+          uv pip compile requirements.txt -o requirements.lock.txt --universal --python-version 3.11 -q
+          uv pip compile requirements-dev.txt -o requirements-dev.lock.txt --universal --python-version 3.11 -q
+          git diff --exit-code -- requirements.lock.txt requirements-dev.lock.txt
+
+      # Same pins the image uses (requirements-dev.lock.txt includes them all).
       - name: Install dependencies
-        run: pip install -r requirements-dev.txt
+        run: pip install -r requirements-dev.lock.txt
 
       - name: Run tests
         env:

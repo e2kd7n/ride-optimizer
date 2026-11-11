@@ -25,12 +25,14 @@ WORKDIR /app
 RUN mkdir -p data cache logs config htmlcov \
     && chmod 755 data cache logs config
 
-COPY requirements.txt .
+# Install from the lock file, not requirements.txt: requirements.txt has floor
+# pins (e.g. >=), so an upstream release would otherwise reach the Pi at the
+# next auto-update with no change on our side (#677, #636). Regenerate the lock
+# with the command in its header whenever requirements.txt changes; CI fails
+# if the two drift apart.
+COPY requirements.lock.txt .
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir --prefer-binary \
-        --only-binary=:all: numpy pandas scikit-learn scipy 2>/dev/null || \
-    pip install --no-cache-dir numpy pandas scikit-learn scipy && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir --prefer-binary -r requirements.lock.txt
 
 COPY launch.py wsgi.py gunicorn.conf.py ./
 COPY app/ ./app/
